@@ -1,0 +1,28 @@
+[package]
+name = "rs_computer_graphics"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = "0.2.33"
+chrono = "0.4"
+lazy_static = "1.4.0"
+notify = "5.1.0"
+notify-debouncer-mini = { version = "0.2.0" }
+pollster = "0.2"
+log = "0.4.17"
+env_logger = "0.10.0"
+glam = "0.24.0"
+image = "0.24.5"
+russimp = { version = "1.0.4", features = ["prebuilt"] }
+tokio = { version = "1.28.1" }
+winit = { version = "0.28.6" }
+wgpu = "0.16.0"
+epi = "0.17"
+egui = "0.21.0"
+egui_wgpu_backend = "0.23.0"
+egui_winit_platform = "0.18.0"
+egui_demo_lib = "0.21.0"
+rs_dotnet = { version = "0.1.0", path = "../rs_dotnet" }
