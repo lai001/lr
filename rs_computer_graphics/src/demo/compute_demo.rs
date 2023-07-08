@@ -1,17 +1,16 @@
+use crate::shader::shader_library::ShaderLibrary;
+
 pub struct ComputeDemo {
-    shader: wgpu::ShaderModule,
     compute_pipeline: wgpu::ComputePipeline,
     bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl ComputeDemo {
     pub fn new(device: &wgpu::Device) -> ComputeDemo {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-                "../shader/collatz_compute.wgsl"
-            ))),
-        });
+        let shader = ShaderLibrary::default()
+            .lock()
+            .unwrap()
+            .get_shader("collatz_compute.wgsl");
 
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: None,
@@ -22,7 +21,6 @@ impl ComputeDemo {
         let bind_group_layout = compute_pipeline.get_bind_group_layout(0);
 
         ComputeDemo {
-            shader,
             compute_pipeline,
             bind_group_layout,
         }

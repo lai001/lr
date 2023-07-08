@@ -6,19 +6,17 @@ use std::sync::Mutex;
 
 pub type RuntimeInstanceType = *mut libc::c_void;
 
-pub type ApplicationRedrawRequested = unsafe extern "stdcall" fn(
+pub type ApplicationRedrawRequested = unsafe extern "C" fn(
     appPtr: RuntimeInstanceType,
     native_texture_view: NativeWGPUTextureView,
     native_queue: NativeWGPUQueue,
 );
 
 pub type ApplicationKeyboardInput =
-    unsafe extern "stdcall" fn(appPtr: RuntimeInstanceType, keyboard_input: NativeKeyboardInput);
+    unsafe extern "C" fn(appPtr: RuntimeInstanceType, keyboard_input: NativeKeyboardInput);
 
-pub type ApplicationCursorMoved = unsafe extern "stdcall" fn(
-    appPtr: RuntimeInstanceType,
-    position: winit::dpi::PhysicalPosition<f64>,
-);
+pub type ApplicationCursorMoved =
+    unsafe extern "C" fn(appPtr: RuntimeInstanceType, position: winit::dpi::PhysicalPosition<f64>);
 
 #[repr(C)]
 #[derive(Debug)]

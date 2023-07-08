@@ -18,8 +18,8 @@ namespace Foundation
             {
                 return (IntPtr)gCHandle.Value;
             }
-            else 
-            { 
+            else
+            {
                 return IntPtr.Zero;
             }
         }

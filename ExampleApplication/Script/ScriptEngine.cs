@@ -13,7 +13,7 @@ namespace Script
 
         public UserSscript(IUserScript userScript)
         {
-            userScriptWeakRef = new WeakReference(userScript); 
+            userScriptWeakRef = new WeakReference(userScript);
         }
 
         public void Initialize()
@@ -55,7 +55,7 @@ namespace Script
 
     public class ScriptEngine
     {
-        public UserSscript  userSscript;
+        public UserSscript userSscript;
 
         public ScriptEngine()
         {

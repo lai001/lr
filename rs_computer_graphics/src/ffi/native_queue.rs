@@ -3,7 +3,7 @@ use wgpu::{CommandBuffer, Queue};
 #[repr(C)]
 #[derive(Debug)]
 pub struct NativeWGPUQueue {
-    pub queue: *mut Queue,
+    pub queue: *const Queue,
 }
 
 #[repr(C)]

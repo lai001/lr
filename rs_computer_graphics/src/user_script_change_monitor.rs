@@ -1,6 +1,8 @@
 use notify_debouncer_mini::new_debouncer;
 use std::sync::{Arc, Mutex};
 
+use crate::project::{ProjectDescription, ProjectDescriptionDotnetField};
+
 pub struct UserScriptChangeMonitor {
     is_source_file_changed: Arc<Mutex<bool>>,
 }
@@ -9,6 +11,12 @@ impl UserScriptChangeMonitor {
     pub fn new() -> UserScriptChangeMonitor {
         let is_source_file_changed = Arc::new(Mutex::new(false));
         let is_source_file_changed_clone = Arc::clone(&is_source_file_changed);
+        let user_script_path = ProjectDescription::default()
+            .lock()
+            .unwrap()
+            .get_user_script()
+            .path
+            .clone();
         {
             let (sender, receiver) = std::sync::mpsc::channel();
             std::thread::spawn(move || {
@@ -17,7 +25,7 @@ impl UserScriptChangeMonitor {
                 debouncer
                     .watcher()
                     .watch(
-                        std::path::Path::new("./tmp/UserScript.dll"),
+                        std::path::Path::new(&user_script_path),
                         notify::RecursiveMode::NonRecursive,
                     )
                     .unwrap();

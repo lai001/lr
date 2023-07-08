@@ -22,9 +22,12 @@ pub fn to_wstring(str: &str) -> Vec<u16> {
 }
 
 #[cfg(windows)]
-pub fn get_func_ptr(h: *mut libc::c_void, name: &str) -> *mut libc::c_void {
+pub fn get_func_ptr(h_module: *mut libc::c_void, name: &str) -> *mut libc::c_void {
     unsafe {
-        let s = CString::new(name).unwrap().into_bytes();
-        GetProcAddress(h, s.as_ptr())
+        if let Ok(name) = CString::new(name) {
+            let lp_proc_name = name.into_bytes();
+            return GetProcAddress(h_module, lp_proc_name.as_ptr());
+        }
+        return std::ptr::null_mut();
     }
 }

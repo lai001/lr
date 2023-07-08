@@ -1,10 +1,15 @@
-use crate::camera::Camera;
+use std::{borrow::Borrow, f32::consts::E, sync::Arc};
+
+use glam::{Vec3Swizzles, Vec4Swizzles};
+
+use crate::{
+    brigde_data::mesh_vertex::MeshVertex, camera::Camera, resource_manager::ResourceManager,
+    shader::shader_library::ShaderLibrary,
+};
 
 pub struct CubeDemo {
     pub model_matrix: glam::Mat4,
-    pub vertex_data: Vec<Vertex>,
-    shader: wgpu::ShaderModule,
-    pipeline_layout: wgpu::PipelineLayout,
+    pub vertex_data: Vec<MeshVertex>,
     render_pipeline: wgpu::RenderPipeline,
     render_pipeline_write: Option<wgpu::RenderPipeline>,
     vertex_buf: wgpu::Buffer,
@@ -15,50 +20,57 @@ pub struct CubeDemo {
     color_texture: wgpu::Texture,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Vertex {
-    pub pos: glam::Vec4,
-    pub uv: glam::Vec2,
-}
-
 impl CubeDemo {
     pub fn create_color_grid_texture_resource(size: usize) -> Vec<u8> {
-        let file_path = "../../../Resource/ColorGrid.png";
+        let cache_image = ResourceManager::default()
+            .lock()
+            .unwrap()
+            .get_cache_image("ColorGrid.png");
         let is_flipv = false;
-        match image::open(&file_path) {
-            Ok(mut dynamic_image) => {
+        match cache_image {
+            Some(cache_image) => {
+                let dynamic_image: image::DynamicImage;
                 if is_flipv {
-                    dynamic_image = dynamic_image.flipv();
+                    dynamic_image = cache_image.flipv();
+                } else {
+                    dynamic_image = image::DynamicImage::ImageRgba8(cache_image.to_rgba8());
                 }
-                dynamic_image = dynamic_image.resize(
+                let dynamic_image = dynamic_image.resize(
                     size as u32,
                     size as u32,
                     image::imageops::FilterType::Nearest,
                 );
-                let image_buffers = &dynamic_image.into_rgba8();
+                let image_buffers = dynamic_image.into_rgba8();
 
                 let mut texture_buffer: Vec<u8> = vec![0; (4 * size * size).try_into().unwrap()];
-                texture_buffer.copy_from_slice(image_buffers);
+                texture_buffer.copy_from_slice(&image_buffers);
                 texture_buffer
             }
-            Err(error) => panic!("{}", error),
+            None => panic!(),
         }
     }
 
-    pub fn vertex(pos: [f32; 4], uv: [f32; 2]) -> Vertex {
-        Vertex {
-            pos: glam::Vec4::from_array(pos),
-            uv: glam::Vec2::from_array(uv),
+    pub fn vertex(position: glam::Vec4, tex_coord: glam::Vec2) -> MeshVertex {
+        MeshVertex {
+            position: position.xyz(),
+            tex_coord,
+            vertex_color: glam::vec4(0.0, 0.0, 0.0, 0.0),
+            normal: glam::vec3(0.0, 0.0, 1.0),
         }
     }
 
-    pub fn create_vertices() -> (Vec<Vertex>, Vec<u16>) {
+    fn append_component(vector: &glam::Vec3) -> glam::Vec4 {
+        let mut ret = vector.xyzx();
+        ret.w = 1.0;
+        ret
+    }
+
+    pub fn create_vertices() -> (Vec<MeshVertex>, Vec<u16>) {
         let base_plane_data = [
-            Self::vertex([-1.0, 1.0, 0.0, 1.0], [0.0, 0.0]),
-            Self::vertex([1.0, 1.0, 0.0, 1.0], [1.0, 0.0]),
-            Self::vertex([1.0, -1.0, 0.0, 1.0], [1.0, 1.0]),
-            Self::vertex([-1.0, -1.0, 0.0, 1.0], [0.0, 1.0]),
+            Self::vertex(glam::vec4(-1.0, 1.0, 0.0, 1.0), glam::vec2(0.0, 0.0)),
+            Self::vertex(glam::vec4(1.0, 1.0, 0.0, 1.0), glam::vec2(1.0, 0.0)),
+            Self::vertex(glam::vec4(1.0, -1.0, 0.0, 1.0), glam::vec2(1.0, 1.0)),
+            Self::vertex(glam::vec4(-1.0, -1.0, 0.0, 1.0), glam::vec2(0.0, 1.0)),
         ];
 
         let front_plane_data = base_plane_data.map(|item| {
@@ -67,32 +79,50 @@ impl CubeDemo {
                 y: 0.0,
                 z: 1.0,
             });
-            Self::vertex((translation * item.pos).to_array(), item.uv.to_array())
+            Self::vertex(
+                translation * Self::append_component(&item.position),
+                item.tex_coord,
+            )
         });
 
         let back_plane_data = front_plane_data.map(|item| {
             let rotation = glam::Mat4::from_rotation_y(180.0_f32.to_radians());
-            Self::vertex((rotation * item.pos).to_array(), item.uv.to_array())
+            Self::vertex(
+                rotation * Self::append_component(&item.position),
+                item.tex_coord,
+            )
         });
 
         let left_plane_data = front_plane_data.map(|item| {
             let rotation = glam::Mat4::from_rotation_y(-90.0_f32.to_radians());
-            Self::vertex((rotation * item.pos).to_array(), item.uv.to_array())
+            Self::vertex(
+                rotation * Self::append_component(&item.position),
+                item.tex_coord,
+            )
         });
 
         let right_plane_data = front_plane_data.map(|item| {
             let rotation = glam::Mat4::from_rotation_y(90.0_f32.to_radians());
-            Self::vertex((rotation * item.pos).to_array(), item.uv.to_array())
+            Self::vertex(
+                rotation * Self::append_component(&item.position),
+                item.tex_coord,
+            )
         });
 
         let top_plane_data = front_plane_data.map(|item| {
             let rotation = glam::Mat4::from_rotation_x(-90.0_f32.to_radians());
-            Self::vertex((rotation * item.pos).to_array(), item.uv.to_array())
+            Self::vertex(
+                rotation * Self::append_component(&item.position),
+                item.tex_coord,
+            )
         });
 
         let bottom_plane_data = front_plane_data.map(|item| {
             let rotation = glam::Mat4::from_rotation_x(90.0_f32.to_radians());
-            Self::vertex((rotation * item.pos).to_array(), item.uv.to_array())
+            Self::vertex(
+                rotation * Self::append_component(&item.position),
+                item.tex_coord,
+            )
         });
 
         let front_plane_index: Vec<u16> = [2, 1, 0, 3, 2, 0].to_vec();
@@ -146,7 +176,7 @@ impl CubeDemo {
         let unsafe_vertex_data_raw_buffer: &[u8] = unsafe {
             std::slice::from_raw_parts(
                 vertex_data.as_ptr() as *const u8,
-                vertex_data.len() * std::mem::size_of::<Vertex>(),
+                vertex_data.len() * std::mem::size_of::<MeshVertex>(),
             )
         };
 
@@ -199,12 +229,11 @@ impl CubeDemo {
             view_formats: &[],
         });
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-                "../shader/cube.wgsl"
-            ))),
-        });
+        let shader = ShaderLibrary::default()
+            .lock()
+            .unwrap()
+            .get_shader("cube.wgsl");
+
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
             entries: &[
@@ -242,20 +271,30 @@ impl CubeDemo {
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
-        let vertex_size = std::mem::size_of::<Vertex>();
+        let vertex_size = std::mem::size_of::<MeshVertex>();
         let vertex_buffer_layouts = [wgpu::VertexBufferLayout {
             array_stride: vertex_size as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
+                    format: wgpu::VertexFormat::Float32x3,
                     offset: 0,
                     shader_location: 0,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x2,
-                    offset: 4 * 4,
+                    offset: (std::mem::size_of::<f32>() * 3) as u64,
                     shader_location: 1,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: (std::mem::size_of::<f32>() * 5) as u64,
+                    shader_location: 2,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: (std::mem::size_of::<f32>() * 9) as u64,
+                    shader_location: 3,
                 },
             ],
         }];
@@ -348,8 +387,6 @@ impl CubeDemo {
             },
         );
         CubeDemo {
-            shader,
-            pipeline_layout,
             render_pipeline,
             render_pipeline_write,
             vertex_buf,
@@ -390,7 +427,7 @@ impl CubeDemo {
                 .create_view(&wgpu::TextureViewDescriptor::default());
             let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
 
-            let mvp = camera.view_projection * self.model_matrix;
+            let mvp = camera.get_projection_matrix() * camera.get_view_matrix() * self.model_matrix;
             let matrix_ref: &[f32; 16] = mvp.as_ref();
             let unsafe_uniform_raw_buffer: &[u8] = unsafe {
                 std::slice::from_raw_parts(

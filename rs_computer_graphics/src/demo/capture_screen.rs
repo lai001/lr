@@ -1,4 +1,4 @@
-use crate::buffer_dimensions::BufferDimensions;
+use crate::{buffer_dimensions::BufferDimensions, thread_pool};
 
 pub struct CaptureScreen {}
 
@@ -11,10 +11,14 @@ impl CaptureScreen {
         format: wgpu::TextureFormat,
         window_size: &winit::dpi::PhysicalSize<u32>,
     ) {
+        let bytes_per_pixel: usize = format.block_size(None).unwrap() as usize;
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        let buffer_dimensions =
-            BufferDimensions::new(window_size.width as usize, window_size.height as usize);
+        let buffer_dimensions = BufferDimensions::new(
+            window_size.width as usize,
+            window_size.height as usize,
+            bytes_per_pixel,
+        );
         let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: (buffer_dimensions.padded_bytes_per_row * buffer_dimensions.height) as u64,
@@ -54,16 +58,24 @@ impl CaptureScreen {
 
         if let Ok(Ok(_)) = receiver.recv() {
             let padded_buffer = buffer_slice.get_mapped_range();
-            match image::save_buffer(
-                path,
-                &padded_buffer,
-                window_size.width,
-                window_size.height,
-                image::ColorType::Rgba8,
-            ) {
-                Ok(_) => log::debug!("Save image successfully"),
-                Err(error) => log::error!("{:?}", error),
-            }
+            thread_pool::GLOBAL_IO_THREAD_POOL
+                .lock()
+                .unwrap()
+                .in_place_scope(|scope| {
+                    let deep_copy_data = padded_buffer.to_vec();
+                    scope.spawn(move |_| {
+                        match image::save_buffer(
+                            path,
+                            &deep_copy_data,
+                            window_size.width,
+                            window_size.height,
+                            image::ColorType::Rgba8,
+                        ) {
+                            Ok(_) => log::debug!("Save screen image successfully"),
+                            Err(error) => log::error!("{:?}", error),
+                        }
+                    })
+                });
             drop(padded_buffer);
             output_buffer.unmap();
         }

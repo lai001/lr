@@ -11,6 +11,7 @@ use crate::{
         native_render_pipeline::NativeWGPURenderPipelineFunctions,
         native_shader_module::NativeWGPUShaderModuleFunctions,
     },
+    project::{ProjectDescription, ProjectDescriptionDotnetField},
 };
 
 pub struct DotnetRuntime {
@@ -24,8 +25,12 @@ impl DotnetRuntime {
         let mut file_watch = FileWatch {
             file_changed_func: std::ptr::null_mut(),
         };
+        let project_description = ProjectDescription::default();
+        let project_description = project_description.lock().unwrap();
+        let dotnet_field: &ProjectDescriptionDotnetField = project_description.get_dotnet();
+
         unsafe {
-            type EntryPointFn = unsafe extern "stdcall" fn(entry_info: *mut libc::c_void);
+            type EntryPointFn = unsafe extern "C" fn(entry_info: *mut libc::c_void);
             let mut entry_info = entry_info::EntryInfo {
                 runtime_application: std::ptr::null_mut(),
                 runtime_application_functions: (&mut GLOBAL_RUNTIME_APPLICATION_FUNCTIONS
@@ -47,10 +52,10 @@ impl DotnetRuntime {
 
             let entry_point_func: *mut EntryPointFn =
                 rs_dotnet::dotnet::load_and_get_entry_point_func(
-                    "./ExampleApplication.runtimeconfig.json".to_string(),
-                    "./ExampleApplication.dll".to_string(),
-                    "ExampleApplication.Entry, ExampleApplication".to_string(),
-                    "Main".to_string(),
+                    dotnet_field.config_path.to_string(),
+                    dotnet_field.assembly_path.to_string(),
+                    dotnet_field.type_name.to_string(),
+                    dotnet_field.method_name.to_string(),
                 );
 
             let entry_point_func: EntryPointFn = std::mem::transmute(entry_point_func);

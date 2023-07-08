@@ -1,3 +1,4 @@
+use crate::depth_texture::DepthTexture;
 use wgpu::SurfaceCapabilities;
 
 pub struct WGPUContext {
@@ -7,6 +8,7 @@ pub struct WGPUContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub surface_config: wgpu::SurfaceConfiguration,
+    depth_texture: DepthTexture,
 }
 
 impl WGPUContext {
@@ -51,6 +53,7 @@ impl WGPUContext {
         };
 
         surface.configure(&device, &surface_config);
+        let depth_texture = DepthTexture::new(window_size.width, window_size.height, &device);
 
         WGPUContext {
             instance,
@@ -59,6 +62,7 @@ impl WGPUContext {
             device,
             queue,
             surface_config,
+            depth_texture,
         }
     }
 
@@ -76,5 +80,9 @@ impl WGPUContext {
 
     pub fn get_current_swapchain_format(&self) -> wgpu::TextureFormat {
         self.surface_config.format
+    }
+
+    pub fn get_depth_texture_view(&self) -> wgpu::TextureView {
+        self.depth_texture.get_view()
     }
 }

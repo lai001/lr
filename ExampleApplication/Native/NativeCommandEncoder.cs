@@ -31,7 +31,7 @@ namespace Native
         {
             if (!isVaild)
             {
-                return NativeCommandEncoderType.Zero; 
+                return NativeCommandEncoderType.Zero;
             }
             return nativeCommandEncoder;
         }

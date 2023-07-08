@@ -3,7 +3,7 @@ using System;
 
 namespace Script
 {
-    public interface IUserScript: IDisposable
+    public interface IUserScript : IDisposable
     {
         string Name { get; }
         string Description { get; }

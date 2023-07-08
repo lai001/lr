@@ -8,6 +8,7 @@ task("download_deps")
     on_run(function () 
         import("net.http")
         import("utils.archive")
+        import("devel.git")
         os.mkdir(deps_dir)
         local dotnetSDKFilename = "dotnet-sdk-6.0.408-win-x64.zip"
         local link = "https://download.visualstudio.microsoft.com/download/pr/ca13c6f1-3107-4cf8-991c-f70edc1c1139/a9f90579d827514af05c3463bed63c22/" .. dotnetSDKFilename
@@ -28,9 +29,31 @@ task("download_deps")
         }        
     } 
 
+task("fmt")
+    on_run(function () 
+        import("lib.detect.find_program")
+        for _, file in ipairs(os.files("rs_computer_graphics/src/**.rs")) do
+            os.execv(find_program("rustfmt"), { "--edition=2018", file })
+        end
+        for _, file in ipairs(os.files("rs_dotnet/src/**.rs")) do
+            os.execv(find_program("rustfmt"), { "--edition=2018", file })
+        end        
+        os.execv(find_program("dotnet"), { "format", "./ExampleApplication/ExampleApplication.sln" })
+    end)
+    set_menu {
+        usage = "xmake fmt",
+        description = "",
+        options = {
+            {nil, "fmt", nil, nil, "xmake fmt"},
+        }        
+    } 
+
 task("build_target")
     on_run(function ()
         import("lib.detect.find_program")
+        import("core.base.json")
+        import("core.base.option")
+
         local workspace = "$(scriptdir)" .. "/" .. rs_project_name
         local csharp_workspace_path = "$(scriptdir)" .. "/" .. csharp_workspace_name
 
@@ -41,14 +64,45 @@ task("build_target")
             os.execv(find_program("dotnet"), csharp_build_args)
         end
 
-        build({ "build" }, { "build", "./" .. csharp_workspace_name .. ".sln" })
-        build({ "build", "--release" }, { "build", "-c", "Release", "./" .. csharp_workspace_name ..".sln" })
+        local function create_project_json(mode, absolute)
+            os.cd("$(scriptdir)")
+            local path = "rs_computer_graphics/target/" .. mode .. "/Project.json"
+            local project = {
+                paths = {
+                    resource_dir = absolute("Resource"),
+                    shader_dir = absolute("rs_computer_graphics/src/shader"),
+                    intermediate_dir = "./Intermediate",
+                },
+                dotnet = {
+                    config_path = "./ExampleApplication.runtimeconfig.json",
+                    assembly_path = "./ExampleApplication.dll",
+                    type_name = "ExampleApplication.Entry, ExampleApplication",
+                    method_name = "Main",
+                },
+                user_script = {
+                    path = "./tmp/UserScript.dll"
+                }
+            }
+            json.savefile(path, project)
+        end 
+        local mode = option.get("mode")
+        if mode == nil then
+            mode = "debug" 
+        end
+        if mode == "debug" then
+            create_project_json("debug", path.absolute)
+            build({ "build" }, { "build", "./" .. csharp_workspace_name .. ".sln" })
+        elseif mode == "release" then
+            create_project_json("release", path.absolute)
+            build({ "build", "--release" }, { "build", "-c", "Release", "./" .. csharp_workspace_name ..".sln" })
+        end
     end)   
     set_menu {
         usage = "xmake build_target",
         description = "",
         options = {
             {nil, "build_target", nil, nil, "xmake build_target"},
+            {"m", "mode", "kv",  nil, nil },
         }        
     } 
     

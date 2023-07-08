@@ -1,4 +1,4 @@
-pub type FileChangedFunc = unsafe extern "stdcall" fn();
+pub type FileChangedFunc = unsafe extern "C" fn();
 
 #[repr(C)]
 pub struct FileWatch {

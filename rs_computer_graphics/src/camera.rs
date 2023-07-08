@@ -1,24 +1,132 @@
+use crate::rotator::Rotator;
 use glam::{Vec3Swizzles, Vec4Swizzles};
+use winit::event::ElementState;
+
+pub trait CameraInputEventHandle {
+    fn mouse_motion_handle(camera: &mut Camera, delta: (f64, f64), is_cursor_visible: bool);
+    fn keyboard_input_handle(
+        camera: &mut Camera,
+        virtual_key_code: &winit::event::VirtualKeyCode,
+        element_state: &winit::event::ElementState,
+        is_cursor_visible: bool,
+    );
+}
+
+pub struct DefaultCameraInputEventHandle {}
+
+impl CameraInputEventHandle for DefaultCameraInputEventHandle {
+    fn mouse_motion_handle(camera: &mut Camera, delta: (f64, f64), is_cursor_visible: bool) {
+        if is_cursor_visible == false {
+            let speed_x = 0.0_f32;
+            let speed_y = 0.01_f32;
+            let dx: f32;
+            if delta.0.is_sign_negative() {
+                dx = 1.0;
+            } else {
+                dx = -1.0;
+            }
+            let dy: f32;
+            if delta.1.is_sign_negative() {
+                dy = 1.0;
+            } else {
+                dy = -1.0;
+            }
+            camera.add_world_rotation_with_relative_rotator(Rotator {
+                yaw: dx * speed_x,
+                roll: 0.0,
+                pitch: dy * speed_y,
+            });
+        }
+    }
+
+    fn keyboard_input_handle(
+        camera: &mut Camera,
+        virtual_key_code: &winit::event::VirtualKeyCode,
+        element_state: &winit::event::ElementState,
+        is_cursor_visible: bool,
+    ) {
+        let speed = 0.05_f32;
+        if virtual_key_code == &winit::event::VirtualKeyCode::W
+            && element_state == &ElementState::Pressed
+            && is_cursor_visible == false
+        {
+            camera.add_world_location(glam::Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: -1.0 * speed,
+            });
+        }
+        if virtual_key_code == &winit::event::VirtualKeyCode::A
+            && element_state == &ElementState::Pressed
+            && is_cursor_visible == false
+        {
+            camera.add_world_location(glam::Vec3 {
+                x: -1.0 * speed,
+                y: 0.0,
+                z: 0.0,
+            });
+        }
+        if virtual_key_code == &winit::event::VirtualKeyCode::S
+            && element_state == &ElementState::Pressed
+            && is_cursor_visible == false
+        {
+            camera.add_world_location(glam::Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0 * speed,
+            });
+        }
+        if virtual_key_code == &winit::event::VirtualKeyCode::D
+            && element_state == &ElementState::Pressed
+            && is_cursor_visible == false
+        {
+            camera.add_world_location(glam::Vec3 {
+                x: 1.0 * speed,
+                y: 0.0,
+                z: 0.0,
+            });
+        }
+        if virtual_key_code == &winit::event::VirtualKeyCode::Q
+            && element_state == &ElementState::Pressed
+            && is_cursor_visible == false
+        {
+            camera.add_world_location(glam::Vec3 {
+                x: 0.0,
+                y: 1.0 * speed,
+                z: 0.0,
+            });
+        }
+        if virtual_key_code == &winit::event::VirtualKeyCode::E
+            && element_state == &ElementState::Pressed
+            && is_cursor_visible == false
+        {
+            camera.add_world_location(glam::Vec3 {
+                x: 0.0,
+                y: -1.0 * speed,
+                z: 0.0,
+            });
+        }
+    }
+}
 
 pub struct Camera {
-    pub(crate) world_location: glam::Vec3,
-    pub(crate) center: glam::Vec3,
-    up: glam::Vec3,
+    world_location: glam::Vec3,
+    up_vector: glam::Vec3,
     forward_vector: glam::Vec3,
-    pub(crate) fov_y_radians: f32,
-    pub(crate) aspect_ratio: f32,
-    pub(crate) z_near: f32,
-    pub(crate) z_far: f32,
-    pub(crate) projection_matrix: glam::Mat4,
-    pub(crate) view_matrix: glam::Mat4,
-    pub(crate) view_projection: glam::Mat4,
+    fov_y_radians: f32,
+    aspect_ratio: f32,
+    z_near: f32,
+    z_far: f32,
+    projection_matrix: glam::Mat4,
+    view_matrix: glam::Mat4,
+    rotator: Rotator,
 }
 
 impl Camera {
-    pub fn new(
+    fn new(
         world_location: glam::Vec3,
-        center: glam::Vec3,
-        up: glam::Vec3,
+        forward_vector: glam::Vec3,
+        up_vector: glam::Vec3,
         fov_y_radians: f32,
         aspect_ratio: f32,
         z_near: f32,
@@ -26,19 +134,22 @@ impl Camera {
     ) -> Camera {
         let projection_matrix =
             glam::Mat4::perspective_rh(fov_y_radians, aspect_ratio, z_near, z_far);
-        let view_matrix = glam::Mat4::look_at_rh(world_location, center, glam::Vec3::Y);
+        let view_matrix = glam::Mat4::look_to_rh(world_location, forward_vector, up_vector);
         Camera {
             world_location,
+            up_vector,
+            forward_vector,
             fov_y_radians,
             aspect_ratio,
             z_near,
             z_far,
             projection_matrix,
             view_matrix,
-            center,
-            up,
-            forward_vector: (center - world_location).normalize(),
-            view_projection: projection_matrix * view_matrix,
+            rotator: Rotator {
+                yaw: 0.0,
+                roll: 0.0,
+                pitch: 0.0,
+            },
         }
     }
 
@@ -69,31 +180,12 @@ impl Camera {
         self.update_projection_matrix();
     }
 
-    pub fn set_world_absolute_location(&mut self, world_location: glam::Vec3) {
-        self.world_location = world_location;
-        self.center = self.world_location + self.forward_vector;
-
-        self.update_view_matrix();
-    }
-
-    pub fn add_world_absolute_location(&mut self, world_location: glam::Vec3) {
+    pub fn add_world_location(&mut self, world_location: glam::Vec3) {
         self.world_location = self.world_location + world_location;
-        self.center = self.world_location + self.forward_vector;
-
         self.update_view_matrix();
     }
 
-    pub fn add_rotation(&mut self, axis: glam::Vec3, angle_degrees: f32) {
-        let matrix = glam::Mat4::from_quat(glam::Quat::from_axis_angle(
-            axis,
-            angle_degrees.to_radians(),
-        ));
-        let mut forward_vector = self.forward_vector.xyzx();
-        forward_vector.w = 0.0;
-        self.forward_vector = (matrix * forward_vector).xyz().normalize();
-        self.center = self.world_location + self.forward_vector;
-        self.update_view_matrix();
-    }
+    pub fn add_world_rotation_with_relative_rotator(&mut self, rotator: Rotator) {}
 
     fn update_projection_matrix(&mut self) {
         self.projection_matrix = glam::Mat4::perspective_rh(
@@ -102,16 +194,11 @@ impl Camera {
             self.z_near,
             self.z_far,
         );
-        self.update_vp();
     }
 
     fn update_view_matrix(&mut self) {
-        self.view_matrix = glam::Mat4::look_at_rh(self.world_location, self.center, glam::Vec3::Y);
-        self.update_vp();
-    }
-
-    fn update_vp(&mut self) {
-        self.view_projection = self.projection_matrix * self.view_matrix;
+        self.view_matrix =
+            glam::Mat4::look_to_rh(self.world_location, self.forward_vector, self.up_vector);
     }
 
     pub fn get_view_matrix(&self) -> glam::Mat4 {
@@ -122,7 +209,7 @@ impl Camera {
         return self.projection_matrix;
     }
 
-    pub fn get_view_projection(&self) -> glam::Mat4 {
-        return self.view_projection;
+    pub fn get_world_location(&self) -> glam::Vec3 {
+        self.world_location
     }
 }

@@ -9,7 +9,7 @@ namespace Foundation
         public static Action Debounce(this Action func, int milliseconds = 300)
         {
             int last = 0;
-            return delegate()
+            return delegate ()
             {
                 int current = Interlocked.Increment(ref last);
                 Task.Delay(milliseconds).ContinueWith(task =>
