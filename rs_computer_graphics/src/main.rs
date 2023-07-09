@@ -1,3 +1,4 @@
+use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoVisuals};
 use glam::Vec4Swizzles;
 use rs_computer_graphics::{
     actor::Actor,
@@ -16,6 +17,7 @@ use rs_computer_graphics::{
         native_texture_view::NativeWGPUTextureView,
     },
     file_manager::FileManager,
+    gizmo::FGizmo,
     native_window::NativeWindow,
     render_pipeline::phong_pipeline::PhongPipeline,
     rotator::Rotator,
@@ -63,9 +65,16 @@ fn main() {
             .init(&wgpu_context.device, &wgpu_context.queue);
     }
 
-    let path = rs_computer_graphics::util::get_resource_path("Axis.fbx");
-
-    let mut actor = Actor::load_from_file(&wgpu_context.device, &wgpu_context.queue, &path);
+    // let mut actor = Actor::load_from_file(
+    //     &wgpu_context.device,
+    //     &wgpu_context.queue,
+    //     &rs_computer_graphics::util::get_resource_path("Axis.fbx"),
+    // );
+    let mut actor = Actor::load_from_file(
+        &wgpu_context.device,
+        &wgpu_context.queue,
+        &rs_computer_graphics::util::get_resource_path("Cube.dae"),
+    );
 
     let shader_lib = ShaderLibrary::default();
     {
@@ -107,8 +116,10 @@ fn main() {
         &swapchain_format,
     );
 
+    let mut gizmo = FGizmo::default();
+
     native_window.event_loop.run(move |event, _, control_flow| {
-        egui_context.platform.handle_event(&event);
+        egui_context.handle_event(&event);
 
         match event {
             RedrawRequested(..) => {
@@ -180,6 +191,7 @@ fn main() {
                     &actor,
                     &camera,
                 );
+
                 let mut data_source = rs_computer_graphics::egui_context::DataSource {
                     is_captrue_enable: false,
                     is_save: false,
@@ -188,9 +200,22 @@ fn main() {
                 };
 
                 egui_context.draw_ui(queue, device, &output_view, &mut data_source);
+                egui_context.gizmo_settings(&mut gizmo);
 
-                actor.set_world_location(data_source.mesh_location);
-                actor.set_rotator(data_source.mesh_rotator);
+                egui::Area::new("Gizmo Viewport")
+                    .fixed_pos((0.0, 0.0))
+                    .show(&egui_context.get_platform_context(), |ui| {
+                        ui.with_layer_id(egui::LayerId::background(), |ui| {
+                            if let Some(model_matrix) =
+                                gizmo.interact(&camera, ui, actor.get_model_matrix())
+                            {
+                                actor.set_model_matrix(model_matrix);
+                            }
+                        });
+                    });
+
+                // actor.set_world_location(data_source.mesh_location);
+                // actor.set_rotator(data_source.mesh_rotator);
 
                 if data_source.is_captrue_enable {
                     CaptureScreen::capture(

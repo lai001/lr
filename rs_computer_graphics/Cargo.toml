@@ -14,7 +14,7 @@ notify-debouncer-mini = { version = "0.2.0" }
 pollster = "0.2"
 log = "0.4.17"
 env_logger = "0.10.0"
-glam = "0.24.0"
+glam = "0.22.0"
 rayon = "1.6"
 walkdir = "2"
 serde = "1.0.164"
@@ -32,3 +32,4 @@ egui_wgpu_backend = "0.23.0"
 egui_winit_platform = "0.18.0"
 egui_demo_lib = "0.21.0"
 rs_dotnet = { version = "0.1.0", path = "../rs_dotnet" }
+egui-gizmo = { version = "0.10.0", path = "../.xmake/deps/egui-gizmo" }

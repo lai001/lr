@@ -3,6 +3,7 @@ set_xmakever("2.7.8")
 local deps_dir = ".xmake/deps/"
 local rs_project_name = "rs_computer_graphics"
 local csharp_workspace_name = "ExampleApplication"
+local gizmo_dir = deps_dir .. "egui-gizmo"
 
 task("download_deps")
     on_run(function () 
@@ -19,6 +20,11 @@ task("download_deps")
 
         if os.exists(deps_dir .. "dotnetSDK") == false and os.exists(deps_dir .. dotnetSDKFilename) then
             archive.extract(deps_dir .. dotnetSDKFilename, deps_dir .. "dotnetSDK")
+        end
+
+        if os.exists(gizmo_dir) == false then
+            git.clone("https://github.com/jakobhellermann/egui-gizmo.git", {outputdir = gizmo_dir})
+            git.checkout("main", {repodir = gizmo_dir})
         end
     end)
     set_menu {

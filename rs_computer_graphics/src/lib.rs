@@ -11,6 +11,7 @@ pub mod egui_context;
 pub mod entry_info;
 pub mod ffi;
 pub mod file_manager;
+pub mod gizmo;
 pub mod id_generator;
 pub mod material;
 pub mod model_loader;

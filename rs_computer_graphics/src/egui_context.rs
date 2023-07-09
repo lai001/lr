@@ -1,14 +1,14 @@
-use egui::Ui;
+use crate::{gizmo::FGizmo, rotator::Rotator};
+use egui::{color_picker::Alpha, Context, Ui, Widget};
 use egui_demo_lib::DemoWindows;
+use egui_gizmo::GizmoMode;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use std::time::Instant;
 
-use crate::rotator::Rotator;
-
 pub struct EGUIContext {
     screen_descriptor: ScreenDescriptor,
-    pub platform: Platform,
+    platform: Platform,
     egui_rpass: RenderPass,
     demo_app: DemoWindows,
     start_time: Instant,
@@ -177,5 +177,107 @@ impl EGUIContext {
         }
         queue.submit(std::iter::once(encoder.finish()));
         // data_source
+    }
+
+    pub fn handle_event(&mut self, event: &winit::event::Event<()>) {
+        self.platform.handle_event(event);
+    }
+
+    pub fn get_platform_context(&mut self) -> Context {
+        self.platform.context()
+    }
+
+    pub fn gizmo_settings(&mut self, gizmo: &mut FGizmo) {
+        let gizmo_mode = &mut gizmo.gizmo_mode;
+        let gizmo_orientation = &mut gizmo.gizmo_orientation;
+        let custom_highlight_color = &mut gizmo.custom_highlight_color;
+
+        let stroke_width = &mut gizmo.visuals.stroke_width;
+        let gizmo_size = &mut gizmo.visuals.gizmo_size;
+        let mut highlight_color = egui::Color32::GOLD;
+        let x_color = &mut gizmo.visuals.x_color;
+        let y_color = &mut gizmo.visuals.y_color;
+        let z_color = &mut gizmo.visuals.z_color;
+        let s_color = &mut gizmo.visuals.s_color;
+        let inactive_alpha = &mut gizmo.visuals.inactive_alpha;
+        let highlight_alpha = &mut gizmo.visuals.highlight_alpha;
+        let egui_ctx = &self.platform.context();
+
+        egui::Window::new("Gizmo Settings")
+            .resizable(false)
+            .show(egui_ctx, |ui| {
+                egui::ComboBox::from_label("Mode")
+                    .selected_text(format!("{gizmo_mode:?}"))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(gizmo_mode, GizmoMode::Rotate, "Rotate");
+                        ui.selectable_value(gizmo_mode, GizmoMode::Translate, "Translate");
+                        ui.selectable_value(gizmo_mode, GizmoMode::Scale, "Scale");
+                    });
+                ui.end_row();
+
+                egui::ComboBox::from_label("Orientation")
+                    .selected_text(format!("{gizmo_orientation:?}"))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            gizmo_orientation,
+                            egui_gizmo::GizmoOrientation::Global,
+                            "Global",
+                        );
+                        ui.selectable_value(
+                            gizmo_orientation,
+                            egui_gizmo::GizmoOrientation::Local,
+                            "Local",
+                        );
+                    });
+                ui.end_row();
+
+                ui.separator();
+
+                egui::Slider::new(gizmo_size, 10.0f32..=500.0)
+                    .text("Gizmo size")
+                    .ui(ui);
+                egui::Slider::new(stroke_width, 0.1..=10.0)
+                    .text("Stroke width")
+                    .ui(ui);
+                egui::Slider::new(inactive_alpha, 0.0..=1.0)
+                    .text("Inactive alpha")
+                    .ui(ui);
+                egui::Slider::new(highlight_alpha, 0.0..=1.0)
+                    .text("Highlighted alpha")
+                    .ui(ui);
+
+                ui.horizontal(|ui| {
+                    egui::color_picker::color_edit_button_srgba(
+                        ui,
+                        &mut highlight_color,
+                        Alpha::Opaque,
+                    );
+                    egui::Checkbox::new(custom_highlight_color, "Custom highlight color").ui(ui);
+                });
+
+                ui.horizontal(|ui| {
+                    egui::color_picker::color_edit_button_srgba(ui, x_color, Alpha::Opaque);
+                    egui::Label::new("X axis color").wrap(false).ui(ui);
+                });
+
+                ui.horizontal(|ui| {
+                    egui::color_picker::color_edit_button_srgba(ui, y_color, Alpha::Opaque);
+                    egui::Label::new("Y axis color").wrap(false).ui(ui);
+                });
+                ui.horizontal(|ui| {
+                    egui::color_picker::color_edit_button_srgba(ui, z_color, Alpha::Opaque);
+                    egui::Label::new("Z axis color").wrap(false).ui(ui);
+                });
+                ui.horizontal(|ui| {
+                    egui::color_picker::color_edit_button_srgba(ui, s_color, Alpha::Opaque);
+                    egui::Label::new("Screen axis color").wrap(false).ui(ui);
+                });
+                ui.end_row();
+            });
+        if *custom_highlight_color {
+            gizmo.visuals.highlight_color = Some(highlight_color);
+        } else {
+            gizmo.visuals.highlight_color = None;
+        }
     }
 }
