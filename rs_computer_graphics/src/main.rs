@@ -1,5 +1,9 @@
 use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoVisuals};
 use glam::Vec4Swizzles;
+#[cfg(feature = "rs_dotnet")]
+use rs_computer_graphics::dotnet_runtime::DotnetRuntime;
+#[cfg(feature = "rs_quickjs")]
+use rs_computer_graphics::quickjs::quickjs_runtime::QuickJSRuntimeContext;
 use rs_computer_graphics::{
     actor::Actor,
     brigde_data::image2d_vertex::Image2DVertex,
@@ -10,7 +14,6 @@ use rs_computer_graphics::{
         panorama_to_cube_demo::PanoramaToCubeDemo, triangle_demo::TriangleDemo,
         yuv420p_demo::YUV420PDemo,
     },
-    dotnet_runtime::DotnetRuntime,
     egui_context::EGUIContext,
     ffi::{
         native_keyboard_input::NativeKeyboardInput, native_queue::NativeWGPUQueue,
@@ -45,7 +48,11 @@ fn main() {
 
     let mut wgpu_context = WGPUContext::new(&native_window.window);
 
+    #[cfg(feature = "rs_dotnet")]
     let mut dotnet_runtime = DotnetRuntime::new(&mut wgpu_context.device);
+
+    #[cfg(feature = "rs_quickjs")]
+    let mut js_runtime = QuickJSRuntimeContext::new();
 
     let mut user_script_change_monitor = UserScriptChangeMonitor::new();
 
@@ -124,6 +131,7 @@ fn main() {
         match event {
             RedrawRequested(..) => {
                 if user_script_change_monitor.is_changed() {
+                    #[cfg(feature = "rs_dotnet")]
                     dotnet_runtime.reload_script();
                 }
                 egui_context.tick();
@@ -152,6 +160,7 @@ fn main() {
                 // let compute_result = compute_demo.execute(&(0..16).collect(), device, queue);
                 // log::debug!("{:?}", compute_result);
 
+                // #[cfg(feature = "rs_dotnet")]
                 // dotnet_runtime.application.redraw_requested(
                 //     NativeWGPUTextureView {
                 //         texture_view: (&output_view),
@@ -278,6 +287,7 @@ fn main() {
 
                     last_mouse_position = Some(position);
 
+                    #[cfg(feature = "rs_dotnet")]
                     dotnet_runtime.application.cursor_moved(position);
                 }
                 winit::event::WindowEvent::KeyboardInput {
@@ -286,6 +296,7 @@ fn main() {
                     is_synthetic: _,
                 } => {
                     if let Some(virtual_keycode) = input.virtual_keycode {
+                        #[cfg(feature = "rs_dotnet")]
                         dotnet_runtime
                             .application
                             .keyboard_input(NativeKeyboardInput {

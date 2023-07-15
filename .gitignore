@@ -1,7 +1,10 @@
 rs_dotnet/target
 rs_computer_graphics/target
+rs_quickjs/target
 Cargo.lock
 .xmake
 .vscode
 .vs
 obj
+build
+vsxmake*

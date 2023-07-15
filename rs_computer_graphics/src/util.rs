@@ -142,7 +142,7 @@ pub fn change_working_directory() {
         let current_dir = current_dir.to_str().unwrap();
         if current_dir != current_exe_dir {
             std::env::set_current_dir(current_exe_dir).unwrap();
-            log::info!("current_dir: {}", current_exe_dir);
+            log::trace!("current_dir: {}", current_exe_dir);
         }
     }
 }

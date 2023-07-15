@@ -22,13 +22,10 @@ impl UserScriptChangeMonitor {
             std::thread::spawn(move || {
                 let mut debouncer =
                     new_debouncer(std::time::Duration::from_millis(200), None, sender).unwrap();
-                debouncer
-                    .watcher()
-                    .watch(
-                        std::path::Path::new(&user_script_path),
-                        notify::RecursiveMode::NonRecursive,
-                    )
-                    .unwrap();
+                let _ = debouncer.watcher().watch(
+                    std::path::Path::new(&user_script_path),
+                    notify::RecursiveMode::NonRecursive,
+                );
                 for events in receiver {
                     log::info!("Request to rebuild script.");
                     match events {

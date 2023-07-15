@@ -22,6 +22,7 @@ pub struct ProjectDescriptionFileField {
     pub resource_dir: String,
     pub shader_dir: String,
     pub intermediate_dir: String,
+    pub scripts_dir: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -38,7 +39,7 @@ impl ProjectDescription {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
         let project_description: ProjectDescription = serde_json::from_str(&contents).unwrap();
-        log::trace!("{:?}", project_description);
+        log::info!("{:#?}", project_description);
         if !std::path::Path::new(&project_description.paths.intermediate_dir).exists() {
             if let Ok(_) = std::fs::create_dir(project_description.paths.intermediate_dir.clone()) {
                 log::trace!(

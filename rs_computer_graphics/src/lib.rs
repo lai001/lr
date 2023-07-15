@@ -6,6 +6,7 @@ pub mod camera;
 pub mod default_textures;
 pub mod demo;
 pub mod depth_texture;
+#[cfg(feature = "rs_dotnet")]
 pub mod dotnet_runtime;
 pub mod egui_context;
 pub mod entry_info;
@@ -17,6 +18,8 @@ pub mod material;
 pub mod model_loader;
 pub mod native_window;
 pub mod project;
+#[cfg(feature = "rs_quickjs")]
+pub mod quickjs;
 pub mod render_pipeline;
 pub mod resource_manager;
 pub mod rotator;

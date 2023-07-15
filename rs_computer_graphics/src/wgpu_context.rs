@@ -38,8 +38,8 @@ impl WGPUContext {
         let swapchain_capabilities = surface.get_capabilities(&adapter);
         let swapchain_format = swapchain_capabilities.formats[0];
 
-        log::info!("swapchain_capabilities {:?}", swapchain_capabilities);
-        log::info!("adapter: {:?}", adapter.get_info());
+        log::info!("swapchain_capabilities {:#?}", swapchain_capabilities);
+        log::info!("adapter: {:#?}", adapter.get_info());
         log::info!("swapchain_format: {:?}", swapchain_format);
 
         let surface_config = wgpu::SurfaceConfiguration {
