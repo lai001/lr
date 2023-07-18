@@ -66,6 +66,11 @@ task("download_deps")
             git.clone("https://github.com/jakobhellermann/egui-gizmo.git", {outputdir = gizmo_dir})
             git.checkout("main", {repodir = gizmo_dir})
         end
+
+        if os.exists("Resource/neon_photostudio_2k.exr") == false then 
+            local link = "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/2k/neon_photostudio_2k.exr"
+            http.download(link, "Resource/neon_photostudio_2k.exr")
+        end
     end)
     set_menu {
         usage = "xmake download_deps",

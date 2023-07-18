@@ -1,6 +1,6 @@
 use crate::{actor::Actor, camera::Camera, yuv420p_image::YUV420pImage};
 use core::ffi;
-use glam::Vec4Swizzles;
+use glam::{Vec3Swizzles, Vec4Swizzles};
 use std::io::Write;
 
 #[derive(Clone, Debug)]
@@ -502,10 +502,89 @@ pub fn ray_intersection_hit_test(
     results
 }
 
+// http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
+pub fn radical_inverse_vdc(bits: u32) -> f32 {
+    let mut bits = bits;
+    bits = (bits << 16) | (bits >> 16);
+    bits = ((bits & 0x55555555) << 1) | ((bits & 0xAAAAAAAA) >> 1);
+    bits = ((bits & 0x33333333) << 2) | ((bits & 0xCCCCCCCC) >> 2);
+    bits = ((bits & 0x0F0F0F0F) << 4) | ((bits & 0xF0F0F0F0) >> 4);
+    bits = ((bits & 0x00FF00FF) << 8) | ((bits & 0xFF00FF00) >> 8);
+    bits as f32 * 2.3283064365386963e-10 // / 0x100000000
+}
+
+pub fn hammersley_2d(i: u32, n: u32) -> glam::Vec2 {
+    glam::vec2(i as f32 / n as f32, radical_inverse_vdc(i))
+}
+
+pub fn hemisphere_sample_uniform(u: f32, v: f32) -> glam::Vec3 {
+    let phi = v * std::f32::consts::TAU;
+    let cos_theta = 1.0 - u;
+    let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
+    glam::vec3(phi.cos() * sin_theta, phi.sin() * sin_theta, cos_theta)
+}
+
+pub fn importance_sample_ggx(xi: glam::Vec2, roughness: f32) -> glam::Vec3 {
+    let a = roughness * roughness;
+    let phi = std::f32::consts::TAU * xi.x;
+    let cos_theta = ((1.0 - xi.y) / (1.0 + (a * a - 1.0) * xi.y)).sqrt();
+    let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
+    glam::vec3(phi.cos() * sin_theta, phi.sin() * sin_theta, cos_theta)
+}
+
+pub fn sample_equirectangular_map(sample_picker: glam::Vec3) -> glam::Vec2 {
+    let x = ((sample_picker.z.atan2(sample_picker.x) + std::f32::consts::PI)
+        / std::f32::consts::TAU)
+        .clamp(0.0, 1.0);
+    let y = (sample_picker.y.acos() / std::f32::consts::PI).clamp(0.0, 1.0);
+    glam::vec2(x, y)
+}
+
+pub fn geometry_schlick_ggx(n_dot_v: f32, roughness: f32) -> f32 {
+    let a = roughness;
+    let k = (a * a) / 2.0f32;
+    let nom = n_dot_v;
+    let denom = n_dot_v * (1.0 - k) + k;
+    return nom / denom;
+}
+
+pub fn geometry_smith(n: glam::Vec3, v: glam::Vec3, l: glam::Vec3, roughness: f32) -> f32 {
+    let n_dot_v = n.dot(v).max(0.0);
+    let n_dot_l = n.dot(l).max(0.0);
+    let ggx2 = geometry_schlick_ggx(n_dot_v, roughness);
+    let ggx1 = geometry_schlick_ggx(n_dot_l, roughness);
+    return ggx1 * ggx2;
+}
+
+pub fn convert_coordinate_system(
+    v: glam::Vec3,
+    x: glam::Vec3,
+    y: glam::Vec3,
+    z: glam::Vec3,
+) -> glam::Vec3 {
+    let mut x_axis = x.xyzx();
+    x_axis.w = 0.0;
+    let mut y_axis = y.xyzx();
+    y_axis.w = 0.0;
+    let mut z_axis = z.xyzx();
+    z_axis.w = 0.0;
+    let mut v = v.xyzx();
+    v.w = 1.0;
+    (glam::mat4(x_axis, y_axis, z_axis, glam::Vec4::W) * v).xyz()
+}
+
+pub fn reflect_vec3(i: glam::Vec3, n: glam::Vec3) -> glam::Vec3 {
+    i - 2.0 * n.dot(i) * n
+}
+
 #[cfg(test)]
 pub mod test {
-    use super::{alignment, math_remap_value_range, triangle_plane_ray_intersection};
-    use crate::util::next_highest_power_of_two;
+    use super::{alignment, math_remap_value_range, reflect_vec3, triangle_plane_ray_intersection};
+    use crate::util::{
+        convert_coordinate_system, geometry_schlick_ggx, geometry_smith, hammersley_2d,
+        hemisphere_sample_uniform, importance_sample_ggx, next_highest_power_of_two,
+        radical_inverse_vdc, sample_equirectangular_map,
+    };
 
     #[test]
     pub fn next_highest_power_of_two_test() {

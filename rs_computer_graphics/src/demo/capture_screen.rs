@@ -58,24 +58,21 @@ impl CaptureScreen {
 
         if let Ok(Ok(_)) = receiver.recv() {
             let padded_buffer = buffer_slice.get_mapped_range();
-            thread_pool::GLOBAL_IO_THREAD_POOL
-                .lock()
-                .unwrap()
-                .in_place_scope(|scope| {
-                    let deep_copy_data = padded_buffer.to_vec();
-                    scope.spawn(move |_| {
-                        match image::save_buffer(
-                            path,
-                            &deep_copy_data,
-                            window_size.width,
-                            window_size.height,
-                            image::ColorType::Rgba8,
-                        ) {
-                            Ok(_) => log::debug!("Save screen image successfully"),
-                            Err(error) => log::error!("{:?}", error),
-                        }
-                    })
-                });
+            let deep_copy_data = padded_buffer.to_vec();
+            let path = path.to_string();
+            let window_size = window_size.clone();
+            thread_pool::ThreadPool::global().lock().unwrap().spawn(
+                move || match image::save_buffer(
+                    path,
+                    &deep_copy_data,
+                    window_size.width,
+                    window_size.height,
+                    image::ColorType::Rgba8,
+                ) {
+                    Ok(_) => log::debug!("Save screen image successfully"),
+                    Err(error) => log::error!("{:?}", error),
+                },
+            );
             drop(padded_buffer);
             output_buffer.unmap();
         }

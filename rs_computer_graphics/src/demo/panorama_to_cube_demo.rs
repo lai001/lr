@@ -48,7 +48,7 @@ impl PanoramaToCubeDemo {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> PanoramaToCubeDemo {
         let (equirectangular_data, equirectangular_size) = Self::image_data();
         let mut length = equirectangular_size.0.min(equirectangular_size.1);
-        length = (length as f32 / 6.0).round() as u32;
+        length = (length as f32).round() as u32;
         length = next_highest_power_of_two(length as isize) as u32;
 
         let shader = ShaderLibrary::default()
@@ -244,26 +244,22 @@ impl PanoramaToCubeDemo {
             let data = buffer_slice.get_mapped_range();
             let mut chunk = data.chunks_exact(single_length);
             let mut index: i32 = 0;
+
             while let Some(data) = chunk.next() {
-                thread_pool::GLOBAL_IO_THREAD_POOL
-                    .lock()
-                    .unwrap()
-                    .in_place_scope(|scope| {
-                        let deep_copy_data = data.to_vec();
-                        let length = self.cube_length;
-                        scope.spawn(move |_| {
-                            match image::save_buffer(
-                                std::format!("./outputimage_{}.exr", index),
-                                &deep_copy_data,
-                                length,
-                                length,
-                                image::ColorType::Rgba32F,
-                            ) {
-                                Ok(_) => log::debug!("Save image successfully"),
-                                Err(error) => panic!("{}", error),
-                            }
-                        })
-                    });
+                let deep_copy_data = data.to_vec();
+                let length = self.cube_length;
+                thread_pool::ThreadPool::io().lock().unwrap().spawn(
+                    move || match image::save_buffer(
+                        std::format!("./outputimage_{}.exr", index),
+                        &deep_copy_data,
+                        length,
+                        length,
+                        image::ColorType::Rgba32F,
+                    ) {
+                        Ok(_) => log::debug!("Save image successfully"),
+                        Err(error) => panic!("{}", error),
+                    },
+                );
                 index += 1;
             }
 

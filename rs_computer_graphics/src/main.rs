@@ -6,6 +6,7 @@ use rs_computer_graphics::dotnet_runtime::DotnetRuntime;
 use rs_computer_graphics::quickjs::quickjs_runtime::QuickJSRuntimeContext;
 use rs_computer_graphics::{
     actor::Actor,
+    bake::{BakeInfo, Baker},
     brigde_data::image2d_vertex::Image2DVertex,
     camera::{Camera, CameraInputEventHandle, DefaultCameraInputEventHandle},
     default_textures::DefaultTextures,
@@ -26,6 +27,7 @@ use rs_computer_graphics::{
     rotator::Rotator,
     shader::shader_library::ShaderLibrary,
     static_mesh::StaticMesh,
+    thread_pool,
     user_script_change_monitor::UserScriptChangeMonitor,
     util::{
         change_working_directory, init_log, math_remap_value_range, screent_space_to_world_space,
@@ -206,9 +208,13 @@ fn main() {
                     is_save: false,
                     mesh_location: actor.get_localtion(),
                     mesh_rotator: actor.get_rotator(),
+                    target_fps: egui_context.get_fps(),
                 };
 
                 egui_context.draw_ui(queue, device, &output_view, &mut data_source);
+                egui_context.set_fps(data_source.target_fps);
+                egui_context.sync_fps(control_flow);
+
                 egui_context.gizmo_settings(&mut gizmo);
 
                 egui::Area::new("Gizmo Viewport")

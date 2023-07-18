@@ -1,6 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 
+#[cfg(feature = "rs_quickjs")]
 fn main() {
     if Ok("release".to_owned()) == env::var("PROFILE") {
         println!("cargo:rustc-link-search=../build/windows/x64/release");
@@ -24,3 +25,6 @@ fn main() {
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
 }
+
+#[cfg(not(feature = "rs_quickjs"))]
+fn main() {}

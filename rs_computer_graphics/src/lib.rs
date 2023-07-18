@@ -1,5 +1,6 @@
 pub mod actor;
 pub mod application;
+pub mod bake;
 pub mod brigde_data;
 pub mod buffer_dimensions;
 pub mod camera;

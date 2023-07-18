@@ -12,7 +12,9 @@ pub struct EGUIContext {
     egui_rpass: RenderPass,
     demo_app: DemoWindows,
     start_time: Instant,
+    current_frame_start_time: Instant,
     render_ticks: usize,
+    fps: u64,
 }
 
 pub struct DataSource {
@@ -21,6 +23,7 @@ pub struct DataSource {
 
     pub mesh_location: glam::Vec3,
     pub mesh_rotator: Rotator,
+    pub target_fps: u64,
 }
 
 impl EGUIContext {
@@ -51,6 +54,8 @@ impl EGUIContext {
             demo_app,
             start_time: Instant::now(),
             render_ticks: 0,
+            current_frame_start_time: Instant::now(),
+            fps: 24,
         }
     }
 
@@ -59,6 +64,7 @@ impl EGUIContext {
     }
 
     pub fn tick(&mut self) {
+        self.current_frame_start_time = Instant::now();
         self.render_ticks += 1;
         self.platform
             .update_time(self.start_time.elapsed().as_secs_f64());
@@ -68,19 +74,20 @@ impl EGUIContext {
         let context = &self.platform.context();
 
         // self.demo_app.ui(context);
-
-        egui::Area::new("Buttons")
-            .fixed_pos(egui::pos2(32.0, 32.0))
-            .show(context, |ui| {
-                let response = ui.button("Capture screen");
-                if response.clicked() {
-                    data_source.is_captrue_enable = true;
-                }
-                let response = ui.button("Save");
-                if response.clicked() {
-                    data_source.is_save = true;
-                }
+        egui::Window::new("Pannel").show(context, |ui|{
+            let response = ui.button("Capture screen");
+            if response.clicked() {
+                data_source.is_captrue_enable = true;
+            }
+            let response = ui.button("Save");
+            if response.clicked() {
+                data_source.is_save = true;
+            }
+            ui.horizontal(|ui| {
+                ui.label("fps: ");
+                ui.add(egui::DragValue::new(&mut data_source.target_fps).clamp_range(1..=60));
             });
+        });
 
         egui::Window::new("Property").show(context, |ui| {
             self.draw_vec3_control(ui, &mut data_source.mesh_location, "Location ");
@@ -279,5 +286,30 @@ impl EGUIContext {
         } else {
             gizmo.visuals.highlight_color = None;
         }
+    }
+
+    pub fn get_start_time(&self) -> Instant {
+        self.start_time
+    }
+
+    pub fn sync_fps(&mut self, control_flow: &mut winit::event_loop::ControlFlow) {
+        let start_time = self.current_frame_start_time;
+        let elapsed_time = std::time::Instant::now()
+            .duration_since(start_time)
+            .as_millis() as u64;
+        let wait_millis = match 1000 / self.fps >= elapsed_time {
+            true => 1000 / self.fps - elapsed_time,
+            false => 0,
+        };
+        let new_inst = start_time + std::time::Duration::from_millis(wait_millis);
+        *control_flow = winit::event_loop::ControlFlow::WaitUntil(new_inst);
+    }
+
+    pub fn get_fps(&self) -> u64 {
+        self.fps
+    }
+
+    pub fn set_fps(&mut self, fps: u64) {
+        self.fps = fps;
     }
 }

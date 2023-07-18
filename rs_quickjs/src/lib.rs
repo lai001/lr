@@ -1,5 +1,7 @@
+#[cfg(feature = "rs_quickjs")]
 pub mod quickjs_bindings;
 
+#[cfg(feature = "rs_quickjs")]
 #[cfg(test)]
 mod tests {
     use super::quickjs_bindings::*;
