@@ -1,163 +1,13 @@
 use crate::{
+    bake_info::BakeInfo,
+    cube_map::CubeMap,
     thread_pool,
     util::{
-        convert_coordinate_system, geometry_smith, hammersley_2d, hemisphere_sample_uniform,
-        importance_sample_ggx, reflect_vec3, sample_equirectangular_map,
+        calculate_mipmap_level, convert_coordinate_system, geometry_smith, hammersley_2d,
+        hemisphere_sample_uniform, importance_sample_ggx, reflect_vec3, sample_equirectangular_map,
     },
 };
 use glam::Vec3Swizzles;
-use image::GenericImageView;
-
-pub struct CubeMap<P: image::Pixel, Container> {
-    negative_x: image::ImageBuffer<P, Container>,
-    positive_x: image::ImageBuffer<P, Container>,
-    negative_y: image::ImageBuffer<P, Container>,
-    positive_y: image::ImageBuffer<P, Container>,
-    negative_z: image::ImageBuffer<P, Container>,
-    positive_z: image::ImageBuffer<P, Container>,
-}
-
-impl<P, Container> CubeMap<P, Container>
-where
-    P: image::Pixel,
-    Container: std::ops::Deref<Target = [P::Subpixel]>,
-{
-    pub fn to_mut_array(&mut self) -> Vec<&mut image::ImageBuffer<P, Container>> {
-        let images = vec![
-            &mut self.positive_x,
-            &mut self.negative_x,
-            &mut self.positive_y,
-            &mut self.negative_y,
-            &mut self.positive_z,
-            &mut self.negative_z,
-        ];
-        images
-    }
-
-    pub fn to_array(&self) -> Vec<&image::ImageBuffer<P, Container>> {
-        let images = vec![
-            &self.positive_x,
-            &self.negative_x,
-            &self.positive_y,
-            &self.negative_y,
-            &self.positive_z,
-            &self.negative_z,
-        ];
-        images
-    }
-
-    pub fn sample(&self, location: glam::Vec3) -> &P {
-        let location_abs = location.abs();
-        let mag = location_abs.max_element();
-        if mag == location_abs.x {
-            if location.x > 0.0 {
-                let x = 1.0 - (location.z + 1.0) / 2.0;
-                let y = (location.y + 1.0) / 2.0;
-                let x = x * (self.positive_x.width() - 1) as f32;
-                let y = y * (self.positive_x.height() - 1) as f32;
-                let pixel = (&self.positive_x).get_pixel(x as u32, y as u32);
-                return pixel;
-            } else if location.x < 0.0 {
-                let x = (location.z + 1.0) / 2.0;
-                let y = (location.y + 1.0) / 2.0;
-                let x = x * (self.positive_x.width() - 1) as f32;
-                let y = y * (self.positive_x.height() - 1) as f32;
-                let pixel = (&self.negative_x).get_pixel(x as u32, y as u32);
-                return pixel;
-            }
-        } else if mag == location_abs.y {
-            if location.y > 0.0 {
-                let x = (location.x + 1.0) / 2.0;
-                let y = 1.0 - (location.z + 1.0) / 2.0;
-                let x = x * (self.positive_x.width() - 1) as f32;
-                let y = y * (self.positive_x.height() - 1) as f32;
-                let pixel = (&self.positive_y).get_pixel(x as u32, y as u32);
-                return pixel;
-            } else if location.y < 0.0 {
-                let x = (location.x + 1.0) / 2.0;
-                let y = (location.z + 1.0) / 2.0;
-                let x = x * (self.positive_x.width() - 1) as f32;
-                let y = y * (self.positive_x.height() - 1) as f32;
-                let pixel = (&self.negative_y).get_pixel(x as u32, y as u32);
-                return pixel;
-            }
-        } else if mag == location_abs.z {
-            if location.z > 0.0 {
-                let x = (location.x + 1.0) / 2.0;
-                let y = (location.y + 1.0) / 2.0;
-                let x = x * (self.positive_x.width() - 1) as f32;
-                let y = y * (self.positive_x.height() - 1) as f32;
-                let pixel = (&self.positive_z).get_pixel(x as u32, y as u32);
-                return pixel;
-            } else if location.z < 0.0 {
-                let x = 1.0 - (location.x + 1.0) / 2.0;
-                let y = (location.y + 1.0) / 2.0;
-                let x = x * (self.positive_x.width() - 1) as f32;
-                let y = y * (self.positive_x.height() - 1) as f32;
-                let pixel = (&self.negative_z).get_pixel(x as u32, y as u32);
-                return pixel;
-            }
-        }
-        panic!()
-    }
-}
-
-pub fn cube_map_to_equirectangular(
-    cube_map: &CubeMap<image::Rgba<f32>, Vec<f32>>,
-    target_width: u32,
-    target_height: u32,
-) -> image::ImageBuffer<image::Rgba<f32>, Vec<f32>> {
-    let mut equirectangular =
-        image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(target_width, target_height);
-    let images = vec![
-        &cube_map.positive_x,
-        &cube_map.negative_x,
-        &cube_map.positive_y,
-        &cube_map.negative_y,
-        &cube_map.positive_z,
-        &cube_map.negative_z,
-    ];
-    let length = cube_map.positive_x.width();
-    for (index, image) in images.iter().enumerate() {
-        for height_idx in 0..length {
-            for width_idx in 0..length {
-                let uv = glam::vec2(
-                    width_idx as f32 / length as f32,
-                    height_idx as f32 / length as f32,
-                ) * 2.0_f32
-                    - 1.0_f32;
-                let sample_picker: glam::Vec3;
-                if index == 0 {
-                    sample_picker = glam::vec3(1.0, uv.y, -uv.x);
-                } else if index == 1 {
-                    sample_picker = glam::vec3(-1.0, uv.y, uv.x);
-                } else if index == 2 {
-                    sample_picker = glam::vec3(uv.x, 1.0, -uv.y);
-                } else if index == 3 {
-                    sample_picker = glam::vec3(uv.x, -1.0, uv.y);
-                } else if index == 4 {
-                    sample_picker = glam::vec3(uv.x, uv.y, 1.0);
-                } else if index == 5 {
-                    sample_picker = glam::vec3(-uv.x, uv.y, -1.0);
-                } else {
-                    panic!()
-                }
-                let sample_picker = sample_picker.normalize();
-                // let color = cube_map.sample(sample_picker);
-                let color = image.get_pixel(width_idx, height_idx);
-                let equirectangular_tex_coord = sample_equirectangular_map(sample_picker);
-                let equirectangular_tex_coord = glam::uvec2(
-                    (equirectangular_tex_coord.x * (target_width as f32 - 1.0)) as u32,
-                    (equirectangular_tex_coord.y * (target_height as f32 - 1.0)) as u32,
-                );
-                let target_pixel = equirectangular
-                    .get_pixel_mut(equirectangular_tex_coord.x, equirectangular_tex_coord.y);
-                target_pixel.0.copy_from_slice(color.0.as_slice());
-            }
-        }
-    }
-    equirectangular
-}
 
 pub fn sample_equirectangular(
     image: &image::ImageBuffer<image::Rgba<f32>, Vec<f32>>,
@@ -172,23 +22,7 @@ pub fn sample_equirectangular(
     return source_pixel;
 }
 
-pub struct BakeInfo {
-    pub is_bake_environment: bool,
-    pub is_bake_irradiance: bool,
-    pub is_bake_brdflut: bool,
-    pub is_bake_pre_filter: bool,
-    pub environment_cube_map_length: u32,
-    pub irradiance_cube_map_length: u32,
-    pub irradiance_sample_count: u32,
-    pub pre_filter_cube_map_length: u32,
-    pub pre_filter_cube_map_max_mipmap_level: u32,
-    pub pre_filter_sample_count: u32,
-    pub brdflutmap_length: u32,
-    pub brdf_sample_count: u32,
-}
-
 pub struct Baker {
-    file_path: String,
     bake_info: BakeInfo,
     equirectangular_hdr_image: image::ImageBuffer<image::Rgba<f32>, Vec<f32>>,
     environment_cube_map: Option<CubeMap<image::Rgba<f32>, Vec<f32>>>,
@@ -207,7 +41,6 @@ impl Baker {
         if let Ok(image) = image::open(&file_path) {
             let equirectangular_hdr_image = image.into_rgba32f();
             Baker {
-                file_path,
                 bake_info,
                 environment_cube_map: None,
                 equirectangular_hdr_image,
@@ -218,6 +51,30 @@ impl Baker {
         } else {
             panic!()
         }
+    }
+
+    fn default_progress_bar(len: u64, label: &str) -> indicatif::ProgressBar {
+        let template = format!(
+            "[{{elapsed_precise}}] {} {{bar:40.cyan/blue}} {{pos:>8}}/{{len:8}} {{msg}} ({{eta}})",
+            label
+        );
+        let progress_bar = indicatif::ProgressBar::new(len);
+        progress_bar.set_style(indicatif::ProgressStyle::with_template(&template).unwrap());
+        progress_bar
+    }
+
+    fn get_sample_picker(face: u32, uv: glam::Vec2) -> glam::Vec3 {
+        let sample_picker: glam::Vec3;
+        match face {
+            0 => sample_picker = glam::vec3(1.0, uv.y, -uv.x),
+            1 => sample_picker = glam::vec3(-1.0, uv.y, uv.x),
+            2 => sample_picker = glam::vec3(uv.x, 1.0, -uv.y),
+            3 => sample_picker = glam::vec3(uv.x, -1.0, uv.y),
+            4 => sample_picker = glam::vec3(uv.x, uv.y, 1.0),
+            5 => sample_picker = glam::vec3(-uv.x, uv.y, -1.0),
+            _ => panic!(),
+        }
+        sample_picker.normalize()
     }
 
     pub fn bake(&mut self) {
@@ -235,19 +92,8 @@ impl Baker {
         }
     }
 
-    fn calculate_mipmap_level(&mut self, length: u32) -> u32 {
-        let mut mipmap_level: u32 = 1;
-        let mut length = length;
-        while length > 4 {
-            length /= 2;
-            mipmap_level += 1;
-        }
-        return mipmap_level;
-    }
-
     fn bake_pre_filter_cube_maps(&mut self) -> Vec<CubeMap<image::Rgba<f32>, Vec<f32>>> {
-        let max_mipmap_level = self
-            .calculate_mipmap_level(self.bake_info.pre_filter_cube_map_length)
+        let max_mipmap_level = calculate_mipmap_level(self.bake_info.pre_filter_cube_map_length)
             .min(self.bake_info.pre_filter_cube_map_max_mipmap_level);
         assert!(max_mipmap_level > 0);
         let roughness_delta: f32;
@@ -259,6 +105,21 @@ impl Baker {
 
         let mut cube_maps: Vec<CubeMap<image::Rgba<f32>, Vec<f32>>> = vec![];
 
+        let multi_progress = indicatif::MultiProgress::new();
+        let mut progress_collection: Vec<indicatif::ProgressBar> = vec![];
+        for mipmap_level in 0..max_mipmap_level {
+            let length = self.bake_info.pre_filter_cube_map_length / (1 << mipmap_level);
+            let template = format!(
+                "[{{elapsed_precise}}] baking pre filter cube map {} {{bar:40.cyan/blue}} {{pos:>8}}/{{len:8}} {{msg}} ({{eta}})",
+                mipmap_level
+            );
+            let progress_bar =
+                multi_progress.add(indicatif::ProgressBar::new((6 * length * length).into()));
+            let style = indicatif::ProgressStyle::with_template(&template).unwrap();
+            progress_bar.set_style(style);
+            progress_collection.push(progress_bar);
+        }
+
         let (tx, rx) = std::sync::mpsc::channel();
         for mipmap_level in 0..max_mipmap_level {
             let tx = tx.clone();
@@ -266,31 +127,30 @@ impl Baker {
             let sample_count = self.bake_info.pre_filter_sample_count;
             let equirectangular_hdr_image = self.equirectangular_hdr_image.clone();
             let roughness = roughness_delta * mipmap_level as f32;
-
+            let progress_bar = progress_collection[mipmap_level as usize].to_owned();
             thread_pool::ThreadPool::global()
                 .lock()
                 .unwrap()
                 .spawn(move || {
-                    let negative_x =
-                        image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(length, length);
-                    let positive_x =
-                        image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(length, length);
-                    let negative_y =
-                        image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(length, length);
-                    let positive_y =
-                        image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(length, length);
-                    let negative_z =
-                        image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(length, length);
-                    let positive_z =
-                        image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(length, length);
-
                     let mut cube_map = CubeMap {
-                        negative_x: negative_x,
-                        positive_x: positive_x,
-                        negative_y: negative_y,
-                        positive_y: positive_y,
-                        negative_z: negative_z,
-                        positive_z: positive_z,
+                        negative_x: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                            length, length,
+                        ),
+                        positive_x: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                            length, length,
+                        ),
+                        negative_y: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                            length, length,
+                        ),
+                        positive_y: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                            length, length,
+                        ),
+                        negative_z: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                            length, length,
+                        ),
+                        positive_z: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                            length, length,
+                        ),
                     };
 
                     for index in 0..cube_map.to_mut_array().len() {
@@ -301,23 +161,7 @@ impl Baker {
                                     height_idx as f32 / length as f32,
                                 ) * 2.0_f32
                                     - 1.0_f32;
-                                let mut sample_picker: glam::Vec3;
-                                if index == 0 {
-                                    sample_picker = glam::vec3(1.0, uv.y, -uv.x);
-                                } else if index == 1 {
-                                    sample_picker = glam::vec3(-1.0, uv.y, uv.x);
-                                } else if index == 2 {
-                                    sample_picker = glam::vec3(uv.x, 1.0, -uv.y);
-                                } else if index == 3 {
-                                    sample_picker = glam::vec3(uv.x, -1.0, uv.y);
-                                } else if index == 4 {
-                                    sample_picker = glam::vec3(uv.x, uv.y, 1.0);
-                                } else if index == 5 {
-                                    sample_picker = glam::vec3(-uv.x, uv.y, -1.0);
-                                } else {
-                                    panic!()
-                                }
-                                sample_picker = sample_picker.normalize();
+                                let sample_picker = Self::get_sample_picker(index as u32, uv);
                                 let mut total_weight = 0.0_f32;
                                 let mut prefiltered_color = glam::Vec3::ZERO;
 
@@ -355,9 +199,14 @@ impl Baker {
                                         cube_map[index].get_pixel_mut(width_idx, height_idx);
                                     target_pixel.0 = source_pixel.to_array();
                                 }
+                                progress_bar.inc(1);
                             }
                         }
                     }
+                    progress_bar.finish_with_message(format!(
+                        "bake pre filter cube map {} finish.",
+                        mipmap_level
+                    ));
                     tx.send(cube_map).unwrap();
                 });
         }
@@ -395,8 +244,10 @@ impl Baker {
             &mut positive_z,
             &mut negative_z,
         ];
-        let total = (images.len() * length as usize) as f32;
-
+        let progress_bar = Self::default_progress_bar(
+            images.len() as u64 * length as u64 * length as u64,
+            "baking irradiance cube map",
+        );
         for (index, image) in images.iter_mut().enumerate() {
             for height_idx in 0..length {
                 for width_idx in 0..length {
@@ -405,23 +256,7 @@ impl Baker {
                         height_idx as f32 / length as f32,
                     ) * 2.0_f32
                         - 1.0_f32;
-                    let mut sample_picker: glam::Vec3;
-                    if index == 0 {
-                        sample_picker = glam::vec3(1.0, uv.y, -uv.x);
-                    } else if index == 1 {
-                        sample_picker = glam::vec3(-1.0, uv.y, uv.x);
-                    } else if index == 2 {
-                        sample_picker = glam::vec3(uv.x, 1.0, -uv.y);
-                    } else if index == 3 {
-                        sample_picker = glam::vec3(uv.x, -1.0, uv.y);
-                    } else if index == 4 {
-                        sample_picker = glam::vec3(uv.x, uv.y, 1.0);
-                    } else if index == 5 {
-                        sample_picker = glam::vec3(-uv.x, uv.y, -1.0);
-                    } else {
-                        panic!()
-                    }
-                    sample_picker = sample_picker.normalize();
+                    let sample_picker = Self::get_sample_picker(index as u32, uv);
                     let up_vector = glam::vec3(0.0, 1.0, 0.0);
                     let tangent_vector = sample_picker.cross(up_vector).normalize();
                     let bitangent_vector = sample_picker.cross(tangent_vector).normalize();
@@ -464,14 +299,11 @@ impl Baker {
                     let mut source_pixel = source_pixel.xyzx();
                     source_pixel.w = 1.0;
                     target_pixel.0 = source_pixel.to_array();
+                    progress_bar.inc(1);
                 }
-                log::trace!(
-                    "Bake irradiance progress: {}",
-                    (index * length as usize + height_idx as usize) as f32 / total
-                );
             }
         }
-
+        progress_bar.finish_with_message("bake irradiance cube map finish.");
         CubeMap {
             negative_x: negative_x,
             positive_x: positive_x,
@@ -526,6 +358,10 @@ impl Baker {
             self.bake_info.brdflutmap_length,
             self.bake_info.brdflutmap_length,
         );
+        let progress_bar = Self::default_progress_bar(
+            self.bake_info.brdflutmap_length as u64 * self.bake_info.brdflutmap_length as u64,
+            "baking brdflut map",
+        );
 
         for height_idx in 0..self.bake_info.brdflutmap_length {
             for width_idx in 0..self.bake_info.brdflutmap_length {
@@ -537,13 +373,10 @@ impl Baker {
                 let pixel_color = glam::vec4(pixel_color.x, pixel_color.y, 0.0, 1.0);
                 let mut color = brdflut_image.get_pixel_mut(width_idx, height_idx);
                 color.0 = pixel_color.to_array();
+                progress_bar.inc(1);
             }
-            log::trace!(
-                "Bake brdf progress: {}",
-                height_idx as f32 / self.bake_info.brdflutmap_length as f32
-            );
         }
-
+        progress_bar.finish_with_message("bake brdf map finish.");
         brdflut_image
     }
 
@@ -564,6 +397,10 @@ impl Baker {
             &mut positive_z,
             &mut negative_z,
         ];
+        let progress_bar = Self::default_progress_bar(
+            images.len() as u64 * length as u64 * length as u64,
+            "baking environment cube map",
+        );
 
         for (index, image) in images.iter_mut().enumerate() {
             for height_idx in 0..length {
@@ -573,23 +410,7 @@ impl Baker {
                         height_idx as f32 / length as f32,
                     ) * 2.0_f32
                         - 1.0_f32;
-                    let mut sample_picker: glam::Vec3;
-                    if index == 0 {
-                        sample_picker = glam::vec3(1.0, uv.y, -uv.x);
-                    } else if index == 1 {
-                        sample_picker = glam::vec3(-1.0, uv.y, uv.x);
-                    } else if index == 2 {
-                        sample_picker = glam::vec3(uv.x, 1.0, -uv.y);
-                    } else if index == 3 {
-                        sample_picker = glam::vec3(uv.x, -1.0, uv.y);
-                    } else if index == 4 {
-                        sample_picker = glam::vec3(uv.x, uv.y, 1.0);
-                    } else if index == 5 {
-                        sample_picker = glam::vec3(-uv.x, uv.y, -1.0);
-                    } else {
-                        panic!()
-                    }
-                    sample_picker = sample_picker.normalize();
+                    let sample_picker = Self::get_sample_picker(index as u32, uv);
 
                     let sample_picker = sample_equirectangular_map(sample_picker);
                     let sample_picker = glam::vec2(
@@ -601,10 +422,11 @@ impl Baker {
                         .equirectangular_hdr_image
                         .get_pixel(sample_picker.x as u32, sample_picker.y as u32);
                     target_pixel.0 = source_pixel.0;
+                    progress_bar.inc(1);
                 }
             }
         }
-
+        progress_bar.finish_with_message("bake environment cube map finish.");
         CubeMap {
             negative_x: negative_x,
             positive_x: positive_x,
@@ -623,8 +445,6 @@ impl Baker {
         match dir_path {
             Some(dir_path) => match std::fs::create_dir_all(dir_path) {
                 Ok(_) => {
-                    let rgba32f_image = image::DynamicImage::ImageRgba32F(image.clone());
-                    let image = rgba32f_image.to_rgba8();
                     let result = image.save(path.clone());
                     match result {
                         Ok(_) => log::trace!("Save to {}", path.to_str().unwrap()),
@@ -637,33 +457,29 @@ impl Baker {
         }
     }
 
-    fn save_cube_map(
-        &self,
-        dir_path: &std::path::Path,
-        cube_map: &CubeMap<image::Rgba<f32>, Vec<f32>>,
-    ) {
+    fn save_cube_map(dir_path: &std::path::Path, cube_map: &CubeMap<image::Rgba<f32>, Vec<f32>>) {
         {
-            let path = dir_path.join("negative_x.png");
+            let path = dir_path.join("negative_x.exr");
             Self::save_image_to_disk(&cube_map.negative_x, path);
         }
         {
-            let path = dir_path.join("positive_x.png");
+            let path = dir_path.join("positive_x.exr");
             Self::save_image_to_disk(&cube_map.positive_x, path);
         }
         {
-            let path = dir_path.join("negative_y.png");
+            let path = dir_path.join("negative_y.exr");
             Self::save_image_to_disk(&cube_map.negative_y, path);
         }
         {
-            let path = dir_path.join("positive_y.png");
+            let path = dir_path.join("positive_y.exr");
             Self::save_image_to_disk(&cube_map.positive_y, path);
         }
         {
-            let path = dir_path.join("negative_z.png");
+            let path = dir_path.join("negative_z.exr");
             Self::save_image_to_disk(&cube_map.negative_z, path);
         }
         {
-            let path = dir_path.join("positive_z.png");
+            let path = dir_path.join("positive_z.exr");
             Self::save_image_to_disk(&cube_map.positive_z, path);
         }
     }
@@ -671,18 +487,18 @@ impl Baker {
     pub fn save_to_disk_sync(&self, dir: &str) {
         let dir_path = std::path::Path::new(dir);
         if let Some(cube_map) = &self.environment_cube_map {
-            self.save_cube_map(&dir_path.join("environment_cube_map"), cube_map);
+            Baker::save_cube_map(&dir_path.join("environment_cube_map"), cube_map);
         }
         if let Some(brdflut_image) = &self.brdflut_image {
-            let path = dir_path.join("brdflut.png");
+            let path = dir_path.join("brdflut.exr");
             Self::save_image_to_disk(brdflut_image, path);
         }
         if let Some(cube_map) = &self.irradiance_cube_map {
-            self.save_cube_map(&dir_path.join("irradiance_cube_map"), cube_map);
+            Baker::save_cube_map(&dir_path.join("irradiance_cube_map"), cube_map);
         }
         if let Some(cube_maps) = &self.pre_filter_cube_maps {
             for (index, cube_map) in cube_maps.iter().enumerate() {
-                self.save_cube_map(
+                Baker::save_cube_map(
                     &dir_path.join(format!("pre_filter_cube_map_{}", index)),
                     cube_map,
                 );

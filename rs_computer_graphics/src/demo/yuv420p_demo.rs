@@ -1,7 +1,6 @@
 use crate::{
     brigde_data::image2d_vertex::Image2DVertex, file_manager::FileManager,
-    render_pipeline::yuv420p_pipeline::YUV420pPipeline, shader::shader_library::ShaderLibrary,
-    util, yuv420p_image::YUV420pImage,
+    render_pipeline::yuv420p_pipeline::YUV420pPipeline, util, yuv420p_image::YUV420pImage,
 };
 use std::path::Path;
 use wgpu::{Device, Queue, Texture, TextureView};

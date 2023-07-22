@@ -34,3 +34,4 @@ egui_demo_lib = "0.21.0"
 rs_dotnet = { version = "0.1.0", path = "../rs_dotnet", optional = true, default-features = false }
 rs_quickjs = { version = "0.1.0", path = "../rs_quickjs", optional = true, default-features = false }
 egui-gizmo = { version = "0.10.0", path = "../.xmake/deps/egui-gizmo" }
+indicatif = "0.17.5"

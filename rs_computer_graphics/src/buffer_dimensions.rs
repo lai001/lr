@@ -1,4 +1,5 @@
 // https://github.dev/gfx-rs/wgpu/blob/trunk/wgpu/examples/capture/main.rs
+#[derive(Debug)]
 pub struct BufferDimensions {
     pub width: usize,
     pub height: usize,

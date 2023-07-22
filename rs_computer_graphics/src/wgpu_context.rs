@@ -12,13 +12,11 @@ pub struct WGPUContext {
 }
 
 impl WGPUContext {
-    pub fn new(window: &winit::window::Window) -> WGPUContext {
+    pub fn new(window: &winit::window::Window, power_preference: Option<wgpu::PowerPreference>) -> WGPUContext {
         let instance = wgpu::Instance::default();
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            // power_preference: wgpu::PowerPreference::HighPerformance,
+            power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
         }))

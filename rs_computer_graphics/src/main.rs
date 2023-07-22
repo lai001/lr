@@ -1,13 +1,9 @@
-use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoVisuals};
-use glam::Vec4Swizzles;
 #[cfg(feature = "rs_dotnet")]
 use rs_computer_graphics::dotnet_runtime::DotnetRuntime;
 #[cfg(feature = "rs_quickjs")]
 use rs_computer_graphics::quickjs::quickjs_runtime::QuickJSRuntimeContext;
 use rs_computer_graphics::{
     actor::Actor,
-    bake::{BakeInfo, Baker},
-    brigde_data::image2d_vertex::Image2DVertex,
     camera::{Camera, CameraInputEventHandle, DefaultCameraInputEventHandle},
     default_textures::DefaultTextures,
     demo::{
@@ -16,26 +12,15 @@ use rs_computer_graphics::{
         yuv420p_demo::YUV420PDemo,
     },
     egui_context::EGUIContext,
-    ffi::{
-        native_keyboard_input::NativeKeyboardInput, native_queue::NativeWGPUQueue,
-        native_texture_view::NativeWGPUTextureView,
-    },
     file_manager::FileManager,
     gizmo::FGizmo,
     native_window::NativeWindow,
     render_pipeline::phong_pipeline::PhongPipeline,
-    rotator::Rotator,
     shader::shader_library::ShaderLibrary,
-    static_mesh::StaticMesh,
-    thread_pool,
     user_script_change_monitor::UserScriptChangeMonitor,
-    util::{
-        change_working_directory, init_log, math_remap_value_range, screent_space_to_world_space,
-        shape, triangle_plane_ray_intersection,
-    },
+    util::{change_working_directory, init_log},
     wgpu_context::WGPUContext,
 };
-use std::io::Write;
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event::*, VirtualKeyCode},
@@ -48,7 +33,8 @@ fn main() {
 
     let native_window = NativeWindow::new();
 
-    let mut wgpu_context = WGPUContext::new(&native_window.window);
+    let mut wgpu_context =
+        WGPUContext::new(&native_window.window, Some(wgpu::PowerPreference::LowPower));
 
     #[cfg(feature = "rs_dotnet")]
     let mut dotnet_runtime = DotnetRuntime::new(&mut wgpu_context.device);

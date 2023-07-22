@@ -159,10 +159,17 @@ pub fn cast_to_raw_buffer<'a, T>(vec: &[T]) -> &'a [u8] {
     buffer
 }
 
-pub fn cast_to_buffer<'a, U>(buffer: *const u8, len: usize) -> &'a [U] {
+pub fn cast_to_raw_type_buffer<'a, U>(buffer: *const u8, len: usize) -> &'a [U] {
     unsafe {
         let len = len / std::mem::size_of::<U>();
         std::slice::from_raw_parts(buffer as *const U, len)
+    }
+}
+
+pub fn cast_to_type_buffer<'a, U>(buffer: &'a [u8]) -> &'a [U] {
+    unsafe {
+        let len = buffer.len() / std::mem::size_of::<U>();
+        std::slice::from_raw_parts(buffer.as_ptr() as *const U, len)
     }
 }
 
@@ -180,6 +187,181 @@ pub fn next_highest_power_of_two(v: isize) -> isize {
     v |= v >> 16;
     v = v + 1;
     v
+}
+
+pub fn calculate_mipmap_level(length: u32) -> u32 {
+    let mut mipmap_level: u32 = 1;
+    let mut length = length;
+    while length > 4 {
+        length /= 2;
+        mipmap_level += 1;
+    }
+    return mipmap_level;
+}
+
+pub fn map_texture_cpu_sync(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    width: u32,
+    height: u32,
+    color_type: image::ColorType,
+) -> Vec<u8> {
+    assert_eq!(color_type, image::ColorType::Rgba32F);
+    let bytes_per_pixel: usize = 4 * std::mem::size_of::<f32>();
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    let buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
+        width as usize,
+        height as usize,
+        bytes_per_pixel,
+    );
+    let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: (buffer_dimensions.padded_bytes_per_row * buffer_dimensions.height) as u64,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let texture_extent = wgpu::Extent3d {
+        width: buffer_dimensions.width as u32,
+        height: buffer_dimensions.height as u32,
+        depth_or_array_layers: 1,
+    };
+    encoder.copy_texture_to_buffer(
+        texture.as_image_copy(),
+        wgpu::ImageCopyBuffer {
+            buffer: &output_buffer,
+            layout: wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
+                rows_per_image: None,
+            },
+        },
+        texture_extent,
+    );
+    let command_buffer = encoder.finish();
+    let submission_index = queue.submit(std::iter::once(command_buffer));
+    let buffer_slice = output_buffer.slice(..);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+    device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index));
+    if let Ok(Ok(_)) = receiver.recv() {
+        let padded_buffer = buffer_slice.get_mapped_range();
+        let deep_copy_data = padded_buffer.to_vec();
+        drop(padded_buffer);
+        output_buffer.unmap();
+        return deep_copy_data;
+    } else {
+        panic!()
+    }
+}
+
+pub fn map_texture_cube_cpu_sync(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    cube_map_texture: &wgpu::Texture,
+    width: u32,
+    height: u32,
+    color_type: image::ColorType,
+) -> Vec<Vec<u8>> {
+    assert_eq!(color_type, image::ColorType::Rgba32F);
+    let bytes_per_pixel: usize = 4 * std::mem::size_of::<f32>();
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    let buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
+        width as usize,
+        height as usize,
+        bytes_per_pixel,
+    );
+
+    let copy_texutre = wgpu::ImageCopyTexture {
+        texture: cube_map_texture,
+        mip_level: 0,
+        origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+        aspect: wgpu::TextureAspect::All,
+    };
+
+    let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: (buffer_dimensions.padded_bytes_per_row * buffer_dimensions.height * 6) as u64,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    encoder.copy_texture_to_buffer(
+        copy_texutre,
+        wgpu::ImageCopyBuffer {
+            buffer: &staging_buffer,
+            layout: wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
+                rows_per_image: Some(height),
+            },
+        },
+        wgpu::Extent3d {
+            width: width,
+            height: height,
+            depth_or_array_layers: 6,
+        },
+    );
+    let submission_index = queue.submit(Some(encoder.finish()));
+    let single_length = buffer_dimensions.padded_bytes_per_row * height as usize;
+    let buffer_slice = staging_buffer.slice(..);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+    device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index));
+    let mut image_datas: Vec<Vec<u8>> = vec![];
+    if let Ok(Ok(_)) = receiver.recv() {
+        let data = buffer_slice.get_mapped_range();
+        let mut chunk = data.chunks_exact(single_length);
+        while let Some(data) = chunk.next() {
+            let deep_copy_data = data.to_vec();
+            image_datas.push(deep_copy_data);
+        }
+        drop(data);
+        staging_buffer.unmap();
+    } else {
+        panic!()
+    }
+    assert_eq!(image_datas.len(), 6);
+    return image_datas;
+}
+
+pub fn texture2d_from_rgba_rgba32_fimage(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    image: &image::Rgba32FImage,
+    mip_level_count: u32,
+) -> wgpu::Texture {
+    let texture_extent = wgpu::Extent3d {
+        depth_or_array_layers: 1,
+        width: image.width(),
+        height: image.height(),
+    };
+
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: texture_extent,
+        mip_level_count: mip_level_count,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba32Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let image_data = image.as_raw().as_slice();
+    let image_data = cast_to_raw_buffer(image_data);
+    queue.write_texture(
+        texture.as_image_copy(),
+        image_data,
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * std::mem::size_of::<f32>() as u32 * image.width()),
+            rows_per_image: None,
+        },
+        texture_extent,
+    );
+    texture
 }
 
 pub fn texture2d_from_rgba_image_file(
@@ -579,12 +761,8 @@ pub fn reflect_vec3(i: glam::Vec3, n: glam::Vec3) -> glam::Vec3 {
 
 #[cfg(test)]
 pub mod test {
-    use super::{alignment, math_remap_value_range, reflect_vec3, triangle_plane_ray_intersection};
-    use crate::util::{
-        convert_coordinate_system, geometry_schlick_ggx, geometry_smith, hammersley_2d,
-        hemisphere_sample_uniform, importance_sample_ggx, next_highest_power_of_two,
-        radical_inverse_vdc, sample_equirectangular_map,
-    };
+    use super::{alignment, math_remap_value_range, triangle_plane_ray_intersection};
+    use crate::util::next_highest_power_of_two;
 
     #[test]
     pub fn next_highest_power_of_two_test() {

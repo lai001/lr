@@ -1,9 +1,13 @@
+pub mod acceleration_bake;
 pub mod actor;
 pub mod application;
 pub mod bake;
+pub mod bake_info;
 pub mod brigde_data;
 pub mod buffer_dimensions;
 pub mod camera;
+pub mod compute_pipeline;
+pub mod cube_map;
 pub mod default_textures;
 pub mod demo;
 pub mod depth_texture;

@@ -1,5 +1,4 @@
 use crate::rotator::Rotator;
-use glam::{Vec3Swizzles, Vec4Swizzles};
 use winit::event::ElementState;
 
 pub trait CameraInputEventHandle {

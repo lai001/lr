@@ -1,7 +1,6 @@
+use crate::project::ProjectDescription;
 use notify_debouncer_mini::new_debouncer;
 use std::sync::{Arc, Mutex};
-
-use crate::project::{ProjectDescription, ProjectDescriptionDotnetField};
 
 pub struct UserScriptChangeMonitor {
     is_source_file_changed: Arc<Mutex<bool>>,

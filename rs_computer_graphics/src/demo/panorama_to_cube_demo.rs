@@ -90,7 +90,7 @@ impl PanoramaToCubeDemo {
             label: None,
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: "main",
+            entry_point: "cs_main",
         });
 
         let equirectangular_texture_extent3d = wgpu::Extent3d {

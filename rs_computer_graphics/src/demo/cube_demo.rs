@@ -1,7 +1,4 @@
-use std::{borrow::Borrow, f32::consts::E, sync::Arc};
-
 use glam::{Vec3Swizzles, Vec4Swizzles};
-
 use crate::{
     brigde_data::mesh_vertex::MeshVertex, camera::Camera, resource_manager::ResourceManager,
     shader::shader_library::ShaderLibrary,

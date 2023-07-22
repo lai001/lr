@@ -58,7 +58,7 @@ impl ModelLoader {
                         .get_resource_path(&impoted_texture.path);
                     match texture_type {
                         russimp::texture::TextureType::Diffuse => {
-                            if let Some((texture, image)) =
+                            if let Some((texture, _)) =
                                 util::texture2d_from_rgba_image_file(device, queue, true, &path)
                             {
                                 log::trace!("Load diffuse texture from {}", &path);
@@ -68,7 +68,7 @@ impl ModelLoader {
                             }
                         }
                         russimp::texture::TextureType::Specular => {
-                            if let Some((texture, image)) =
+                            if let Some((texture, _)) =
                                 util::texture2d_from_rgba_image_file(device, queue, true, &path)
                             {
                                 log::trace!("Load specular texture from {}", &path);
