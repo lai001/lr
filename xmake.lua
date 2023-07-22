@@ -67,9 +67,9 @@ task("download_deps")
             git.checkout("main", {repodir = gizmo_dir})
         end
 
-        if os.exists("Resource/neon_photostudio_2k.exr") == false then 
+        if os.exists("Resource/Remote/neon_photostudio_2k.exr") == false then 
             local link = "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/2k/neon_photostudio_2k.exr"
-            http.download(link, "Resource/neon_photostudio_2k.exr")
+            http.download(link, "Resource/Remote/neon_photostudio_2k.exr")
         end
     end)
     set_menu {

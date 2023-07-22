@@ -95,7 +95,8 @@ impl ComputeDemo {
 
         if let Ok(Ok(_)) = receiver.recv() {
             let data = buffer_slice.get_mapped_range();
-            let result: Vec<u32> = crate::util::cast_to_raw_type_buffer(data.as_ptr(), data.len()).to_vec();
+            let result: Vec<u32> =
+                crate::util::cast_to_raw_type_buffer(data.as_ptr(), data.len()).to_vec();
             drop(data);
             staging_buffer.unmap();
             Some(result)

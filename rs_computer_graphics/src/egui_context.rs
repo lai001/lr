@@ -74,7 +74,7 @@ impl EGUIContext {
         let context = &self.platform.context();
 
         // self.demo_app.ui(context);
-        egui::Window::new("Pannel").show(context, |ui|{
+        egui::Window::new("Pannel").show(context, |ui| {
             let response = ui.button("Capture screen");
             if response.clicked() {
                 data_source.is_captrue_enable = true;

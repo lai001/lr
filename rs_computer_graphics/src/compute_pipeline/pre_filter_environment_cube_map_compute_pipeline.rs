@@ -1,8 +1,8 @@
+use crate::shader::shader_library::ShaderLibrary;
 use wgpu::{
     BindGroupLayout, ComputePipeline, StorageTextureAccess, TextureFormat, TextureSampleType,
     TextureViewDimension,
 };
-use crate::shader::shader_library::ShaderLibrary;
 
 struct Constants {
     roughness: f32,

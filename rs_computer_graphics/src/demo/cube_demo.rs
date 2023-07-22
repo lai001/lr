@@ -1,8 +1,8 @@
-use glam::{Vec3Swizzles, Vec4Swizzles};
 use crate::{
     brigde_data::mesh_vertex::MeshVertex, camera::Camera, resource_manager::ResourceManager,
     shader::shader_library::ShaderLibrary,
 };
+use glam::{Vec3Swizzles, Vec4Swizzles};
 
 pub struct CubeDemo {
     pub model_matrix: glam::Mat4,

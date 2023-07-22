@@ -8,3 +8,4 @@ Cargo.lock
 obj
 build
 vsxmake*
+Resource/Remote
