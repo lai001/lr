@@ -99,6 +99,11 @@ JSValue QuickJS_NewInt32(JSContext *ctx, int32_t val)
     return JS_NewInt32(ctx, val);
 }
 
+JSValue QuickJS_NewInt64(JSContext *ctx, int64_t val)
+{
+    return JS_NewInt64(ctx, val);
+}
+
 JSValue QuickJS_NewBool(JSContext *ctx, JS_BOOL val)
 {
     return JS_NewBool(ctx, val);

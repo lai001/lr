@@ -1,34 +1,43 @@
-use super::ffi::log::rs_Log_trace;
-use rs_quickjs::quickjs_bindings::*;
+use super::ffi::{acceleration_bake::AccelerationBakerJSClass, log::rs_Log_trace};
+use crate::acceleration_bake::AccelerationBaker;
+use rs_quickjs::{
+    quick_js_context::QuickJSContext, quick_js_runtime::QuickJSRuntime, quickjs_bindings::*,
+};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    ffi::CString,
+    sync::{Arc, Mutex},
+};
 
 pub struct QuickJSRuntimeContext {
-    runtime: QuickJSRuntime,
+    runtime: Arc<RefCell<QuickJSRuntime>>,
     context: QuickJSContext,
 }
 
 impl QuickJSRuntimeContext {
     pub fn new() -> QuickJSRuntimeContext {
-        let mut runtime = QuickJSRuntime::new();
-        let mut context = QuickJSContext::new(&mut runtime);
-        runtime.std_init_handlers();
-        runtime.set_module_loader_func();
+        let runtime = Arc::new(RefCell::new(QuickJSRuntime::new()));
+        runtime.borrow_mut().std_init_handlers();
+        runtime.borrow_mut().set_module_loader_func();
+
+        let context = QuickJSContext::new(runtime.clone());
         context.std_add_helpers();
         context.init_module_os();
         context.init_module_std();
-        let mut js_runtime = QuickJSRuntimeContext {
-            runtime,
-            context: context,
-        };
-        js_runtime.register();
+
         let project_description = crate::project::ProjectDescription::default();
         let project_description = project_description.lock().unwrap();
         let scripts_dir = project_description.get_paths().scripts_dir.to_string();
-        let filename = scripts_dir + "/main.js";
-        js_runtime.eval_file_module(&filename);
+        let script_filename = scripts_dir + "/main.js";
+
+        let mut js_runtime = QuickJSRuntimeContext { runtime, context };
+        js_runtime.register();
+        js_runtime.eval_file_module(&script_filename);
         js_runtime
     }
 
-    pub fn eval_file_module(&mut self, filename: &str) {
+    pub fn eval_file_module(&self, filename: &str) {
         self.context.eval_file_module(filename);
     }
 
@@ -38,6 +47,10 @@ impl QuickJSRuntimeContext {
                 let c_function = context.new_c_function(Some(rs_Log_trace), "rs_Log_trace", 0);
                 context.set_property_str(console_obj, "log", c_function);
             });
+
+            let cls = AccelerationBakerJSClass::default().lock().unwrap();
+            let constructor_class_func = cls.import(context);
+            context.set_property_str(global_obj, cls.get_class_name(), constructor_class_func);
         });
     }
 }

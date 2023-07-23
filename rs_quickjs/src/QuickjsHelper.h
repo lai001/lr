@@ -27,6 +27,8 @@ extern "C"
 
     JSValue QuickJS_NewInt32(JSContext *ctx, int32_t val);
 
+    JSValue QuickJS_NewInt64(JSContext *ctx, int64_t val);
+
     JSValue QuickJS_NewBool(JSContext *ctx, JS_BOOL val);
 
     JS_BOOL QuickJS_VALUE_IS_NAN(JSValue v);

@@ -79,6 +79,7 @@ task("download_deps")
             {nil, "download_deps", nil, nil, "xmake download_deps"},
         }        
     } 
+task_end()
 
 task("fmt")
     on_run(function () 
@@ -104,6 +105,7 @@ task("fmt")
             {nil, "fmt", nil, nil, "xmake fmt"},
         }        
     } 
+task_end()
 
 task("build_target")
     on_run(function ()
@@ -189,7 +191,8 @@ task("build_target")
             {"m", "mode", "kv",  nil, nil },
         }        
     } 
-    
+task_end()
+
 task("build_clean")
     on_run(function ()
         os.tryrm(rs_project_name .. "/target")
@@ -209,6 +212,7 @@ task("build_clean")
             {nil, "build_clean", nil, nil, "xmake build_clean"},
         }        
     } 
+task_end()
 
 task("setup_project")
     on_run(function ()
@@ -239,6 +243,7 @@ task("setup_project")
             {nil, "setup_project", nil, nil, "xmake setup_project"},
         }        
     } 
+task_end()
 
 if is_enable_quickjs then 
     target("quickjs")

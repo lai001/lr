@@ -1,7 +1,9 @@
-#[cfg(feature = "rs_quickjs")]
+pub mod quick_js_context;
+pub mod quick_js_runtime;
 pub mod quickjs_bindings;
+#[macro_use]
+extern crate lazy_static;
 
-#[cfg(feature = "rs_quickjs")]
 #[cfg(test)]
 mod tests {
     use super::quickjs_bindings::*;
