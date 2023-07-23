@@ -6,6 +6,7 @@ lazy_static! {
         Mutex::new(AccelerationBakerJSClass::new());
 }
 
+#[derive(Debug)]
 pub struct AccelerationBakerJSClass {
     class_id: JSClassID,
     class_def: JSClassDef,
@@ -72,22 +73,11 @@ impl AccelerationBakerJSClass {
         argc: ::std::os::raw::c_int,
         argv: *mut JSValue,
     ) -> JSValue {
-        log::trace!(
-            "{}",
-            GLOBAL_ACCELERATION_BAKER_JS_CLASS
-                .lock()
-                .unwrap()
-                .class_name
-                .clone()
-                + " ctor"
-        );
+        let jsclass = GLOBAL_ACCELERATION_BAKER_JS_CLASS.lock().unwrap();
+        log::trace!("{}", jsclass.class_name.clone() + " ctor");
         let mut object = QuickJS::null();
         QuickJS::get_property_str(ctx, this_val, "prototype", |ctx, proto| {
-            object = QuickJS::new_object_proto_class(
-                ctx,
-                proto,
-                GLOBAL_ACCELERATION_BAKER_JS_CLASS.lock().unwrap().class_id,
-            );
+            object = QuickJS::new_object_proto_class(ctx, proto, jsclass.class_id);
         });
         return object;
     }
@@ -98,26 +88,14 @@ impl AccelerationBakerJSClass {
         argc: ::std::os::raw::c_int,
         argv: *mut JSValue,
     ) -> JSValue {
+        let jsclass = GLOBAL_ACCELERATION_BAKER_JS_CLASS.lock().unwrap();
         let mut object = QuickJS::null();
-        object = QuickJS::new_string(
-            ctx,
-            &GLOBAL_ACCELERATION_BAKER_JS_CLASS
-                .lock()
-                .unwrap()
-                .class_name,
-        );
+        object = QuickJS::new_string(ctx, &jsclass.class_name);
         return object;
     }
 
     extern "C" fn AccelerationBakerJSClass_finalizer(rt: *mut JSRuntime, this_val: JSValue) {
-        log::trace!(
-            "{}",
-            GLOBAL_ACCELERATION_BAKER_JS_CLASS
-                .lock()
-                .unwrap()
-                .class_name
-                .clone()
-                + " finalizer"
-        );
+        let jsclass = GLOBAL_ACCELERATION_BAKER_JS_CLASS.lock().unwrap();
+        log::trace!("{}", jsclass.class_name.clone() + " finalizer");
     }
 }

@@ -1,14 +1,9 @@
-use super::ffi::{acceleration_bake::AccelerationBakerJSClass, log::rs_Log_trace};
-use crate::acceleration_bake::AccelerationBaker;
-use rs_quickjs::{
-    quick_js_context::QuickJSContext, quick_js_runtime::QuickJSRuntime, quickjs_bindings::*,
+use super::ffi::{
+    acceleration_bake::AccelerationBakerJSClass, bake_info::BakeInfoJSClass, log::rs_Log_trace,
 };
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    ffi::CString,
-    sync::{Arc, Mutex},
-};
+use crate::wgpu_context::WGPUContext;
+use rs_quickjs::{quick_js_context::QuickJSContext, quick_js_runtime::QuickJSRuntime};
+use std::{cell::RefCell, sync::Arc};
 
 pub struct QuickJSRuntimeContext {
     runtime: Arc<RefCell<QuickJSRuntime>>,
@@ -49,6 +44,12 @@ impl QuickJSRuntimeContext {
             });
 
             let cls = AccelerationBakerJSClass::default().lock().unwrap();
+            log::trace!("{:?}", cls);
+            let constructor_class_func = cls.import(context);
+            context.set_property_str(global_obj, cls.get_class_name(), constructor_class_func);
+
+            let cls = BakeInfoJSClass::default().lock().unwrap();
+            log::trace!("{:?}", cls);
             let constructor_class_func = cls.import(context);
             context.set_property_str(global_obj, cls.get_class_name(), constructor_class_func);
         });

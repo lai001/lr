@@ -187,6 +187,14 @@ impl QuickJSContext {
             JS_SetClassProto(self.inner, class_id, obj);
         }
     }
+
+    pub fn get_class_proto(&self, class_id: JSClassID) -> JSValue {
+        unsafe { JS_GetClassProto(self.inner, class_id) }
+    }
+
+    pub fn new_object_proto_class(&self, proto: JSValue, class_id: JSClassID) -> JSValue {
+        unsafe { JS_NewObjectProtoClass(self.inner, proto, class_id) }
+    }
 }
 
 impl Drop for QuickJSContext {

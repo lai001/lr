@@ -89,6 +89,46 @@ impl QuickJS {
         unsafe { QuickJS_IsObject(value) != 0 }
     }
 
+    pub fn is_bool(value: JSValue) -> bool {
+        unsafe { QuickJS_IsBool(value) != 0 }
+    }
+
+    pub fn is_big_float(value: JSValue) -> bool {
+        unsafe { QuickJS_IsBigFloat(value) != 0 }
+    }
+
+    pub fn is_number(value: JSValue) -> bool {
+        unsafe { QuickJS_IsNumber(value) != 0 }
+    }
+
+    pub fn to_bool(ctx: *mut JSContext, value: JSValue) -> bool {
+        unsafe { JS_ToBool(ctx, value) != 0 }
+    }
+
+    pub fn to_uint32(ctx: *mut JSContext, value: JSValue) -> u32 {
+        let mut number = 0_u32;
+        unsafe {
+            QuickJS_ToUint32(ctx, &mut number, value);
+        }
+        number
+    }
+
+    pub fn is_null(val: JSValue) -> bool {
+        unsafe { QuickJS_IsNull(val) != 0 }
+    }
+
+    pub fn is_undefined(val: JSValue) -> bool {
+        unsafe { QuickJS_IsUndefined(val) != 0 }
+    }
+
+    pub fn is_uninitialized(val: JSValue) -> bool {
+        unsafe { QuickJS_IsUninitialized(val) != 0 }
+    }
+
+    pub fn is_exception(val: JSValue) -> bool {
+        unsafe { QuickJS_IsException(val) != 0 }
+    }
+
     pub fn new_string(ctx: *mut JSContext, string: &str) -> JSValue {
         let c_str = CString::new(string).unwrap();
         let value = unsafe { JS_NewString(ctx, c_str.as_ptr()) };
@@ -173,7 +213,25 @@ impl QuickJS {
 
     pub fn set_opaque<T>(obj: JSValue, opaque: *mut T) {
         unsafe {
-            JS_SetOpaque(obj, opaque as *mut ::std::os::raw::c_void);
+            let opaque_pointer: *mut ::std::os::raw::c_void = std::mem::transmute(opaque);
+            JS_SetOpaque(obj, opaque_pointer);
+        }
+    }
+
+    pub fn get_opaque<T>(obj: JSValue, class_id: JSClassID) -> *mut T {
+        unsafe {
+            let opaque_pointer = JS_GetOpaque(obj, class_id);
+            std::mem::transmute(opaque_pointer)
+        }
+    }
+
+    pub fn get_class_proto(ctx: *mut JSContext, class_id: JSClassID) -> JSValue {
+        unsafe { JS_GetClassProto(ctx, class_id) }
+    }
+
+    pub fn std_dump_error(ctx: *mut JSContext) {
+        unsafe {
+            js_std_dump_error(ctx);
         }
     }
 }

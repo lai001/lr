@@ -1,3 +1,5 @@
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct BakeInfo {
     pub is_bake_environment: bool,
     pub is_bake_irradiance: bool,
