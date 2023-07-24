@@ -22,6 +22,7 @@ pub mod id_generator;
 pub mod material;
 pub mod model_loader;
 pub mod native_window;
+pub mod primitive_data;
 pub mod project;
 #[cfg(feature = "rs_quickjs")]
 pub mod quickjs;

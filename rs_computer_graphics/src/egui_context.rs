@@ -55,7 +55,7 @@ impl EGUIContext {
             start_time: Instant::now(),
             render_ticks: 0,
             current_frame_start_time: Instant::now(),
-            fps: 24,
+            fps: 60,
         }
     }
 

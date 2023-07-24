@@ -1,70 +1,60 @@
+use std::sync::Arc;
+
 use crate::actor::Actor;
 use crate::brigde_data::mesh_vertex::MeshVertex;
 use crate::camera::Camera;
+use crate::primitive_data::PrimitiveData;
 use crate::shader::shader_library::ShaderLibrary;
-use crate::static_mesh::StaticMesh;
 use crate::{util, VertexBufferLayout};
+use glam::{Vec3Swizzles, Vec4Swizzles};
 use wgpu::*;
 
-pub struct PhongShadingVSHConstants {
-    model: glam::Mat4,
+struct Constants {
     view: glam::Mat4,
     projection: glam::Mat4,
 }
 
-pub struct PhongPipeline {
+pub struct SkyBoxPipeline {
     render_pipeline: RenderPipeline,
     sampler_bind_group_layout: BindGroupLayout,
     texture_bind_group_layout: BindGroupLayout,
     uniform_bind_group_layout: BindGroupLayout,
     depth_ops: Option<Operations<f32>>,
     stencil_ops: Option<Operations<u32>>,
-    depth_stencil: Option<DepthStencilState>,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    index_count: u32,
 }
 
-impl PhongPipeline {
-    pub fn new(
-        device: &Device,
-        depth_stencil: Option<DepthStencilState>,
-        texture_format: &wgpu::TextureFormat,
-    ) -> PhongPipeline {
+impl SkyBoxPipeline {
+    pub fn new(device: &Device, texture_format: &wgpu::TextureFormat) -> SkyBoxPipeline {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("[PhongPipeline] texture bind group layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: true },
-                            view_dimension: TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
+                label: Some("[SkyBoxPipeline] texture bind group layout"),
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: false },
+                        view_dimension: TextureViewDimension::Cube,
+                        multisampled: false,
                     },
-                    BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: true },
-                            view_dimension: TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                ],
+                    count: None,
+                }],
             });
 
         let uniform_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("[PhongPipeline] uniform bind group layout"),
+                label: Some("[SkyBoxPipeline] uniform bind group layout"),
                 entries: &[BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStages::VERTEX,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: None,
+                        min_binding_size: wgpu::BufferSize::new(
+                            std::mem::size_of::<Constants>() as u64
+                        ),
                     },
                     count: None,
                 }],
@@ -72,17 +62,17 @@ impl PhongPipeline {
 
         let sampler_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("[PhongPipeline] sampler bind group layout"),
+                label: Some("[SkyBoxPipeline] sampler bind group layout"),
                 entries: &[BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
                     count: None,
                 }],
             });
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("[PhongPipeline] pipeline layout"),
+            label: Some("[SkyBoxPipeline] pipeline layout"),
             bind_group_layouts: &[
                 &uniform_bind_group_layout,
                 &texture_bind_group_layout,
@@ -94,18 +84,18 @@ impl PhongPipeline {
         let shader = ShaderLibrary::default()
             .lock()
             .unwrap()
-            .get_shader("phong.wgsl");
+            .get_shader("sky_box.wgsl");
         let vertex_buffer_layouts = [VertexBufferLayout!(
             MeshVertex,
             [
                 VertexFormat::Float32x3,
                 VertexFormat::Float32x2,
                 VertexFormat::Float32x4,
-                VertexFormat::Float32x3
+                VertexFormat::Float32x3,
             ]
         )];
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("[PhongPipeline] render pipeline"),
+            label: Some("[SkyBoxPipeline] render pipeline"),
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: &shader,
@@ -121,17 +111,23 @@ impl PhongPipeline {
                 cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil: {
-                match depth_stencil {
-                    Some(ref x) => Some(x.clone()),
-                    None => None,
-                }
-            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                depth_compare: wgpu::CompareFunction::LessEqual,
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: MultisampleState::default(),
             multiview: None,
         });
 
-        PhongPipeline {
+        let primitive_data = PrimitiveData::cube();
+        let vertex_buffer =
+            crate::util::create_gpu_vertex_buffer_from(device, &primitive_data.vertices, None);
+        let index_buffer =
+            crate::util::create_gpu_index_buffer_from(device, &primitive_data.indices, None);
+        SkyBoxPipeline {
             render_pipeline,
             sampler_bind_group_layout,
             texture_bind_group_layout,
@@ -141,30 +137,9 @@ impl PhongPipeline {
                 store: true,
             }),
             stencil_ops: None,
-            depth_stencil,
-        }
-    }
-
-    pub fn render_actor(
-        &self,
-        device: &Device,
-        queue: &Queue,
-        output_view: &TextureView,
-        depth_view: &TextureView,
-        actor: &Actor,
-        camera: &Camera,
-    ) {
-        let model_matrix = actor.get_model_matrix();
-        for static_mesh in actor.get_static_meshs() {
-            self.render(
-                device,
-                queue,
-                output_view,
-                depth_view,
-                model_matrix,
-                static_mesh,
-                camera,
-            )
+            vertex_buffer,
+            index_buffer,
+            index_count: primitive_data.indices.len() as u32,
         }
     }
 
@@ -174,8 +149,7 @@ impl PhongPipeline {
         queue: &Queue,
         output_view: &TextureView,
         depth_view: &TextureView,
-        model_matrix: &glam::Mat4,
-        static_mesh: &StaticMesh,
+        cube_texture: &wgpu::Texture,
         camera: &Camera,
     ) {
         let mut encoder =
@@ -186,11 +160,20 @@ impl PhongPipeline {
                 depth_ops: self.depth_ops,
                 stencil_ops: self.stencil_ops,
             };
-            let material = static_mesh.get_material();
-            let diffuse_texture_view = material.get_diffuse_texture_view();
-            let specular_texture_view = material.get_specular_texture_view();
 
-            let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+            let cube_view = cube_texture.create_view(&wgpu::TextureViewDescriptor {
+                label: Some("[SkyBoxPipeline] cube_view"),
+                format: Some(wgpu::TextureFormat::Rgba32Float),
+                dimension: Some(wgpu::TextureViewDimension::Cube),
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                mip_level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            });
+            let mut sampler_description = wgpu::SamplerDescriptor::default();
+            // sampler_description.compare = Some(CompareFunction::LessEqual);
+            let sampler = device.create_sampler(&sampler_description);
             let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.sampler_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
@@ -202,26 +185,30 @@ impl PhongPipeline {
 
             let textures_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.texture_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&specular_texture_view),
-                    },
-                ],
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&cube_view),
+                }],
                 label: None,
             });
+            // glm::mat4(glm::mat3(camera.get_view_matrix()));
+            let view = camera.get_view_matrix();
+            let view = glam::mat3(view.x_axis.xyz(), view.y_axis.xyz(), view.z_axis.xyz());
+            let mut x_axis = view.x_axis.xyzx();
+            x_axis.w = 0.0;
+            let mut y_axis = view.y_axis.xyzx();
+            y_axis.w = 0.0;
+            let mut z_axis = view.z_axis.xyzx();
+            z_axis.w = 0.0;
+            let mut w_axis = glam::Vec4::W;
 
-            let phong_shading_vshconstants = PhongShadingVSHConstants {
-                model: model_matrix.clone(),
-                view: camera.get_view_matrix(),
+            let view_matrix = glam::mat4(x_axis, y_axis, z_axis, w_axis);
+
+            let vshconstants = Constants {
+                view: view_matrix,
                 projection: camera.get_projection_matrix(),
             };
-            let uniform_buf =
-                util::create_gpu_uniform_buffer_from(device, &phong_shading_vshconstants, None);
+            let uniform_buf = util::create_gpu_uniform_buffer_from(device, &vshconstants, None);
             let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.uniform_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
@@ -236,7 +223,6 @@ impl PhongPipeline {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        // load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                         load: wgpu::LoadOp::Load,
                         store: true,
                     },
@@ -249,12 +235,11 @@ impl PhongPipeline {
             render_pass.set_bind_group(1, &textures_bind_group, &[]);
             render_pass.set_bind_group(2, &sampler_bind_group, &[]);
 
-            let mesh_buffer = static_mesh.get_mesh_buffer();
-            let vertex_buffer = mesh_buffer.get_vertex_buffer();
-            let index_buffer = mesh_buffer.get_index_buffer();
+            let vertex_buffer = &self.vertex_buffer;
+            let index_buffer = &self.index_buffer;
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.draw_indexed(0..mesh_buffer.get_index_count(), 0, 0..1);
+            render_pass.draw_indexed(0..self.index_count, 0, 0..1);
         }
 
         queue.submit(Some(encoder.finish()));

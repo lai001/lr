@@ -6,14 +6,14 @@ struct VertexOutput {
     @location(3) fragPosition: vec3<f32>,
 };
 
-struct PhongShadingVSHConstants
+struct VSConstants
 {
     model: mat4x4<f32>,
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
 };
 
-@group(0) @binding(0) var<uniform> phongShadingVshConstants: PhongShadingVSHConstants;
+@group(0) @binding(0) var<uniform> constants: VSConstants;
 
 @vertex fn vs_main(
     @location(0) position: vec3<f32>,
@@ -21,15 +21,14 @@ struct PhongShadingVSHConstants
     @location(2) vertexColor: vec4<f32>,
     @location(3) normal: vec3<f32>,
 ) -> VertexOutput {
-
-    let mv = phongShadingVshConstants.view * phongShadingVshConstants.model;
-    let mvp = phongShadingVshConstants.projection * mv;
+    let mv = constants.view * constants.model;
+    let mvp = constants.projection * mv;
     var result: VertexOutput;
     result.texCoord = texCoord;
     result.position = mvp * vec4<f32>(position, 1.0);
     result.vertexColor = vertexColor;
     result.normal = normal;
-    result.fragPosition = (phongShadingVshConstants.model * vec4<f32>(position, 1.0)).xyz;
+    result.fragPosition = (constants.model * vec4<f32>(position, 1.0)).xyz;
     return result;
 }
 

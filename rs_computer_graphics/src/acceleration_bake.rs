@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     bake_info::BakeInfo,
     compute_pipeline::{
@@ -16,6 +18,7 @@ pub struct AccelerationBaker {
     environment_cube_map: Option<CubeMap<image::Rgba<f32>, Vec<f32>>>,
     brdflut_image: Option<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>>,
     irradiance_cube_map: Option<CubeMap<image::Rgba<f32>, Vec<f32>>>,
+    environment_cube_texture: Arc<Option<wgpu::Texture>>,
 }
 
 impl AccelerationBaker {
@@ -30,24 +33,29 @@ impl AccelerationBaker {
         assert!(bake_info.irradiance_cube_map_length > 0);
         assert!(bake_info.pre_filter_cube_map_length > 4);
         assert!(bake_info.pre_filter_cube_map_max_mipmap_level > 0);
-        if let Ok(image) = image::open(&file_path) {
-            let max_mipmap_level = calculate_mipmap_level(bake_info.pre_filter_cube_map_length)
-                .min(bake_info.pre_filter_cube_map_max_mipmap_level);
-            assert!(max_mipmap_level > 0);
+        match image::open(&file_path) {
+            Ok(image) => {
+                let max_mipmap_level = calculate_mipmap_level(bake_info.pre_filter_cube_map_length)
+                    .min(bake_info.pre_filter_cube_map_max_mipmap_level);
+                assert!(max_mipmap_level > 0);
 
-            let equirectangular_hdr_image = image.into_rgba32f();
-            let equirectangular_hdr_texture =
-                texture2d_from_rgba_rgba32_fimage(device, queue, &equirectangular_hdr_image, 1);
-            AccelerationBaker {
-                bake_info,
-                equirectangular_hdr_texture,
-                pre_filter_cube_maps: None,
-                environment_cube_map: None,
-                brdflut_image: None,
-                irradiance_cube_map: None,
+                let equirectangular_hdr_image = image.into_rgba32f();
+                let equirectangular_hdr_texture =
+                    texture2d_from_rgba_rgba32_fimage(device, queue, &equirectangular_hdr_image, 1);
+                AccelerationBaker {
+                    bake_info,
+                    equirectangular_hdr_texture,
+                    pre_filter_cube_maps: None,
+                    environment_cube_map: None,
+                    brdflut_image: None,
+                    irradiance_cube_map: None,
+                    environment_cube_texture: Arc::new(None),
+                }
             }
-        } else {
-            panic!()
+            Err(error) => {
+                log::warn!("{:?}", error);
+                panic!()
+            }
         }
     }
 
@@ -56,7 +64,9 @@ impl AccelerationBaker {
             self.pre_filter_cube_maps = Some(self.bake_pre_filter_cube_maps(device, queue));
         }
         if self.bake_info.is_bake_environment {
-            self.environment_cube_map = Some(self.bake_environment_cube_map(device, queue));
+            let (cube_map, texture) = self.bake_environment_cube_map(device, queue);
+            self.environment_cube_map = Some(cube_map);
+            self.environment_cube_texture = Arc::new(Some(texture));
         }
         if self.bake_info.is_bake_brdflut {
             self.brdflut_image = Some(self.bake_brdflut_image(device, queue));
@@ -108,14 +118,35 @@ impl AccelerationBaker {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> CubeMap<image::Rgba<f32>, Vec<f32>> {
+    ) -> (CubeMap<image::Rgba<f32>, Vec<f32>>, wgpu::Texture) {
         let panorama_to_cube_pipeline = PanoramaToCubePipeline::new(device);
-        let images = panorama_to_cube_pipeline.execute(
+        let texture = panorama_to_cube_pipeline.execute(
             device,
             queue,
             &self.equirectangular_hdr_texture,
             self.bake_info.environment_cube_map_length,
         );
+
+        let image_datas = crate::util::map_texture_cube_cpu_sync(
+            device,
+            queue,
+            &texture,
+            self.bake_info.environment_cube_map_length,
+            self.bake_info.environment_cube_map_length,
+            image::ColorType::Rgba32F,
+        );
+        let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
+        for image_data in &image_datas {
+            let f32_data: &[f32] = crate::util::cast_to_type_buffer(image_data);
+            let imgae = image::Rgba32FImage::from_vec(
+                self.bake_info.environment_cube_map_length,
+                self.bake_info.environment_cube_map_length,
+                f32_data.to_vec(),
+            )
+            .unwrap();
+            images.push(imgae);
+        }
+
         let cube_map = CubeMap {
             negative_x: images[0].to_owned(),
             positive_x: images[1].to_owned(),
@@ -124,7 +155,7 @@ impl AccelerationBaker {
             negative_z: images[4].to_owned(),
             positive_z: images[5].to_owned(),
         };
-        cube_map
+        (cube_map, texture)
     }
 
     fn bake_pre_filter_cube_maps(
@@ -240,5 +271,9 @@ impl AccelerationBaker {
             },
             None => panic!(),
         }
+    }
+
+    pub fn get_environment_cube_texture(&self) -> Arc<Option<wgpu::Texture>> {
+        self.environment_cube_texture.clone()
     }
 }

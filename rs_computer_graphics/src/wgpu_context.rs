@@ -42,6 +42,14 @@ impl WGPUContext {
         log::info!("swapchain_capabilities {:#?}", swapchain_capabilities);
         log::info!("adapter: {:#?}", adapter.get_info());
         log::info!("swapchain_format: {:?}", swapchain_format);
+        log::info!(
+            "default SamplerDescriptor: {:?}",
+            wgpu::SamplerDescriptor::default()
+        );
+        log::info!(
+            "default TextureViewDescriptor: {:?}",
+            wgpu::TextureViewDescriptor::default()
+        );
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,

@@ -3,7 +3,9 @@ use rs_computer_graphics::dotnet_runtime::DotnetRuntime;
 #[cfg(feature = "rs_quickjs")]
 use rs_computer_graphics::quickjs::quickjs_runtime::QuickJSRuntimeContext;
 use rs_computer_graphics::{
+    acceleration_bake::AccelerationBaker,
     actor::Actor,
+    bake_info::BakeInfo,
     camera::{Camera, CameraInputEventHandle, DefaultCameraInputEventHandle},
     default_textures::DefaultTextures,
     demo::{
@@ -15,12 +17,16 @@ use rs_computer_graphics::{
     file_manager::FileManager,
     gizmo::FGizmo,
     native_window::NativeWindow,
-    render_pipeline::phong_pipeline::PhongPipeline,
+    render_pipeline::{
+        attachment_pipeline::AttachmentPipeline, phong_pipeline::PhongPipeline,
+        sky_box_pipeline::SkyBoxPipeline,
+    },
     shader::shader_library::ShaderLibrary,
     user_script_change_monitor::UserScriptChangeMonitor,
     util::{change_working_directory, init_log},
     wgpu_context::WGPUContext,
 };
+use std::borrow::Borrow;
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event::*, VirtualKeyCode},
@@ -111,6 +117,33 @@ fn main() {
         &swapchain_format,
     );
 
+    let attachment_pipeline = AttachmentPipeline::new(&wgpu_context.device, &swapchain_format);
+
+    let sky_box_pipeline = SkyBoxPipeline::new(&wgpu_context.device, &swapchain_format);
+
+    let hdr_filepath =
+        rs_computer_graphics::util::get_resource_path("Remote/neon_photostudio_2k.exr");
+    let mut baker = AccelerationBaker::new(
+        &wgpu_context.device,
+        &wgpu_context.queue,
+        hdr_filepath,
+        BakeInfo {
+            is_bake_environment: true,
+            is_bake_irradiance: false,
+            is_bake_brdflut: false,
+            is_bake_pre_filter: false,
+            environment_cube_map_length: 512,
+            irradiance_cube_map_length: 1024,
+            irradiance_sample_count: 1024,
+            pre_filter_cube_map_length: 1024,
+            pre_filter_cube_map_max_mipmap_level: 6,
+            pre_filter_sample_count: 1024,
+            brdflutmap_length: 1024,
+            brdf_sample_count: 1024,
+        },
+    );
+    baker.bake(&wgpu_context.device, &wgpu_context.queue);
+
     let mut gizmo = FGizmo::default();
 
     native_window.event_loop.run(move |event, _, control_flow| {
@@ -142,6 +175,25 @@ fn main() {
                 let output_view = output_frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
+
+                attachment_pipeline.draw(
+                    device,
+                    queue,
+                    &output_view,
+                    &wgpu_context.get_depth_texture_view(),
+                    wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: true,
+                    },
+                    Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0),
+                        store: true,
+                    }),
+                );
 
                 // triangle_demo.draw(device, &output_view, queue);
                 // cube_demo.draw(device, &output_view, queue, &camera);
@@ -179,6 +231,18 @@ fn main() {
                 //     &output_view,
                 //     queue,
                 // );
+
+                match baker.get_environment_cube_texture().borrow() {
+                    Some(texture) => sky_box_pipeline.render(
+                        device,
+                        queue,
+                        &output_view,
+                        &wgpu_context.get_depth_texture_view(),
+                        texture,
+                        &camera,
+                    ),
+                    None => {}
+                }
 
                 phone_pipeline.render_actor(
                     device,

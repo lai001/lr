@@ -1,5 +1,5 @@
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct MeshVertex {
     pub position: glam::Vec3,
     pub tex_coord: glam::Vec2,
