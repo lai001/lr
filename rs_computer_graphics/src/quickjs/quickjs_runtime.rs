@@ -1,7 +1,6 @@
 use super::ffi::{
     acceleration_bake::AccelerationBakerJSClass, bake_info::BakeInfoJSClass, log::rs_Log_trace,
 };
-use crate::wgpu_context::WGPUContext;
 use rs_quickjs::{quick_js_context::QuickJSContext, quick_js_runtime::QuickJSRuntime};
 use std::{cell::RefCell, sync::Arc};
 

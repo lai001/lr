@@ -51,7 +51,7 @@ fn main() {
     let mut user_script_change_monitor = UserScriptChangeMonitor::new();
 
     let window_size = native_window.window.inner_size();
-    let swapchain_format = wgpu_context.get_surface_capabilities().formats[0];
+    let swapchain_format = wgpu_context.get_current_swapchain_format();
 
     let mut egui_context = EGUIContext::new(
         &wgpu_context.device,
@@ -146,6 +146,12 @@ fn main() {
 
     let mut gizmo = FGizmo::default();
 
+    let mut data_source = rs_computer_graphics::egui_context::DataSource {
+        is_captrue_enable: false,
+        is_save: false,
+        target_fps: egui_context.get_fps(),
+    };
+
     native_window.event_loop.run(move |event, _, control_flow| {
         egui_context.handle_event(&event);
 
@@ -167,19 +173,17 @@ fn main() {
                 }
 
                 let swapchain_format = wgpu_context.get_current_swapchain_format();
-                let surface = &wgpu_context.surface;
+                let surface = wgpu_context.get_current_surface_texture();
                 let device = &wgpu_context.device;
                 let queue = &wgpu_context.queue;
-
-                let output_frame = surface.get_current_texture().unwrap();
-                let output_view = output_frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let surface_texture = &surface.texture;
+                let surface_texture_view =
+                    surface_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
                 attachment_pipeline.draw(
                     device,
                     queue,
-                    &output_view,
+                    &surface_texture_view,
                     &wgpu_context.get_depth_texture_view(),
                     wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
@@ -236,7 +240,7 @@ fn main() {
                     Some(texture) => sky_box_pipeline.render(
                         device,
                         queue,
-                        &output_view,
+                        &surface_texture_view,
                         &wgpu_context.get_depth_texture_view(),
                         texture,
                         &camera,
@@ -247,24 +251,15 @@ fn main() {
                 phone_pipeline.render_actor(
                     device,
                     queue,
-                    &output_view,
+                    &surface_texture_view,
                     &wgpu_context.get_depth_texture_view(),
                     &actor,
                     &camera,
                 );
 
-                let mut data_source = rs_computer_graphics::egui_context::DataSource {
-                    is_captrue_enable: false,
-                    is_save: false,
-                    mesh_location: actor.get_localtion(),
-                    mesh_rotator: actor.get_rotator(),
-                    target_fps: egui_context.get_fps(),
-                };
-
-                egui_context.draw_ui(queue, device, &output_view, &mut data_source);
+                egui_context.draw_ui(queue, device, &surface_texture_view, &mut data_source);
                 egui_context.set_fps(data_source.target_fps);
                 egui_context.sync_fps(control_flow);
-
                 egui_context.gizmo_settings(&mut gizmo);
 
                 egui::Area::new("Gizmo Viewport")
@@ -287,16 +282,18 @@ fn main() {
                         &std::format!("./CaptureScreen_{:?}.png", egui_context.get_render_ticks()),
                         device,
                         queue,
-                        &output_frame.texture,
+                        surface_texture,
                         swapchain_format,
                         &window_size,
                     );
+                    data_source.is_captrue_enable = false;
                 }
                 if data_source.is_save {
                     panorama_to_cube_demo.execute(device, queue);
+                    data_source.is_save = false;
                 }
 
-                output_frame.present();
+                surface.present();
             }
             MainEventsCleared => {
                 native_window.window.request_redraw();
@@ -313,33 +310,44 @@ fn main() {
             },
             WindowEvent { event, .. } => match event {
                 winit::event::WindowEvent::Resized(size) => {
+                    log::trace!("Window resized to {:?}", size);
                     wgpu_context.window_resized(size);
                 }
                 winit::event::WindowEvent::CloseRequested => {
                     *control_flow = ControlFlow::Exit;
+                }
+                winit::event::WindowEvent::MouseInput {
+                    device_id,
+                    state,
+                    button,
+                    modifiers,
+                } => {
+                    // match button {
+                    //     winit::event::MouseButton::Left => todo!(),
+                    //     winit::event::MouseButton::Right => todo!(),
+                    //     winit::event::MouseButton::Middle => todo!(),
+                    //     winit::event::MouseButton::Other(_) => todo!(),
+                    // }
                 }
                 winit::event::WindowEvent::CursorMoved {
                     device_id: _,
                     position,
                     modifiers: _,
                 } => {
-                    let hit_test_results = rs_computer_graphics::util::ray_intersection_hit_test(
-                        &actor,
-                        position,
-                        window_size,
-                        *actor.get_model_matrix(),
-                        &camera,
-                    );
+                    if is_cursor_visible {
+                        let hit_test_results =
+                            rs_computer_graphics::util::ray_intersection_hit_test(
+                                &actor,
+                                position,
+                                window_size,
+                                *actor.get_model_matrix(),
+                                &camera,
+                            );
 
-                    for result in hit_test_results {
-                        log::trace!("{:?}", result);
+                        for result in hit_test_results {
+                            log::trace!("{:?}", result);
+                        }
                     }
-
-                    // log::debug!(
-                    //     "{:?}, {:?}",
-                    //     near_point_at_world_space,
-                    //     far_point_at_world_space
-                    // );
 
                     last_mouse_position = Some(position);
 

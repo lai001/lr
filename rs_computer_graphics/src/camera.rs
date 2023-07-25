@@ -16,24 +16,14 @@ pub struct DefaultCameraInputEventHandle {}
 impl CameraInputEventHandle for DefaultCameraInputEventHandle {
     fn mouse_motion_handle(camera: &mut Camera, delta: (f64, f64), is_cursor_visible: bool) {
         if is_cursor_visible == false {
-            let speed_x = 0.0_f32;
-            let speed_y = 0.01_f32;
-            let dx: f32;
-            if delta.0.is_sign_negative() {
-                dx = 1.0;
-            } else {
-                dx = -1.0;
-            }
-            let dy: f32;
-            if delta.1.is_sign_negative() {
-                dy = 1.0;
-            } else {
-                dy = -1.0;
-            }
-            camera.add_world_rotation_with_relative_rotator(Rotator {
-                yaw: dx * speed_x,
+            let speed_x = 0.25_f64;
+            let speed_y = 0.25_f64;
+            let yaw: f64 = (delta.0 * speed_x).to_radians();
+            let pitch: f64 = (-delta.1 * speed_y).to_radians();
+            camera.add_world_rotation_relative(&Rotator {
+                yaw: yaw as f32,
                 roll: 0.0,
-                pitch: dy * speed_y,
+                pitch: pitch as f32,
             });
         }
     }
@@ -49,17 +39,17 @@ impl CameraInputEventHandle for DefaultCameraInputEventHandle {
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
         {
-            camera.add_world_location(glam::Vec3 {
+            camera.add_local_location(glam::Vec3 {
                 x: 0.0,
                 y: 0.0,
-                z: -1.0 * speed,
+                z: 1.0 * speed,
             });
         }
         if virtual_key_code == &winit::event::VirtualKeyCode::A
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
         {
-            camera.add_world_location(glam::Vec3 {
+            camera.add_local_location(glam::Vec3 {
                 x: -1.0 * speed,
                 y: 0.0,
                 z: 0.0,
@@ -69,17 +59,17 @@ impl CameraInputEventHandle for DefaultCameraInputEventHandle {
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
         {
-            camera.add_world_location(glam::Vec3 {
+            camera.add_local_location(glam::Vec3 {
                 x: 0.0,
                 y: 0.0,
-                z: 1.0 * speed,
+                z: -1.0 * speed,
             });
         }
         if virtual_key_code == &winit::event::VirtualKeyCode::D
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
         {
-            camera.add_world_location(glam::Vec3 {
+            camera.add_local_location(glam::Vec3 {
                 x: 1.0 * speed,
                 y: 0.0,
                 z: 0.0,
@@ -89,7 +79,7 @@ impl CameraInputEventHandle for DefaultCameraInputEventHandle {
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
         {
-            camera.add_world_location(glam::Vec3 {
+            camera.add_local_location(glam::Vec3 {
                 x: 0.0,
                 y: 1.0 * speed,
                 z: 0.0,
@@ -99,7 +89,7 @@ impl CameraInputEventHandle for DefaultCameraInputEventHandle {
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
         {
-            camera.add_world_location(glam::Vec3 {
+            camera.add_local_location(glam::Vec3 {
                 x: 0.0,
                 y: -1.0 * speed,
                 z: 0.0,
@@ -184,7 +174,32 @@ impl Camera {
         self.update_view_matrix();
     }
 
-    pub fn add_world_rotation_with_relative_rotator(&mut self, rotator: Rotator) {}
+    pub fn add_local_location(&mut self, location: glam::Vec3) {
+        self.world_location += self.forward_vector * location.z;
+        self.world_location += self.forward_vector.cross(self.up_vector).normalize() * location.x;
+        self.world_location += self.up_vector * location.y;
+        self.update_view_matrix();
+    }
+
+    pub fn set_world_rotation_absolute(&mut self, rotator: &Rotator) {
+        let mut forward_vector = glam::Vec3::ZERO;
+        let pitch = rotator
+            .pitch
+            .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+        forward_vector.x = pitch.cos() * rotator.yaw.cos();
+        forward_vector.y = pitch.sin();
+        forward_vector.z = pitch.cos() * rotator.yaw.sin();
+        self.forward_vector = forward_vector;
+        self.update_view_matrix();
+    }
+
+    pub fn add_world_rotation_relative(&mut self, rotator: &Rotator) {
+        self.rotator.pitch = (self.rotator.pitch + rotator.pitch)
+            .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+        self.rotator.yaw += rotator.yaw;
+        self.rotator.roll += rotator.roll;
+        self.set_world_rotation_absolute(&self.rotator.clone());
+    }
 
     fn update_projection_matrix(&mut self) {
         self.projection_matrix = glam::Mat4::perspective_rh(
@@ -210,5 +225,9 @@ impl Camera {
 
     pub fn get_world_location(&self) -> glam::Vec3 {
         self.world_location
+    }
+
+    pub fn get_forward_vector(&self) -> &glam::Vec3 {
+        &self.forward_vector
     }
 }

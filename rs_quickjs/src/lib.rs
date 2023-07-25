@@ -1,13 +1,10 @@
 pub mod quick_js_context;
 pub mod quick_js_runtime;
 pub mod quickjs_bindings;
-#[macro_use]
-extern crate lazy_static;
 
 #[cfg(test)]
 mod tests {
     use super::quickjs_bindings::*;
-    use std::ffi::CString;
 
     #[test]
     fn quickjs_test() {

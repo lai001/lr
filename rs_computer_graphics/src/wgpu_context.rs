@@ -1,9 +1,9 @@
 use crate::depth_texture::DepthTexture;
-use wgpu::SurfaceCapabilities;
+use wgpu::{SurfaceCapabilities, SurfaceTexture};
 
 pub struct WGPUContext {
     pub instance: wgpu::Instance,
-    pub surface: wgpu::Surface,
+    surface: wgpu::Surface,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -12,12 +12,16 @@ pub struct WGPUContext {
 }
 
 impl WGPUContext {
+    fn new_surface(instance: &wgpu::Instance, window: &winit::window::Window) -> wgpu::Surface {
+        unsafe { instance.create_surface(window) }.unwrap()
+    }
+
     pub fn new(
         window: &winit::window::Window,
         power_preference: Option<wgpu::PowerPreference>,
     ) -> WGPUContext {
         let instance = wgpu::Instance::default();
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        let surface = Self::new_surface(&instance, window);
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),
             compatible_surface: Some(&surface),
@@ -37,7 +41,13 @@ impl WGPUContext {
 
         let window_size = window.inner_size();
         let swapchain_capabilities = surface.get_capabilities(&adapter);
-        let swapchain_format = swapchain_capabilities.formats[0];
+        let mut swapchain_format = swapchain_capabilities.formats[0];
+
+        for format in &swapchain_capabilities.formats {
+            if format == &wgpu::TextureFormat::Rgba8UnormSrgb {
+                swapchain_format = *format;
+            }
+        }
 
         log::info!("swapchain_capabilities {:#?}", swapchain_capabilities);
         log::info!("adapter: {:#?}", adapter.get_info());
@@ -93,5 +103,9 @@ impl WGPUContext {
 
     pub fn get_depth_texture_view(&self) -> wgpu::TextureView {
         self.depth_texture.get_view()
+    }
+
+    pub fn get_current_surface_texture(&self) -> SurfaceTexture {
+        self.surface.get_current_texture().unwrap()
     }
 }

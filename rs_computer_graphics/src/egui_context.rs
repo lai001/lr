@@ -20,9 +20,6 @@ pub struct EGUIContext {
 pub struct DataSource {
     pub is_captrue_enable: bool,
     pub is_save: bool,
-
-    pub mesh_location: glam::Vec3,
-    pub mesh_rotator: Rotator,
     pub target_fps: u64,
 }
 
@@ -89,11 +86,7 @@ impl EGUIContext {
             });
         });
 
-        egui::Window::new("Property").show(context, |ui| {
-            self.draw_vec3_control(ui, &mut data_source.mesh_location, "Location ");
-            self.draw_rotator_control(ui, &mut data_source.mesh_rotator, "Rotator ");
-        });
-        // data_source
+        egui::Window::new("Property").show(context, |ui| {});
     }
 
     fn draw_rotator_control(&mut self, ui: &mut Ui, value: &mut Rotator, label: &str) {
@@ -102,19 +95,19 @@ impl EGUIContext {
             ui.add(
                 egui::DragValue::new(&mut value.pitch)
                     .speed(1.0)
-                    .clamp_range(0.0..=360.0)
+                    .clamp_range(-180.0..=180.0)
                     .prefix("pitch: "),
             );
             ui.add(
                 egui::DragValue::new(&mut value.yaw)
                     .speed(1.0)
-                    .clamp_range(0.0..=360.0)
+                    .clamp_range(-180.0..=180.0)
                     .prefix("yaw: "),
             );
             ui.add(
                 egui::DragValue::new(&mut value.roll)
                     .speed(1.0)
-                    .clamp_range(0.0..=360.0)
+                    .clamp_range(-180.0..=180.0)
                     .prefix("roll: "),
             );
         });
