@@ -21,6 +21,8 @@ pub struct DataSource {
     pub is_captrue_enable: bool,
     pub is_save: bool,
     pub target_fps: u64,
+    pub roughness_factor: f32,
+    pub metalness_factor: f32,
 }
 
 impl EGUIContext {
@@ -86,7 +88,20 @@ impl EGUIContext {
             });
         });
 
-        egui::Window::new("Property").show(context, |ui| {});
+        egui::Window::new("Property").show(context, |ui| {
+            ui.add(
+                egui::DragValue::new(&mut data_source.roughness_factor)
+                    .speed(0.01)
+                    .clamp_range(0.0..=1.0)
+                    .prefix("roughness_factor: "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut data_source.metalness_factor)
+                    .speed(0.01)
+                    .clamp_range(0.0..=1.0)
+                    .prefix("metalness_factor: "),
+            );
+        });
     }
 
     fn draw_rotator_control(&mut self, ui: &mut Ui, value: &mut Rotator, label: &str) {

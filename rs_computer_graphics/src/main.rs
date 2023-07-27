@@ -188,6 +188,8 @@ fn main() {
         is_captrue_enable: false,
         is_save: false,
         target_fps: egui_context.get_fps(),
+        roughness_factor: 0.0,
+        metalness_factor: 1.0,
     };
 
     native_window.event_loop.run(move |event, _, control_flow| {
@@ -293,8 +295,8 @@ fn main() {
                     &wgpu_context.get_depth_texture_view(),
                     &actor_pbr,
                     &camera,
-                    0.1,
-                    0.0,
+                    data_source.roughness_factor,
+                    data_source.metalness_factor,
                     DirectionalLight::default(),
                     PointLight::default(),
                     SpotLight::default(),

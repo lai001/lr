@@ -14,22 +14,22 @@ fn get_sample_picker(face : u32, uv: vec2<f32>) -> vec3<f32> {
 	switch(face)
 	{
 		case 0u:  {
-			SamplePicker = vec3<f32>(1.0,  uv.y, -uv.x);
+			SamplePicker = vec3<f32>(1.0,  -uv.y, -uv.x);
 		}
 		case 1u: {
-			SamplePicker = vec3<f32>(-1.0, uv.y,  uv.x);
+			SamplePicker = vec3<f32>(-1.0, -uv.y,  uv.x);
 		}
 		case 2u: {
-			SamplePicker = vec3<f32>(uv.x, 1.0, -uv.y);
+			SamplePicker = vec3<f32>(uv.x, 1.0, uv.y);
 		}
 		case 3u: {
-			SamplePicker = vec3<f32>(uv.x, -1.0, uv.y);
+			SamplePicker = vec3<f32>(uv.x, -1.0, -uv.y);
 		}
 		case 4u: {
-			SamplePicker = vec3<f32>(uv.x, uv.y, 1.0);
+			SamplePicker = vec3<f32>(uv.x, -uv.y, 1.0);
 		}
 		case 5u: {
-			SamplePicker = vec3<f32>(-uv.x, uv.y, -1.0);
+			SamplePicker = vec3<f32>(-uv.x, -uv.y, -1.0);
 		}
 		default {
 			SamplePicker = vec3<f32>(1.0, 0.0, 0.0);
