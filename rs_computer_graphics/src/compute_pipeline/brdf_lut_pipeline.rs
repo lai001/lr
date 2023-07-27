@@ -74,7 +74,7 @@ impl BrdfLutPipeline {
         queue: &wgpu::Queue,
         length: u32,
         sample_count: u32,
-    ) -> image::ImageBuffer<image::Rgba<f32>, Vec<f32>> {
+    ) -> wgpu::Texture {
         let lut_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
@@ -86,7 +86,9 @@ impl BrdfLutPipeline {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
 
@@ -134,15 +136,16 @@ impl BrdfLutPipeline {
             cpass.dispatch_workgroups(length / 16, length / 16, 6);
         }
         let _ = queue.submit(Some(encoder.finish()));
-        let image_data = map_texture_cpu_sync(
-            device,
-            queue,
-            &lut_texture,
-            length,
-            length,
-            image::ColorType::Rgba32F,
-        );
-        let f32_data: &[f32] = crate::util::cast_to_type_buffer(&image_data);
-        image::Rgba32FImage::from_vec(length, length, f32_data.to_vec()).unwrap()
+        // let image_data = map_texture_cpu_sync(
+        //     device,
+        //     queue,
+        //     &lut_texture,
+        //     length,
+        //     length,
+        //     image::ColorType::Rgba32F,
+        // );
+        // let f32_data: &[f32] = crate::util::cast_to_type_buffer(&image_data);
+        // image::Rgba32FImage::from_vec(length, length, f32_data.to_vec()).unwrap()
+        lut_texture
     }
 }

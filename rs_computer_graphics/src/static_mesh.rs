@@ -1,4 +1,4 @@
-use crate::{brigde_data::mesh_vertex::MeshVertex, material::Material, util};
+use crate::{brigde_data::mesh_vertex::MeshVertex, material_type::EMaterialType, util};
 
 pub struct Mesh {
     vertex_buffer: Vec<MeshVertex>,
@@ -69,21 +69,26 @@ pub struct StaticMesh {
     name: String,
     mesh: Mesh,
     mesh_buffer: MeshBuffer,
-    material: Material,
+    material_type: EMaterialType,
 }
 
 impl StaticMesh {
-    pub fn new(name: &str, mesh: Mesh, mesh_buffer: MeshBuffer, material: Material) -> StaticMesh {
+    pub fn new(
+        name: &str,
+        mesh: Mesh,
+        mesh_buffer: MeshBuffer,
+        material_type: EMaterialType,
+    ) -> StaticMesh {
         StaticMesh {
             name: name.to_string(),
             mesh,
             mesh_buffer,
-            material,
+            material_type,
         }
     }
 
-    pub fn get_material(&self) -> &Material {
-        &self.material
+    pub fn get_material_type(&self) -> &EMaterialType {
+        &self.material_type
     }
 
     pub fn get_mesh_buffer(&self) -> &MeshBuffer {
@@ -96,5 +101,9 @@ impl StaticMesh {
 
     pub fn get_triangles_view(&self) -> Vec<(&glam::Vec3, &glam::Vec3, &glam::Vec3)> {
         self.mesh.triangles_view()
+    }
+
+    pub fn set_material_type(&mut self, material_type: EMaterialType) {
+        self.material_type = material_type;
     }
 }

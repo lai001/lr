@@ -16,10 +16,13 @@ use rs_computer_graphics::{
     egui_context::EGUIContext,
     file_manager::FileManager,
     gizmo::FGizmo,
+    light::{DirectionalLight, PointLight, SpotLight},
+    material_type::EMaterialType,
     native_window::NativeWindow,
+    pbr_material::PBRMaterial,
     render_pipeline::{
-        attachment_pipeline::AttachmentPipeline, phong_pipeline::PhongPipeline,
-        sky_box_pipeline::SkyBoxPipeline,
+        attachment_pipeline::AttachmentPipeline, pbr_pipeline::PBRPipeline,
+        phong_pipeline::PhongPipeline, sky_box_pipeline::SkyBoxPipeline,
     },
     shader::shader_library::ShaderLibrary,
     user_script_change_monitor::UserScriptChangeMonitor,
@@ -77,6 +80,12 @@ fn main() {
         &rs_computer_graphics::util::get_resource_path("Cube.dae"),
     );
 
+    let mut actor_pbr = Actor::load_from_file(
+        &wgpu_context.device,
+        &wgpu_context.queue,
+        &rs_computer_graphics::util::get_resource_path("Remote/Test/untitled.fbx"),
+    );
+
     let shader_lib = ShaderLibrary::default();
     {
         shader_lib.lock().unwrap().load_shader_from(
@@ -117,6 +126,18 @@ fn main() {
         &swapchain_format,
     );
 
+    let pbr_pipeline = PBRPipeline::new(
+        &wgpu_context.device,
+        Some(wgpu::DepthStencilState {
+            depth_compare: wgpu::CompareFunction::Less,
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        &swapchain_format,
+    );
+
     let attachment_pipeline = AttachmentPipeline::new(&wgpu_context.device, &swapchain_format);
 
     let sky_box_pipeline = SkyBoxPipeline::new(&wgpu_context.device, &swapchain_format);
@@ -129,10 +150,10 @@ fn main() {
         hdr_filepath,
         BakeInfo {
             is_bake_environment: true,
-            is_bake_irradiance: false,
-            is_bake_brdflut: false,
-            is_bake_pre_filter: false,
-            environment_cube_map_length: 512,
+            is_bake_irradiance: true,
+            is_bake_brdflut: true,
+            is_bake_pre_filter: true,
+            environment_cube_map_length: 1024,
             irradiance_cube_map_length: 1024,
             irradiance_sample_count: 1024,
             pre_filter_cube_map_length: 1024,
@@ -143,6 +164,23 @@ fn main() {
         },
     );
     baker.bake(&wgpu_context.device, &wgpu_context.queue);
+
+    {
+        let default_textures = DefaultTextures::default();
+        let default_textures = default_textures.lock().unwrap();
+        for mesh in actor_pbr.get_static_meshs_mut() {
+            let pbr_material = PBRMaterial::new(
+                default_textures.get_black_texture(),
+                default_textures.get_normal_texture(),
+                default_textures.get_white_texture(),
+                default_textures.get_white_texture(),
+                baker.get_brdflut_texture(),
+                baker.get_pre_filter_cube_map_textures(),
+                baker.get_irradiance_cube_map_texture(),
+            );
+            mesh.set_material_type(EMaterialType::Pbr(pbr_material))
+        }
+    }
 
     let mut gizmo = FGizmo::default();
 
@@ -199,15 +237,15 @@ fn main() {
                     }),
                 );
 
-                // triangle_demo.draw(device, &output_view, queue);
-                // cube_demo.draw(device, &output_view, queue, &camera);
+                // triangle_demo.draw(device, &surface_texture_view, queue);
+                // cube_demo.draw(device, &surface_texture_view, queue, &camera);
                 // let compute_result = compute_demo.execute(&(0..16).collect(), device, queue);
                 // log::debug!("{:?}", compute_result);
 
                 // #[cfg(feature = "rs_dotnet")]
                 // dotnet_runtime.application.redraw_requested(
                 //     NativeWGPUTextureView {
-                //         texture_view: (&output_view),
+                //         texture_view: (&surface_texture_view),
                 //     },
                 //     NativeWGPUQueue { queue },
                 // );
@@ -248,14 +286,28 @@ fn main() {
                     None => {}
                 }
 
-                phone_pipeline.render_actor(
+                pbr_pipeline.render_actor(
                     device,
                     queue,
                     &surface_texture_view,
                     &wgpu_context.get_depth_texture_view(),
-                    &actor,
+                    &actor_pbr,
                     &camera,
+                    0.1,
+                    0.0,
+                    DirectionalLight::default(),
+                    PointLight::default(),
+                    SpotLight::default(),
                 );
+
+                // phone_pipeline.render_actor(
+                //     device,
+                //     queue,
+                //     &surface_texture_view,
+                //     &wgpu_context.get_depth_texture_view(),
+                //     &actor,
+                //     &camera,
+                // );
 
                 egui_context.draw_ui(queue, device, &surface_texture_view, &mut data_source);
                 egui_context.set_fps(data_source.target_fps);
@@ -267,9 +319,9 @@ fn main() {
                     .show(&egui_context.get_platform_context(), |ui| {
                         ui.with_layer_id(egui::LayerId::background(), |ui| {
                             if let Some(model_matrix) =
-                                gizmo.interact(&camera, ui, actor.get_model_matrix())
+                                gizmo.interact(&camera, ui, actor_pbr.get_model_matrix())
                             {
-                                actor.set_model_matrix(model_matrix);
+                                actor_pbr.set_model_matrix(model_matrix);
                             }
                         });
                     });

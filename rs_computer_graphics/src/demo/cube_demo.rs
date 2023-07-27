@@ -1,8 +1,9 @@
 use crate::{
     brigde_data::mesh_vertex::MeshVertex, camera::Camera, resource_manager::ResourceManager,
-    shader::shader_library::ShaderLibrary,
+    shader::shader_library::ShaderLibrary, VertexBufferLayout,
 };
 use glam::{Vec3Swizzles, Vec4Swizzles};
+use wgpu::VertexFormat;
 
 pub struct CubeDemo {
     pub model_matrix: glam::Mat4,
@@ -53,6 +54,8 @@ impl CubeDemo {
             tex_coord,
             vertex_color: glam::vec4(0.0, 0.0, 0.0, 0.0),
             normal: glam::vec3(0.0, 0.0, 1.0),
+            tangent: glam::Vec3::X,
+            bitangent: glam::Vec3::Y,
         }
     }
 
@@ -268,33 +271,18 @@ impl CubeDemo {
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
-        let vertex_size = std::mem::size_of::<MeshVertex>();
-        let vertex_buffer_layouts = [wgpu::VertexBufferLayout {
-            array_stride: vertex_size as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x2,
-                    offset: (std::mem::size_of::<f32>() * 3) as u64,
-                    shader_location: 1,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: (std::mem::size_of::<f32>() * 5) as u64,
-                    shader_location: 2,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
-                    offset: (std::mem::size_of::<f32>() * 9) as u64,
-                    shader_location: 3,
-                },
-            ],
-        }];
+        // let vertex_size = std::mem::size_of::<MeshVertex>();
+        let vertex_buffer_layouts = [VertexBufferLayout!(
+            MeshVertex,
+            [
+                VertexFormat::Float32x4,
+                VertexFormat::Float32x3,
+                VertexFormat::Float32x3,
+                VertexFormat::Float32x3,
+                VertexFormat::Float32x3,
+                VertexFormat::Float32x2,
+            ]
+        )];
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,

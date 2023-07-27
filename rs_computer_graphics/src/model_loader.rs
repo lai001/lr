@@ -2,6 +2,7 @@ use crate::{
     brigde_data::mesh_vertex::MeshVertex,
     file_manager::FileManager,
     material::Material,
+    material_type::EMaterialType,
     static_mesh::{Mesh, MeshBuffer, StaticMesh},
     util,
 };
@@ -38,7 +39,10 @@ impl ModelLoader {
 
         let scene = russimp::scene::Scene::from_file(
             &file_path,
-            vec![russimp::scene::PostProcess::Triangulate],
+            vec![
+                russimp::scene::PostProcess::Triangulate,
+                russimp::scene::PostProcess::CalculateTangentSpace,
+            ],
         )
         .unwrap();
 
@@ -46,8 +50,8 @@ impl ModelLoader {
             Self::walk_node(node);
         }
 
-        let mut diffuse_textures: HashMap<String, Arc<wgpu::Texture>> = HashMap::new();
-        let mut specular_textures: HashMap<String, Arc<wgpu::Texture>> = HashMap::new();
+        let mut diffuse_textures: HashMap<String, Arc<Option<wgpu::Texture>>> = HashMap::new();
+        let mut specular_textures: HashMap<String, Arc<Option<wgpu::Texture>>> = HashMap::new();
 
         for material in &scene.materials {
             for (texture_type, textures) in &material.textures {
@@ -63,7 +67,7 @@ impl ModelLoader {
                             {
                                 log::trace!("Load diffuse texture from {}", &path);
 
-                                diffuse_textures.insert(path, Arc::new(texture));
+                                diffuse_textures.insert(path, Arc::new(Some(texture)));
                                 // diffuse_texture = Some(Arc::new(texs.0));
                             }
                         }
@@ -73,7 +77,7 @@ impl ModelLoader {
                             {
                                 log::trace!("Load specular texture from {}", &path);
 
-                                specular_textures.insert(path, Arc::new(texture));
+                                specular_textures.insert(path, Arc::new(Some(texture)));
                                 // specular_texture = Some(Arc::new(texs.0));
                             }
                         }
@@ -87,8 +91,8 @@ impl ModelLoader {
             let mut vertex_buffer: Vec<MeshVertex> = vec![];
             let mut index_buffer: Vec<u32> = vec![];
             let mut uv_map: Option<Vec<russimp::Vector3D>> = None;
-            let mut diffuse_texture: Option<Arc<wgpu::Texture>> = None;
-            let mut specular_texture: Option<Arc<wgpu::Texture>> = None;
+            let mut diffuse_texture: Arc<Option<wgpu::Texture>> = Arc::new(None);
+            let mut specular_texture: Arc<Option<wgpu::Texture>> = Arc::new(None);
 
             for (texture_type, textures) in &scene
                 .materials
@@ -104,12 +108,12 @@ impl ModelLoader {
                 match texture_type {
                     russimp::texture::TextureType::Diffuse => {
                         if let Some(texture) = diffuse_textures.get(&path) {
-                            diffuse_texture = Some(texture.clone());
+                            diffuse_texture = texture.clone();
                         }
                     }
                     russimp::texture::TextureType::Specular => {
                         if let Some(texture) = specular_textures.get(&path) {
-                            specular_texture = Some(texture.clone());
+                            specular_texture = texture.clone();
                         }
                     }
                     _ => {}
@@ -149,17 +153,21 @@ impl ModelLoader {
                     }
 
                     let normal = imported_mesh.normals.get(*index as usize).unwrap();
+                    let tangent = imported_mesh.tangents.get(*index as usize).unwrap();
+                    let bitangent = imported_mesh.bitangents.get(*index as usize).unwrap();
 
                     let vertex = MeshVertex {
-                        position: glam::vec3(vertex.x, vertex.y, vertex.z),
-                        tex_coord: glam::vec2(texture_coord.x, texture_coord.y),
                         vertex_color: glam::vec4(
                             vertex_color.r,
                             vertex_color.g,
                             vertex_color.b,
                             vertex_color.a,
                         ),
+                        position: glam::vec3(vertex.x, vertex.y, vertex.z),
                         normal: glam::vec3(normal.x, normal.y, normal.z),
+                        tangent: glam::vec3(tangent.x, tangent.y, tangent.z),
+                        bitangent: glam::vec3(bitangent.x, bitangent.y, bitangent.z),
+                        tex_coord: glam::vec2(texture_coord.x, texture_coord.y),
                     };
                     vertex_buffer.push(vertex);
                     index_buffer.push(*index);
@@ -176,7 +184,13 @@ impl ModelLoader {
             let mesh = Mesh::new(vertex_buffer, index_buffer);
             let mesh_buffer = MeshBuffer::from(device, &mesh);
             let material = Material::new(diffuse_texture, specular_texture);
-            let static_mesh = StaticMesh::new(&imported_mesh.name, mesh, mesh_buffer, material);
+
+            let static_mesh = StaticMesh::new(
+                &imported_mesh.name,
+                mesh,
+                mesh_buffer,
+                EMaterialType::Phong(material),
+            );
             static_meshs.push(static_mesh);
         }
         static_meshs

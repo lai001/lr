@@ -88,7 +88,7 @@ impl IrradianceCubeMapPipeline {
         equirectangular_texture: &wgpu::Texture,
         length: u32,
         sample_count: u32,
-    ) -> Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> {
+    ) -> wgpu::Texture {
         let cube_map_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
@@ -100,7 +100,9 @@ impl IrradianceCubeMapPipeline {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
 
@@ -168,20 +170,6 @@ impl IrradianceCubeMapPipeline {
         }
 
         let _ = queue.submit(Some(encoder.finish()));
-        let image_datas = crate::util::map_texture_cube_cpu_sync(
-            device,
-            queue,
-            &cube_map_texture,
-            length,
-            length,
-            image::ColorType::Rgba32F,
-        );
-        let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
-        for image_data in &image_datas {
-            let f32_data: &[f32] = crate::util::cast_to_type_buffer(image_data);
-            let imgae = image::Rgba32FImage::from_vec(length, length, f32_data.to_vec()).unwrap();
-            images.push(imgae);
-        }
-        images
+        cube_map_texture
     }
 }

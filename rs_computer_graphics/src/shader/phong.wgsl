@@ -16,17 +16,19 @@ struct VSConstants
 @group(0) @binding(0) var<uniform> constants: VSConstants;
 
 @vertex fn vs_main(
-    @location(0) position: vec3<f32>,
-    @location(1) texCoord: vec2<f32>,
-    @location(2) vertexColor: vec4<f32>,
-    @location(3) normal: vec3<f32>,
+    @location(0) vertex_color: vec4<f32>,
+    @location(1) position: vec3<f32>,
+    @location(2) normal: vec3<f32>,
+    @location(3) tangent: vec3<f32>,
+    @location(4) bitangent: vec3<f32>,
+    @location(5) tex_coord: vec2<f32>,
 ) -> VertexOutput {
     let mv = constants.view * constants.model;
     let mvp = constants.projection * mv;
     var result: VertexOutput;
-    result.texCoord = texCoord;
+    result.texCoord = tex_coord;
     result.position = mvp * vec4<f32>(position, 1.0);
-    result.vertexColor = vertexColor;
+    result.vertexColor = vertex_color;
     result.normal = normal;
     result.fragPosition = (constants.model * vec4<f32>(position, 1.0)).xyz;
     return result;

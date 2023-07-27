@@ -527,9 +527,9 @@ pub fn create_gpu_uniform_buffer_from<T>(
 #[macro_export]
 macro_rules! VertexBufferLayout {
     ($Type:ident, $vertex_formats:expr) => {
-        VertexBufferLayout {
-            array_stride: std::mem::size_of::<$Type>() as BufferAddress,
-            step_mode: VertexStepMode::Vertex,
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<$Type>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &{
                 let mut attributes: Vec<wgpu::VertexAttribute> = vec![];
                 let mut array_stride: u64 = 0;

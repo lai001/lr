@@ -6,6 +6,8 @@ use crate::{util, VertexBufferLayout};
 use glam::{Vec3Swizzles, Vec4Swizzles};
 use wgpu::*;
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
 struct Constants {
     view: glam::Mat4,
     projection: glam::Mat4,
@@ -85,10 +87,12 @@ impl SkyBoxPipeline {
         let vertex_buffer_layouts = [VertexBufferLayout!(
             MeshVertex,
             [
-                VertexFormat::Float32x3,
-                VertexFormat::Float32x2,
                 VertexFormat::Float32x4,
                 VertexFormat::Float32x3,
+                VertexFormat::Float32x3,
+                VertexFormat::Float32x3,
+                VertexFormat::Float32x3,
+                VertexFormat::Float32x2,
             ]
         )];
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {

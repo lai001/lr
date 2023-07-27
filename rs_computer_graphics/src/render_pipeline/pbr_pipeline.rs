@@ -1,21 +1,32 @@
-use crate::actor::Actor;
-use crate::brigde_data::mesh_vertex::MeshVertex;
-use crate::camera::Camera;
-use crate::material_type::EMaterialType;
-use crate::shader::shader_library::ShaderLibrary;
-use crate::static_mesh::StaticMesh;
+use crate::{
+    actor::Actor,
+    brigde_data::mesh_vertex::MeshVertex,
+    // brigde_data::mesh_vertex::PBRMeshVertex,
+    camera::Camera,
+    light::{DirectionalLight, PointLight, SpotLight},
+    material_type::EMaterialType,
+    shader::shader_library::ShaderLibrary,
+    static_mesh::StaticMesh,
+};
 use crate::{util, VertexBufferLayout};
 use wgpu::*;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct PhongShadingVSHConstants {
+struct Constants {
+    directional_light: DirectionalLight,
+    point_light: PointLight,
+    spot_light: SpotLight,
     model: glam::Mat4,
     view: glam::Mat4,
     projection: glam::Mat4,
+    view_position: glam::Vec3,
+    roughness_factor: f32,
+    metalness_factor: f32,
+    _padding3: [u32; 3],
 }
 
-pub struct PhongPipeline {
+pub struct PBRPipeline {
     render_pipeline: RenderPipeline,
     sampler_bind_group_layout: BindGroupLayout,
     texture_bind_group_layout: BindGroupLayout,
@@ -25,15 +36,15 @@ pub struct PhongPipeline {
     depth_stencil: Option<DepthStencilState>,
 }
 
-impl PhongPipeline {
+impl PBRPipeline {
     pub fn new(
         device: &Device,
         depth_stencil: Option<DepthStencilState>,
         texture_format: &wgpu::TextureFormat,
-    ) -> PhongPipeline {
+    ) -> PBRPipeline {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("[PhongPipeline] texture bind group layout"),
+                label: Some("[PBRPipeline] texture bind group layout"),
                 entries: &[
                     BindGroupLayoutEntry {
                         binding: 0,
@@ -55,19 +66,72 @@ impl PhongPipeline {
                         },
                         count: None,
                     },
+                    BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::Cube,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 6,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: false },
+                            view_dimension: TextureViewDimension::Cube,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
                 ],
             });
 
         let uniform_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("[PhongPipeline] uniform bind group layout"),
+                label: Some("[PBRPipeline] uniform bind group layout"),
                 entries: &[BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: ShaderStages::VERTEX,
+                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: None,
+                        min_binding_size: wgpu::BufferSize::new(
+                            std::mem::size_of::<Constants>() as u64
+                        ),
+                        // min_binding_size: None,
                     },
                     count: None,
                 }],
@@ -75,17 +139,25 @@ impl PhongPipeline {
 
         let sampler_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("[PhongPipeline] sampler bind group layout"),
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                }],
+                label: Some("[PBRPipeline] sampler bind group layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                ],
             });
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("[PhongPipeline] pipeline layout"),
+            label: Some("[PBRPipeline] pipeline layout"),
             bind_group_layouts: &[
                 &uniform_bind_group_layout,
                 &texture_bind_group_layout,
@@ -97,7 +169,7 @@ impl PhongPipeline {
         let shader = ShaderLibrary::default()
             .lock()
             .unwrap()
-            .get_shader("phong.wgsl");
+            .get_shader("pbr.wgsl");
         let vertex_buffer_layouts = [VertexBufferLayout!(
             MeshVertex,
             [
@@ -110,7 +182,7 @@ impl PhongPipeline {
             ]
         )];
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("[PhongPipeline] render pipeline"),
+            label: Some("[PBRPipeline] render pipeline"),
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: &shader,
@@ -135,8 +207,7 @@ impl PhongPipeline {
             multisample: MultisampleState::default(),
             multiview: None,
         });
-
-        PhongPipeline {
+        PBRPipeline {
             render_pipeline,
             sampler_bind_group_layout,
             texture_bind_group_layout,
@@ -158,6 +229,11 @@ impl PhongPipeline {
         depth_view: &TextureView,
         actor: &Actor,
         camera: &Camera,
+        roughness_factor: f32,
+        metalness_factor: f32,
+        directional_light: DirectionalLight,
+        point_light: PointLight,
+        spot_light: SpotLight,
     ) {
         let model_matrix = actor.get_model_matrix();
         for static_mesh in actor.get_static_meshs() {
@@ -169,6 +245,11 @@ impl PhongPipeline {
                 model_matrix,
                 static_mesh,
                 camera,
+                roughness_factor,
+                metalness_factor,
+                directional_light,
+                point_light,
+                spot_light,
             )
         }
     }
@@ -182,6 +263,11 @@ impl PhongPipeline {
         model_matrix: &glam::Mat4,
         static_mesh: &StaticMesh,
         camera: &Camera,
+        roughness_factor: f32,
+        metalness_factor: f32,
+        directional_light: DirectionalLight,
+        point_light: PointLight,
+        spot_light: SpotLight,
     ) {
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -193,21 +279,34 @@ impl PhongPipeline {
             };
             let material = {
                 match static_mesh.get_material_type() {
-                    EMaterialType::Phong(material) => material,
-                    EMaterialType::Pbr(_) => panic!(),
+                    EMaterialType::Phong(_) => panic!(),
+                    EMaterialType::Pbr(material) => material,
                 }
             };
+            let albedo_texture_view = material.get_albedo_texture_view();
+            let metallic_texture_view = material.get_metallic_texture_view();
+            let brdflut_texture_view = material.get_brdflut_texture_view();
+            let irradiance_texture_view = material.get_irradiance_texture_view();
+            let roughness_texture_view = material.get_roughness_texture_view();
+            let pre_filter_cube_map_texture_view = material.get_pre_filter_cube_map_texture_view();
+            let normal_texture_view = material.get_normal_texture_view();
 
-            let diffuse_texture_view = material.get_diffuse_texture_view();
-            let specular_texture_view = material.get_specular_texture_view();
-
-            let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
             let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.sampler_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                }],
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Sampler(
+                            &device.create_sampler(&wgpu::SamplerDescriptor::default()),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(
+                            &device.create_sampler(&wgpu::SamplerDescriptor::default()),
+                        ),
+                    },
+                ],
                 label: None,
             });
 
@@ -216,23 +315,51 @@ impl PhongPipeline {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                        resource: wgpu::BindingResource::TextureView(&albedo_texture_view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&specular_texture_view),
+                        resource: wgpu::BindingResource::TextureView(&normal_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&metallic_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&roughness_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&brdflut_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(
+                            &pre_filter_cube_map_texture_view,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::TextureView(&irradiance_texture_view),
                     },
                 ],
                 label: None,
             });
 
-            let phong_shading_vshconstants = PhongShadingVSHConstants {
-                model: model_matrix.clone(),
+            let constants = Constants {
+                directional_light,
+                point_light,
+                spot_light,
+                model: *model_matrix,
                 view: camera.get_view_matrix(),
                 projection: camera.get_projection_matrix(),
+                view_position: camera.get_world_location(),
+                roughness_factor,
+                metalness_factor,
+                _padding3: [0, 0, 0],
             };
-            let uniform_buf =
-                util::create_gpu_uniform_buffer_from(device, &phong_shading_vshconstants, None);
+            let uniform_buf = util::create_gpu_uniform_buffer_from(device, &constants, None);
             let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.uniform_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {

@@ -49,6 +49,10 @@ impl Actor {
         self.static_meshs.as_ref()
     }
 
+    pub fn get_static_meshs_mut(&mut self) -> &mut [StaticMesh] {
+        &mut self.static_meshs
+    }
+
     pub fn set_model_matrix(&mut self, model_matrix: glam::Mat4) {
         self.model = model_matrix;
     }

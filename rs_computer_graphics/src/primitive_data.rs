@@ -15,10 +15,12 @@ impl PrimitiveData {
 
     fn vertex(position: glam::Vec4, tex_coord: glam::Vec2) -> MeshVertex {
         MeshVertex {
-            position: position.xyz(),
-            tex_coord,
             vertex_color: glam::vec4(0.0, 0.0, 0.0, 0.0),
+            position: position.xyz(),
             normal: glam::vec3(0.0, 0.0, 1.0),
+            tangent: glam::Vec3::X,
+            bitangent: glam::Vec3::Y,
+            tex_coord,
         }
     }
 

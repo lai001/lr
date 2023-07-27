@@ -90,8 +90,8 @@ impl PreFilterEnvironmentCubeMapComputePipeline {
         length: u32,
         roughness: f32,
         sample_count: u32,
-    ) -> Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> {
-        let cube_map_texture = device.create_texture(&wgpu::TextureDescriptor {
+    ) -> wgpu::Texture {
+        let cube_map_texture_descriptor = wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
                 width: length,
@@ -102,9 +102,12 @@ impl PreFilterEnvironmentCubeMapComputePipeline {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
-        });
+        };
+        let cube_map_texture = device.create_texture(&cube_map_texture_descriptor);
 
         let equirectangular_texture_view_desc = wgpu::TextureViewDescriptor {
             label: None,
@@ -172,21 +175,6 @@ impl PreFilterEnvironmentCubeMapComputePipeline {
             cpass.dispatch_workgroups(length / 16, length / 16, 6);
         }
         let _ = queue.submit(Some(encoder.finish()));
-
-        let image_datas = crate::util::map_texture_cube_cpu_sync(
-            device,
-            queue,
-            &cube_map_texture,
-            length,
-            length,
-            image::ColorType::Rgba32F,
-        );
-        let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
-        for image_data in &image_datas {
-            let f32_data: &[f32] = crate::util::cast_to_type_buffer(image_data);
-            let imgae = image::Rgba32FImage::from_vec(length, length, f32_data.to_vec()).unwrap();
-            images.push(imgae);
-        }
-        images
+        return cube_map_texture;
     }
 }
