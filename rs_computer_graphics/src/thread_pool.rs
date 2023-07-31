@@ -9,7 +9,13 @@ lazy_static! {
     ));
     static ref GLOBAL_IO_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> = Arc::new(Mutex::new(
         rayon::ThreadPoolBuilder::new()
-            .num_threads(2)
+            .num_threads(1)
+            .build()
+            .unwrap(),
+    ));
+    static ref GLOBAL_AUDIO_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> = Arc::new(Mutex::new(
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
             .build()
             .unwrap(),
     ));
@@ -24,5 +30,9 @@ impl ThreadPool {
 
     pub fn io() -> Arc<Mutex<rayon::ThreadPool>> {
         GLOBAL_IO_THREAD_POOL.clone()
+    }
+
+    pub fn audio() -> Arc<Mutex<rayon::ThreadPool>> {
+        GLOBAL_AUDIO_THREAD_POOL.clone()
     }
 }

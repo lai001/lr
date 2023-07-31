@@ -1,3 +1,4 @@
+use plotters::prelude::BitMapBackend;
 #[cfg(feature = "rs_dotnet")]
 use rs_computer_graphics::dotnet_runtime::DotnetRuntime;
 #[cfg(feature = "rs_quickjs")]
@@ -21,15 +22,23 @@ use rs_computer_graphics::{
     native_window::NativeWindow,
     pbr_material::PBRMaterial,
     render_pipeline::{
-        attachment_pipeline::AttachmentPipeline, pbr_pipeline::PBRPipeline,
-        phong_pipeline::PhongPipeline, sky_box_pipeline::SkyBoxPipeline,
+        attachment_pipeline::AttachmentPipeline, audio_pipeline::AudioPipeline,
+        pbr_pipeline::PBRPipeline, phong_pipeline::PhongPipeline, sky_box_pipeline::SkyBoxPipeline,
     },
     shader::shader_library::ShaderLibrary,
+    static_mesh::StaticMesh,
+    thread_pool,
     user_script_change_monitor::UserScriptChangeMonitor,
-    util::{change_working_directory, init_log},
+    util::{change_working_directory, init_log, save_fft_result},
     wgpu_context::WGPUContext,
 };
-use std::borrow::Borrow;
+use rs_media::{
+    audio_format::{AudioFormat, EAudioSampleType},
+    audio_pcmbuffer::AudioPcmbuffer,
+    audio_player_item::AudioPlayerItem,
+};
+use rustfft::{num_complex::Complex, FftPlanner};
+use std::{borrow::Borrow, sync::Arc, time::Duration};
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event::*, VirtualKeyCode},
@@ -39,6 +48,61 @@ use winit::{
 fn main() {
     init_log();
     change_working_directory();
+
+    // thread_pool::ThreadPool::global().lock().unwrap().spawn(|| {
+    //     rs_media::hw::hw_test(&rs_computer_graphics::util::get_resource_path(
+    //         "Remote/BigBuckBunny.mp4",
+    //     ));
+    // });
+    // thread_pool::ThreadPool::global().lock().unwrap().spawn(|| {
+    //     rs_media::sw::sw_test(&rs_computer_graphics::util::get_resource_path(
+    //         "Remote/BigBuckBunny.mp4",
+    //     ));
+    // });
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let sender_clone = sender.clone();
+    thread_pool::ThreadPool::audio()
+        .lock()
+        .unwrap()
+        .spawn(move || {
+            let mut player_item = AudioPlayerItem::new(
+                &rs_computer_graphics::util::get_resource_path("Remote/sample-15s.mp3"),
+            );
+            // player_item.seek(5.0);
+            let mut index = 0;
+            let _ = std::fs::remove_dir_all("./dsp");
+            let _ = std::fs::create_dir("./dsp");
+            while let Some(frames) = player_item.next_frames() {
+                for frame in &frames {
+                    let buffer: &[f32] = frame.pcm_buffer.get_channel_data_view(0);
+                    let mut planner = FftPlanner::<f32>::new();
+                    let fft = planner.plan_fft_forward(buffer.len());
+                    let mut signals: Vec<Complex<f32>> =
+                        buffer.iter().map(|x| Complex { re: *x, im: 0.0 }).collect();
+                    fft.process(&mut signals);
+                    let result: Vec<f32> = signals.iter().map(|x| x.norm()).collect();
+                    let image_datas: Vec<u8> = result
+                        .iter()
+                        .map(|x| {
+                            let x = x.clamp(0.0, 1.0);
+                            (x * 255.0) as u8
+                        })
+                        .collect();
+                    let audio_image =
+                        image::GrayImage::from_vec(image_datas.len() as u32, 1, image_datas)
+                            .unwrap();
+                    std::thread::sleep(Duration::from_secs_f32(0.1));
+                    let _ = sender_clone.send(audio_image);
+                    // save_fft_result(&format!("./dsp/fft_{}.png", index), &result);
+                    index += 1;
+                    log::trace!("time_range: {:?}", frame.get_time_range_second());
+                }
+            }
+            let mut audio_device = rs_media::audio_device::AudioDevice::new();
+            audio_device.run();
+        });
+
+    drop(sender);
 
     let native_window = NativeWindow::new();
 
@@ -79,6 +143,14 @@ fn main() {
         &wgpu_context.queue,
         &rs_computer_graphics::util::get_resource_path("Cube.dae"),
     );
+
+    let mut quad_actor = Actor::load_from_static_meshs(vec![StaticMesh::quad(
+        "quad",
+        &wgpu_context.device,
+        rs_computer_graphics::material_type::EMaterialType::Phong(
+            rs_computer_graphics::material::Material::new(Arc::new(None), Arc::new(None)),
+        ),
+    )]);
 
     let mut actor_pbr = Actor::load_from_file(
         &wgpu_context.device,
@@ -126,6 +198,18 @@ fn main() {
         &swapchain_format,
     );
 
+    let audio_pipeline = AudioPipeline::new(
+        &wgpu_context.device,
+        Some(wgpu::DepthStencilState {
+            depth_compare: wgpu::CompareFunction::Less,
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        &swapchain_format,
+    );
+
     let pbr_pipeline = PBRPipeline::new(
         &wgpu_context.device,
         Some(wgpu::DepthStencilState {
@@ -150,9 +234,9 @@ fn main() {
         hdr_filepath,
         BakeInfo {
             is_bake_environment: true,
-            is_bake_irradiance: true,
-            is_bake_brdflut: true,
-            is_bake_pre_filter: true,
+            is_bake_irradiance: false,
+            is_bake_brdflut: false,
+            is_bake_pre_filter: false,
             environment_cube_map_length: 1024,
             irradiance_cube_map_length: 1024,
             irradiance_sample_count: 1024,
@@ -276,6 +360,31 @@ fn main() {
                 //     queue,
                 // );
 
+                if let Ok(audio_image) = receiver.recv_timeout(std::time::Duration::from_millis(5))
+                {
+                    for mesh in quad_actor.get_static_meshs_mut() {
+                        let audio_texture = rs_computer_graphics::util::texture2d_from_gray_image(
+                            device,
+                            queue,
+                            &audio_image,
+                        );
+                        let material = rs_computer_graphics::material::Material::new(
+                            std::sync::Arc::new(Some(audio_texture)),
+                            std::sync::Arc::new(None),
+                        );
+                        mesh.set_material_type(EMaterialType::Phong(material))
+                    }
+                }
+
+                audio_pipeline.render_actor(
+                    device,
+                    queue,
+                    &surface_texture_view,
+                    &wgpu_context.get_depth_texture_view(),
+                    &quad_actor,
+                    &camera,
+                );
+
                 match baker.get_environment_cube_texture().borrow() {
                     Some(texture) => sky_box_pipeline.render(
                         device,
@@ -288,19 +397,19 @@ fn main() {
                     None => {}
                 }
 
-                pbr_pipeline.render_actor(
-                    device,
-                    queue,
-                    &surface_texture_view,
-                    &wgpu_context.get_depth_texture_view(),
-                    &actor_pbr,
-                    &camera,
-                    data_source.roughness_factor,
-                    data_source.metalness_factor,
-                    DirectionalLight::default(),
-                    PointLight::default(),
-                    SpotLight::default(),
-                );
+                // pbr_pipeline.render_actor(
+                //     device,
+                //     queue,
+                //     &surface_texture_view,
+                //     &wgpu_context.get_depth_texture_view(),
+                //     &actor_pbr,
+                //     &camera,
+                //     data_source.roughness_factor,
+                //     data_source.metalness_factor,
+                //     DirectionalLight::default(),
+                //     PointLight::default(),
+                //     SpotLight::default(),
+                // );
 
                 // phone_pipeline.render_actor(
                 //     device,
@@ -321,9 +430,9 @@ fn main() {
                     .show(&egui_context.get_platform_context(), |ui| {
                         ui.with_layer_id(egui::LayerId::background(), |ui| {
                             if let Some(model_matrix) =
-                                gizmo.interact(&camera, ui, actor_pbr.get_model_matrix())
+                                gizmo.interact(&camera, ui, quad_actor.get_model_matrix())
                             {
-                                actor_pbr.set_model_matrix(model_matrix);
+                                quad_actor.set_model_matrix(model_matrix);
                             }
                         });
                     });

@@ -114,7 +114,8 @@ pub fn shape(
 }
 
 pub fn init_log() {
-    let log_env = env_logger::Env::default().default_filter_or("rs_computer_graphics,rs_dotnet");
+    let log_env =
+        env_logger::Env::default().default_filter_or("rs_computer_graphics,rs_dotnet,rs_media");
     env_logger::Builder::from_env(log_env)
         .format(|buf, record| {
             let level = record.level();
@@ -389,6 +390,68 @@ pub fn texture2d_from_rgba_image_file(
             None
         }
     }
+}
+
+pub fn save_fft_result(filename: &str, buffer: &[f32]) {
+    let root = plotters::prelude::IntoDrawingArea::into_drawing_area(
+        plotters::prelude::BitMapBackend::new(filename, (1280, 360)),
+    );
+    root.fill(&plotters::style::WHITE).unwrap();
+    let mut chart = plotters::prelude::ChartBuilder::on(&root)
+        .margin(15)
+        .x_label_area_size(25)
+        .y_label_area_size(25)
+        .build_cartesian_2d(0_f32..buffer.len() as f32, 0_f32..1_f32)
+        .unwrap();
+
+    chart.configure_mesh().draw().unwrap();
+
+    chart
+        .draw_series(plotters::series::LineSeries::new(
+            buffer
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i as f32, *v as f32)),
+            &plotters::style::RED,
+        ))
+        .unwrap();
+
+    root.present().unwrap();
+}
+
+pub fn texture2d_from_gray_image(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    image: &image::GrayImage,
+) -> wgpu::Texture {
+    let texture_extent = wgpu::Extent3d {
+        depth_or_array_layers: 1,
+        width: image.width(),
+        height: image.height(),
+    };
+
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: texture_extent,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    queue.write_texture(
+        texture.as_image_copy(),
+        image,
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(1 * image.width()),
+            rows_per_image: None,
+        },
+        texture_extent,
+    );
+    texture
 }
 
 pub fn texture2d_from_rgba_image(

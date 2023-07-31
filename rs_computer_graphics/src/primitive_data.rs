@@ -13,6 +13,11 @@ impl PrimitiveData {
         PrimitiveData { vertices, indices }
     }
 
+    pub fn quad() -> PrimitiveData {
+        let (vertices, indices) = Self::get_base_plane_data();
+        PrimitiveData { vertices, indices }
+    }
+
     fn vertex(position: glam::Vec4, tex_coord: glam::Vec2) -> MeshVertex {
         MeshVertex {
             vertex_color: glam::vec4(0.0, 0.0, 0.0, 0.0),
@@ -28,6 +33,20 @@ impl PrimitiveData {
         let mut ret = vector.xyzx();
         ret.w = 1.0;
         ret
+    }
+
+    fn get_base_plane_data() -> (Vec<MeshVertex>, Vec<u32>) {
+        let base_plane_data = [
+            Self::vertex(glam::vec4(-1.0, 1.0, 0.0, 1.0), glam::vec2(0.0, 0.0)),
+            Self::vertex(glam::vec4(1.0, 1.0, 0.0, 1.0), glam::vec2(1.0, 0.0)),
+            Self::vertex(glam::vec4(1.0, -1.0, 0.0, 1.0), glam::vec2(1.0, 1.0)),
+            Self::vertex(glam::vec4(-1.0, -1.0, 0.0, 1.0), glam::vec2(0.0, 1.0)),
+        ];
+        let front_plane_index: Vec<u32> = [2, 1, 0, 3, 2, 0].to_vec();
+        (
+            [base_plane_data].concat().to_vec(),
+            [front_plane_index].concat().to_vec(),
+        )
     }
 
     fn create_cube_vertices() -> (Vec<MeshVertex>, Vec<u32>) {

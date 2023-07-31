@@ -1,3 +1,4 @@
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DirectionalLight {
     pub direction: glam::Vec3,
@@ -25,6 +26,7 @@ impl DirectionalLight {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct PointLight {
     pub position: glam::Vec3,
@@ -58,6 +60,7 @@ impl PointLight {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct SpotLight {
     pub position: glam::Vec3,

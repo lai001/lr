@@ -1,0 +1,15 @@
+[package]
+name = "rs_media"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ffmpeg-next = "6.0.0"
+cpal = "0.15.2"
+image = "0.24.5"
+bitflags = "2.1.0"
+num-complex = "0.4.3"
+log = "0.4.17"
+rustfft = "6.1.0"

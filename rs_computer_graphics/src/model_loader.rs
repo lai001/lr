@@ -3,7 +3,7 @@ use crate::{
     file_manager::FileManager,
     material::Material,
     material_type::EMaterialType,
-    static_mesh::{Mesh, MeshBuffer, StaticMesh},
+    static_mesh::{Mesh, StaticMesh},
     util,
 };
 use russimp::node::Node;
@@ -182,13 +182,12 @@ impl ModelLoader {
             );
 
             let mesh = Mesh::new(vertex_buffer, index_buffer);
-            let mesh_buffer = MeshBuffer::from(device, &mesh);
             let material = Material::new(diffuse_texture, specular_texture);
 
             let static_mesh = StaticMesh::new(
                 &imported_mesh.name,
                 mesh,
-                mesh_buffer,
+                device,
                 EMaterialType::Phong(material),
             );
             static_meshs.push(static_mesh);

@@ -5,6 +5,7 @@ local rs_project_name = "rs_computer_graphics"
 local csharp_workspace_name = "ExampleApplication"
 local gizmo_dir = deps_dir .. "egui-gizmo"
 local quickjs_dir = deps_dir .. "quickjs"
+local ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
 
 option("enable_dotnet")
     set_default(false)
@@ -25,6 +26,55 @@ local is_enable_quickjs = get_config("enable_quickjs")
 if is_enable_quickjs == nil then
     is_enable_quickjs = false
 end
+
+task("code_workspace")
+    on_run(function ()
+        import("core.project.config")
+        import("core.base.json")
+        config.load()
+        is_enable_dotnet = get_config("enable_dotnet")
+        is_enable_quickjs = get_config("enable_quickjs")
+        local features = { "" }
+        local linkedProjects = { path.absolute("./rs_computer_graphics/Cargo.toml") }        
+        local associations = {}
+        local ffmpeg_env = {
+            ["FFMPEG_DIR"] = ffmpeg_dir
+        }
+
+        if is_enable_quickjs then 
+            table.join2(features, "rs_quickjs")
+            table.join2(linkedProjects, path.absolute("./rs_quickjs/Cargo.toml"))
+            table.join2(associations, {["quickjs.h"] = "c"})
+        end
+        if is_enable_dotnet then 
+            table.join2(features, "rs_dotnet")
+            table.join2(linkedProjects, path.absolute("./rs_dotnet/Cargo.toml"))
+        end
+
+        local code_workspace = {
+            ["folders"] =  {{
+                ["path"] = path.absolute("./")
+            }},
+            ["settings"] = {
+                ["rust-analyzer.cargo.features"] = features,
+                ["rust-analyzer.linkedProjects"] = linkedProjects,
+                ["files.associations"] = associations,
+                ["rust-analyzer.cargo.extraEnv"] = ffmpeg_env,
+                ["rust-analyzer.server.extraEnv"] = ffmpeg_env,
+                ["rust-analyzer.check.extraEnv"] = ffmpeg_env,
+                ["rust-analyzer.runnableEnv"] = ffmpeg_env
+            }
+        }
+        json.savefile("./" .. rs_project_name .. ".code-workspace", code_workspace)
+    end)
+    set_menu {
+        usage = "xmake code_workspace",
+        description = "",
+        options = {
+            {nil, "code_workspace", nil, nil, "xmake code_workspace"},
+        }    
+    }
+task_end()
 
 task("download_deps")
     on_run(function () 
@@ -71,6 +121,25 @@ task("download_deps")
             local link = "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/2k/neon_photostudio_2k.exr"
             http.download(link, "Resource/Remote/neon_photostudio_2k.exr")
         end
+
+        local ffmpeg_zip_filename = deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0.zip"
+        if os.exists(ffmpeg_zip_filename) == false then 
+            local link = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2023-07-24-12-50/ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0.zip"
+            http.download(link, ffmpeg_zip_filename)
+        end
+        if os.exists(ffmpeg_zip_filename) and os.exists(ffmpeg_dir) == false then 
+            archive.extract(ffmpeg_zip_filename, deps_dir)
+        end
+
+        if os.exists("Resource/Remote/BigBuckBunny.mp4") == false then 
+            local link = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+            http.download(link, "Resource/Remote/BigBuckBunny.mp4")
+        end
+
+        if os.exists("Resource/Remote/sample-15s.mp3") == false then 
+            local link = "https://download.samplelib.com/mp3/sample-15s.mp3"
+            http.download(link, "Resource/Remote/sample-15s.mp3")
+        end        
     end)
     set_menu {
         usage = "xmake download_deps",
@@ -84,12 +153,12 @@ task_end()
 task("fmt")
     on_run(function () 
         import("lib.detect.find_program")
-        for _, file in ipairs(os.files("rs_computer_graphics/src/**.rs")) do
-            os.execv(find_program("rustfmt"), { "--edition=2018", file })
+        local rs_projects = { "rs_computer_graphics", "rs_dotnet", "rs_media", "rs_quickjs" }
+        for _, project in ipairs(rs_projects) do
+            for _, file in ipairs(os.files(project .. "/src/**.rs")) do
+                os.execv(find_program("rustfmt"), { "--edition=2018", file })
+            end
         end
-        for _, file in ipairs(os.files("rs_dotnet/src/**.rs")) do
-            os.execv(find_program("rustfmt"), { "--edition=2018", file })
-        end      
         for _, file in ipairs(os.files("rs_quickjs/src/**.h")) do
             os.execv(find_program("clang-format"), { "-style=microsoft", "-i", file })
         end      
@@ -114,6 +183,8 @@ task("build_target")
         import("core.base.option")
         import("core.project.config")
         config.load()
+
+        os.addenvs({FFMPEG_DIR = ffmpeg_dir})
 
         local workspace = "$(scriptdir)" .. "/" .. rs_project_name
         local csharp_workspace_path = "$(scriptdir)" .. "/" .. csharp_workspace_name
@@ -198,6 +269,7 @@ task("build_clean")
         os.tryrm(rs_project_name .. "/target")
         os.tryrm("rs_dotnet/target")
         os.tryrm("rs_quickjs/target")
+        os.tryrm("rs_media/target")
         os.tryrm(csharp_workspace_name .. "/.vs")
         os.tryrm(".vscode")
         os.tryrm("build")
@@ -229,12 +301,20 @@ task("setup_project")
             os.cp(nethost .. ".dll", target_nethost .. ".dll")
             os.cp(nethost .. ".lib", target_nethost .. ".lib")        
         end
+        local function setup_ffmpeg(buildType) 
+            local target_dir = rs_project_name .. "/target/"
+            os.mkdir(target_dir .. buildType)
+            os.cp(ffmpeg_dir .. "/bin/*.dll", target_dir .. buildType)
+        end        
 
         task.run("download_deps")
+        task.run("code_workspace")
         if is_enable_dotnet then 
             setup_dotnet("debug")
             setup_dotnet("release")
         end
+        setup_ffmpeg("debug")
+        setup_ffmpeg("release")
     end)
     set_menu {
         usage = "xmake setup_project",

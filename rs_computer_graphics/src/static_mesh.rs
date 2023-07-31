@@ -1,4 +1,7 @@
-use crate::{brigde_data::mesh_vertex::MeshVertex, material_type::EMaterialType, util};
+use crate::{
+    brigde_data::mesh_vertex::MeshVertex, material_type::EMaterialType,
+    primitive_data::PrimitiveData, util,
+};
 
 pub struct Mesh {
     vertex_buffer: Vec<MeshVertex>,
@@ -10,6 +13,14 @@ impl Mesh {
         Mesh {
             vertex_buffer,
             index_buffer,
+        }
+    }
+
+    pub fn quad() -> Mesh {
+        let data = PrimitiveData::quad();
+        Mesh {
+            vertex_buffer: data.vertices,
+            index_buffer: data.indices,
         }
     }
 
@@ -76,9 +87,21 @@ impl StaticMesh {
     pub fn new(
         name: &str,
         mesh: Mesh,
-        mesh_buffer: MeshBuffer,
+        device: &wgpu::Device,
         material_type: EMaterialType,
     ) -> StaticMesh {
+        let mesh_buffer = MeshBuffer::from(device, &mesh);
+        StaticMesh {
+            name: name.to_string(),
+            mesh,
+            mesh_buffer,
+            material_type,
+        }
+    }
+
+    pub fn quad(name: &str, device: &wgpu::Device, material_type: EMaterialType) -> StaticMesh {
+        let mesh = Mesh::quad();
+        let mesh_buffer = MeshBuffer::from(device, &mesh);
         StaticMesh {
             name: name.to_string(),
             mesh,

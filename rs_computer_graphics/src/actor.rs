@@ -19,6 +19,16 @@ impl Actor {
         actor
     }
 
+    pub fn load_from_static_meshs(static_meshs: Vec<StaticMesh>) -> Actor {
+        let actor = Actor {
+            static_meshs,
+            model: glam::Mat4::IDENTITY,
+            localtion: glam::Vec3::ZERO,
+            rotator: Rotator::zero(),
+        };
+        actor
+    }
+
     pub fn set_world_location(&mut self, location: glam::Vec3) {
         self.localtion = location;
         self.model = glam::Mat4::from_translation(self.localtion)
