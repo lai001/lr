@@ -7,7 +7,7 @@ pub extern "C" fn rs_Log_trace(
     argc: ::std::os::raw::c_int,
     argv: *mut JSValue,
 ) -> JSValue {
-    let slice = unsafe { std::slice::from_raw_parts(argv, argc as usize) };
+    let slice: &[JSValue] = unsafe { std::slice::from_raw_parts(argv, argc as usize) };
     let mut message = String::new();
     for val in slice {
         let str = QuickJS::to_c_string_len2(ctx, *val, 0);

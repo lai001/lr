@@ -30,7 +30,7 @@ pub fn get_available_hwdevice_types() -> Vec<AVHWDeviceType> {
     unsafe { get_available_hwdevice_types_unsafe() }
 }
 
-unsafe fn find_hw_pix_fmt(
+pub(crate) unsafe fn find_hw_pix_fmt(
     codec: *const AVCodec,
     device_type: AVHWDeviceType,
 ) -> Option<AVPixelFormat> {
@@ -50,11 +50,11 @@ unsafe fn find_hw_pix_fmt(
 }
 
 #[repr(C)]
-struct MyUserData {
-    hw_pix_fmt: AVPixelFormat,
+pub(crate) struct MyUserData {
+    pub(crate) hw_pix_fmt: AVPixelFormat,
 }
 
-unsafe extern "C" fn get_hw_format(
+pub(crate) unsafe extern "C" fn get_hw_format(
     ctx: *mut AVCodecContext,
     pix_fmts: *const AVPixelFormat,
 ) -> AVPixelFormat {
@@ -78,7 +78,10 @@ unsafe extern "C" fn get_hw_format(
     return AVPixelFormat::AV_PIX_FMT_NONE;
 }
 
-unsafe fn hw_decoder_init(ctx: *mut AVCodecContext, device_type: AVHWDeviceType) {
+pub(crate) unsafe fn hw_decoder_init(
+    ctx: *mut AVCodecContext,
+    device_type: AVHWDeviceType,
+) -> impl FnMut() -> () {
     let mut hw_device_ctx: *mut AVBufferRef = std::ptr::null_mut();
     let state = av_hwdevice_ctx_create(
         &mut hw_device_ctx,
@@ -91,6 +94,9 @@ unsafe fn hw_decoder_init(ctx: *mut AVCodecContext, device_type: AVHWDeviceType)
         panic!()
     }
     (*ctx).hw_device_ctx = av_buffer_ref(hw_device_ctx);
+    move || {
+        av_buffer_unref(&mut hw_device_ctx);
+    }
 }
 
 unsafe fn hw_test_unsafe(filename: &str) {
@@ -137,7 +143,7 @@ unsafe fn hw_test_unsafe(filename: &str) {
     (*video_decoder.as_mut_ptr()).opaque = std::mem::transmute(raw);
     (*video_decoder.as_mut_ptr()).get_format = Some(get_hw_format);
 
-    hw_decoder_init(video_decoder.as_mut_ptr(), expect_hw_type);
+    let mut release_hw_device_ctx = hw_decoder_init(video_decoder.as_mut_ptr(), expect_hw_type);
 
     let mut scaler = Context::get(
         Pixel::NV12,
@@ -180,7 +186,8 @@ unsafe fn hw_test_unsafe(filename: &str) {
             packet_index += 1;
         }
     }
-    av_buffer_unref(&mut (*video_decoder.as_mut_ptr()).hw_device_ctx);
+    // av_buffer_unref(&mut (*video_decoder.as_mut_ptr()).hw_device_ctx);
+    release_hw_device_ctx();
     let _ = Box::from(raw);
 }
 

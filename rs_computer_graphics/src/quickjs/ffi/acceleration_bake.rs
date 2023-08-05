@@ -11,6 +11,7 @@ pub struct AccelerationBakerJSClass {
     class_id: JSClassID,
     class_def: JSClassDef,
     class_name: String,
+    def_class_name: CString,
     property_function_list: HashMap<CString, JSCFunction>,
 }
 unsafe impl Send for AccelerationBakerJSClass {}
@@ -22,7 +23,7 @@ impl AccelerationBakerJSClass {
 
     fn new() -> AccelerationBakerJSClass {
         let class_name = "AccelerationBaker".to_string();
-        let c_str = CString::new(class_name.as_str()).unwrap();
+        let def_class_name = CString::new(class_name.as_str()).unwrap();
 
         let mut property_function_list: HashMap<CString, JSCFunction> = HashMap::new();
         property_function_list.insert(
@@ -33,14 +34,15 @@ impl AccelerationBakerJSClass {
         AccelerationBakerJSClass {
             class_id: QuickJS::new_classid(),
             class_def: JSClassDef {
-                class_name: c_str.as_ptr(),
+                class_name: def_class_name.as_ptr(),
                 finalizer: Some(Self::AccelerationBakerJSClass_finalizer),
                 gc_mark: None,
                 call: None,
                 exotic: std::ptr::null_mut(),
             },
-            class_name: class_name,
+            class_name,
             property_function_list,
+            def_class_name,
         }
     }
 
@@ -76,9 +78,11 @@ impl AccelerationBakerJSClass {
         let jsclass = GLOBAL_ACCELERATION_BAKER_JS_CLASS.lock().unwrap();
         log::trace!("{}", jsclass.class_name.clone() + " ctor");
         let mut object = QuickJS::null();
-        QuickJS::get_property_str(ctx, this_val, "prototype", |ctx, proto| {
-            object = QuickJS::new_object_proto_class(ctx, proto, jsclass.class_id);
-        });
+        {
+            let prototype = QuickJS::get_property_str(ctx, this_val, "prototype");
+            object = QuickJS::new_object_proto_class(ctx, prototype, jsclass.class_id);
+            QuickJS::free_value(ctx, prototype);
+        }
         return object;
     }
 

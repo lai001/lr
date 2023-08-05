@@ -36,21 +36,27 @@ impl QuickJSRuntimeContext {
     }
 
     pub fn register(&mut self) {
-        self.context.get_global_object(|context, global_obj| {
-            context.get_property_str(global_obj, "console", |context, console_obj| {
-                let c_function = context.new_c_function(Some(rs_Log_trace), "rs_Log_trace", 0);
-                context.set_property_str(console_obj, "log", c_function);
-            });
-
+        let global_obj = self.context.get_global_object();
+        {
+            let console_obj = self.context.get_property_str(global_obj, "console");
+            let c_function = self
+                .context
+                .new_c_function(Some(rs_Log_trace), "rs_Log_trace", 0);
+            self.context
+                .set_property_str(console_obj, "log", c_function);
+            self.context.free_value(console_obj);
+        }
+        {
             let cls = AccelerationBakerJSClass::default().lock().unwrap();
-            log::trace!("{:?}", cls);
-            let constructor_class_func = cls.import(context);
-            context.set_property_str(global_obj, cls.get_class_name(), constructor_class_func);
+            let constructor_class_func = cls.import(&mut self.context);
+            self.context
+                .set_property_str(global_obj, cls.get_class_name(), constructor_class_func);
 
             let cls = BakeInfoJSClass::default().lock().unwrap();
-            log::trace!("{:?}", cls);
-            let constructor_class_func = cls.import(context);
-            context.set_property_str(global_obj, cls.get_class_name(), constructor_class_func);
-        });
+            let constructor_class_func = cls.import(&mut self.context);
+            self.context
+                .set_property_str(global_obj, cls.get_class_name(), constructor_class_func);
+        }
+        self.context.free_value(global_obj);
     }
 }

@@ -36,6 +36,7 @@ use rs_media::{
     audio_format::{AudioFormat, EAudioSampleType},
     audio_pcmbuffer::AudioPcmbuffer,
     audio_player_item::AudioPlayerItem,
+    video_player_item::EVideoDecoderType,
 };
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{borrow::Borrow, sync::Arc, time::Duration};
@@ -59,6 +60,25 @@ fn main() {
     //         "Remote/BigBuckBunny.mp4",
     //     ));
     // });
+    rs_media::init();
+    let (video_sender, video_receiver) = std::sync::mpsc::channel();
+    let video_sender_clone = video_sender.clone();
+    thread_pool::ThreadPool::global()
+        .lock()
+        .unwrap()
+        .spawn(move || {
+            let filepath = rs_computer_graphics::util::get_resource_path("Remote/BigBuckBunny.mp4");
+            let mut video_player_item = rs_media::video_player_item::VideoPlayerItem::new(
+                &filepath,
+                Some(EVideoDecoderType::Hardware),
+            );
+            while let Some(frames) = video_player_item.next_frames() {
+                for frame in frames {
+                    let _ = video_sender_clone.send(frame);
+                    std::thread::sleep(Duration::from_secs_f32(1.0 / 24.0));
+                }
+            }
+        });
     let (sender, receiver) = std::sync::mpsc::channel();
     let sender_clone = sender.clone();
     thread_pool::ThreadPool::audio()
@@ -95,7 +115,6 @@ fn main() {
                     let _ = sender_clone.send(audio_image);
                     // save_fft_result(&format!("./dsp/fft_{}.png", index), &result);
                     index += 1;
-                    log::trace!("time_range: {:?}", frame.get_time_range_second());
                 }
             }
             let mut audio_device = rs_media::audio_device::AudioDevice::new();
@@ -103,6 +122,7 @@ fn main() {
         });
 
     drop(sender);
+    drop(video_sender);
 
     let native_window = NativeWindow::new();
 
@@ -146,6 +166,14 @@ fn main() {
 
     let mut quad_actor = Actor::load_from_static_meshs(vec![StaticMesh::quad(
         "quad",
+        &wgpu_context.device,
+        rs_computer_graphics::material_type::EMaterialType::Phong(
+            rs_computer_graphics::material::Material::new(Arc::new(None), Arc::new(None)),
+        ),
+    )]);
+
+    let mut video_quad_actor = Actor::load_from_static_meshs(vec![StaticMesh::quad(
+        "video_quad",
         &wgpu_context.device,
         rs_computer_graphics::material_type::EMaterialType::Phong(
             rs_computer_graphics::material::Material::new(Arc::new(None), Arc::new(None)),
@@ -360,7 +388,7 @@ fn main() {
                 //     queue,
                 // );
 
-                if let Ok(audio_image) = receiver.recv_timeout(std::time::Duration::from_millis(5))
+                if let Ok(audio_image) = receiver.recv_timeout(std::time::Duration::from_millis(2))
                 {
                     for mesh in quad_actor.get_static_meshs_mut() {
                         let audio_texture = rs_computer_graphics::util::texture2d_from_gray_image(
@@ -375,6 +403,32 @@ fn main() {
                         mesh.set_material_type(EMaterialType::Phong(material))
                     }
                 }
+
+                if let Ok(video_image) =
+                    video_receiver.recv_timeout(std::time::Duration::from_millis(2))
+                {
+                    for mesh in video_quad_actor.get_static_meshs_mut() {
+                        let video_texture = rs_computer_graphics::util::texture2d_from_rgba_image(
+                            device,
+                            queue,
+                            &video_image.image,
+                        );
+                        let material = rs_computer_graphics::material::Material::new(
+                            std::sync::Arc::new(Some(video_texture)),
+                            std::sync::Arc::new(None),
+                        );
+                        mesh.set_material_type(EMaterialType::Phong(material))
+                    }
+                }
+
+                phone_pipeline.render_actor(
+                    device,
+                    queue,
+                    &surface_texture_view,
+                    &wgpu_context.get_depth_texture_view(),
+                    &video_quad_actor,
+                    &camera,
+                );
 
                 audio_pipeline.render_actor(
                     device,

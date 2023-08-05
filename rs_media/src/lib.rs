@@ -7,3 +7,14 @@ pub mod audio_player_item;
 pub mod dsp;
 pub mod hw;
 pub mod sw;
+pub mod time_range;
+pub mod video_player_item;
+
+static START: std::sync::Once = std::sync::Once::new();
+
+pub fn init() {
+    START.call_once(|| match ffmpeg_next::init() {
+        Ok(_) => {}
+        Err(error) => panic!("{}", error),
+    });
+}

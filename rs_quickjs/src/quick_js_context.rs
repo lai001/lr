@@ -56,14 +56,10 @@ impl QuickJSContext {
         }
     }
 
-    pub fn get_global_object(
-        &mut self,
-        mut closure: impl FnMut(&mut QuickJSContext, JSValue) -> (),
-    ) {
+    pub fn get_global_object(&mut self) -> JSValue {
         unsafe {
             let global_object = JS_GetGlobalObject(self.inner);
-            closure(self, global_object);
-            self.free_value(global_object)
+            global_object
         }
     }
 
@@ -89,17 +85,11 @@ impl QuickJSContext {
         unsafe { QuickJS_NewInt64(self.inner, value) }
     }
 
-    pub fn get_property_str(
-        &mut self,
-        this_obj: JSValue,
-        name: &str,
-        mut closure: impl FnMut(&mut QuickJSContext, JSValue) -> (),
-    ) {
+    pub fn get_property_str(&mut self, this_obj: JSValue, name: &str) -> JSValue {
         let c_str = CString::new(name).unwrap();
         unsafe {
             let object = JS_GetPropertyStr(self.inner, this_obj, c_str.as_ptr());
-            closure(self, object);
-            self.free_value(object)
+            object
         }
     }
 

@@ -160,8 +160,8 @@ impl QuickJS {
             if str == std::ptr::null() {
                 panic!()
             }
-            let cstr = CStr::from_ptr(str);
-            let string = String::from_utf8_lossy(cstr.to_bytes()).to_string();
+            let buffer = std::slice::from_raw_parts(str as *const u8, plen);
+            let string = String::from_utf8_lossy(buffer).to_string();
             JS_FreeCString(ctx, str);
             string
         }
@@ -183,17 +183,11 @@ impl QuickJS {
         }
     }
 
-    pub fn get_property_str(
-        ctx: *mut JSContext,
-        this_obj: JSValue,
-        name: &str,
-        mut closure: impl FnMut(*mut JSContext, JSValue) -> (),
-    ) {
+    pub fn get_property_str(ctx: *mut JSContext, this_obj: JSValue, name: &str) -> JSValue {
         let c_str = CString::new(name).unwrap();
         unsafe {
             let object = JS_GetPropertyStr(ctx, this_obj, c_str.as_ptr());
-            closure(ctx, object);
-            Self::free_value(ctx, object);
+            object
         }
     }
 
@@ -232,6 +226,23 @@ impl QuickJS {
     pub fn std_dump_error(ctx: *mut JSContext) {
         unsafe {
             js_std_dump_error(ctx);
+        }
+    }
+
+    pub fn has_property(ctx: *mut JSContext, this_obj: JSValue, prop: JSAtom) -> bool {
+        unsafe {
+            let state = JS_HasProperty(ctx, this_obj, prop);
+            state != 0
+        }
+    }
+
+    pub fn has_property_str(ctx: *mut JSContext, this_obj: JSValue, prop: &str) -> bool {
+        unsafe {
+            let c_str = CString::new(prop).unwrap();
+            let atom = JS_NewAtom(ctx, c_str.as_ptr());
+            let state = JS_HasProperty(ctx, this_obj, atom);
+            JS_FreeAtom(ctx, atom);
+            state != 0
         }
     }
 }

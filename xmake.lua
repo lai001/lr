@@ -153,7 +153,7 @@ task_end()
 task("fmt")
     on_run(function () 
         import("lib.detect.find_program")
-        local rs_projects = { "rs_computer_graphics", "rs_dotnet", "rs_media", "rs_quickjs" }
+        local rs_projects = { "rs_computer_graphics", "rs_dotnet", "rs_media", "rs_quickjs", "rs_foundation" }
         for _, project in ipairs(rs_projects) do
             for _, file in ipairs(os.files(project .. "/src/**.rs")) do
                 os.execv(find_program("rustfmt"), { "--edition=2018", file })
@@ -270,6 +270,7 @@ task("build_clean")
         os.tryrm("rs_dotnet/target")
         os.tryrm("rs_quickjs/target")
         os.tryrm("rs_media/target")
+        os.tryrm("rs_foundation/target")
         os.tryrm(csharp_workspace_name .. "/.vs")
         os.tryrm(".vscode")
         os.tryrm("build")
