@@ -7,13 +7,13 @@ lazy_static! {
         Mutex::new(BakeInfoJSClass::new());
 }
 
-#[derive(Debug)]
 pub struct BakeInfoJSClass {
     class_id: JSClassID,
     class_def: JSClassDef,
     class_name: String,
     def_class_name: CString,
     property_function_list: HashMap<CString, JSCFunction>,
+    func_entrys: Vec<JSCFunctionListEntry>,
 }
 unsafe impl Send for BakeInfoJSClass {}
 
@@ -31,7 +31,11 @@ impl BakeInfoJSClass {
             CString::new("toString").unwrap(),
             Some(Self::BakeInfo_toString),
         );
-
+        let mut func_entrys: Vec<JSCFunctionListEntry> = vec![];
+        for (name, func) in &property_function_list {
+            let entry = QuickJS::new_function_list_entry(&name, *func);
+            func_entrys.push(entry);
+        }
         BakeInfoJSClass {
             class_id: QuickJS::new_classid(),
             class_def: JSClassDef {
@@ -44,6 +48,7 @@ impl BakeInfoJSClass {
             class_name,
             property_function_list,
             def_class_name,
+            func_entrys,
         }
     }
 
@@ -51,12 +56,7 @@ impl BakeInfoJSClass {
         let rt = ctx.get_runtime();
         rt.borrow_mut().new_class(self.class_id, &self.class_def);
         let proto = ctx.new_object();
-        let mut func_entrys: Vec<JSCFunctionListEntry> = vec![];
-        for (name, func) in &self.property_function_list {
-            let entry = QuickJS::new_function_list_entry(&name, *func);
-            func_entrys.push(entry);
-        }
-        ctx.set_property_function_list(proto, &func_entrys);
+        ctx.set_property_function_list(proto, &self.func_entrys);
         let constructor_class_func =
             ctx.new_constructor_function(Some(Self::BakeInfo_ctor), &self.class_name);
         ctx.set_constructor(constructor_class_func, proto);
