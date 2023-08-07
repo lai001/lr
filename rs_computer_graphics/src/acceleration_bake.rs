@@ -295,7 +295,7 @@ impl AccelerationBaker {
 
             let pre_filter_environment_cube_map_compute_pipeline =
                 PreFilterEnvironmentCubeMapComputePipeline::new(device);
-            let (cube_map_texture) = pre_filter_environment_cube_map_compute_pipeline.execute(
+            let cube_map_texture = pre_filter_environment_cube_map_compute_pipeline.execute(
                 device,
                 queue,
                 &self.equirectangular_hdr_texture,

@@ -1,4 +1,3 @@
-use plotters::prelude::BitMapBackend;
 #[cfg(feature = "rs_dotnet")]
 use rs_computer_graphics::dotnet_runtime::DotnetRuntime;
 #[cfg(feature = "rs_quickjs")]
@@ -17,7 +16,6 @@ use rs_computer_graphics::{
     egui_context::EGUIContext,
     file_manager::FileManager,
     gizmo::FGizmo,
-    light::{DirectionalLight, PointLight, SpotLight},
     material_type::EMaterialType,
     native_window::NativeWindow,
     pbr_material::PBRMaterial,
@@ -29,15 +27,10 @@ use rs_computer_graphics::{
     static_mesh::StaticMesh,
     thread_pool,
     user_script_change_monitor::UserScriptChangeMonitor,
-    util::{change_working_directory, init_log, save_fft_result},
+    util::{change_working_directory, init_log},
     wgpu_context::WGPUContext,
 };
-use rs_media::{
-    audio_format::{AudioFormat, EAudioSampleType},
-    audio_pcmbuffer::AudioPcmbuffer,
-    audio_player_item::AudioPlayerItem,
-    video_player_item::EVideoDecoderType,
-};
+use rs_media::{audio_player_item::AudioPlayerItem, video_player_item::EVideoDecoderType};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{borrow::Borrow, sync::Arc, time::Duration};
 use winit::{
@@ -186,6 +179,12 @@ fn main() {
         &rs_computer_graphics::util::get_resource_path("Remote/Test/untitled.fbx"),
     );
 
+    let mut cone_actor = Actor::load_from_file(
+        &wgpu_context.device,
+        &wgpu_context.queue,
+        &rs_computer_graphics::util::get_resource_path("Remote/Cone.fbx"),
+    );
+
     let shader_lib = ShaderLibrary::default();
     {
         shader_lib.lock().unwrap().load_shader_from(
@@ -309,6 +308,8 @@ fn main() {
 
         match event {
             RedrawRequested(..) => {
+                let window_size = native_window.window.inner_size();
+                camera.set_window_size(window_size.width, window_size.height);
                 if user_script_change_monitor.is_changed() {
                     #[cfg(feature = "rs_dotnet")]
                     dotnet_runtime.reload_script();
@@ -474,7 +475,13 @@ fn main() {
                 //     &camera,
                 // );
 
-                egui_context.draw_ui(queue, device, &surface_texture_view, &mut data_source);
+                egui_context.draw_ui(
+                    queue,
+                    device,
+                    &native_window.window,
+                    &surface_texture_view,
+                    &mut data_source,
+                );
                 egui_context.set_fps(data_source.target_fps);
                 egui_context.sync_fps(control_flow);
                 egui_context.gizmo_settings(&mut gizmo);
@@ -483,10 +490,11 @@ fn main() {
                     .fixed_pos((0.0, 0.0))
                     .show(&egui_context.get_platform_context(), |ui| {
                         ui.with_layer_id(egui::LayerId::background(), |ui| {
+                            let actor = &mut cone_actor;
                             if let Some(model_matrix) =
-                                gizmo.interact(&camera, ui, quad_actor.get_model_matrix())
+                                gizmo.interact(&camera, ui, actor.get_model_matrix())
                             {
-                                quad_actor.set_model_matrix(model_matrix);
+                                actor.set_model_matrix(model_matrix);
                             }
                         });
                     });

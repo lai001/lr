@@ -7,7 +7,6 @@ use egui_winit_platform::{Platform, PlatformDescriptor};
 use std::time::Instant;
 
 pub struct EGUIContext {
-    screen_descriptor: ScreenDescriptor,
     platform: Platform,
     egui_rpass: RenderPass,
     demo_app: DemoWindows,
@@ -38,16 +37,10 @@ impl EGUIContext {
             font_definitions: egui::FontDefinitions::default(),
             style: Default::default(),
         };
-        let screen_descriptor = ScreenDescriptor {
-            physical_width: window.inner_size().width,
-            physical_height: window.inner_size().height,
-            scale_factor: window.scale_factor() as f32,
-        };
         let platform = Platform::new(platform_descriptor);
         let egui_rpass = egui_wgpu_backend::RenderPass::new(&device, swapchain_format, 1);
         let demo_app = egui_demo_lib::DemoWindows::default();
         EGUIContext {
-            screen_descriptor,
             platform,
             egui_rpass,
             demo_app,
@@ -156,10 +149,17 @@ impl EGUIContext {
         &mut self,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
+        window: &winit::window::Window,
         output_view: &wgpu::TextureView,
         data_source: &mut DataSource,
     ) /*-> DataSource*/
     {
+        let screen_descriptor = ScreenDescriptor {
+            physical_width: window.inner_size().width,
+            physical_height: window.inner_size().height,
+            scale_factor: window.scale_factor() as f32,
+        };
+
         // let data_source: DataSource;
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -177,14 +177,14 @@ impl EGUIContext {
                 .add_textures(&device, &queue, &tdelta)
                 .unwrap();
             self.egui_rpass
-                .update_buffers(&device, &queue, &paint_jobs, &self.screen_descriptor);
+                .update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
 
             self.egui_rpass
                 .execute(
                     &mut encoder,
                     &output_view,
                     &paint_jobs,
-                    &self.screen_descriptor,
+                    &screen_descriptor,
                     None,
                 )
                 .unwrap();

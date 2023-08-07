@@ -1,4 +1,4 @@
-use crate::{shader::shader_library::ShaderLibrary, util::map_texture_cpu_sync};
+use crate::shader::shader_library::ShaderLibrary;
 use wgpu::{
     BindGroupLayout, ComputePipeline, StorageTextureAccess, TextureFormat, TextureViewDimension,
 };

@@ -90,6 +90,7 @@ impl WGPUContext {
             self.surface_config.width = size.width;
             self.surface_config.height = size.height;
             self.surface.configure(&self.device, &self.surface_config);
+            self.depth_texture = DepthTexture::new(size.width, size.height, &self.device);
         }
     }
 

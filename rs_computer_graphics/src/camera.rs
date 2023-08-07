@@ -154,6 +154,11 @@ impl Camera {
         )
     }
 
+    pub fn set_window_size(&mut self, window_width: u32, window_height: u32) {
+        self.aspect_ratio = window_width as f32 / window_height as f32;
+        self.update_projection_matrix();
+    }
+
     pub fn set_fov_y_radians(&mut self, fov_y_radians: f32) {
         self.fov_y_radians = fov_y_radians;
         self.update_projection_matrix();
@@ -227,7 +232,7 @@ impl Camera {
         self.world_location
     }
 
-    pub fn get_forward_vector(&self) -> &glam::Vec3 {
-        &self.forward_vector
+    pub fn get_forward_vector(&self) -> glam::Vec3 {
+        self.forward_vector
     }
 }

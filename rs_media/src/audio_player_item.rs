@@ -163,7 +163,7 @@ impl AudioPlayerItem {
                         };
                         if data_buffer.len() == buffer.len() {
                             buffer.copy_from_slice(data_buffer);
-                        } 
+                        }
                     }
                     let audio_frame = AudioFrame {
                         pcm_buffer,

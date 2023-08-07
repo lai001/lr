@@ -5,8 +5,8 @@ use crate::{
     time_range::{TimeRange, TimeRangeRational},
 };
 use ffmpeg_next::ffi::{
-    av_hwframe_transfer_data, av_rescale_q_rnd, av_seek_frame, AVCodec, AVCodecContext,
-    AVHWDeviceType, AVPixelFormat, AVRational, AVRounding, AVSEEK_FLAG_BACKWARD,
+    av_hwframe_transfer_data, av_seek_frame, AVCodec, AVCodecContext, AVHWDeviceType,
+    AVPixelFormat, AVSEEK_FLAG_BACKWARD,
 };
 use std::collections::HashMap;
 

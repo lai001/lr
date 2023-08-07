@@ -371,7 +371,7 @@ impl Baker {
                 );
                 let pixel_color = integrate_brdf(texcoord.x, texcoord.y);
                 let pixel_color = glam::vec4(pixel_color.x, pixel_color.y, 0.0, 1.0);
-                let mut color = brdflut_image.get_pixel_mut(width_idx, height_idx);
+                let color = brdflut_image.get_pixel_mut(width_idx, height_idx);
                 color.0 = pixel_color.to_array();
                 progress_bar.inc(1);
             }
@@ -417,7 +417,7 @@ impl Baker {
                         sample_picker.x * (self.equirectangular_hdr_image.width() - 1) as f32,
                         sample_picker.y * (self.equirectangular_hdr_image.height() - 1) as f32,
                     );
-                    let mut target_pixel = image.get_pixel_mut(width_idx, height_idx);
+                    let target_pixel = image.get_pixel_mut(width_idx, height_idx);
                     let source_pixel = self
                         .equirectangular_hdr_image
                         .get_pixel(sample_picker.x as u32, sample_picker.y as u32);
