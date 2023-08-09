@@ -15,6 +15,7 @@ use rs_computer_graphics::{
     },
     egui_context::EGUIContext,
     file_manager::FileManager,
+    frame_buffer::FrameBuffer,
     gizmo::FGizmo,
     material_type::EMaterialType,
     native_window::NativeWindow,
@@ -298,10 +299,18 @@ fn main() {
     let mut data_source = rs_computer_graphics::egui_context::DataSource {
         is_captrue_enable: false,
         is_save: false,
+        is_save_frame_buffer: false,
         target_fps: egui_context.get_fps(),
         roughness_factor: 0.0,
         metalness_factor: 1.0,
+        frame_buffer_color: egui::Color32::BLACK,
     };
+
+    let frmae_buffer = FrameBuffer::new(
+        &wgpu_context.device,
+        winit::dpi::PhysicalSize::<u32>::new(1024, 1024),
+        swapchain_format,
+    );
 
     native_window.event_loop.run(move |event, _, control_flow| {
         egui_context.handle_event(&event);
@@ -512,6 +521,47 @@ fn main() {
                         &window_size,
                     );
                     data_source.is_captrue_enable = false;
+                }
+                if data_source.is_save_frame_buffer {
+                    let color = data_source.frame_buffer_color;
+                    let color = wgpu::Color {
+                        r: color.r() as f64 / 255.0,
+                        g: color.g() as f64 / 255.0,
+                        b: color.b() as f64 / 255.0,
+                        a: color.a() as f64 / 255.0,
+                    };
+                    attachment_pipeline.draw(
+                        device,
+                        queue,
+                        &frmae_buffer.get_color_texture_view(),
+                        &frmae_buffer.get_depth_texture_view(),
+                        wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(color),
+                            store: true,
+                        },
+                        Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0),
+                            store: true,
+                        }),
+                    );
+                    if let Some(frame_buffer_image) = frmae_buffer.capture(device, queue) {
+                        thread_pool::ThreadPool::io()
+                            .lock()
+                            .unwrap()
+                            .spawn(move || {
+                                match frame_buffer_image
+                                    .save(std::format!("./frame_buffer_image.png"))
+                                {
+                                    Ok(_) => {}
+                                    Err(error) => panic!("{}", error),
+                                }
+                            });
+                    }
+                    data_source.is_save_frame_buffer = false;
                 }
                 if data_source.is_save {
                     panorama_to_cube_demo.execute(device, queue);

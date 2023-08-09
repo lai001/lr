@@ -19,6 +19,8 @@ pub struct EGUIContext {
 pub struct DataSource {
     pub is_captrue_enable: bool,
     pub is_save: bool,
+    pub is_save_frame_buffer: bool,
+    pub frame_buffer_color: egui::Color32,
     pub target_fps: u64,
     pub roughness_factor: f32,
     pub metalness_factor: f32,
@@ -75,6 +77,14 @@ impl EGUIContext {
             if response.clicked() {
                 data_source.is_save = true;
             }
+            if ui.button("Save frame buffer").clicked() {
+                data_source.is_save_frame_buffer = true;
+            }
+            egui::color_picker::color_edit_button_srgba(
+                ui,
+                &mut data_source.frame_buffer_color,
+                Alpha::Opaque,
+            );
             ui.horizontal(|ui| {
                 ui.label("fps: ");
                 ui.add(egui::DragValue::new(&mut data_source.target_fps).clamp_range(1..=60));

@@ -18,6 +18,7 @@ pub mod egui_context;
 pub mod entry_info;
 pub mod ffi;
 pub mod file_manager;
+pub mod frame_buffer;
 pub mod gizmo;
 pub mod id_generator;
 pub mod light;

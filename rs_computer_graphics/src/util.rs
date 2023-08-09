@@ -208,8 +208,22 @@ pub fn map_texture_cpu_sync(
     height: u32,
     color_type: image::ColorType,
 ) -> Vec<u8> {
-    assert_eq!(color_type, image::ColorType::Rgba32F);
-    let bytes_per_pixel: usize = 4 * std::mem::size_of::<f32>();
+    let available_texture_formats = std::collections::HashMap::from([
+        (wgpu::TextureFormat::Rgba8Unorm, image::ColorType::Rgba8),
+        (wgpu::TextureFormat::Rgba8UnormSrgb, image::ColorType::Rgba8),
+        (wgpu::TextureFormat::Rgba32Float, image::ColorType::Rgb32F),
+    ]);
+    let available_color_types = std::collections::HashMap::from([
+        (image::ColorType::Rgba32F, 4 * std::mem::size_of::<f32>()),
+        (image::ColorType::Rgba8, 4 * std::mem::size_of::<u8>()),
+    ]);
+    let expect_color_type = available_texture_formats
+        .get(&texture.format())
+        .unwrap_or(&color_type);
+
+    assert!(available_color_types.contains_key(&expect_color_type));
+    assert_eq!(texture.size().depth_or_array_layers, 1);
+    let bytes_per_pixel: usize = *available_color_types.get(&expect_color_type).unwrap();
     let mut encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
     let buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
