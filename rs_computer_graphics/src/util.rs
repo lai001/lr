@@ -401,7 +401,7 @@ pub fn texture2d_from_rgba_image_file(
             }
         }
         Err(error) => {
-            log::warn!("{error}");
+            log::warn!("{error}, {path}");
             None
         }
     }
@@ -846,6 +846,12 @@ pub fn convert_coordinate_system(
 
 pub fn reflect_vec3(i: glam::Vec3, n: glam::Vec3) -> glam::Vec3 {
     i - 2.0 * n.dot(i) * n
+}
+
+pub fn index_2d_lookup(index: f32, width: f32) -> glam::Vec2 {
+    let y = index / width;
+    let x = index % width;
+    glam::Vec2 { x, y }
 }
 
 #[cfg(test)]

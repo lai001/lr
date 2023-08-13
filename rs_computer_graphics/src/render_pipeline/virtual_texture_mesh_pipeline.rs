@@ -4,6 +4,7 @@ use crate::camera::Camera;
 use crate::material_type::EMaterialType;
 use crate::shader::shader_library::ShaderLibrary;
 use crate::static_mesh::StaticMesh;
+use crate::virtual_texture::virtual_texture_configuration::VirtualTextureConfiguration;
 use crate::{util, VertexBufferLayout};
 use wgpu::*;
 
@@ -23,6 +24,7 @@ pub struct VirtualTextureMeshPipeline {
     sampler_bind_group_layout: BindGroupLayout,
     texture_bind_group_layout: BindGroupLayout,
     uniform_bind_group_layout: BindGroupLayout,
+    virtual_texture_configuration: VirtualTextureConfiguration,
 }
 
 impl VirtualTextureMeshPipeline {
@@ -30,6 +32,7 @@ impl VirtualTextureMeshPipeline {
         device: &Device,
         depth_stencil: Option<DepthStencilState>,
         texture_format: &wgpu::TextureFormat,
+        virtual_texture_configuration: VirtualTextureConfiguration,
     ) -> VirtualTextureMeshPipeline {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -136,6 +139,7 @@ impl VirtualTextureMeshPipeline {
             sampler_bind_group_layout,
             texture_bind_group_layout,
             uniform_bind_group_layout,
+            virtual_texture_configuration,
         }
     }
 
@@ -225,9 +229,9 @@ impl VirtualTextureMeshPipeline {
                 model: model_matrix.clone(),
                 view: camera.get_view_matrix(),
                 projection: camera.get_projection_matrix(),
-                physical_texture_size: 4096,
-                virtual_texture_size: 512 * 1000,
-                tile_size: 256,
+                physical_texture_size: self.virtual_texture_configuration.physical_texture_size,
+                virtual_texture_size: self.virtual_texture_configuration.virtual_texture_size,
+                tile_size: self.virtual_texture_configuration.tile_size,
             };
             let uniform_buf = util::create_gpu_uniform_buffer_from(device, &constants, None);
             let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

@@ -30,7 +30,10 @@ use rs_computer_graphics::{
     thread_pool,
     user_script_change_monitor::UserScriptChangeMonitor,
     util::{change_working_directory, init_log},
-    virtual_texture::{block_image::BlockImage, virtual_texture_system::VirtualTextureSystem},
+    virtual_texture::{
+        block_image::BlockImage, virtual_texture_configuration::VirtualTextureConfiguration,
+        virtual_texture_system::VirtualTextureSystem,
+    },
     wgpu_context::WGPUContext,
 };
 use rs_media::{audio_player_item::AudioPlayerItem, video_player_item::EVideoDecoderType};
@@ -322,11 +325,15 @@ fn main() {
         swapchain_format,
     );
 
-    let mut vt_flow = VirtualTextureSystem::new(
+    let virtual_texture_configuration = VirtualTextureConfiguration {
+        physical_texture_size: 4096,
+        virtual_texture_size: 512 * 1000,
+        tile_size: 256,
+    };
+
+    let mut virtual_texture_system = VirtualTextureSystem::new(
         &wgpu_context.device,
-        4096,
-        512 * 1000,
-        256,
+        virtual_texture_configuration,
         window_size.width / 8,
         window_size.height / 8,
         wgpu::TextureFormat::Rgba8Unorm,
@@ -346,6 +353,7 @@ fn main() {
             bias: wgpu::DepthBiasState::default(),
         }),
         &swapchain_format,
+        virtual_texture_configuration,
     );
 
     native_window.event_loop.run(move |event, _, control_flow| {
@@ -399,39 +407,62 @@ fn main() {
                 );
 
                 {
-                    vt_flow.new_frame(device, queue);
+                    virtual_texture_system.new_frame(device, queue);
 
                     let mut vt_camera = camera.clone();
-                    let feed_back_texture_size = vt_flow.get_feed_back_texture_size();
+                    let feed_back_texture_size =
+                        virtual_texture_system.get_feed_back_texture_size();
                     vt_camera.set_window_size(
                         feed_back_texture_size.width,
                         feed_back_texture_size.height,
                     );
-                    vt_flow.render_actor(device, queue, &cube_virtual_texture_actor, &vt_camera);
-                    let pages = vt_flow.read(device, queue);
+                    virtual_texture_system.render_actor(
+                        device,
+                        queue,
+                        &cube_virtual_texture_actor,
+                        &vt_camera,
+                    );
+                    let pages = virtual_texture_system.read(device, queue);
 
-                    for page in &pages {
-                        if let Some(cache_image) =
-                            block_image.get_image(page.0 as u32, page.1 as u32)
+                    for (index, page) in pages.iter().enumerate() {
+                        let (page_x, page_y) = *page;
+                        if let Some(cache_texture) =
+                            block_image.get_texture(device, queue, page_x, page_y)
                         {
-                            vt_flow.update_page_table(
-                                page.0 as u32,
-                                page.1 as u32,
-                                page.0,
-                                page.1,
+                            let coord = rs_computer_graphics::util::index_2d_lookup(
+                                index as f32,
+                                (virtual_texture_system.get_physical_texture_size()
+                                    / virtual_texture_system.get_tile_size())
+                                    as f32,
+                            );
+                            let (physical_page_x, physical_page_y) =
+                                (coord.x as u16, coord.y as u16);
+                            virtual_texture_system.update_page_table(
+                                page_x,
+                                page_y,
+                                physical_page_x,
+                                physical_page_y,
                                 0,
                                 0,
                             );
-                            vt_flow.upload_page_image(device, queue, *page, cache_image);
+                            virtual_texture_system.upload_page_texture(
+                                device,
+                                queue,
+                                (physical_page_x, physical_page_y),
+                                cache_texture,
+                            );
                         };
                     }
 
-                    vt_flow.upload_page_table(queue);
+                    virtual_texture_system.upload_page_table(queue);
 
                     for mesh in cube_virtual_texture_actor.get_static_meshs_mut() {
                         let mut material = rs_computer_graphics::material::Material::default();
-                        material.set_page_table_texture(vt_flow.get_page_table_texture());
-                        material.set_physical_texture(vt_flow.get_physical_texture());
+                        material.set_page_table_texture(
+                            virtual_texture_system.get_page_table_texture(),
+                        );
+                        material
+                            .set_physical_texture(virtual_texture_system.get_physical_texture());
                         mesh.set_material_type(EMaterialType::Phong(material))
                     }
 
@@ -454,7 +485,7 @@ fn main() {
 
                     data_source.draw_image = Some(egui_context.create_image(
                         device,
-                        &vt_flow.get_physical_texture_view(),
+                        &virtual_texture_system.get_physical_texture_view(),
                         egui::Vec2 {
                             x: 256 as f32,
                             y: 256 as f32,

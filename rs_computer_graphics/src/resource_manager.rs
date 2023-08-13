@@ -5,14 +5,14 @@ use std::{
 };
 use walkdir::WalkDir;
 
-pub struct ResourceManager {
-    image_sync_cache: moka::sync::Cache<String, Arc<image::DynamicImage>>,
-    texture_sync_cache: moka::sync::Cache<String, Arc<wgpu::Texture>>,
-}
-
 lazy_static! {
     static ref GLOBAL_RESOURCE_MANAGER: Arc<Mutex<ResourceManager>> =
         Arc::new(Mutex::new(ResourceManager::new()));
+}
+
+pub struct ResourceManager {
+    image_sync_cache: moka::sync::Cache<String, Arc<image::DynamicImage>>,
+    texture_sync_cache: moka::sync::Cache<String, Arc<wgpu::Texture>>,
 }
 
 impl ResourceManager {
@@ -25,12 +25,12 @@ impl ResourceManager {
 
     pub fn default() -> Arc<Mutex<ResourceManager>> {
         let rm = GLOBAL_RESOURCE_MANAGER.clone();
-        rm.lock().unwrap().preload_from_disk(
-            &FileManager::default()
-                .lock()
-                .unwrap()
-                .get_resource_dir_path(),
-        );
+        // rm.lock().unwrap().preload_from_disk(
+        //     &FileManager::default()
+        //         .lock()
+        //         .unwrap()
+        //         .get_resource_dir_path(),
+        // );
         rm
     }
 
@@ -42,7 +42,14 @@ impl ResourceManager {
         self.image_sync_cache.get(key)
     }
 
-    pub fn load_image_from_disk_and_cache(&mut self, key: &str, path: String) {
+    pub fn get_cache_or_load_image(&mut self, key: &str, path: &str) -> Option<Arc<image::DynamicImage>> {
+        if !self.image_sync_cache.contains_key(key) {
+            self.load_image_from_disk_and_cache(key, path);
+        }
+        self.image_sync_cache.get(key)
+    }
+
+    pub fn load_image_from_disk_and_cache(&mut self, key: &str, path: &str) {
         let image = image::open(path);
         match image {
             Ok(image) => {
@@ -65,7 +72,7 @@ impl ResourceManager {
         }
     }
 
-    pub fn preload_from_disk(&mut self, dir: &str) {
+    fn preload_from_disk(&mut self, dir: &str) {
         let dir_path = Path::new(dir);
         for entry in WalkDir::new(dir.clone()) {
             if let Ok(entry) = entry {
@@ -79,7 +86,7 @@ impl ResourceManager {
                                 .to_str()
                                 .unwrap()
                                 .to_string();
-                            self.load_image_from_disk_and_cache(&key, path.to_string());
+                            self.load_image_from_disk_and_cache(&key, path);
                         }
                     }
                 }

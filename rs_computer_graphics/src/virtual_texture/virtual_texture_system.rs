@@ -13,30 +13,33 @@ use std::{collections::HashMap, sync::Arc};
 use wgpu::*;
 use winit::dpi::PhysicalSize;
 
+use super::virtual_texture_configuration::VirtualTextureConfiguration;
+
 pub struct VirtualTextureSystem {
     physical_texture: Arc<Option<Texture>>,
     page_table_texture: Arc<Option<Texture>>,
     feed_back_texture: Texture,
     feed_back_depth_texture: DepthTexture,
-    virtual_texture_size: u32,
     page_table_size: u32,
-    tile_size: u32,
     feed_back_pipeline: FeedBackPipeline,
     clean_pipeline: VirtualTextureCleanPipeline,
     page_table_data: Vec<u16>,
     page_buffer_dimensions: BufferDimensions,
+    virtual_texture_configuration: VirtualTextureConfiguration,
 }
 
 impl VirtualTextureSystem {
     pub fn new(
         device: &Device,
-        physical_texture_size: u32,
-        virtual_texture_size: u32,
-        tile_size: u32,
+        virtual_texture_configuration: VirtualTextureConfiguration,
         feed_back_texture_width: u32,
         feed_back_texture_height: u32,
         physical_texture_color_format: TextureFormat,
     ) -> VirtualTextureSystem {
+        let physical_texture_size = virtual_texture_configuration.physical_texture_size;
+        let virtual_texture_size = virtual_texture_configuration.virtual_texture_size;
+        let tile_size = virtual_texture_configuration.tile_size;
+
         assert_eq!(physical_texture_size % tile_size, 0);
         assert_eq!(virtual_texture_size % tile_size, 0);
 
@@ -135,13 +138,15 @@ impl VirtualTextureSystem {
             page_table_texture: Arc::new(Some(page_table_texture)),
             feed_back_texture,
             feed_back_depth_texture,
-            virtual_texture_size,
+            // virtual_texture_size,
             page_table_size,
-            tile_size,
+            // tile_size,
             feed_back_pipeline,
             clean_pipeline,
             page_table_data,
             page_buffer_dimensions,
+            // physical_texture_size,
+            virtual_texture_configuration,
         }
     }
 
@@ -166,7 +171,7 @@ impl VirtualTextureSystem {
             &output_view,
             &depth_view,
             wgpu::Operations {
-                load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
+                load: wgpu::LoadOp::Load,
                 store: true,
             },
             Some(wgpu::Operations {
@@ -280,10 +285,13 @@ impl VirtualTextureSystem {
             let mut uniq: HashMap<(u16, u16), bool> = HashMap::new();
             for line in line_buffer_chunks {
                 for data in line.chunks(4) {
-                    assert_eq!(data.len(), 4);
-                    let page_x = data.get(0).unwrap();
-                    let page_y = data.get(1).unwrap();
-                    uniq.insert((*page_x, *page_y), true);
+                    debug_assert_eq!(data.len(), 4);
+                    let is_valid = *data.get(3).unwrap() == 1;
+                    if is_valid {
+                        let page_x = data.get(0).unwrap();
+                        let page_y = data.get(1).unwrap();
+                        uniq.insert((*page_x, *page_y), true);
+                    }
                 }
             }
             let mut pages: Vec<(u16, u16)> = uniq.keys().map(|x| *x).collect();
@@ -332,8 +340,9 @@ impl VirtualTextureSystem {
         page: (u16, u16),
         image: &ImageBuffer<Rgba<u8>, Vec<u8>>,
     ) {
-        assert_eq!(image.width(), self.tile_size);
-        assert_eq!(image.height(), self.tile_size);
+        let tile_size = self.virtual_texture_configuration.tile_size;
+        assert_eq!(image.width(), tile_size);
+        assert_eq!(image.height(), tile_size);
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         let buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
@@ -354,8 +363,8 @@ impl VirtualTextureSystem {
                 texture: self.physical_texture.as_ref().as_ref().unwrap(),
                 mip_level: 0,
                 origin: Origin3d {
-                    x: page.0 as u32 * self.tile_size,
-                    y: page.1 as u32 * self.tile_size,
+                    x: page.0 as u32 * tile_size,
+                    y: page.1 as u32 * tile_size,
                     z: 0,
                 },
                 aspect: TextureAspect::All,
@@ -378,8 +387,10 @@ impl VirtualTextureSystem {
         page: (u16, u16),
         texture: Arc<Texture>,
     ) {
-        assert_eq!(texture.width(), self.tile_size);
-        assert_eq!(texture.height(), self.tile_size);
+        let tile_size = self.virtual_texture_configuration.tile_size;
+
+        assert_eq!(texture.width(), tile_size);
+        assert_eq!(texture.height(), tile_size);
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
@@ -394,8 +405,8 @@ impl VirtualTextureSystem {
                 texture: self.physical_texture.as_ref().as_ref().unwrap(),
                 mip_level: 0,
                 origin: Origin3d {
-                    x: page.0 as u32 * self.tile_size,
-                    y: page.1 as u32 * self.tile_size,
+                    x: page.0 as u32 * tile_size,
+                    y: page.1 as u32 * tile_size,
                     z: 0,
                 },
                 aspect: TextureAspect::All,
@@ -446,8 +457,8 @@ impl VirtualTextureSystem {
 
     pub fn update_page_table(
         &mut self,
-        page_x: u32,
-        page_y: u32,
+        page_x: u16,
+        page_y: u16,
         physical_page_x: u16,
         physical_page_y: u16,
         mipmap: u16,
@@ -475,5 +486,13 @@ impl VirtualTextureSystem {
 
     pub fn get_page_table_texture(&self) -> Arc<Option<Texture>> {
         self.page_table_texture.clone()
+    }
+
+    pub fn get_physical_texture_size(&self) -> u32 {
+        self.virtual_texture_configuration.physical_texture_size
+    }
+
+    pub fn get_tile_size(&self) -> u32 {
+        self.virtual_texture_configuration.tile_size
     }
 }

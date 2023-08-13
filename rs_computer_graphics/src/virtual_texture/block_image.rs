@@ -1,23 +1,26 @@
-use crate::file_manager::FileManager;
+use std::sync::Arc;
+
+use crate::{file_manager::FileManager, util};
 use image::{GenericImage, ImageBuffer, Rgba};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PersistentBlockImageInfo {
-    pub x: u32,
-    pub y: u32,
+    pub x: u16,
+    pub y: u16,
     pub path: String,
 }
 
 pub struct BlockImageMakeResult {
-    pub x: u32,
-    pub y: u32,
+    pub x: u16,
+    pub y: u16,
     pub image: ImageBuffer<Rgba<u8>, Vec<u8>>,
 }
 
 pub struct BlockImage {
     persistent_block_image_infos: Vec<PersistentBlockImageInfo>,
-    cache_images: std::collections::HashMap<(u32, u32), ImageBuffer<Rgba<u8>, Vec<u8>>>,
+    cache_images: std::collections::HashMap<(u16, u16), ImageBuffer<Rgba<u8>, Vec<u8>>>,
+    cache_textures: std::collections::HashMap<(u16, u16), Arc<wgpu::Texture>>,
 }
 
 impl BlockImage {
@@ -28,6 +31,7 @@ impl BlockImage {
             BlockImage {
                 persistent_block_image_infos,
                 cache_images: std::collections::HashMap::new(),
+                cache_textures: std::collections::HashMap::new(),
             }
         } else {
             let results = Self::make(file_path, 256).unwrap();
@@ -35,6 +39,7 @@ impl BlockImage {
             BlockImage {
                 persistent_block_image_infos,
                 cache_images: std::collections::HashMap::new(),
+                cache_textures: std::collections::HashMap::new(),
             }
         }
     }
@@ -91,8 +96,8 @@ impl BlockImage {
                             image.sub_image(w * tile_size, h * tile_size, tile_size, tile_size);
                         let sub_image_copy = sub_image.to_image();
                         results.push(BlockImageMakeResult {
-                            x: w,
-                            y: h,
+                            x: w as u16,
+                            y: h as u16,
                             image: sub_image_copy,
                         });
                     }
@@ -135,7 +140,7 @@ impl BlockImage {
         infos
     }
 
-    pub fn get_image(&mut self, x: u32, y: u32) -> Option<&ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    pub fn get_image(&mut self, x: u16, y: u16) -> Option<&ImageBuffer<Rgba<u8>, Vec<u8>>> {
         let key = (x, y);
         let cache_images = &mut self.cache_images;
         let is_contains_key = cache_images.contains_key(&key);
@@ -156,5 +161,41 @@ impl BlockImage {
                 None
             }
         }
+    }
+
+    pub fn get_texture(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        x: u16,
+        y: u16,
+    ) -> Option<Arc<wgpu::Texture>> {
+        let key = (x, y);
+        let cache_textures = &mut self.cache_textures;
+        let is_contains_key = cache_textures.contains_key(&key);
+        if is_contains_key == false {
+            match self.get_image(x, y) {
+                Some(cache_image) => {
+                    let texture = util::texture2d_from_rgba_image(device, queue, cache_image);
+                    self.cache_textures.insert(key, Arc::new(texture));
+                }
+                None => {}
+            }
+        }
+        let texture = self.cache_textures.get(&key);
+        match texture {
+            Some(texture) => Some(texture.clone()),
+            None => {
+                log::warn!("Invalid x: {}, y: {}", x, y);
+                None
+            }
+        }
+    }
+
+    pub fn retain(&mut self, keeping_pages: &Vec<(u16, u16)>) {
+        self.cache_images
+            .retain(|&key, _| keeping_pages.contains(&key));
+        self.cache_textures
+            .retain(|&key, _| keeping_pages.contains(&key));
     }
 }

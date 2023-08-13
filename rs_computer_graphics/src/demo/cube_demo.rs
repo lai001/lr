@@ -1,6 +1,6 @@
 use crate::{
     brigde_data::mesh_vertex::MeshVertex, camera::Camera, resource_manager::ResourceManager,
-    shader::shader_library::ShaderLibrary, VertexBufferLayout,
+    shader::shader_library::ShaderLibrary, VertexBufferLayout, util,
 };
 use glam::{Vec3Swizzles, Vec4Swizzles};
 use wgpu::VertexFormat;
@@ -23,7 +23,7 @@ impl CubeDemo {
         let cache_image = ResourceManager::default()
             .lock()
             .unwrap()
-            .get_cache_image("ColorGrid.png");
+            .get_cache_or_load_image("ColorGrid.png", &util::get_resource_path("ColorGrid.png"));
         let is_flipv = false;
         match cache_image {
             Some(cache_image) => {
