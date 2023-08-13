@@ -1,19 +1,20 @@
 use crate::shader::shader_library::ShaderLibrary;
 
-pub struct AttachmentPipeline {
+pub struct VirtualTextureCleanPipeline {
     pub pipeline_layout: wgpu::PipelineLayout,
     pub render_pipeline: wgpu::RenderPipeline,
 }
 
-impl AttachmentPipeline {
+impl VirtualTextureCleanPipeline {
     pub fn new(
         device: &wgpu::Device,
         output_texture_format: &wgpu::TextureFormat,
-    ) -> AttachmentPipeline {
+    ) -> VirtualTextureCleanPipeline {
+        assert_eq!(*output_texture_format, wgpu::TextureFormat::Rgba16Uint);
         let shader = ShaderLibrary::default()
             .lock()
             .unwrap()
-            .get_shader("attachment.wgsl");
+            .get_shader("virtual_texture_clean.wgsl");
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[],
@@ -43,13 +44,13 @@ impl AttachmentPipeline {
                 ))],
             }),
             primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: depth_stencil,
+            depth_stencil,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
         });
-        AttachmentPipeline {
-            pipeline_layout: pipeline_layout,
-            render_pipeline: render_pipeline,
+        VirtualTextureCleanPipeline {
+            pipeline_layout,
+            render_pipeline,
         }
     }
 
@@ -67,8 +68,8 @@ impl AttachmentPipeline {
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         let render_pass_depth_stencil_attachment = wgpu::RenderPassDepthStencilAttachment {
             view: &depth_view,
-            depth_ops: depth_ops,
-            stencil_ops: stencil_ops,
+            depth_ops,
+            stencil_ops,
         };
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

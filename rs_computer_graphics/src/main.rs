@@ -23,12 +23,14 @@ use rs_computer_graphics::{
     render_pipeline::{
         attachment_pipeline::AttachmentPipeline, audio_pipeline::AudioPipeline,
         pbr_pipeline::PBRPipeline, phong_pipeline::PhongPipeline, sky_box_pipeline::SkyBoxPipeline,
+        virtual_texture_mesh_pipeline::VirtualTextureMeshPipeline,
     },
     shader::shader_library::ShaderLibrary,
     static_mesh::StaticMesh,
     thread_pool,
     user_script_change_monitor::UserScriptChangeMonitor,
     util::{change_working_directory, init_log},
+    virtual_texture::{block_image::BlockImage, virtual_texture_system::VirtualTextureSystem},
     wgpu_context::WGPUContext,
 };
 use rs_media::{audio_player_item::AudioPlayerItem, video_player_item::EVideoDecoderType};
@@ -120,8 +122,7 @@ fn main() {
 
     let native_window = NativeWindow::new();
 
-    let mut wgpu_context =
-        WGPUContext::new(&native_window.window, Some(wgpu::PowerPreference::LowPower));
+    let mut wgpu_context = WGPUContext::new(&native_window.window, None, None);
 
     #[cfg(feature = "rs_dotnet")]
     let mut dotnet_runtime = DotnetRuntime::new(&mut wgpu_context.device);
@@ -184,6 +185,12 @@ fn main() {
         &wgpu_context.device,
         &wgpu_context.queue,
         &rs_computer_graphics::util::get_resource_path("Remote/Cone.fbx"),
+    );
+
+    let mut cube_virtual_texture_actor = Actor::load_from_file(
+        &wgpu_context.device,
+        &wgpu_context.queue,
+        &rs_computer_graphics::util::get_resource_path("Remote/CubeVirtualTexture.fbx"),
     );
 
     let shader_lib = ShaderLibrary::default();
@@ -300,16 +307,45 @@ fn main() {
         is_captrue_enable: false,
         is_save: false,
         is_save_frame_buffer: false,
+        frame_buffer_color: egui::Color32::BLACK,
         target_fps: egui_context.get_fps(),
         roughness_factor: 0.0,
         metalness_factor: 1.0,
-        frame_buffer_color: egui::Color32::BLACK,
+        draw_image: None,
+        movement_speed: 0.01,
+        motion_speed: 0.1,
     };
 
     let frmae_buffer = FrameBuffer::new(
         &wgpu_context.device,
         winit::dpi::PhysicalSize::<u32>::new(1024, 1024),
         swapchain_format,
+    );
+
+    let mut vt_flow = VirtualTextureSystem::new(
+        &wgpu_context.device,
+        4096,
+        512 * 1000,
+        256,
+        window_size.width / 8,
+        window_size.height / 8,
+        wgpu::TextureFormat::Rgba8Unorm,
+    );
+
+    let mut block_image = BlockImage::new(&rs_computer_graphics::util::get_resource_path(
+        "Remote/Untitled_4k.png",
+    ));
+
+    let virtual_texture_mesh_pipeline = VirtualTextureMeshPipeline::new(
+        &wgpu_context.device,
+        Some(wgpu::DepthStencilState {
+            depth_compare: wgpu::CompareFunction::Less,
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        &swapchain_format,
     );
 
     native_window.event_loop.run(move |event, _, control_flow| {
@@ -331,6 +367,7 @@ fn main() {
                         virtual_key_code,
                         element_state,
                         is_cursor_visible,
+                        data_source.movement_speed,
                     );
                 }
 
@@ -360,6 +397,70 @@ fn main() {
                         store: true,
                     }),
                 );
+
+                {
+                    vt_flow.new_frame(device, queue);
+
+                    let mut vt_camera = camera.clone();
+                    let feed_back_texture_size = vt_flow.get_feed_back_texture_size();
+                    vt_camera.set_window_size(
+                        feed_back_texture_size.width,
+                        feed_back_texture_size.height,
+                    );
+                    vt_flow.render_actor(device, queue, &cube_virtual_texture_actor, &vt_camera);
+                    let pages = vt_flow.read(device, queue);
+
+                    for page in &pages {
+                        if let Some(cache_image) =
+                            block_image.get_image(page.0 as u32, page.1 as u32)
+                        {
+                            vt_flow.update_page_table(
+                                page.0 as u32,
+                                page.1 as u32,
+                                page.0,
+                                page.1,
+                                0,
+                                0,
+                            );
+                            vt_flow.upload_page_image(device, queue, *page, cache_image);
+                        };
+                    }
+
+                    vt_flow.upload_page_table(queue);
+
+                    for mesh in cube_virtual_texture_actor.get_static_meshs_mut() {
+                        let mut material = rs_computer_graphics::material::Material::default();
+                        material.set_page_table_texture(vt_flow.get_page_table_texture());
+                        material.set_physical_texture(vt_flow.get_physical_texture());
+                        mesh.set_material_type(EMaterialType::Phong(material))
+                    }
+
+                    virtual_texture_mesh_pipeline.render_actor(
+                        device,
+                        queue,
+                        &surface_texture_view,
+                        &wgpu_context.get_depth_texture_view(),
+                        &cube_virtual_texture_actor,
+                        &camera,
+                        Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0),
+                            store: true,
+                        }),
+                    );
+
+                    data_source.draw_image = Some(egui_context.create_image(
+                        device,
+                        &vt_flow.get_physical_texture_view(),
+                        egui::Vec2 {
+                            x: 256 as f32,
+                            y: 256 as f32,
+                        },
+                    ));
+                }
 
                 // triangle_demo.draw(device, &surface_texture_view, queue);
                 // cube_demo.draw(device, &surface_texture_view, queue, &camera);
@@ -579,6 +680,7 @@ fn main() {
                         &mut camera,
                         delta,
                         is_cursor_visible,
+                        data_source.motion_speed,
                     );
                 }
                 _ => {}

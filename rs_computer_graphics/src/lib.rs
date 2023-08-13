@@ -39,6 +39,7 @@ pub mod static_mesh;
 pub mod thread_pool;
 pub mod user_script_change_monitor;
 pub mod util;
+pub mod virtual_texture;
 pub mod wgpu_context;
 pub mod yuv420p_image;
 #[macro_use]

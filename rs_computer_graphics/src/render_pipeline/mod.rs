@@ -1,6 +1,9 @@
 pub mod attachment_pipeline;
 pub mod audio_pipeline;
+pub mod feed_back_pipeline;
 pub mod pbr_pipeline;
 pub mod phong_pipeline;
 pub mod sky_box_pipeline;
+pub mod virtual_texture_clean_pipeline;
+pub mod virtual_texture_mesh_pipeline;
 pub mod yuv420p_pipeline;

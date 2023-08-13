@@ -1,7 +1,6 @@
+use crate::depth_texture::DepthTexture;
 use wgpu::TextureFormat;
 use winit::dpi::PhysicalSize;
-
-use crate::{buffer_dimensions::BufferDimensions, depth_texture::DepthTexture};
 
 pub struct FrameBuffer {
     color_texture: wgpu::Texture,
@@ -17,6 +16,8 @@ impl FrameBuffer {
         let available_texture_formats = std::collections::HashMap::from([
             (wgpu::TextureFormat::Rgba8Unorm, true),
             (wgpu::TextureFormat::Rgba8UnormSrgb, true),
+            (wgpu::TextureFormat::Bgra8Unorm, true),
+            (wgpu::TextureFormat::Bgra8UnormSrgb, true),
         ]);
         assert!(available_texture_formats.contains_key(&color_format));
         let texture_extent = wgpu::Extent3d {

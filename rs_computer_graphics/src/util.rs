@@ -2,6 +2,7 @@ use crate::{actor::Actor, camera::Camera, yuv420p_image::YUV420pImage};
 use core::ffi;
 use glam::{Vec3Swizzles, Vec4Swizzles};
 use std::io::Write;
+use wgpu::TextureFormat;
 
 #[derive(Clone, Debug)]
 pub struct RayHitTestResult {
@@ -472,7 +473,16 @@ pub fn texture2d_from_rgba_image(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     image: &image::RgbaImage,
+    // texture_format: TextureFormat,
 ) -> wgpu::Texture {
+    // let available_texture_formats = HashMap::from([
+    //     (TextureFormat::Rgba8Unorm, true),
+    //     (TextureFormat::Rgba8UnormSrgb, true),
+    //     (TextureFormat::Bgra8Unorm, true),
+    //     (TextureFormat::Bgra8UnormSrgb, true),
+    // ]);
+    // assert!(available_texture_formats.contains_key(&texture_format));
+
     let texture_extent = wgpu::Extent3d {
         depth_or_array_layers: 1,
         width: image.width(),
@@ -485,8 +495,10 @@ pub fn texture2d_from_rgba_image(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        format: TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
 

@@ -2,22 +2,33 @@ use crate::rotator::Rotator;
 use winit::event::ElementState;
 
 pub trait CameraInputEventHandle {
-    fn mouse_motion_handle(camera: &mut Camera, delta: (f64, f64), is_cursor_visible: bool);
+    fn mouse_motion_handle(
+        camera: &mut Camera,
+        delta: (f64, f64),
+        is_cursor_visible: bool,
+        motion_speed: f32,
+    );
     fn keyboard_input_handle(
         camera: &mut Camera,
         virtual_key_code: &winit::event::VirtualKeyCode,
         element_state: &winit::event::ElementState,
         is_cursor_visible: bool,
+        movement_speed: f32,
     );
 }
 
 pub struct DefaultCameraInputEventHandle {}
 
 impl CameraInputEventHandle for DefaultCameraInputEventHandle {
-    fn mouse_motion_handle(camera: &mut Camera, delta: (f64, f64), is_cursor_visible: bool) {
+    fn mouse_motion_handle(
+        camera: &mut Camera,
+        delta: (f64, f64),
+        is_cursor_visible: bool,
+        motion_speed: f32,
+    ) {
         if is_cursor_visible == false {
-            let speed_x = 0.25_f64;
-            let speed_y = 0.25_f64;
+            let speed_x = motion_speed as f64;
+            let speed_y = motion_speed as f64;
             let yaw: f64 = (delta.0 * speed_x).to_radians();
             let pitch: f64 = (-delta.1 * speed_y).to_radians();
             camera.add_world_rotation_relative(&Rotator {
@@ -33,8 +44,9 @@ impl CameraInputEventHandle for DefaultCameraInputEventHandle {
         virtual_key_code: &winit::event::VirtualKeyCode,
         element_state: &winit::event::ElementState,
         is_cursor_visible: bool,
+        movement_speed: f32,
     ) {
-        let speed = 0.05_f32;
+        let speed = movement_speed;
         if virtual_key_code == &winit::event::VirtualKeyCode::W
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
@@ -98,6 +110,7 @@ impl CameraInputEventHandle for DefaultCameraInputEventHandle {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Camera {
     world_location: glam::Vec3,
     up_vector: glam::Vec3,

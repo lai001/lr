@@ -1,5 +1,5 @@
 use crate::depth_texture::DepthTexture;
-use wgpu::{SurfaceCapabilities, SurfaceTexture};
+use wgpu::{InstanceDescriptor, SurfaceCapabilities, SurfaceTexture};
 
 pub struct WGPUContext {
     pub instance: wgpu::Instance,
@@ -19,8 +19,10 @@ impl WGPUContext {
     pub fn new(
         window: &winit::window::Window,
         power_preference: Option<wgpu::PowerPreference>,
+        instance_desc: Option<InstanceDescriptor>,
     ) -> WGPUContext {
-        let instance = wgpu::Instance::default();
+        // let instance = wgpu::Instance::default();
+        let instance = wgpu::Instance::new(instance_desc.unwrap_or_default());
         let surface = Self::new_surface(&instance, window);
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),
@@ -50,7 +52,9 @@ impl WGPUContext {
         }
 
         log::info!("swapchain_capabilities {:#?}", swapchain_capabilities);
-        log::info!("adapter: {:#?}", adapter.get_info());
+        log::info!("adapter info: {:#?}", adapter.get_info());
+        log::info!("adapter limits: {:#?}", adapter.limits());
+        log::info!("adapter features: {:#?}", adapter.features());
         log::info!("swapchain_format: {:?}", swapchain_format);
         log::info!(
             "default SamplerDescriptor: {:?}",

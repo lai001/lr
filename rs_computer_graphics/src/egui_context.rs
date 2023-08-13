@@ -1,5 +1,5 @@
 use crate::{gizmo::FGizmo, rotator::Rotator};
-use egui::{color_picker::Alpha, Context, Ui, Widget};
+use egui::{color_picker::Alpha, Context, TextureId, Ui, Vec2, Widget};
 use egui_demo_lib::DemoWindows;
 use egui_gizmo::GizmoMode;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
@@ -24,6 +24,14 @@ pub struct DataSource {
     pub target_fps: u64,
     pub roughness_factor: f32,
     pub metalness_factor: f32,
+    pub draw_image: Option<DrawImage>,
+    pub movement_speed: f32,
+    pub motion_speed: f32,
+}
+
+pub struct DrawImage {
+    pub texture_id: TextureId,
+    pub size: Vec2,
 }
 
 impl EGUIContext {
@@ -64,6 +72,22 @@ impl EGUIContext {
             .update_time(self.start_time.elapsed().as_secs_f64());
     }
 
+    pub fn create_image(
+        &mut self,
+        device: &wgpu::Device,
+        texture_view: &wgpu::TextureView,
+        size: Vec2,
+    ) -> DrawImage {
+        DrawImage {
+            texture_id: self.egui_rpass.egui_texture_from_wgpu_texture(
+                device,
+                texture_view,
+                wgpu::FilterMode::Linear,
+            ),
+            size,
+        }
+    }
+
     fn main_ui(&mut self, data_source: &mut DataSource) {
         let context = &self.platform.context();
 
@@ -91,6 +115,17 @@ impl EGUIContext {
             });
         });
 
+        egui::Window::new("Physical Texture")
+            // .vscroll(false)
+            // .resizable(true)
+            // .default_size([250.0, 150.0])
+            .show(context, |ui| {
+                if let Some(draw_image) = &data_source.draw_image {
+                    ui.image(draw_image.texture_id, draw_image.size);
+                    // ui.allocate_space(ui.available_size());
+                }
+            });
+
         egui::Window::new("Property").show(context, |ui| {
             ui.add(
                 egui::DragValue::new(&mut data_source.roughness_factor)
@@ -103,6 +138,18 @@ impl EGUIContext {
                     .speed(0.01)
                     .clamp_range(0.0..=1.0)
                     .prefix("metalness_factor: "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut data_source.motion_speed)
+                    .speed(0.01)
+                    .clamp_range(0.0..=1.0)
+                    .prefix("motion_speed: "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut data_source.movement_speed)
+                    .speed(0.01)
+                    .clamp_range(0.0..=1.0)
+                    .prefix("movement_speed: "),
             );
         });
     }
