@@ -24,6 +24,7 @@ pub mod id_generator;
 pub mod light;
 pub mod material;
 pub mod material_type;
+pub mod mipmap_generator;
 pub mod model_loader;
 pub mod native_window;
 pub mod pbr_material;

@@ -31,7 +31,8 @@ use rs_computer_graphics::{
     user_script_change_monitor::UserScriptChangeMonitor,
     util::{change_working_directory, init_log},
     virtual_texture::{
-        block_image::BlockImage, virtual_texture_configuration::VirtualTextureConfiguration,
+        block_image::BlockImage, tile_index::TileIndex,
+        virtual_texture_configuration::VirtualTextureConfiguration,
         virtual_texture_system::VirtualTextureSystem,
     },
     wgpu_context::WGPUContext,
@@ -425,10 +426,7 @@ fn main() {
                     let pages = virtual_texture_system.read(device, queue);
 
                     for (index, page) in pages.iter().enumerate() {
-                        let (page_x, page_y) = *page;
-                        if let Some(cache_texture) =
-                            block_image.get_texture(device, queue, page_x, page_y)
-                        {
+                        if let Some(cache_texture) = block_image.get_texture(device, queue, *page) {
                             let coord = rs_computer_graphics::util::index_2d_lookup(
                                 index as f32,
                                 (virtual_texture_system.get_physical_texture_size()
@@ -438,17 +436,22 @@ fn main() {
                             let (physical_page_x, physical_page_y) =
                                 (coord.x as u16, coord.y as u16);
                             virtual_texture_system.update_page_table(
-                                page_x,
-                                page_y,
-                                physical_page_x,
-                                physical_page_y,
-                                0,
+                                *page,
+                                TileIndex {
+                                    x: physical_page_x,
+                                    y: physical_page_y,
+                                    mipmap_level: 0,
+                                },
                                 0,
                             );
                             virtual_texture_system.upload_page_texture(
                                 device,
                                 queue,
-                                (physical_page_x, physical_page_y),
+                                TileIndex {
+                                    x: physical_page_x,
+                                    y: physical_page_y,
+                                    mipmap_level: 0,
+                                },
                                 cache_texture,
                             );
                         };
@@ -482,7 +485,7 @@ fn main() {
                             store: true,
                         }),
                     );
-
+                    // block_image.retain(&pages);
                     data_source.draw_image = Some(egui_context.create_image(
                         device,
                         &virtual_texture_system.get_physical_texture_view(),

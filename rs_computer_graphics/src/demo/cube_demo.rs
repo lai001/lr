@@ -1,6 +1,6 @@
 use crate::{
     brigde_data::mesh_vertex::MeshVertex, camera::Camera, resource_manager::ResourceManager,
-    shader::shader_library::ShaderLibrary, VertexBufferLayout, util,
+    shader::shader_library::ShaderLibrary, util, VertexBufferLayout,
 };
 use glam::{Vec3Swizzles, Vec4Swizzles};
 use wgpu::VertexFormat;

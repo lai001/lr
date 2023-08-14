@@ -42,7 +42,11 @@ impl ResourceManager {
         self.image_sync_cache.get(key)
     }
 
-    pub fn get_cache_or_load_image(&mut self, key: &str, path: &str) -> Option<Arc<image::DynamicImage>> {
+    pub fn get_cache_or_load_image(
+        &mut self,
+        key: &str,
+        path: &str,
+    ) -> Option<Arc<image::DynamicImage>> {
         if !self.image_sync_cache.contains_key(key) {
             self.load_image_from_disk_and_cache(key, path);
         }

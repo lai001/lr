@@ -1,3 +1,4 @@
+use super::{tile_index::TileIndex, virtual_texture_configuration::VirtualTextureConfiguration};
 use crate::{
     actor::Actor,
     buffer_dimensions::BufferDimensions,
@@ -12,8 +13,6 @@ use image::{ImageBuffer, Rgba};
 use std::{collections::HashMap, sync::Arc};
 use wgpu::*;
 use winit::dpi::PhysicalSize;
-
-use super::virtual_texture_configuration::VirtualTextureConfiguration;
 
 pub struct VirtualTextureSystem {
     physical_texture: Arc<Option<Texture>>,
@@ -234,7 +233,7 @@ impl VirtualTextureSystem {
         }
     }
 
-    pub fn read(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<(u16, u16)> {
+    pub fn read(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<TileIndex> {
         let texture = &self.feed_back_texture;
         let texture_size = self.feed_back_texture.size();
 
@@ -282,23 +281,32 @@ impl VirtualTextureSystem {
             let type_buffer: &[u16] = crate::util::cast_to_type_buffer(&padded_buffer);
             let line_buffer_chunks = type_buffer.chunks(buffer_dimensions.padded_bytes_per_row / 2);
             assert_eq!(line_buffer_chunks.len(), height as usize);
-            let mut uniq: HashMap<(u16, u16), bool> = HashMap::new();
+            let mut uniq: HashMap<TileIndex, bool> = HashMap::new();
             for line in line_buffer_chunks {
                 for data in line.chunks(4) {
                     debug_assert_eq!(data.len(), 4);
                     let is_valid = *data.get(3).unwrap() == 1;
                     if is_valid {
-                        let page_x = data.get(0).unwrap();
-                        let page_y = data.get(1).unwrap();
-                        uniq.insert((*page_x, *page_y), true);
+                        uniq.insert(
+                            TileIndex {
+                                x: *data.get(0).unwrap(),
+                                y: *data.get(1).unwrap(),
+                                mipmap_level: *data.get(2).unwrap() as u32,
+                            },
+                            true,
+                        );
                     }
                 }
             }
-            let mut pages: Vec<(u16, u16)> = uniq.keys().map(|x| *x).collect();
+            let mut pages: Vec<TileIndex> = uniq.keys().map(|x| *x).collect();
             pages.sort_by(|a, b| {
-                let a = width * a.1 as u32 + a.0 as u32;
-                let b = width * b.1 as u32 + b.0 as u32;
-                a.cmp(&b)
+                if a.mipmap_level == b.mipmap_level {
+                    let a = width * a.y as u32 + a.x as u32;
+                    let b = width * b.y as u32 + b.x as u32;
+                    a.cmp(&b)
+                } else {
+                    a.mipmap_level.cmp(&b.mipmap_level)
+                }
             });
             drop(padded_buffer);
             output_buffer.unmap();
@@ -384,7 +392,7 @@ impl VirtualTextureSystem {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        page: (u16, u16),
+        page: TileIndex,
         texture: Arc<Texture>,
     ) {
         let tile_size = self.virtual_texture_configuration.tile_size;
@@ -405,8 +413,8 @@ impl VirtualTextureSystem {
                 texture: self.physical_texture.as_ref().as_ref().unwrap(),
                 mip_level: 0,
                 origin: Origin3d {
-                    x: page.0 as u32 * tile_size,
-                    y: page.1 as u32 * tile_size,
+                    x: page.x as u32 * tile_size,
+                    y: page.y as u32 * tile_size,
                     z: 0,
                 },
                 aspect: TextureAspect::All,
@@ -457,22 +465,23 @@ impl VirtualTextureSystem {
 
     pub fn update_page_table(
         &mut self,
-        page_x: u16,
-        page_y: u16,
-        physical_page_x: u16,
-        physical_page_y: u16,
-        mipmap: u16,
+        virtual_tile_index: TileIndex,
+        physical_tile_index: TileIndex,
         debug: u16,
     ) {
         let buffer_dimensions = &self.page_buffer_dimensions;
         let chunks = self
             .page_table_data
             .chunks_mut(buffer_dimensions.get_padded_width() * 4);
-        let line = chunks.skip(page_y as usize).next().unwrap();
-        let page_data = line.chunks_mut(4).skip(page_x as usize).next().unwrap();
-        page_data[0] = physical_page_x;
-        page_data[1] = physical_page_y;
-        page_data[2] = mipmap;
+        let line = chunks.skip(virtual_tile_index.y as usize).next().unwrap();
+        let page_data = line
+            .chunks_mut(4)
+            .skip(virtual_tile_index.x as usize)
+            .next()
+            .unwrap();
+        page_data[0] = physical_tile_index.x;
+        page_data[1] = physical_tile_index.y;
+        page_data[2] = physical_tile_index.mipmap_level as u16;
         page_data[3] = debug;
     }
 

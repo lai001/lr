@@ -1,26 +1,24 @@
-use std::sync::Arc;
-
-use crate::{file_manager::FileManager, util};
+use super::tile_index::TileIndex;
+use crate::{file_manager::FileManager, mipmap_generator::MipmapGenerator, util};
 use image::{GenericImage, ImageBuffer, Rgba};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PersistentBlockImageInfo {
-    pub x: u16,
-    pub y: u16,
+    pub tile_index: TileIndex,
     pub path: String,
 }
 
 pub struct BlockImageMakeResult {
-    pub x: u16,
-    pub y: u16,
+    pub tile_index: TileIndex,
     pub image: ImageBuffer<Rgba<u8>, Vec<u8>>,
 }
 
 pub struct BlockImage {
     persistent_block_image_infos: Vec<PersistentBlockImageInfo>,
-    cache_images: std::collections::HashMap<(u16, u16), ImageBuffer<Rgba<u8>, Vec<u8>>>,
-    cache_textures: std::collections::HashMap<(u16, u16), Arc<wgpu::Texture>>,
+    cache_images: std::collections::HashMap<TileIndex, ImageBuffer<Rgba<u8>, Vec<u8>>>,
+    cache_textures: std::collections::HashMap<TileIndex, Arc<wgpu::Texture>>,
 }
 
 impl BlockImage {
@@ -94,12 +92,25 @@ impl BlockImage {
                     for h in 0..height_pages {
                         let sub_image =
                             image.sub_image(w * tile_size, h * tile_size, tile_size, tile_size);
-                        let sub_image_copy = sub_image.to_image();
-                        results.push(BlockImageMakeResult {
-                            x: w as u16,
-                            y: h as u16,
-                            image: sub_image_copy,
-                        });
+
+                        let mut images: Vec<image::DynamicImage> = vec![];
+                        let dynamic_image = image::DynamicImage::ImageRgba8(sub_image.to_image());
+                        images.append(&mut MipmapGenerator::generate_from_image_cpu(
+                            &dynamic_image,
+                            None,
+                        ));
+                        images.insert(0, dynamic_image);
+
+                        for (index, image) in images.iter_mut().enumerate() {
+                            results.push(BlockImageMakeResult {
+                                image: image.to_rgba8(),
+                                tile_index: TileIndex {
+                                    x: w as u16,
+                                    y: h as u16,
+                                    mipmap_level: index as u32,
+                                },
+                            });
+                        }
                     }
                 }
 
@@ -121,12 +132,14 @@ impl BlockImage {
         let mut infos: Vec<PersistentBlockImageInfo> = vec![];
         for result in results {
             let prefix = "block_";
-            let name = format!("{}_{}", result.x, result.y);
+            let name = format!(
+                "{}_{}_{}",
+                result.tile_index.x, result.tile_index.y, result.tile_index.mipmap_level
+            );
             let save_path = format!("{}/{}{}.png", &dir, prefix, &name);
             infos.push(PersistentBlockImageInfo {
-                x: result.x,
-                y: result.y,
                 path: save_path.clone(),
+                tile_index: result.tile_index,
             });
             match result.image.save(save_path) {
                 Ok(_) => {}
@@ -140,13 +153,13 @@ impl BlockImage {
         infos
     }
 
-    pub fn get_image(&mut self, x: u16, y: u16) -> Option<&ImageBuffer<Rgba<u8>, Vec<u8>>> {
-        let key = (x, y);
+    pub fn get_image(&mut self, tile_index: TileIndex) -> Option<&ImageBuffer<Rgba<u8>, Vec<u8>>> {
+        let key = tile_index;
         let cache_images = &mut self.cache_images;
         let is_contains_key = cache_images.contains_key(&key);
         if is_contains_key == false {
             for block_image_info in &self.persistent_block_image_infos {
-                if block_image_info.x == x && block_image_info.y == y {
+                if block_image_info.tile_index == tile_index {
                     let image = image::open(&block_image_info.path).unwrap();
                     let image = image.to_rgba8();
                     self.cache_images.insert(key, image);
@@ -157,7 +170,7 @@ impl BlockImage {
         match image {
             Some(image) => Some(image),
             None => {
-                log::warn!("Invalid x: {}, y: {}", x, y);
+                log::warn!("Invalid tile index: {:?}", tile_index);
                 None
             }
         }
@@ -167,14 +180,13 @@ impl BlockImage {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        x: u16,
-        y: u16,
+        tile_index: TileIndex,
     ) -> Option<Arc<wgpu::Texture>> {
-        let key = (x, y);
+        let key = tile_index;
         let cache_textures = &mut self.cache_textures;
         let is_contains_key = cache_textures.contains_key(&key);
         if is_contains_key == false {
-            match self.get_image(x, y) {
+            match self.get_image(tile_index) {
                 Some(cache_image) => {
                     let texture = util::texture2d_from_rgba_image(device, queue, cache_image);
                     self.cache_textures.insert(key, Arc::new(texture));
@@ -186,13 +198,13 @@ impl BlockImage {
         match texture {
             Some(texture) => Some(texture.clone()),
             None => {
-                log::warn!("Invalid x: {}, y: {}", x, y);
+                log::warn!("Invalid tile index: {:?}", tile_index);
                 None
             }
         }
     }
 
-    pub fn retain(&mut self, keeping_pages: &Vec<(u16, u16)>) {
+    pub fn retain(&mut self, keeping_pages: &Vec<TileIndex>) {
         self.cache_images
             .retain(|&key, _| keeping_pages.contains(&key));
         self.cache_textures
