@@ -98,7 +98,7 @@ impl Material {
     pub fn get_page_table_texture_view(&self) -> wgpu::TextureView {
         let texture_view_descriptor = wgpu::TextureViewDescriptor {
             label: Some("page table"),
-            format: Some(TextureFormat::Rgba16Uint),
+            format: Some(TextureFormat::Rgba8Uint),
             dimension: Some(TextureViewDimension::D2),
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,

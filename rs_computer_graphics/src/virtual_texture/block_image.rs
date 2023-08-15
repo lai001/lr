@@ -107,7 +107,7 @@ impl BlockImage {
                                 tile_index: TileIndex {
                                     x: w as u16,
                                     y: h as u16,
-                                    mipmap_level: index as u32,
+                                    mipmap_level: index as u8,
                                 },
                             });
                         }

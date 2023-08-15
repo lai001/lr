@@ -21,8 +21,8 @@ pub struct VirtualTextureSystem {
     feed_back_depth_texture: DepthTexture,
     page_table_size: u32,
     feed_back_pipeline: FeedBackPipeline,
-    clean_pipeline: VirtualTextureCleanPipeline,
-    page_table_data: Vec<u16>,
+    feed_back_texture_clean_pipeline: VirtualTextureCleanPipeline,
+    page_table_data: Vec<u8>,
     page_buffer_dimensions: BufferDimensions,
     virtual_texture_configuration: VirtualTextureConfiguration,
 }
@@ -58,7 +58,7 @@ impl VirtualTextureSystem {
                 height: physical_texture_size,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
+            mip_level_count: virtual_texture_configuration.get_max_mipmap_level() as u32,
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: physical_texture_color_format,
@@ -79,7 +79,7 @@ impl VirtualTextureSystem {
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba16Uint,
+            format: TextureFormat::Rgba8Uint,
             usage: TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_SRC
                 | TextureUsages::COPY_DST,
@@ -114,37 +114,32 @@ impl VirtualTextureSystem {
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
             }),
-            &TextureFormat::Rgba16Uint,
+            &feed_back_texture.format(),
         );
 
         let feed_back_depth_texture =
             DepthTexture::new(feed_back_texture_width, feed_back_texture_height, device);
-        let clean_pipeline = VirtualTextureCleanPipeline::new(device, &TextureFormat::Rgba16Uint);
+        let feed_back_texture_clean_pipeline =
+            VirtualTextureCleanPipeline::new(device, &feed_back_texture.format());
 
         let page_buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
             page_table_size as usize,
             page_table_size as usize,
-            4 * std::mem::size_of::<u16>(),
+            4 * std::mem::size_of::<u8>(),
         );
-        let page_table_data: Vec<u16> =
-            vec![
-                0 as u16;
-                page_buffer_dimensions.get_padded_width() * page_table_size as usize * 4
-            ];
+        let page_table_data: Vec<u8> =
+            vec![0 as u8; page_buffer_dimensions.get_padded_width() * page_table_size as usize * 4];
 
         VirtualTextureSystem {
             physical_texture: Arc::new(Some(physical_texture)),
             page_table_texture: Arc::new(Some(page_table_texture)),
             feed_back_texture,
             feed_back_depth_texture,
-            // virtual_texture_size,
             page_table_size,
-            // tile_size,
             feed_back_pipeline,
-            clean_pipeline,
+            feed_back_texture_clean_pipeline,
             page_table_data,
             page_buffer_dimensions,
-            // physical_texture_size,
             virtual_texture_configuration,
         }
     }
@@ -152,7 +147,7 @@ impl VirtualTextureSystem {
     pub fn new_frame(&mut self, device: &Device, queue: &Queue) {
         let output_texture_view_descriptor = TextureViewDescriptor {
             label: None,
-            format: Some(TextureFormat::Rgba16Uint),
+            format: Some(self.feed_back_texture.format()),
             dimension: Some(TextureViewDimension::D2),
             aspect: TextureAspect::All,
             base_mip_level: 0,
@@ -164,7 +159,7 @@ impl VirtualTextureSystem {
             .feed_back_texture
             .create_view(&output_texture_view_descriptor);
         let depth_view: TextureView = self.feed_back_depth_texture.get_view();
-        self.clean_pipeline.draw(
+        self.feed_back_texture_clean_pipeline.draw(
             device,
             queue,
             &output_view,
@@ -193,7 +188,7 @@ impl VirtualTextureSystem {
     ) {
         let output_texture_view_descriptor = TextureViewDescriptor {
             label: None,
-            format: Some(TextureFormat::Rgba16Uint),
+            format: Some(self.feed_back_texture.format()),
             dimension: Some(TextureViewDimension::D2),
             aspect: TextureAspect::All,
             base_mip_level: 0,
@@ -234,7 +229,6 @@ impl VirtualTextureSystem {
     }
 
     pub fn read(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<TileIndex> {
-        let texture = &self.feed_back_texture;
         let texture_size = self.feed_back_texture.size();
 
         let width = texture_size.width;
@@ -259,7 +253,7 @@ impl VirtualTextureSystem {
             depth_or_array_layers: 1,
         };
         encoder.copy_texture_to_buffer(
-            texture.as_image_copy(),
+            self.feed_back_texture.as_image_copy(),
             wgpu::ImageCopyBuffer {
                 buffer: &output_buffer,
                 layout: wgpu::ImageDataLayout {
@@ -279,7 +273,8 @@ impl VirtualTextureSystem {
         if let Ok(Ok(_)) = receiver.recv() {
             let padded_buffer = buffer_slice.get_mapped_range();
             let type_buffer: &[u16] = crate::util::cast_to_type_buffer(&padded_buffer);
-            let line_buffer_chunks = type_buffer.chunks(buffer_dimensions.padded_bytes_per_row / 2);
+            let line_buffer_chunks = type_buffer
+                .chunks(buffer_dimensions.padded_bytes_per_row / std::mem::size_of::<u16>());
             assert_eq!(line_buffer_chunks.len(), height as usize);
             let mut uniq: HashMap<TileIndex, bool> = HashMap::new();
             for line in line_buffer_chunks {
@@ -287,14 +282,10 @@ impl VirtualTextureSystem {
                     debug_assert_eq!(data.len(), 4);
                     let is_valid = *data.get(3).unwrap() == 1;
                     if is_valid {
-                        uniq.insert(
-                            TileIndex {
-                                x: *data.get(0).unwrap(),
-                                y: *data.get(1).unwrap(),
-                                mipmap_level: *data.get(2).unwrap() as u32,
-                            },
-                            true,
-                        );
+                        let x = *data.get(0).unwrap() as u16;
+                        let y = *data.get(1).unwrap() as u16;
+                        let mipmap_level = *data.get(2).unwrap() as u8;
+                        uniq.insert(TileIndex { x, y, mipmap_level }, true);
                     }
                 }
             }
@@ -395,10 +386,17 @@ impl VirtualTextureSystem {
         page: TileIndex,
         texture: Arc<Texture>,
     ) {
-        let tile_size = self.virtual_texture_configuration.tile_size;
+        {
+            let size = wgpu::Extent3d {
+                width: self.virtual_texture_configuration.tile_size,
+                height: self.virtual_texture_configuration.tile_size,
+                depth_or_array_layers: 1,
+            };
+            let size = size.mip_level_size(page.mipmap_level as u32, TextureDimension::D2);
+            assert_eq!(size.width, texture.size().width);
+            assert_eq!(size.height, texture.size().width);
+        }
 
-        assert_eq!(texture.width(), tile_size);
-        assert_eq!(texture.height(), tile_size);
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
@@ -411,10 +409,10 @@ impl VirtualTextureSystem {
             },
             ImageCopyTexture {
                 texture: self.physical_texture.as_ref().as_ref().unwrap(),
-                mip_level: 0,
+                mip_level: page.mipmap_level as u32,
                 origin: Origin3d {
-                    x: page.x as u32 * tile_size,
-                    y: page.y as u32 * tile_size,
+                    x: page.x as u32 * texture.width(),
+                    y: page.y as u32 * texture.height(),
                     z: 0,
                 },
                 aspect: TextureAspect::All,
@@ -467,8 +465,19 @@ impl VirtualTextureSystem {
         &mut self,
         virtual_tile_index: TileIndex,
         physical_tile_index: TileIndex,
-        debug: u16,
+        debug: u8,
     ) {
+        assert!(
+            physical_tile_index.x
+                <= (self.virtual_texture_configuration.physical_texture_size
+                    / self.virtual_texture_configuration.tile_size) as u16
+        );
+        assert!(
+            physical_tile_index.y
+                <= (self.virtual_texture_configuration.physical_texture_size
+                    / self.virtual_texture_configuration.tile_size) as u16
+        );
+
         let buffer_dimensions = &self.page_buffer_dimensions;
         let chunks = self
             .page_table_data
@@ -479,13 +488,13 @@ impl VirtualTextureSystem {
             .skip(virtual_tile_index.x as usize)
             .next()
             .unwrap();
-        page_data[0] = physical_tile_index.x;
-        page_data[1] = physical_tile_index.y;
-        page_data[2] = physical_tile_index.mipmap_level as u16;
+        page_data[0] = physical_tile_index.x as u8;
+        page_data[1] = physical_tile_index.y as u8;
+        page_data[2] = physical_tile_index.mipmap_level;
         page_data[3] = debug;
     }
 
-    pub fn clean_page_table(&mut self, value: u16) {
+    pub fn clean_page_table(&mut self, value: u8) {
         self.page_table_data.fill(value);
     }
 

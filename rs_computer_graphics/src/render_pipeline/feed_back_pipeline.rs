@@ -17,6 +17,7 @@ struct VSConstants {
     tile_size: u32,
     feed_back_texture_width: u32,
     feed_back_texture_height: u32,
+    mipmap_level_bias: f32,
 }
 
 pub struct FeedBackPipeline {
@@ -159,6 +160,7 @@ impl FeedBackPipeline {
                 tile_size: 256,
                 feed_back_texture_width,
                 feed_back_texture_height,
+                mipmap_level_bias: 0.0,
             };
             let uniform_buf =
                 util::create_gpu_uniform_buffer_from(device, &phong_shading_vshconstants, None);

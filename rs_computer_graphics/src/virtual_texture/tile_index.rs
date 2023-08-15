@@ -4,5 +4,5 @@ use serde::{Deserialize, Serialize};
 pub struct TileIndex {
     pub x: u16,
     pub y: u16,
-    pub mipmap_level: u32,
+    pub mipmap_level: u8,
 }

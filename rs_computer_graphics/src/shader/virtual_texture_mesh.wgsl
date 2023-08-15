@@ -60,7 +60,7 @@ fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
     tex_coord.x += offset_x;
     tex_coord.y += offset_y;
 
-    var color = textureSample(physical_texture, filterable_sampler, tex_coord).xyz;
+    var color = textureSampleLevel(physical_texture, filterable_sampler, tex_coord, f32(indirect.z)).xyz;
 
     return vec4<f32>(color, 1.0);
 }

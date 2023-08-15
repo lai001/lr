@@ -424,6 +424,7 @@ fn main() {
                         &vt_camera,
                     );
                     let pages = virtual_texture_system.read(device, queue);
+                    // log::trace!("{:?}", pages);
 
                     for (index, page) in pages.iter().enumerate() {
                         if let Some(cache_texture) = block_image.get_texture(device, queue, *page) {
@@ -440,7 +441,7 @@ fn main() {
                                 TileIndex {
                                     x: physical_page_x,
                                     y: physical_page_y,
-                                    mipmap_level: 0,
+                                    mipmap_level: page.mipmap_level,
                                 },
                                 0,
                             );
@@ -450,7 +451,7 @@ fn main() {
                                 TileIndex {
                                     x: physical_page_x,
                                     y: physical_page_y,
-                                    mipmap_level: 0,
+                                    mipmap_level: page.mipmap_level,
                                 },
                                 cache_texture,
                             );
