@@ -33,7 +33,11 @@ impl WGPUContext {
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
-                features: wgpu::Features::default(),
+                features: {
+                    let mut features = wgpu::Features::default();
+                    features.insert(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
+                    features
+                },
                 limits: wgpu::Limits::default(),
                 label: None,
             },

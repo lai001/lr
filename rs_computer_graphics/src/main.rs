@@ -126,7 +126,11 @@ fn main() {
 
     let native_window = NativeWindow::new();
 
-    let mut wgpu_context = WGPUContext::new(&native_window.window, None, None);
+    let mut wgpu_context = WGPUContext::new(
+        &native_window.window,
+        Some(wgpu::PowerPreference::HighPerformance),
+        None,
+    );
 
     #[cfg(feature = "rs_dotnet")]
     let mut dotnet_runtime = DotnetRuntime::new(&mut wgpu_context.device);
@@ -335,8 +339,8 @@ fn main() {
     let mut virtual_texture_system = VirtualTextureSystem::new(
         &wgpu_context.device,
         virtual_texture_configuration,
-        window_size.width / 8,
-        window_size.height / 8,
+        window_size.width / 4,
+        window_size.height / 4,
         wgpu::TextureFormat::Rgba8Unorm,
     );
 
@@ -423,42 +427,38 @@ fn main() {
                         &cube_virtual_texture_actor,
                         &vt_camera,
                     );
-                    let pages = virtual_texture_system.read(device, queue);
-                    // log::trace!("{:?}", pages);
 
-                    for (index, page) in pages.iter().enumerate() {
-                        if let Some(cache_texture) = block_image.get_texture(device, queue, *page) {
-                            let coord = rs_computer_graphics::util::index_2d_lookup(
-                                index as f32,
-                                (virtual_texture_system.get_physical_texture_size()
-                                    / virtual_texture_system.get_tile_size())
-                                    as f32,
-                            );
-                            let (physical_page_x, physical_page_y) =
-                                (coord.x as u16, coord.y as u16);
-                            virtual_texture_system.update_page_table(
-                                *page,
-                                TileIndex {
-                                    x: physical_page_x,
-                                    y: physical_page_y,
-                                    mipmap_level: page.mipmap_level,
-                                },
-                                0,
-                            );
-                            virtual_texture_system.upload_page_texture(
-                                device,
-                                queue,
-                                TileIndex {
-                                    x: physical_page_x,
-                                    y: physical_page_y,
-                                    mipmap_level: page.mipmap_level,
-                                },
-                                cache_texture,
-                            );
-                        };
+                    let pages = virtual_texture_system.read(device, queue);
+                    // log::trace!("{:#?}", pages);
+                    for page in pages {
+                        let range =
+                            (page.mipmap_level as i32 - 3).max(0)..(page.mipmap_level as i32 + 3);
+                        for mipmap in range {
+                            let page = TileIndex {
+                                x: page.x,
+                                y: page.y,
+                                mipmap_level: mipmap as u8,
+                            };
+                            if let Some(cache_texture) =
+                                block_image.get_texture(device, queue, page)
+                            {
+                                let (physical_page_x, physical_page_y) =
+                                    (page.x as u16, page.y as u16);
+                                virtual_texture_system.upload_page_texture(
+                                    device,
+                                    queue,
+                                    TileIndex {
+                                        x: physical_page_x,
+                                        y: physical_page_y,
+                                        mipmap_level: page.mipmap_level,
+                                    },
+                                    cache_texture,
+                                );
+                            };
+                        }
                     }
 
-                    virtual_texture_system.upload_page_table(queue);
+                    virtual_texture_system.upload_page_table(device, queue);
 
                     for mesh in cube_virtual_texture_actor.get_static_meshs_mut() {
                         let mut material = rs_computer_graphics::material::Material::default();
@@ -635,7 +635,7 @@ fn main() {
                     .fixed_pos((0.0, 0.0))
                     .show(&egui_context.get_platform_context(), |ui| {
                         ui.with_layer_id(egui::LayerId::background(), |ui| {
-                            let actor = &mut cone_actor;
+                            let actor = &mut cube_virtual_texture_actor;
                             if let Some(model_matrix) =
                                 gizmo.interact(&camera, ui, actor.get_model_matrix())
                             {

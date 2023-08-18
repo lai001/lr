@@ -199,8 +199,13 @@ impl VirtualTextureMeshPipeline {
 
             let page_table_texture_view = material.get_page_table_texture_view();
             let physical_texture_view = material.get_physical_texture_view();
-
-            let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+            let sampler = device.create_sampler(&{
+                let mut sampler_descriptor = wgpu::SamplerDescriptor::default();
+                sampler_descriptor.mipmap_filter = wgpu::FilterMode::Linear;
+                sampler_descriptor.min_filter = wgpu::FilterMode::Linear;
+                sampler_descriptor.mag_filter = wgpu::FilterMode::Linear;
+                sampler_descriptor
+            });
             let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.sampler_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {

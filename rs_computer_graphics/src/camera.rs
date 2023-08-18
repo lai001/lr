@@ -87,7 +87,7 @@ impl CameraInputEventHandle for DefaultCameraInputEventHandle {
                 z: 0.0,
             });
         }
-        if virtual_key_code == &winit::event::VirtualKeyCode::Q
+        if virtual_key_code == &winit::event::VirtualKeyCode::E
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
         {
@@ -97,7 +97,7 @@ impl CameraInputEventHandle for DefaultCameraInputEventHandle {
                 z: 0.0,
             });
         }
-        if virtual_key_code == &winit::event::VirtualKeyCode::E
+        if virtual_key_code == &winit::event::VirtualKeyCode::Q
             && element_state == &ElementState::Pressed
             && is_cursor_visible == false
         {

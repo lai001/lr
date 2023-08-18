@@ -2,6 +2,7 @@ use super::{tile_index::TileIndex, virtual_texture_configuration::VirtualTexture
 use crate::{
     actor::Actor,
     buffer_dimensions::BufferDimensions,
+    compute_pipeline::update_page_table::UpdatePageTableCSPipeline,
     default_textures::DefaultTextures,
     depth_texture::DepthTexture,
     render_pipeline::{
@@ -25,6 +26,7 @@ pub struct VirtualTextureSystem {
     page_table_data: Vec<u8>,
     page_buffer_dimensions: BufferDimensions,
     virtual_texture_configuration: VirtualTextureConfiguration,
+    update_page_table_cs_pipeline: UpdatePageTableCSPipeline,
 }
 
 impl VirtualTextureSystem {
@@ -52,7 +54,7 @@ impl VirtualTextureSystem {
         let page_table_size = virtual_texture_size / tile_size;
 
         let physical_texture = device.create_texture(&TextureDescriptor {
-            label: None,
+            label: Some("VirtualTextureSystem.physical_texture"),
             size: Extent3d {
                 width: physical_texture_size,
                 height: physical_texture_size,
@@ -70,7 +72,7 @@ impl VirtualTextureSystem {
         });
 
         let page_table_texture = device.create_texture(&TextureDescriptor {
-            label: None,
+            label: Some("VirtualTextureSystem.page_table_texture"),
             size: Extent3d {
                 width: page_table_size,
                 height: page_table_size,
@@ -82,13 +84,14 @@ impl VirtualTextureSystem {
             format: TextureFormat::Rgba8Uint,
             usage: TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_SRC
-                | TextureUsages::COPY_DST,
+                | TextureUsages::COPY_DST
+                | TextureUsages::STORAGE_BINDING,
             // | TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
 
         let feed_back_texture = device.create_texture(&TextureDescriptor {
-            label: None,
+            label: Some("VirtualTextureSystem.feed_back_texture"),
             size: Extent3d {
                 width: feed_back_texture_width,
                 height: feed_back_texture_height,
@@ -101,7 +104,8 @@ impl VirtualTextureSystem {
             usage: TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_SRC
                 | TextureUsages::COPY_DST
-                | TextureUsages::RENDER_ATTACHMENT,
+                | TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::STORAGE_BINDING,
             view_formats: &[],
         });
 
@@ -130,6 +134,8 @@ impl VirtualTextureSystem {
         let page_table_data: Vec<u8> =
             vec![0 as u8; page_buffer_dimensions.get_padded_width() * page_table_size as usize * 4];
 
+        let update_page_table_cs_pipeline = UpdatePageTableCSPipeline::new(device);
+
         VirtualTextureSystem {
             physical_texture: Arc::new(Some(physical_texture)),
             page_table_texture: Arc::new(Some(page_table_texture)),
@@ -141,6 +147,7 @@ impl VirtualTextureSystem {
             page_table_data,
             page_buffer_dimensions,
             virtual_texture_configuration,
+            update_page_table_cs_pipeline,
         }
     }
 
@@ -307,29 +314,35 @@ impl VirtualTextureSystem {
         }
     }
 
-    pub fn upload_page_table(&mut self, queue: &wgpu::Queue) {
-        let buffer_dimensions = &self.page_buffer_dimensions;
-
-        let texture_extent = wgpu::Extent3d {
-            depth_or_array_layers: 1,
-            width: self.page_table_size,
-            height: self.page_table_size,
-        };
-
-        queue.write_texture(
-            self.page_table_texture
-                .as_ref()
-                .as_ref()
-                .unwrap()
-                .as_image_copy(),
-            crate::util::cast_to_raw_buffer(&self.page_table_data),
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
-                rows_per_image: None,
-            },
-            texture_extent,
+    pub fn upload_page_table(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        self.update_page_table_cs_pipeline.execute(
+            device,
+            queue,
+            &self.feed_back_texture,
+            self.page_table_texture.as_ref().as_ref().unwrap(),
         );
+        // let buffer_dimensions = &self.page_buffer_dimensions;
+
+        // let texture_extent = wgpu::Extent3d {
+        //     depth_or_array_layers: 1,
+        //     width: self.page_table_size,
+        //     height: self.page_table_size,
+        // };
+
+        // queue.write_texture(
+        //     self.page_table_texture
+        //         .as_ref()
+        //         .as_ref()
+        //         .unwrap()
+        //         .as_image_copy(),
+        //     crate::util::cast_to_raw_buffer(&self.page_table_data),
+        //     wgpu::ImageDataLayout {
+        //         offset: 0,
+        //         bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
+        //         rows_per_image: None,
+        //     },
+        //     texture_extent,
+        // );
     }
 
     pub fn upload_page_image(
@@ -340,8 +353,8 @@ impl VirtualTextureSystem {
         image: &ImageBuffer<Rgba<u8>, Vec<u8>>,
     ) {
         let tile_size = self.virtual_texture_configuration.tile_size;
-        assert_eq!(image.width(), tile_size);
-        assert_eq!(image.height(), tile_size);
+        debug_assert_eq!(image.width(), tile_size);
+        debug_assert_eq!(image.height(), tile_size);
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         let buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
@@ -393,8 +406,8 @@ impl VirtualTextureSystem {
                 depth_or_array_layers: 1,
             };
             let size = size.mip_level_size(page.mipmap_level as u32, TextureDimension::D2);
-            assert_eq!(size.width, texture.size().width);
-            assert_eq!(size.height, texture.size().width);
+            debug_assert_eq!(size.width, texture.size().width);
+            debug_assert_eq!(size.height, texture.size().width);
         }
 
         let mut encoder =
@@ -467,12 +480,12 @@ impl VirtualTextureSystem {
         physical_tile_index: TileIndex,
         debug: u8,
     ) {
-        assert!(
+        debug_assert!(
             physical_tile_index.x
                 <= (self.virtual_texture_configuration.physical_texture_size
                     / self.virtual_texture_configuration.tile_size) as u16
         );
-        assert!(
+        debug_assert!(
             physical_tile_index.y
                 <= (self.virtual_texture_configuration.physical_texture_size
                     / self.virtual_texture_configuration.tile_size) as u16

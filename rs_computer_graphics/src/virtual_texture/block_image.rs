@@ -170,7 +170,7 @@ impl BlockImage {
         match image {
             Some(image) => Some(image),
             None => {
-                log::warn!("Invalid tile index: {:?}", tile_index);
+                // log::warn!("Invalid tile index: {:?}", tile_index);
                 None
             }
         }
@@ -198,7 +198,7 @@ impl BlockImage {
         match texture {
             Some(texture) => Some(texture.clone()),
             None => {
-                log::warn!("Invalid tile index: {:?}", tile_index);
+                // log::warn!("Invalid tile index: {:?}", tile_index);
                 None
             }
         }

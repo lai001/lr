@@ -37,6 +37,7 @@ pub mod resource_manager;
 pub mod rotator;
 pub mod shader;
 pub mod static_mesh;
+pub mod texture_loader;
 pub mod thread_pool;
 pub mod user_script_change_monitor;
 pub mod util;
