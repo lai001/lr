@@ -1,5 +1,5 @@
 use crate::{gizmo::FGizmo, rotator::Rotator};
-use egui::{color_picker::Alpha, Context, TextureId, Ui, Vec2, Widget};
+use egui::{color_picker::Alpha, Context, Response, TextureId, Ui, Vec2, Widget};
 use egui_demo_lib::DemoWindows;
 use egui_gizmo::GizmoMode;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
@@ -18,7 +18,6 @@ pub struct EGUIContext {
 
 pub struct DataSource {
     pub is_captrue_enable: bool,
-    pub is_save: bool,
     pub is_save_frame_buffer: bool,
     pub frame_buffer_color: egui::Color32,
     pub target_fps: u64,
@@ -99,10 +98,6 @@ impl EGUIContext {
             let response = ui.button("Capture screen");
             if response.clicked() {
                 data_source.is_captrue_enable = true;
-            }
-            let response = ui.button("Save");
-            if response.clicked() {
-                data_source.is_save = true;
             }
             if ui.button("Save frame buffer").clicked() {
                 data_source.is_save_frame_buffer = true;
@@ -270,7 +265,7 @@ impl EGUIContext {
         self.platform.context()
     }
 
-    pub fn gizmo_settings(&mut self, gizmo: &mut FGizmo) {
+    pub fn gizmo_settings(&mut self, gizmo: &mut FGizmo, data_source: &mut DataSource) {
         let gizmo_mode = &mut gizmo.gizmo_mode;
         let gizmo_orientation = &mut gizmo.gizmo_orientation;
         let custom_highlight_color = &mut gizmo.custom_highlight_color;

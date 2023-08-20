@@ -13,4 +13,5 @@ pub struct BakeInfo {
     pub pre_filter_sample_count: u32,
     pub brdflutmap_length: u32,
     pub brdf_sample_count: u32,
+    pub is_read_back: bool,
 }

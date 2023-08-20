@@ -1,5 +1,6 @@
 pub mod acceleration_bake;
 pub mod actor;
+pub mod actor_selector;
 pub mod application;
 pub mod bake;
 pub mod bake_info;

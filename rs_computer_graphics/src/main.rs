@@ -5,15 +5,12 @@ use rs_computer_graphics::quickjs::quickjs_runtime::QuickJSRuntimeContext;
 use rs_computer_graphics::{
     acceleration_bake::AccelerationBaker,
     actor::Actor,
+    actor_selector::ActorSelector,
     bake_info::BakeInfo,
     camera::{Camera, CameraInputEventHandle, DefaultCameraInputEventHandle},
     default_textures::DefaultTextures,
-    demo::{
-        capture_screen::CaptureScreen, compute_demo::ComputeDemo, cube_demo::CubeDemo,
-        panorama_to_cube_demo::PanoramaToCubeDemo, triangle_demo::TriangleDemo,
-        yuv420p_demo::YUV420PDemo,
-    },
-    egui_context::EGUIContext,
+    demo::capture_screen::CaptureScreen,
+    egui_context::{self, EGUIContext},
     file_manager::FileManager,
     frame_buffer::FrameBuffer,
     gizmo::FGizmo,
@@ -39,7 +36,13 @@ use rs_computer_graphics::{
 };
 use rs_media::{audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer};
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{borrow::Borrow, sync::Arc, time::Duration};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    collections::HashMap,
+    sync::Arc,
+    time::Duration,
+};
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event::*, VirtualKeyCode},
@@ -135,13 +138,12 @@ fn main() {
             .lock()
             .unwrap()
             .init(&wgpu_context.device, &wgpu_context.queue);
+        ShaderLibrary::default().lock().unwrap().load_shader_from(
+            &wgpu_context.device,
+            &FileManager::default().lock().unwrap().get_shader_dir_path(),
+        )
     }
 
-    // let mut actor = Actor::load_from_file(
-    //     &wgpu_context.device,
-    //     &wgpu_context.queue,
-    //     &rs_computer_graphics::util::get_resource_path("Axis.fbx"),
-    // );
     let mut actor = Actor::load_from_file(
         &wgpu_context.device,
         &wgpu_context.queue,
@@ -183,26 +185,6 @@ fn main() {
         &wgpu_context.queue,
         &rs_computer_graphics::util::get_resource_path("Remote/CubeVirtualTexture.fbx"),
     );
-
-    let shader_lib = ShaderLibrary::default();
-    {
-        shader_lib.lock().unwrap().load_shader_from(
-            &wgpu_context.device,
-            &FileManager::default().lock().unwrap().get_shader_dir_path(),
-        )
-    }
-    let triangle_demo = TriangleDemo::new(&wgpu_context.device, &swapchain_format);
-    let mut cube_demo = CubeDemo::new(
-        &wgpu_context.device,
-        &swapchain_format,
-        &wgpu_context.queue,
-        window_size.width,
-        window_size.height,
-    );
-    let compute_demo = ComputeDemo::new(&wgpu_context.device);
-    let panorama_to_cube_demo = PanoramaToCubeDemo::new(&wgpu_context.device, &wgpu_context.queue);
-    let yuvimage_demo =
-        YUV420PDemo::new(&wgpu_context.device, &wgpu_context.queue, &swapchain_format);
 
     let mut camera = Camera::default(window_size.width, window_size.height);
 
@@ -252,12 +234,10 @@ fn main() {
 
     let sky_box_pipeline = SkyBoxPipeline::new(&wgpu_context.device, &swapchain_format);
 
-    let hdr_filepath =
-        rs_computer_graphics::util::get_resource_path("Remote/neon_photostudio_2k.exr");
     let mut baker = AccelerationBaker::new(
         &wgpu_context.device,
         &wgpu_context.queue,
-        hdr_filepath,
+        &rs_computer_graphics::util::get_resource_path("Remote/neon_photostudio_2k.exr"),
         BakeInfo {
             is_bake_environment: true,
             is_bake_irradiance: false,
@@ -271,6 +251,7 @@ fn main() {
             pre_filter_sample_count: 1024,
             brdflutmap_length: 1024,
             brdf_sample_count: 1024,
+            is_read_back: false,
         },
     );
     baker.bake(&wgpu_context.device, &wgpu_context.queue);
@@ -294,9 +275,8 @@ fn main() {
 
     let mut gizmo = FGizmo::default();
 
-    let mut data_source = rs_computer_graphics::egui_context::DataSource {
+    let mut data_source = egui_context::DataSource {
         is_captrue_enable: false,
-        is_save: false,
         is_save_frame_buffer: false,
         frame_buffer_color: egui::Color32::BLACK,
         target_fps: egui_context.get_fps(),
@@ -346,6 +326,10 @@ fn main() {
         &swapchain_format,
         virtual_texture_configuration,
     );
+
+    let mut under_cursor_actor_index: Option<usize> = None;
+    let mut selected_actor_index: Option<usize> = None;
+    let mut uploaded_tile_index: HashMap<TileIndex, bool> = HashMap::new();
 
     native_window.event_loop.run(move |event, _, control_flow| {
         egui_context.handle_event(&event);
@@ -407,6 +391,7 @@ fn main() {
                         feed_back_texture_size.width,
                         feed_back_texture_size.height,
                     );
+
                     virtual_texture_system.render_actor(
                         device,
                         queue,
@@ -430,16 +415,21 @@ fn main() {
                             {
                                 let (physical_page_x, physical_page_y) =
                                     (page.x as u16, page.y as u16);
-                                virtual_texture_system.upload_page_texture(
-                                    device,
-                                    queue,
-                                    TileIndex {
-                                        x: physical_page_x,
-                                        y: physical_page_y,
-                                        mipmap_level: page.mipmap_level,
-                                    },
-                                    cache_texture,
-                                );
+
+                                let tile_index = TileIndex {
+                                    x: physical_page_x,
+                                    y: physical_page_y,
+                                    mipmap_level: page.mipmap_level,
+                                };
+                                if !uploaded_tile_index.contains_key(&tile_index) {
+                                    virtual_texture_system.upload_page_texture(
+                                        device,
+                                        queue,
+                                        tile_index,
+                                        cache_texture,
+                                    );
+                                    uploaded_tile_index.insert(tile_index, true);
+                                }
                             };
                         }
                     }
@@ -483,41 +473,12 @@ fn main() {
                     ));
                 }
 
-                // triangle_demo.draw(device, &surface_texture_view, queue);
-                // cube_demo.draw(device, &surface_texture_view, queue, &camera);
-                // let compute_result = compute_demo.execute(&(0..16).collect(), device, queue);
-                // log::debug!("{:?}", compute_result);
-
                 // #[cfg(feature = "rs_dotnet")]
                 // dotnet_runtime.application.redraw_requested(
                 //     NativeWGPUTextureView {
                 //         texture_view: (&surface_texture_view),
                 //     },
                 //     NativeWGPUQueue { queue },
-                // );
-
-                // yuvimage_demo.render(
-                //     vec![
-                //         Image2DVertex {
-                //             pos: glam::vec2(-1.0, 1.0),
-                //             uv: glam::vec2(0.0, 0.0),
-                //         },
-                //         Image2DVertex {
-                //             pos: glam::vec2(0.0, 1.0),
-                //             uv: glam::vec2(1.0, 0.0),
-                //         },
-                //         Image2DVertex {
-                //             pos: glam::vec2(0.0, 0.0),
-                //             uv: glam::vec2(1.0, 1.0),
-                //         },
-                //         Image2DVertex {
-                //             pos: glam::vec2(-1.0, 0.0),
-                //             uv: glam::vec2(0.0, 1.0),
-                //         },
-                //     ],
-                //     device,
-                //     &output_view,
-                //     queue,
                 // );
 
                 if let Ok(audio_image) = receiver.recv_timeout(std::time::Duration::from_millis(2))
@@ -631,20 +592,39 @@ fn main() {
 
                 egui_context.set_fps(data_source.target_fps);
                 egui_context.sync_fps(control_flow);
-                egui_context.gizmo_settings(&mut gizmo);
+                egui_context.gizmo_settings(&mut gizmo, &mut data_source);
 
-                egui::Area::new("Gizmo Viewport")
-                    .fixed_pos((0.0, 0.0))
-                    .show(&egui_context.get_platform_context(), |ui| {
-                        ui.with_layer_id(egui::LayerId::background(), |ui| {
-                            let actor = &mut video_quad_actor;
-                            if let Some(model_matrix) =
-                                gizmo.interact(&camera, ui, actor.get_model_matrix())
-                            {
-                                actor.set_model_matrix(model_matrix);
+                {
+                    let mut actors = vec![
+                        &mut actor,
+                        &mut audio_quad_actor,
+                        &mut video_quad_actor,
+                        &mut actor_pbr,
+                        &mut cone_actor,
+                        &mut cube_virtual_texture_actor,
+                    ];
+                    match selected_actor_index {
+                        Some(index) => match actors.get_mut(index) {
+                            Some(actor) => {
+                                egui::Area::new("Gizmo Viewport")
+                                    .fixed_pos((0.0, 0.0))
+                                    .show(&egui_context.get_platform_context(), |ui| {
+                                        ui.with_layer_id(egui::LayerId::background(), |ui| {
+                                            if let Some(model_matrix) = gizmo.interact(
+                                                &camera,
+                                                ui,
+                                                actor.get_model_matrix(),
+                                            ) {
+                                                actor.set_model_matrix(model_matrix);
+                                            }
+                                        });
+                                    });
                             }
-                        });
-                    });
+                            None => {}
+                        },
+                        None => {}
+                    }
+                }
 
                 // actor.set_world_location(data_source.mesh_location);
                 // actor.set_rotator(data_source.mesh_rotator);
@@ -697,10 +677,6 @@ fn main() {
                     }
                     data_source.is_save_frame_buffer = false;
                 }
-                if data_source.is_save {
-                    panorama_to_cube_demo.execute(device, queue);
-                    data_source.is_save = false;
-                }
 
                 surface.present();
             }
@@ -731,31 +707,40 @@ fn main() {
                     state,
                     button,
                     modifiers,
-                } => {
-                    // match button {
-                    //     winit::event::MouseButton::Left => todo!(),
-                    //     winit::event::MouseButton::Right => todo!(),
-                    //     winit::event::MouseButton::Middle => todo!(),
-                    //     winit::event::MouseButton::Other(_) => todo!(),
-                    // }
-                }
+                } => match button {
+                    winit::event::MouseButton::Left => {
+                        if is_cursor_visible {
+                            match under_cursor_actor_index {
+                                Some(index) => selected_actor_index = Some(index),
+                                None => selected_actor_index = None,
+                            }
+                        }
+                    }
+                    winit::event::MouseButton::Right => {}
+                    winit::event::MouseButton::Middle => {}
+                    winit::event::MouseButton::Other(_) => {}
+                },
                 winit::event::WindowEvent::CursorMoved {
                     device_id: _,
                     position,
                     modifiers: _,
                 } => {
                     if is_cursor_visible {
-                        let hit_test_results =
-                            rs_computer_graphics::util::ray_intersection_hit_test(
+                        match ActorSelector::select(
+                            vec![
                                 &actor,
-                                position,
-                                window_size,
-                                *actor.get_model_matrix(),
-                                &camera,
-                            );
-
-                        for result in hit_test_results {
-                            // log::trace!("{:?}", result);
+                                &audio_quad_actor,
+                                &video_quad_actor,
+                                &actor_pbr,
+                                &cone_actor,
+                                &cube_virtual_texture_actor,
+                            ],
+                            position,
+                            window_size,
+                            &camera,
+                        ) {
+                            Some((index, _)) => under_cursor_actor_index = Some(index),
+                            None => under_cursor_actor_index = None,
                         }
                     }
 

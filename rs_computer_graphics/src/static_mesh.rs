@@ -26,7 +26,7 @@ impl Mesh {
 
     pub fn triangles_view(&self) -> Vec<(&glam::Vec3, &glam::Vec3, &glam::Vec3)> {
         assert_eq!(self.index_buffer.len() % 3, 0);
-        assert_eq!(self.vertex_buffer.len(), self.index_buffer.len());
+        // assert_eq!(self.vertex_buffer.len(), self.index_buffer.len());
         let mut triangles: Vec<(&glam::Vec3, &glam::Vec3, &glam::Vec3)> = vec![];
         for i in (0..self.index_buffer.len()).step_by(3) {
             if let (Some(a), Some(b), Some(c)) = (

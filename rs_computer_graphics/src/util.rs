@@ -132,7 +132,7 @@ pub fn map_texture_cpu_sync(
     let available_texture_formats = std::collections::HashMap::from([
         (wgpu::TextureFormat::Rgba8Unorm, image::ColorType::Rgba8),
         (wgpu::TextureFormat::Rgba8UnormSrgb, image::ColorType::Rgba8),
-        (wgpu::TextureFormat::Rgba32Float, image::ColorType::Rgb32F),
+        (wgpu::TextureFormat::Rgba32Float, image::ColorType::Rgba32F),
     ]);
     let available_color_types = std::collections::HashMap::from([
         (image::ColorType::Rgba32F, 4 * std::mem::size_of::<f32>()),
@@ -142,7 +142,11 @@ pub fn map_texture_cpu_sync(
         .get(&texture.format())
         .unwrap_or(&color_type);
 
-    assert!(available_color_types.contains_key(&expect_color_type));
+    assert!(
+        available_color_types.contains_key(&expect_color_type),
+        "{:?} is not supported",
+        expect_color_type
+    );
     assert_eq!(texture.size().depth_or_array_layers, 1);
     let bytes_per_pixel: usize = *available_color_types.get(&expect_color_type).unwrap();
     let mut encoder =

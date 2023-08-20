@@ -21,6 +21,7 @@ class BakeInfo {
      * @param {number} pre_filter_sample_count 
      * @param {number} brdflutmap_length 
      * @param {number} brdf_sample_count 
+     * @param {boolean} is_read_back 
      */
     constructor(
         is_bake_environment,
@@ -34,7 +35,8 @@ class BakeInfo {
         pre_filter_cube_map_max_mipmap_level,
         pre_filter_sample_count,
         brdflutmap_length,
-        brdf_sample_count
+        brdf_sample_count,
+        is_read_back,
     );
     /**
      * @returns {string}

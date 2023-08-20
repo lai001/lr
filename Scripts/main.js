@@ -13,5 +13,6 @@ let bake_info = new BakeInfo(
     6,
     2048,
     1024,
-    2048);
+    2048,
+    false);
 console.log(bake_info);

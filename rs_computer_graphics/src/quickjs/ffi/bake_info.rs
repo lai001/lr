@@ -88,6 +88,7 @@ fn create_bake_info(
             && QuickJS::is_number(argv[9])
             && QuickJS::is_number(argv[10])
             && QuickJS::is_number(argv[11])
+            && QuickJS::is_bool(argv[12])
         {
             let is_bake_environment: bool = QuickJS::to_bool(ctx, argv[0]);
             let is_bake_irradiance: bool = QuickJS::to_bool(ctx, argv[1]);
@@ -101,6 +102,7 @@ fn create_bake_info(
             let pre_filter_sample_count: u32 = QuickJS::to_uint32(ctx, argv[9]);
             let brdflutmap_length: u32 = QuickJS::to_uint32(ctx, argv[10]);
             let brdf_sample_count: u32 = QuickJS::to_uint32(ctx, argv[11]);
+            let is_read_back: bool = QuickJS::to_bool(ctx, argv[12]);
             let bake_info = BakeInfo {
                 is_bake_environment,
                 is_bake_irradiance,
@@ -114,6 +116,7 @@ fn create_bake_info(
                 pre_filter_sample_count,
                 brdflutmap_length,
                 brdf_sample_count,
+                is_read_back,
             };
             let bake_info = Box::new(bake_info);
             return Some(bake_info);

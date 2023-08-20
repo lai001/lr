@@ -30,7 +30,7 @@ impl AccelerationBaker {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        file_path: String,
+        file_path: &str,
         bake_info: BakeInfo,
     ) -> AccelerationBaker {
         assert!(bake_info.brdflutmap_length > 0);
@@ -38,7 +38,7 @@ impl AccelerationBaker {
         assert!(bake_info.irradiance_cube_map_length > 0);
         assert!(bake_info.pre_filter_cube_map_length > 4);
         assert!(bake_info.pre_filter_cube_map_max_mipmap_level > 0);
-        match image::open(&file_path) {
+        match image::open(file_path) {
             Ok(image) => {
                 let max_mipmap_level = calculate_mipmap_level(bake_info.pre_filter_cube_map_length)
                     .min(bake_info.pre_filter_cube_map_max_mipmap_level);
@@ -70,27 +70,29 @@ impl AccelerationBaker {
 
     pub fn bake(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         if self.bake_info.is_bake_pre_filter {
-            let (cube_maps, cube_map_textures) = self.bake_pre_filter_cube_maps(device, queue);
-            self.pre_filter_cube_maps = Some(cube_maps);
+            let cube_map_textures = self.bake_pre_filter_cube_maps(device, queue);
             self.pre_filter_cube_map_lod_texture =
                 Arc::new(Some(Self::convert(device, queue, &cube_map_textures)));
             self.pre_filter_cube_map_textures = Arc::new(Some(cube_map_textures));
         }
         if self.bake_info.is_bake_environment {
-            let (cube_map, cube_map_texture) = self.bake_environment_cube_map(device, queue);
-            self.environment_cube_map = Some(cube_map);
+            let cube_map_texture = self.bake_environment_cube_map(device, queue);
             self.environment_cube_texture = Arc::new(Some(cube_map_texture));
         }
         if self.bake_info.is_bake_brdflut {
-            let (brdflut_image, brdflut_texture) = self.bake_brdflut_image(device, queue);
-            self.brdflut_image = Some(brdflut_image);
+            let brdflut_texture = self.bake_brdflut_image(device, queue);
             self.brdflut_texture = Arc::new(Some(brdflut_texture));
         }
         if self.bake_info.is_bake_irradiance {
-            let (irradiance_cube_map, irradiance_cube_map_texture) =
-                self.bake_irradiance_cube_map(device, queue);
-            self.irradiance_cube_map = Some(irradiance_cube_map);
+            let irradiance_cube_map_texture = self.bake_irradiance_cube_map(device, queue);
             self.irradiance_cube_map_texture = Arc::new(Some(irradiance_cube_map_texture));
+        }
+
+        if self.bake_info.is_read_back {
+            self.brdflut_image = self.read_back_brdflut_texture(device, queue);
+            self.environment_cube_map = self.read_back_environment_cube_map(device, queue);
+            self.irradiance_cube_map = self.read_back_irradiance_cube_map(device, queue);
+            self.pre_filter_cube_maps = self.read_back_pre_filter_cube_maps(device, queue);
         }
     }
 
@@ -154,7 +156,7 @@ impl AccelerationBaker {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> (CubeMap<image::Rgba<f32>, Vec<f32>>, wgpu::Texture) {
+    ) -> wgpu::Texture {
         let irradiance_cube_map_pipeline = IrradianceCubeMapPipeline::new(device);
         let cube_map_texture = irradiance_cube_map_pipeline.execute(
             device,
@@ -163,45 +165,50 @@ impl AccelerationBaker {
             self.bake_info.irradiance_cube_map_length,
             self.bake_info.irradiance_sample_count,
         );
-
-        let image_datas = crate::util::map_texture_cube_cpu_sync(
-            device,
-            queue,
-            &cube_map_texture,
-            self.bake_info.irradiance_cube_map_length,
-            self.bake_info.irradiance_cube_map_length,
-            image::ColorType::Rgba32F,
-        );
-        let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
-        for image_data in &image_datas {
-            let f32_data: &[f32] = cast_to_type_buffer(image_data);
-            let imgae = image::Rgba32FImage::from_vec(
-                self.bake_info.irradiance_cube_map_length,
-                self.bake_info.irradiance_cube_map_length,
-                f32_data.to_vec(),
-            )
-            .unwrap();
-            images.push(imgae);
-        }
-        let cube_map = CubeMap {
-            negative_x: images[0].to_owned(),
-            positive_x: images[1].to_owned(),
-            negative_y: images[2].to_owned(),
-            positive_y: images[3].to_owned(),
-            negative_z: images[4].to_owned(),
-            positive_z: images[5].to_owned(),
-        };
-        (cube_map, cube_map_texture)
+        cube_map_texture
     }
 
-    fn bake_brdflut_image(
+    fn read_back_irradiance_cube_map(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> (
-        image::ImageBuffer<image::Rgba<f32>, Vec<f32>>,
-        wgpu::Texture,
-    ) {
+    ) -> Option<CubeMap<image::Rgba<f32>, Vec<f32>>> {
+        match self.irradiance_cube_map_texture.as_ref() {
+            Some(cube_map_texture) => {
+                let image_datas = crate::util::map_texture_cube_cpu_sync(
+                    device,
+                    queue,
+                    &cube_map_texture,
+                    self.bake_info.irradiance_cube_map_length,
+                    self.bake_info.irradiance_cube_map_length,
+                    image::ColorType::Rgba32F,
+                );
+                let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
+                for image_data in &image_datas {
+                    let f32_data: &[f32] = cast_to_type_buffer(image_data);
+                    let imgae = image::Rgba32FImage::from_vec(
+                        self.bake_info.irradiance_cube_map_length,
+                        self.bake_info.irradiance_cube_map_length,
+                        f32_data.to_vec(),
+                    )
+                    .unwrap();
+                    images.push(imgae);
+                }
+                let cube_map = CubeMap {
+                    negative_x: images[0].to_owned(),
+                    positive_x: images[1].to_owned(),
+                    negative_y: images[2].to_owned(),
+                    positive_y: images[3].to_owned(),
+                    negative_z: images[4].to_owned(),
+                    positive_z: images[5].to_owned(),
+                };
+                Some(cube_map)
+            }
+            None => None,
+        }
+    }
+
+    fn bake_brdflut_image(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::Texture {
         let brdf_lut_pipeline = BrdfLutPipeline::new(device);
         let lut_texture = brdf_lut_pipeline.execute(
             device,
@@ -209,30 +216,43 @@ impl AccelerationBaker {
             self.bake_info.brdflutmap_length,
             self.bake_info.brdf_sample_count,
         );
+        lut_texture
+    }
 
-        let image_data = crate::util::map_texture_cpu_sync(
-            device,
-            queue,
-            &lut_texture,
-            self.bake_info.brdflutmap_length,
-            self.bake_info.brdflutmap_length,
-            image::ColorType::Rgba32F,
-        );
-        let f32_data: &[f32] = cast_to_type_buffer(&image_data);
-        let image = image::Rgba32FImage::from_vec(
-            self.bake_info.brdflutmap_length,
-            self.bake_info.brdflutmap_length,
-            f32_data.to_vec(),
-        )
-        .unwrap();
-        (image, lut_texture)
+    fn read_back_brdflut_texture(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Option<image::Rgba32FImage> {
+        match self.brdflut_texture.as_ref() {
+            Some(lut_texture) => {
+                let image_data = crate::util::map_texture_cpu_sync(
+                    device,
+                    queue,
+                    &lut_texture,
+                    self.bake_info.brdflutmap_length,
+                    self.bake_info.brdflutmap_length,
+                    image::ColorType::Rgba32F,
+                );
+                let f32_data: &[f32] = cast_to_type_buffer(&image_data);
+                match image::Rgba32FImage::from_vec(
+                    self.bake_info.brdflutmap_length,
+                    self.bake_info.brdflutmap_length,
+                    f32_data.to_vec(),
+                ) {
+                    Some(image) => Some(image),
+                    None => None,
+                }
+            }
+            None => None,
+        }
     }
 
     fn bake_environment_cube_map(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> (CubeMap<image::Rgba<f32>, Vec<f32>>, wgpu::Texture) {
+    ) -> wgpu::Texture {
         let panorama_to_cube_pipeline = PanoramaToCubePipeline::new(device);
         let texture = panorama_to_cube_pipeline.execute(
             device,
@@ -240,43 +260,56 @@ impl AccelerationBaker {
             &self.equirectangular_hdr_texture,
             self.bake_info.environment_cube_map_length,
         );
+        texture
+    }
 
-        let image_datas = crate::util::map_texture_cube_cpu_sync(
-            device,
-            queue,
-            &texture,
-            self.bake_info.environment_cube_map_length,
-            self.bake_info.environment_cube_map_length,
-            image::ColorType::Rgba32F,
-        );
-        let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
-        for image_data in &image_datas {
-            let f32_data: &[f32] = cast_to_type_buffer(image_data);
-            let imgae = image::Rgba32FImage::from_vec(
-                self.bake_info.environment_cube_map_length,
-                self.bake_info.environment_cube_map_length,
-                f32_data.to_vec(),
-            )
-            .unwrap();
-            images.push(imgae);
+    fn read_back_environment_cube_map(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Option<CubeMap<image::Rgba<f32>, Vec<f32>>> {
+        match self.environment_cube_texture.as_ref() {
+            Some(texture) => {
+                let image_datas = crate::util::map_texture_cube_cpu_sync(
+                    device,
+                    queue,
+                    texture,
+                    self.bake_info.environment_cube_map_length,
+                    self.bake_info.environment_cube_map_length,
+                    image::ColorType::Rgba32F,
+                );
+                let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
+                for image_data in &image_datas {
+                    let f32_data: &[f32] = cast_to_type_buffer(image_data);
+                    let imgae = image::Rgba32FImage::from_vec(
+                        self.bake_info.environment_cube_map_length,
+                        self.bake_info.environment_cube_map_length,
+                        f32_data.to_vec(),
+                    )
+                    .unwrap();
+                    images.push(imgae);
+                }
+
+                let cube_map = CubeMap {
+                    negative_x: images[0].to_owned(),
+                    positive_x: images[1].to_owned(),
+                    negative_y: images[2].to_owned(),
+                    positive_y: images[3].to_owned(),
+                    negative_z: images[4].to_owned(),
+                    positive_z: images[5].to_owned(),
+                };
+
+                Some(cube_map)
+            }
+            None => None,
         }
-
-        let cube_map = CubeMap {
-            negative_x: images[0].to_owned(),
-            positive_x: images[1].to_owned(),
-            negative_y: images[2].to_owned(),
-            positive_y: images[3].to_owned(),
-            negative_z: images[4].to_owned(),
-            positive_z: images[5].to_owned(),
-        };
-        (cube_map, texture)
     }
 
     fn bake_pre_filter_cube_maps(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> (Vec<CubeMap<image::Rgba<f32>, Vec<f32>>>, Vec<wgpu::Texture>) {
+    ) -> Vec<wgpu::Texture> {
         let max_mipmap_level = calculate_mipmap_level(self.bake_info.pre_filter_cube_map_length)
             .min(self.bake_info.pre_filter_cube_map_max_mipmap_level);
         assert!(max_mipmap_level > 0);
@@ -286,7 +319,7 @@ impl AccelerationBaker {
         } else {
             roughness_delta = 1.0_f32 / (max_mipmap_level as f32 - 1.0);
         }
-        let mut cube_maps: Vec<CubeMap<image::Rgba<f32>, Vec<f32>>> = vec![];
+        // let mut cube_maps: Vec<CubeMap<image::Rgba<f32>, Vec<f32>>> = vec![];
         let mut cube_map_textures: Vec<wgpu::Texture> = vec![];
 
         for mipmap_level in 0..max_mipmap_level {
@@ -304,33 +337,55 @@ impl AccelerationBaker {
                 roughness,
                 sample_count,
             );
-            let image_datas = crate::util::map_texture_cube_cpu_sync(
-                device,
-                queue,
-                &cube_map_texture,
-                length,
-                length,
-                image::ColorType::Rgba32F,
-            );
-            let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
-            for image_data in &image_datas {
-                let f32_data: &[f32] = cast_to_type_buffer(image_data);
-                let imgae =
-                    image::Rgba32FImage::from_vec(length, length, f32_data.to_vec()).unwrap();
-                images.push(imgae);
-            }
-            let cube_map = CubeMap {
-                negative_x: images[0].to_owned(),
-                positive_x: images[1].to_owned(),
-                negative_y: images[2].to_owned(),
-                positive_y: images[3].to_owned(),
-                negative_z: images[4].to_owned(),
-                positive_z: images[5].to_owned(),
-            };
-            cube_maps.push(cube_map);
             cube_map_textures.push(cube_map_texture);
         }
-        (cube_maps, cube_map_textures)
+        cube_map_textures
+    }
+
+    fn read_back_pre_filter_cube_maps(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Option<Vec<CubeMap<image::Rgba<f32>, Vec<f32>>>> {
+        match self.pre_filter_cube_map_textures.as_ref() {
+            Some(cube_map_textures) => {
+                let max_mipmap_level =
+                    calculate_mipmap_level(self.bake_info.pre_filter_cube_map_length)
+                        .min(self.bake_info.pre_filter_cube_map_max_mipmap_level);
+                assert!(max_mipmap_level > 0);
+                let mut cube_maps: Vec<CubeMap<image::Rgba<f32>, Vec<f32>>> = vec![];
+                for (mipmap_level, cube_map_texture) in cube_map_textures.iter().enumerate() {
+                    let length = self.bake_info.pre_filter_cube_map_length / (1 << mipmap_level);
+                    let image_datas = crate::util::map_texture_cube_cpu_sync(
+                        device,
+                        queue,
+                        &cube_map_texture,
+                        length,
+                        length,
+                        image::ColorType::Rgba32F,
+                    );
+                    let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
+                    for image_data in &image_datas {
+                        let f32_data: &[f32] = cast_to_type_buffer(image_data);
+                        let imgae =
+                            image::Rgba32FImage::from_vec(length, length, f32_data.to_vec())
+                                .unwrap();
+                        images.push(imgae);
+                    }
+                    let cube_map = CubeMap {
+                        negative_x: images[0].to_owned(),
+                        positive_x: images[1].to_owned(),
+                        negative_y: images[2].to_owned(),
+                        positive_y: images[3].to_owned(),
+                        negative_z: images[4].to_owned(),
+                        positive_z: images[5].to_owned(),
+                    };
+                    cube_maps.push(cube_map);
+                }
+                Some(cube_maps)
+            }
+            None => None,
+        }
     }
 
     pub fn save_to_disk_sync(&self, dir: &str) {
