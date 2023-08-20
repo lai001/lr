@@ -1,4 +1,5 @@
-use crate::{ffi::gpu_texture_format::NativeWGPUTextureFormat, util::ffi_to_rs_string};
+use crate::ffi::gpu_texture_format::NativeWGPUTextureFormat;
+use rs_foundation::ffi_to_rs_string;
 use std::ffi;
 use wgpu::{CommandEncoder, Device, PipelineLayout, RenderPipeline, ShaderModule};
 

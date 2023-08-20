@@ -27,6 +27,9 @@ pub struct DataSource {
     pub draw_image: Option<DrawImage>,
     pub movement_speed: f32,
     pub motion_speed: f32,
+    pub player_time: f32,
+    pub seek_time: f32,
+    pub is_seek: bool,
 }
 
 pub struct DrawImage {
@@ -104,6 +107,14 @@ impl EGUIContext {
             if ui.button("Save frame buffer").clicked() {
                 data_source.is_save_frame_buffer = true;
             }
+            ui.label(format!("Player time: {:.2}", data_source.player_time));
+            data_source.is_seek = ui
+                .add(
+                    egui::DragValue::new(&mut data_source.seek_time)
+                        .speed(0.1)
+                        .clamp_range(0.0..=60.0 * 5.0),
+                )
+                .changed();
             egui::color_picker::color_edit_button_srgba(
                 ui,
                 &mut data_source.frame_buffer_color,

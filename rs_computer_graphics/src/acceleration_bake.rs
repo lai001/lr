@@ -1,3 +1,4 @@
+use rs_foundation::cast_to_type_buffer;
 use std::sync::Arc;
 
 use crate::{
@@ -173,7 +174,7 @@ impl AccelerationBaker {
         );
         let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
         for image_data in &image_datas {
-            let f32_data: &[f32] = crate::util::cast_to_type_buffer(image_data);
+            let f32_data: &[f32] = cast_to_type_buffer(image_data);
             let imgae = image::Rgba32FImage::from_vec(
                 self.bake_info.irradiance_cube_map_length,
                 self.bake_info.irradiance_cube_map_length,
@@ -217,7 +218,7 @@ impl AccelerationBaker {
             self.bake_info.brdflutmap_length,
             image::ColorType::Rgba32F,
         );
-        let f32_data: &[f32] = crate::util::cast_to_type_buffer(&image_data);
+        let f32_data: &[f32] = cast_to_type_buffer(&image_data);
         let image = image::Rgba32FImage::from_vec(
             self.bake_info.brdflutmap_length,
             self.bake_info.brdflutmap_length,
@@ -250,7 +251,7 @@ impl AccelerationBaker {
         );
         let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
         for image_data in &image_datas {
-            let f32_data: &[f32] = crate::util::cast_to_type_buffer(image_data);
+            let f32_data: &[f32] = cast_to_type_buffer(image_data);
             let imgae = image::Rgba32FImage::from_vec(
                 self.bake_info.environment_cube_map_length,
                 self.bake_info.environment_cube_map_length,
@@ -313,7 +314,7 @@ impl AccelerationBaker {
             );
             let mut images: Vec<image::ImageBuffer<image::Rgba<f32>, Vec<f32>>> = vec![];
             for image_data in &image_datas {
-                let f32_data: &[f32] = crate::util::cast_to_type_buffer(image_data);
+                let f32_data: &[f32] = cast_to_type_buffer(image_data);
                 let imgae =
                     image::Rgba32FImage::from_vec(length, length, f32_data.to_vec()).unwrap();
                 images.push(imgae);

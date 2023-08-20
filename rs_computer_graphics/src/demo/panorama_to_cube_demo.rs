@@ -1,7 +1,7 @@
 use crate::{
-    file_manager::FileManager, shader::shader_library::ShaderLibrary, thread_pool,
-    util::next_highest_power_of_two,
+    file_manager::FileManager, shader::shader_library::ShaderLibrary, thread_pool::ThreadPool,
 };
+use rs_foundation::{cast_to_raw_buffer, next_highest_power_of_two};
 use wgpu::{
     ImageCopyBuffer, ImageDataLayout, Origin3d, StorageTextureAccess, TextureAspect, TextureFormat,
     TextureSampleType, TextureViewDimension,
@@ -126,7 +126,7 @@ impl PanoramaToCubeDemo {
 
         queue.write_texture(
             equirectangular_texture.as_image_copy(),
-            &crate::util::cast_to_raw_buffer(&equirectangular_data),
+            &cast_to_raw_buffer(&equirectangular_data),
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: Some(equirectangular_size.0 * 4 * 4),
@@ -248,8 +248,8 @@ impl PanoramaToCubeDemo {
             while let Some(data) = chunk.next() {
                 let deep_copy_data = data.to_vec();
                 let length = self.cube_length;
-                thread_pool::ThreadPool::io().lock().unwrap().spawn(
-                    move || match image::save_buffer(
+                ThreadPool::io().lock().unwrap().spawn(move || {
+                    match image::save_buffer(
                         std::format!("./outputimage_{}.exr", index),
                         &deep_copy_data,
                         length,
@@ -258,8 +258,8 @@ impl PanoramaToCubeDemo {
                     ) {
                         Ok(_) => log::debug!("Save image successfully"),
                         Err(error) => panic!("{}", error),
-                    },
-                );
+                    }
+                });
                 index += 1;
             }
 

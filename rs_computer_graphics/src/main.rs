@@ -27,7 +27,7 @@ use rs_computer_graphics::{
     },
     shader::shader_library::ShaderLibrary,
     static_mesh::StaticMesh,
-    thread_pool,
+    thread_pool::ThreadPool,
     user_script_change_monitor::UserScriptChangeMonitor,
     util::{change_working_directory, init_log},
     virtual_texture::{
@@ -37,7 +37,7 @@ use rs_computer_graphics::{
     },
     wgpu_context::WGPUContext,
 };
-use rs_media::{audio_player_item::AudioPlayerItem, video_player_item::EVideoDecoderType};
+use rs_media::{audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{borrow::Borrow, sync::Arc, time::Duration};
 use winit::{
@@ -61,68 +61,49 @@ fn main() {
     //     ));
     // });
     rs_media::init();
-    let (video_sender, video_receiver) = std::sync::mpsc::channel();
-    let video_sender_clone = video_sender.clone();
-    thread_pool::ThreadPool::global()
-        .lock()
-        .unwrap()
-        .spawn(move || {
-            let filepath = rs_computer_graphics::util::get_resource_path("Remote/BigBuckBunny.mp4");
-            let mut video_player_item = rs_media::video_player_item::VideoPlayerItem::new(
-                &filepath,
-                Some(EVideoDecoderType::Hardware),
-            );
-            while let Some(frames) = video_player_item.next_frames() {
-                for frame in frames {
-                    let _ = video_sender_clone.send(frame);
-                    std::thread::sleep(Duration::from_secs_f32(1.0 / 24.0));
-                }
-            }
-        });
+    let mut video_frame_player = VideoFramePlayer::new(
+        &rs_computer_graphics::util::get_resource_path("Remote/BigBuckBunny.mp4"),
+    );
+
     let (sender, receiver) = std::sync::mpsc::channel();
     let sender_clone = sender.clone();
-    thread_pool::ThreadPool::audio()
-        .lock()
-        .unwrap()
-        .spawn(move || {
-            let mut player_item = AudioPlayerItem::new(
-                &rs_computer_graphics::util::get_resource_path("Remote/sample-15s.mp3"),
-            );
-            // player_item.seek(5.0);
-            let mut index = 0;
-            let _ = std::fs::remove_dir_all("./dsp");
-            let _ = std::fs::create_dir("./dsp");
-            while let Some(frames) = player_item.next_frames() {
-                for frame in &frames {
-                    let buffer: &[f32] = frame.pcm_buffer.get_channel_data_view(0);
-                    let mut planner = FftPlanner::<f32>::new();
-                    let fft = planner.plan_fft_forward(buffer.len());
-                    let mut signals: Vec<Complex<f32>> =
-                        buffer.iter().map(|x| Complex { re: *x, im: 0.0 }).collect();
-                    fft.process(&mut signals);
-                    let result: Vec<f32> = signals.iter().map(|x| x.norm()).collect();
-                    let image_datas: Vec<u8> = result
-                        .iter()
-                        .map(|x| {
-                            let x = x.clamp(0.0, 1.0);
-                            (x * 255.0) as u8
-                        })
-                        .collect();
-                    let audio_image =
-                        image::GrayImage::from_vec(image_datas.len() as u32, 1, image_datas)
-                            .unwrap();
-                    std::thread::sleep(Duration::from_secs_f32(0.1));
-                    let _ = sender_clone.send(audio_image);
-                    // save_fft_result(&format!("./dsp/fft_{}.png", index), &result);
-                    index += 1;
-                }
+    ThreadPool::audio().lock().unwrap().spawn(move || {
+        let mut player_item = AudioPlayerItem::new(&rs_computer_graphics::util::get_resource_path(
+            "Remote/sample-15s.mp3",
+        ));
+        // player_item.seek(5.0);
+        let mut index = 0;
+        let _ = std::fs::remove_dir_all("./dsp");
+        let _ = std::fs::create_dir("./dsp");
+        while let Some(frames) = player_item.next_frames() {
+            for frame in &frames {
+                let buffer: &[f32] = frame.pcm_buffer.get_channel_data_view(0);
+                let mut planner = FftPlanner::<f32>::new();
+                let fft = planner.plan_fft_forward(buffer.len());
+                let mut signals: Vec<Complex<f32>> =
+                    buffer.iter().map(|x| Complex { re: *x, im: 0.0 }).collect();
+                fft.process(&mut signals);
+                let result: Vec<f32> = signals.iter().map(|x| x.norm()).collect();
+                let image_datas: Vec<u8> = result
+                    .iter()
+                    .map(|x| {
+                        let x = x.clamp(0.0, 1.0);
+                        (x * 255.0) as u8
+                    })
+                    .collect();
+                let audio_image =
+                    image::GrayImage::from_vec(image_datas.len() as u32, 1, image_datas).unwrap();
+                std::thread::sleep(Duration::from_secs_f32(0.1));
+                let _ = sender_clone.send(audio_image);
+                // save_fft_result(&format!("./dsp/fft_{}.png", index), &result);
+                index += 1;
             }
-            let mut audio_device = rs_media::audio_device::AudioDevice::new();
-            audio_device.run();
-        });
+        }
+        let mut audio_device = rs_media::audio_device::AudioDevice::new();
+        audio_device.run();
+    });
 
     drop(sender);
-    drop(video_sender);
 
     let native_window = NativeWindow::new();
 
@@ -167,13 +148,14 @@ fn main() {
         &rs_computer_graphics::util::get_resource_path("Cube.dae"),
     );
 
-    let mut quad_actor = Actor::load_from_static_meshs(vec![StaticMesh::quad(
-        "quad",
+    let mut audio_quad_actor = Actor::load_from_static_meshs(vec![StaticMesh::quad(
+        "audio_quad",
         &wgpu_context.device,
         rs_computer_graphics::material_type::EMaterialType::Phong(
             rs_computer_graphics::material::Material::new(Arc::new(None), Arc::new(None)),
         ),
     )]);
+    audio_quad_actor.set_world_location(glam::vec3(0.0, 2.0, 0.0));
 
     let mut video_quad_actor = Actor::load_from_static_meshs(vec![StaticMesh::quad(
         "video_quad",
@@ -182,6 +164,7 @@ fn main() {
             rs_computer_graphics::material::Material::new(Arc::new(None), Arc::new(None)),
         ),
     )]);
+    video_quad_actor.set_world_location(glam::vec3(2.0, 2.0, 0.0));
 
     let mut actor_pbr = Actor::load_from_file(
         &wgpu_context.device,
@@ -322,6 +305,9 @@ fn main() {
         draw_image: None,
         movement_speed: 0.01,
         motion_speed: 0.1,
+        player_time: 0.0,
+        seek_time: 0.0,
+        is_seek: false,
     };
 
     let frmae_buffer = FrameBuffer::new(
@@ -486,7 +472,7 @@ fn main() {
                             store: true,
                         }),
                     );
-                    // block_image.retain(&pages);
+
                     data_source.draw_image = Some(egui_context.create_image(
                         device,
                         &virtual_texture_system.get_physical_texture_view(),
@@ -536,7 +522,7 @@ fn main() {
 
                 if let Ok(audio_image) = receiver.recv_timeout(std::time::Duration::from_millis(2))
                 {
-                    for mesh in quad_actor.get_static_meshs_mut() {
+                    for mesh in audio_quad_actor.get_static_meshs_mut() {
                         let audio_texture = rs_computer_graphics::util::texture2d_from_gray_image(
                             device,
                             queue,
@@ -550,22 +536,37 @@ fn main() {
                     }
                 }
 
-                if let Ok(video_image) =
-                    video_receiver.recv_timeout(std::time::Duration::from_millis(2))
-                {
-                    for mesh in video_quad_actor.get_static_meshs_mut() {
-                        let video_texture = rs_computer_graphics::util::texture2d_from_rgba_image(
-                            device,
-                            queue,
-                            &video_image.image,
-                        );
-                        let material = rs_computer_graphics::material::Material::new(
-                            std::sync::Arc::new(Some(video_texture)),
-                            std::sync::Arc::new(None),
-                        );
-                        mesh.set_material_type(EMaterialType::Phong(material))
-                    }
+                if video_frame_player.is_playing() == false {
+                    video_frame_player.start();
                 }
+
+                video_frame_player.tick();
+
+                match video_frame_player.get_current_frame() {
+                    Some(video_frame) => {
+                        for mesh in video_quad_actor.get_static_meshs_mut() {
+                            let video_texture =
+                                rs_computer_graphics::util::texture2d_from_rgba_image(
+                                    device,
+                                    queue,
+                                    &video_frame.image,
+                                );
+                            let material = rs_computer_graphics::material::Material::new(
+                                std::sync::Arc::new(Some(video_texture)),
+                                std::sync::Arc::new(None),
+                            );
+                            mesh.set_material_type(EMaterialType::Phong(material))
+                        }
+                    }
+                    None => {}
+                }
+
+                if data_source.is_seek {
+                    video_frame_player.seek(data_source.seek_time);
+                } else {
+                    data_source.seek_time = data_source.player_time;
+                }
+                data_source.player_time = video_frame_player.get_current_play_time();
 
                 phone_pipeline.render_actor(
                     device,
@@ -581,7 +582,7 @@ fn main() {
                     queue,
                     &surface_texture_view,
                     &wgpu_context.get_depth_texture_view(),
-                    &quad_actor,
+                    &audio_quad_actor,
                     &camera,
                 );
 
@@ -627,6 +628,7 @@ fn main() {
                     &surface_texture_view,
                     &mut data_source,
                 );
+
                 egui_context.set_fps(data_source.target_fps);
                 egui_context.sync_fps(control_flow);
                 egui_context.gizmo_settings(&mut gizmo);
@@ -635,7 +637,7 @@ fn main() {
                     .fixed_pos((0.0, 0.0))
                     .show(&egui_context.get_platform_context(), |ui| {
                         ui.with_layer_id(egui::LayerId::background(), |ui| {
-                            let actor = &mut cube_virtual_texture_actor;
+                            let actor = &mut video_quad_actor;
                             if let Some(model_matrix) =
                                 gizmo.interact(&camera, ui, actor.get_model_matrix())
                             {
@@ -685,17 +687,13 @@ fn main() {
                         }),
                     );
                     if let Some(frame_buffer_image) = frmae_buffer.capture(device, queue) {
-                        thread_pool::ThreadPool::io()
-                            .lock()
-                            .unwrap()
-                            .spawn(move || {
-                                match frame_buffer_image
-                                    .save(std::format!("./frame_buffer_image.png"))
-                                {
-                                    Ok(_) => {}
-                                    Err(error) => panic!("{}", error),
-                                }
-                            });
+                        ThreadPool::io().lock().unwrap().spawn(move || {
+                            match frame_buffer_image.save(std::format!("./frame_buffer_image.png"))
+                            {
+                                Ok(_) => {}
+                                Err(error) => panic!("{}", error),
+                            }
+                        });
                     }
                     data_source.is_save_frame_buffer = false;
                 }
@@ -757,7 +755,7 @@ fn main() {
                             );
 
                         for result in hit_test_results {
-                            log::trace!("{:?}", result);
+                            // log::trace!("{:?}", result);
                         }
                     }
 

@@ -11,6 +11,7 @@ use crate::{
     },
 };
 use image::{ImageBuffer, Rgba};
+use rs_foundation::cast_to_type_buffer;
 use std::{collections::HashMap, sync::Arc};
 use wgpu::*;
 use winit::dpi::PhysicalSize;
@@ -279,7 +280,7 @@ impl VirtualTextureSystem {
         device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index));
         if let Ok(Ok(_)) = receiver.recv() {
             let padded_buffer = buffer_slice.get_mapped_range();
-            let type_buffer: &[u16] = crate::util::cast_to_type_buffer(&padded_buffer);
+            let type_buffer: &[u16] = cast_to_type_buffer(&padded_buffer);
             let line_buffer_chunks = type_buffer
                 .chunks(buffer_dimensions.padded_bytes_per_row / std::mem::size_of::<u16>());
             assert_eq!(line_buffer_chunks.len(), height as usize);

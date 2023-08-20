@@ -1,3 +1,4 @@
+use rs_foundation::Range;
 use wgpu::{RenderPass, RenderPipeline};
 
 #[repr(C)]
@@ -38,8 +39,8 @@ pub extern "C" fn nativeRenderPassSetPipeline(
 #[no_mangle]
 pub extern "C" fn nativeRenderPassDraw(
     render_pass: *mut RenderPass,
-    vertices: crate::util::Range<u32>,
-    instances: crate::util::Range<u32>,
+    vertices: Range<u32>,
+    instances: Range<u32>,
 ) {
     assert_ne!(render_pass, std::ptr::null_mut());
     unsafe {

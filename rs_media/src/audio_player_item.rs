@@ -1,12 +1,13 @@
 use crate::{
     audio_format::{AudioFormat, EAudioSampleType},
     audio_pcmbuffer::AudioPcmbuffer,
-    time_range::{TimeRange, TimeRangeRational},
+    time_range::TimeRangeRational,
 };
 use ffmpeg_next::{
     ffi::{av_rescale_q_rnd, av_seek_frame, AVRational, AVRounding, AVSEEK_FLAG_BACKWARD},
     util::format,
 };
+use rs_foundation::TimeRange;
 
 pub struct AudioPlayerItem {
     format_input: ffmpeg_next::format::context::Input,

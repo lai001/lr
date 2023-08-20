@@ -73,51 +73,53 @@ fn create_bake_info(
     ctx: *mut JSContext,
     argc: ::std::os::raw::c_int,
     argv: *mut JSValue,
-) -> Box<BakeInfo> {
+) -> Option<Box<BakeInfo>> {
     let argv = unsafe { std::slice::from_raw_parts_mut(argv, argc as usize) };
-    assert_eq!(argv.len(), 12);
-
-    assert!(QuickJS::is_bool(argv[0]));
-    assert!(QuickJS::is_bool(argv[1]));
-    assert!(QuickJS::is_bool(argv[2]));
-    assert!(QuickJS::is_bool(argv[3]));
-    assert!(QuickJS::is_number(argv[4]));
-    assert!(QuickJS::is_number(argv[5]));
-    assert!(QuickJS::is_number(argv[6]));
-    assert!(QuickJS::is_number(argv[7]));
-    assert!(QuickJS::is_number(argv[8]));
-    assert!(QuickJS::is_number(argv[9]));
-    assert!(QuickJS::is_number(argv[10]));
-    assert!(QuickJS::is_number(argv[11]));
-
-    let is_bake_environment: bool = QuickJS::to_bool(ctx, argv[0]);
-    let is_bake_irradiance: bool = QuickJS::to_bool(ctx, argv[1]);
-    let is_bake_brdflut: bool = QuickJS::to_bool(ctx, argv[2]);
-    let is_bake_pre_filter: bool = QuickJS::to_bool(ctx, argv[3]);
-    let environment_cube_map_length: u32 = QuickJS::to_uint32(ctx, argv[4]);
-    let irradiance_cube_map_length: u32 = QuickJS::to_uint32(ctx, argv[5]);
-    let irradiance_sample_count: u32 = QuickJS::to_uint32(ctx, argv[6]);
-    let pre_filter_cube_map_length: u32 = QuickJS::to_uint32(ctx, argv[7]);
-    let pre_filter_cube_map_max_mipmap_level: u32 = QuickJS::to_uint32(ctx, argv[8]);
-    let pre_filter_sample_count: u32 = QuickJS::to_uint32(ctx, argv[9]);
-    let brdflutmap_length: u32 = QuickJS::to_uint32(ctx, argv[10]);
-    let brdf_sample_count: u32 = QuickJS::to_uint32(ctx, argv[11]);
-    let bake_info = BakeInfo {
-        is_bake_environment,
-        is_bake_irradiance,
-        is_bake_brdflut,
-        is_bake_pre_filter,
-        environment_cube_map_length,
-        irradiance_cube_map_length,
-        irradiance_sample_count,
-        pre_filter_cube_map_length,
-        pre_filter_cube_map_max_mipmap_level,
-        pre_filter_sample_count,
-        brdflutmap_length,
-        brdf_sample_count,
-    };
-    let bake_info = Box::new(bake_info);
-    bake_info
+    if argv.len() == 12 {
+        if QuickJS::is_bool(argv[0])
+            && QuickJS::is_bool(argv[1])
+            && QuickJS::is_bool(argv[2])
+            && QuickJS::is_bool(argv[3])
+            && QuickJS::is_number(argv[4])
+            && QuickJS::is_number(argv[5])
+            && QuickJS::is_number(argv[6])
+            && QuickJS::is_number(argv[7])
+            && QuickJS::is_number(argv[8])
+            && QuickJS::is_number(argv[9])
+            && QuickJS::is_number(argv[10])
+            && QuickJS::is_number(argv[11])
+        {
+            let is_bake_environment: bool = QuickJS::to_bool(ctx, argv[0]);
+            let is_bake_irradiance: bool = QuickJS::to_bool(ctx, argv[1]);
+            let is_bake_brdflut: bool = QuickJS::to_bool(ctx, argv[2]);
+            let is_bake_pre_filter: bool = QuickJS::to_bool(ctx, argv[3]);
+            let environment_cube_map_length: u32 = QuickJS::to_uint32(ctx, argv[4]);
+            let irradiance_cube_map_length: u32 = QuickJS::to_uint32(ctx, argv[5]);
+            let irradiance_sample_count: u32 = QuickJS::to_uint32(ctx, argv[6]);
+            let pre_filter_cube_map_length: u32 = QuickJS::to_uint32(ctx, argv[7]);
+            let pre_filter_cube_map_max_mipmap_level: u32 = QuickJS::to_uint32(ctx, argv[8]);
+            let pre_filter_sample_count: u32 = QuickJS::to_uint32(ctx, argv[9]);
+            let brdflutmap_length: u32 = QuickJS::to_uint32(ctx, argv[10]);
+            let brdf_sample_count: u32 = QuickJS::to_uint32(ctx, argv[11]);
+            let bake_info = BakeInfo {
+                is_bake_environment,
+                is_bake_irradiance,
+                is_bake_brdflut,
+                is_bake_pre_filter,
+                environment_cube_map_length,
+                irradiance_cube_map_length,
+                irradiance_sample_count,
+                pre_filter_cube_map_length,
+                pre_filter_cube_map_max_mipmap_level,
+                pre_filter_sample_count,
+                brdflutmap_length,
+                brdf_sample_count,
+            };
+            let bake_info = Box::new(bake_info);
+            return Some(bake_info);
+        }
+    }
+    None
 }
 
 impl BakeInfoJSClass {
@@ -132,11 +134,12 @@ impl BakeInfoJSClass {
 
         let mut object = QuickJS::null();
         {
-            let prototype = QuickJS::get_property_str(ctx, this_val, "prototype");
-            object = QuickJS::new_object_proto_class(ctx, prototype, jsclass.class_id);
-            let bake_info = Box::into_raw(create_bake_info(ctx, argc, argv));
-            QuickJS::set_opaque(object, bake_info);
-            QuickJS::free_value(ctx, prototype);
+            if let Some(bake_info) = create_bake_info(ctx, argc, argv) {
+                let prototype = QuickJS::get_property_str(ctx, this_val, "prototype");
+                object = QuickJS::new_object_proto_class(ctx, prototype, jsclass.class_id);
+                QuickJS::set_opaque(object, Box::into_raw(bake_info));
+                QuickJS::free_value(ctx, prototype);
+            }
         }
         return object;
     }

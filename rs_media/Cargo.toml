@@ -13,3 +13,4 @@ bitflags = "2.1.0"
 num-complex = "0.4.3"
 log = "0.4.17"
 rustfft = "6.1.0"
+rs_foundation = { version = "0.1.0", path = "../rs_foundation" }

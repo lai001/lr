@@ -1,6 +1,6 @@
+use crate::buffer_dimensions::BufferDimensions;
 use image::{imageops, DynamicImage};
 use wgpu::*;
-use crate::buffer_dimensions::BufferDimensions;
 
 pub struct MipmapGenerator {}
 

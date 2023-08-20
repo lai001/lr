@@ -71,7 +71,8 @@ impl WGStruct {
     }
 
     fn fill(current_offset: usize, align: usize) -> usize {
-        (crate::util::alignment(current_offset as isize, align as isize) as usize) - current_offset
+        (rs_foundation::alignment(current_offset as isize, align as isize) as usize)
+            - current_offset
     }
 
     fn dump(&self, p_offset: usize, level: u32) -> (String, usize) {

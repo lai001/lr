@@ -2,6 +2,7 @@ use crate::{
     brigde_data::image2d_vertex::Image2DVertex, shader::shader_library::ShaderLibrary, util,
     VertexBufferLayout,
 };
+use rs_foundation::cast_to_raw_buffer;
 use wgpu::*;
 
 pub struct YUV420pPipeline {
@@ -146,7 +147,7 @@ impl YUV420pPipeline {
                 device,
                 &wgpu::util::BufferInitDescriptor {
                     label: Some("[YUV420pPipeline] vertex buffer"),
-                    contents: util::cast_to_raw_buffer(&vertex),
+                    contents: cast_to_raw_buffer(&vertex),
                     usage: BufferUsages::VERTEX,
                 },
             );

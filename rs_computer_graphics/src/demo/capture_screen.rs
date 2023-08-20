@@ -1,4 +1,4 @@
-use crate::{buffer_dimensions::BufferDimensions, thread_pool};
+use crate::{buffer_dimensions::BufferDimensions, thread_pool::ThreadPool};
 
 pub struct CaptureScreen {}
 
@@ -61,8 +61,8 @@ impl CaptureScreen {
             let deep_copy_data = padded_buffer.to_vec();
             let path = path.to_string();
             let window_size = window_size.clone();
-            thread_pool::ThreadPool::global().lock().unwrap().spawn(
-                move || match image::save_buffer(
+            ThreadPool::global().lock().unwrap().spawn(move || {
+                match image::save_buffer(
                     path,
                     &deep_copy_data,
                     window_size.width,
@@ -71,8 +71,8 @@ impl CaptureScreen {
                 ) {
                     Ok(_) => log::debug!("Save screen image successfully"),
                     Err(error) => log::error!("{:?}", error),
-                },
-            );
+                }
+            });
             drop(padded_buffer);
             output_buffer.unmap();
         }

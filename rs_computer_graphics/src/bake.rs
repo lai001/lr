@@ -1,7 +1,7 @@
 use crate::{
     bake_info::BakeInfo,
     cube_map::CubeMap,
-    thread_pool,
+    thread_pool::ThreadPool,
     util::{
         calculate_mipmap_level, convert_coordinate_system, geometry_smith, hammersley_2d,
         hemisphere_sample_uniform, importance_sample_ggx, reflect_vec3, sample_equirectangular_map,
@@ -128,87 +128,84 @@ impl Baker {
             let equirectangular_hdr_image = self.equirectangular_hdr_image.clone();
             let roughness = roughness_delta * mipmap_level as f32;
             let progress_bar = progress_collection[mipmap_level as usize].to_owned();
-            thread_pool::ThreadPool::global()
-                .lock()
-                .unwrap()
-                .spawn(move || {
-                    let mut cube_map = CubeMap {
-                        negative_x: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
-                            length, length,
-                        ),
-                        positive_x: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
-                            length, length,
-                        ),
-                        negative_y: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
-                            length, length,
-                        ),
-                        positive_y: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
-                            length, length,
-                        ),
-                        negative_z: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
-                            length, length,
-                        ),
-                        positive_z: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
-                            length, length,
-                        ),
-                    };
+            ThreadPool::global().lock().unwrap().spawn(move || {
+                let mut cube_map = CubeMap {
+                    negative_x: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                        length, length,
+                    ),
+                    positive_x: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                        length, length,
+                    ),
+                    negative_y: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                        length, length,
+                    ),
+                    positive_y: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                        length, length,
+                    ),
+                    negative_z: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                        length, length,
+                    ),
+                    positive_z: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
+                        length, length,
+                    ),
+                };
 
-                    for index in 0..cube_map.to_mut_array().len() {
-                        for height_idx in 0..length {
-                            for width_idx in 0..length {
-                                let uv = glam::vec2(
-                                    width_idx as f32 / length as f32,
-                                    height_idx as f32 / length as f32,
-                                ) * 2.0_f32
-                                    - 1.0_f32;
-                                let sample_picker = Self::get_sample_picker(index as u32, uv);
-                                let mut total_weight = 0.0_f32;
-                                let mut prefiltered_color = glam::Vec3::ZERO;
+                for index in 0..cube_map.to_mut_array().len() {
+                    for height_idx in 0..length {
+                        for width_idx in 0..length {
+                            let uv = glam::vec2(
+                                width_idx as f32 / length as f32,
+                                height_idx as f32 / length as f32,
+                            ) * 2.0_f32
+                                - 1.0_f32;
+                            let sample_picker = Self::get_sample_picker(index as u32, uv);
+                            let mut total_weight = 0.0_f32;
+                            let mut prefiltered_color = glam::Vec3::ZERO;
 
-                                for i in 0..sample_count {
-                                    let xi = hammersley_2d(i, sample_count);
-                                    let g = importance_sample_ggx(xi, roughness);
-                                    let up_vector = glam::vec3(0.0, 1.0, 0.0);
-                                    let tangent_vector = sample_picker.cross(up_vector).normalize();
-                                    let bitangent_vector =
-                                        sample_picker.cross(tangent_vector).normalize();
-                                    let h = convert_coordinate_system(
-                                        g,
-                                        tangent_vector,
-                                        bitangent_vector,
-                                        sample_picker,
-                                    );
-                                    let l = reflect_vec3(-h, sample_picker);
-                                    let n_dot_l = sample_picker.dot(l);
-                                    if n_dot_l > 0.0 {
-                                        let color =
-                                            sample_equirectangular(&equirectangular_hdr_image, l);
-                                        let color = glam::Vec3::from_slice(color.0.as_slice());
-                                        prefiltered_color = prefiltered_color + (color * n_dot_l);
-                                        total_weight = total_weight + n_dot_l;
-                                    }
+                            for i in 0..sample_count {
+                                let xi = hammersley_2d(i, sample_count);
+                                let g = importance_sample_ggx(xi, roughness);
+                                let up_vector = glam::vec3(0.0, 1.0, 0.0);
+                                let tangent_vector = sample_picker.cross(up_vector).normalize();
+                                let bitangent_vector =
+                                    sample_picker.cross(tangent_vector).normalize();
+                                let h = convert_coordinate_system(
+                                    g,
+                                    tangent_vector,
+                                    bitangent_vector,
+                                    sample_picker,
+                                );
+                                let l = reflect_vec3(-h, sample_picker);
+                                let n_dot_l = sample_picker.dot(l);
+                                if n_dot_l > 0.0 {
+                                    let color =
+                                        sample_equirectangular(&equirectangular_hdr_image, l);
+                                    let color = glam::Vec3::from_slice(color.0.as_slice());
+                                    prefiltered_color = prefiltered_color + (color * n_dot_l);
+                                    total_weight = total_weight + n_dot_l;
                                 }
-                                prefiltered_color = prefiltered_color / total_weight;
-
-                                let source_pixel = prefiltered_color;
-                                let mut source_pixel = source_pixel.xyzx();
-                                source_pixel.w = 1.0;
-                                if !source_pixel.is_nan() {
-                                    let mut cube_map = cube_map.to_mut_array();
-                                    let target_pixel =
-                                        cube_map[index].get_pixel_mut(width_idx, height_idx);
-                                    target_pixel.0 = source_pixel.to_array();
-                                }
-                                progress_bar.inc(1);
                             }
+                            prefiltered_color = prefiltered_color / total_weight;
+
+                            let source_pixel = prefiltered_color;
+                            let mut source_pixel = source_pixel.xyzx();
+                            source_pixel.w = 1.0;
+                            if !source_pixel.is_nan() {
+                                let mut cube_map = cube_map.to_mut_array();
+                                let target_pixel =
+                                    cube_map[index].get_pixel_mut(width_idx, height_idx);
+                                target_pixel.0 = source_pixel.to_array();
+                            }
+                            progress_bar.inc(1);
                         }
                     }
-                    progress_bar.finish_with_message(format!(
-                        "bake pre filter cube map {} finish.",
-                        mipmap_level
-                    ));
-                    tx.send(cube_map).unwrap();
-                });
+                }
+                progress_bar.finish_with_message(format!(
+                    "bake pre filter cube map {} finish.",
+                    mipmap_level
+                ));
+                tx.send(cube_map).unwrap();
+            });
         }
 
         drop(tx);

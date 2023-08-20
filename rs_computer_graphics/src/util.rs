@@ -1,6 +1,6 @@
 use crate::{actor::Actor, camera::Camera, yuv420p_image::YUV420pImage};
-use core::ffi;
 use glam::{Vec3Swizzles, Vec4Swizzles};
+use rs_foundation::{cast_to_raw_buffer, math_remap_value_range};
 use std::io::Write;
 use wgpu::TextureFormat;
 
@@ -8,44 +8,6 @@ use wgpu::TextureFormat;
 pub struct RayHitTestResult {
     pub mesh_name: String,
     pub intersection_point: glam::Vec3,
-}
-
-#[repr(C)]
-#[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
-pub struct Range<T: Copy> {
-    pub start: T,
-    pub end: T,
-}
-
-impl<T> Range<T>
-where
-    T: Copy,
-{
-    pub fn to_std_range(&self) -> std::ops::Range<T> {
-        std::ops::Range::<T> {
-            start: self.start,
-            end: self.end,
-        }
-    }
-}
-
-pub fn ffi_to_rs_string(c_str: *const std::ffi::c_char) -> Option<String> {
-    if c_str.is_null() {
-        None
-    } else {
-        let rs_string = unsafe { ffi::CStr::from_ptr(c_str).to_str().unwrap().to_owned() };
-        Some(rs_string)
-    }
-}
-
-pub fn math_remap_value_range(
-    value: f64,
-    from_range: std::ops::Range<f64>,
-    to_range: std::ops::Range<f64>,
-) -> f64 {
-    (value - from_range.start) / (from_range.end - from_range.start)
-        * (to_range.end - to_range.start)
-        + to_range.start
 }
 
 pub fn screent_space_to_world_space(
@@ -147,48 +109,6 @@ pub fn change_working_directory() {
             log::trace!("current_dir: {}", current_exe_dir);
         }
     }
-}
-
-pub fn get_object_address<T>(object: &T) -> String {
-    let raw_ptr = object as *const T;
-    std::format!("{:?}", raw_ptr)
-}
-
-pub fn cast_to_raw_buffer<'a, T>(vec: &[T]) -> &'a [u8] {
-    let buffer = vec.as_ptr() as *const u8;
-    let size = std::mem::size_of::<T>() * vec.len();
-    let buffer = unsafe { std::slice::from_raw_parts(buffer, size) };
-    buffer
-}
-
-pub fn cast_to_raw_type_buffer<'a, U>(buffer: *const u8, len: usize) -> &'a [U] {
-    unsafe {
-        let len = len / std::mem::size_of::<U>();
-        std::slice::from_raw_parts(buffer as *const U, len)
-    }
-}
-
-pub fn cast_to_type_buffer<'a, U>(buffer: &'a [u8]) -> &'a [U] {
-    unsafe {
-        let len = buffer.len() / std::mem::size_of::<U>();
-        std::slice::from_raw_parts(buffer.as_ptr() as *const U, len)
-    }
-}
-
-pub fn alignment(n: isize, align: isize) -> isize {
-    return ((n) + (align) - 1) & !((align) - 1);
-}
-
-pub fn next_highest_power_of_two(v: isize) -> isize {
-    let mut v = v;
-    v = v - 1;
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    v = v + 1;
-    v
 }
 
 pub fn calculate_mipmap_level(length: u32) -> u32 {
@@ -856,73 +776,7 @@ pub fn index_2d_lookup(index: f32, width: f32) -> glam::Vec2 {
 
 #[cfg(test)]
 pub mod test {
-    use super::{alignment, math_remap_value_range, triangle_plane_ray_intersection};
-    use crate::util::next_highest_power_of_two;
-
-    #[test]
-    pub fn next_highest_power_of_two_test() {
-        assert_eq!(next_highest_power_of_two(418), 512);
-    }
-
-    #[test]
-    pub fn alignment_test() {
-        assert_eq!(alignment(418, 4), 420);
-    }
-
-    #[test]
-    pub fn math_remap_value_range_test() {
-        let mapped_value = math_remap_value_range(
-            1.0,
-            std::ops::Range::<f64> {
-                start: 0.0,
-                end: 2.0,
-            },
-            std::ops::Range::<f64> {
-                start: 0.0,
-                end: 100.0,
-            },
-        );
-        assert_eq!(mapped_value, 50.0_f64);
-
-        let mapped_value = math_remap_value_range(
-            0.0,
-            std::ops::Range::<f64> {
-                start: 0.0,
-                end: 2.0,
-            },
-            std::ops::Range::<f64> {
-                start: 0.0,
-                end: 100.0,
-            },
-        );
-        assert_eq!(mapped_value, 0.0_f64);
-
-        let mapped_value = math_remap_value_range(
-            2.0,
-            std::ops::Range::<f64> {
-                start: 0.0,
-                end: 2.0,
-            },
-            std::ops::Range::<f64> {
-                start: 0.0,
-                end: 100.0,
-            },
-        );
-        assert_eq!(mapped_value, 100.0_f64);
-
-        let mapped_value = math_remap_value_range(
-            -1.0,
-            std::ops::Range::<f64> {
-                start: 0.0,
-                end: 2.0,
-            },
-            std::ops::Range::<f64> {
-                start: 0.0,
-                end: 100.0,
-            },
-        );
-        assert_eq!(mapped_value, -50.0_f64);
-    }
+    use super::triangle_plane_ray_intersection;
 
     #[test]
     pub fn triangle_plane_ray_intersection_test() {
