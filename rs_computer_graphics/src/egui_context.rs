@@ -29,6 +29,7 @@ pub struct DataSource {
     pub player_time: f32,
     pub seek_time: f32,
     pub is_seek: bool,
+    pub mipmap_level: u32,
 }
 
 pub struct DrawImage {
@@ -126,6 +127,21 @@ impl EGUIContext {
             // .resizable(true)
             // .default_size([250.0, 150.0])
             .show(context, |ui| {
+                egui::ComboBox::from_label("Mipmap")
+                    .selected_text(format!("{:?}", data_source.mipmap_level))
+                    .show_ui(ui, |ui| {
+                        ui.style_mut().wrap = Some(false);
+                        ui.set_min_width(60.0);
+                        ui.selectable_value(&mut data_source.mipmap_level, 0, "0");
+                        ui.selectable_value(&mut data_source.mipmap_level, 1, "1");
+                        ui.selectable_value(&mut data_source.mipmap_level, 2, "2");
+                        ui.selectable_value(&mut data_source.mipmap_level, 3, "3");
+                        ui.selectable_value(&mut data_source.mipmap_level, 4, "4");
+                        ui.selectable_value(&mut data_source.mipmap_level, 5, "5");
+                        ui.selectable_value(&mut data_source.mipmap_level, 6, "6");
+                        ui.selectable_value(&mut data_source.mipmap_level, 7, "7");
+                        ui.selectable_value(&mut data_source.mipmap_level, 8, "8");
+                    });
                 if let Some(draw_image) = &data_source.draw_image {
                     ui.image(draw_image.texture_id, draw_image.size);
                     // ui.allocate_space(ui.available_size());

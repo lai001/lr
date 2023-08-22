@@ -9,6 +9,7 @@ use crate::{
         feed_back_pipeline::FeedBackPipeline,
         virtual_texture_clean_pipeline::VirtualTextureCleanPipeline,
     },
+    virtual_texture::tile_index::TileOffset,
 };
 use image::{ImageBuffer, Rgba};
 use rs_foundation::cast_to_type_buffer;
@@ -293,20 +294,17 @@ impl VirtualTextureSystem {
                         let x = *data.get(0).unwrap() as u16;
                         let y = *data.get(1).unwrap() as u16;
                         let mipmap_level = *data.get(2).unwrap() as u8;
-                        uniq.insert(TileIndex { x, y, mipmap_level }, true);
+                        uniq.insert(
+                            TileIndex {
+                                tile_offset: TileOffset { x, y },
+                                mipmap_level,
+                            },
+                            true,
+                        );
                     }
                 }
             }
-            let mut pages: Vec<TileIndex> = uniq.keys().map(|x| *x).collect();
-            pages.sort_by(|a, b| {
-                if a.mipmap_level == b.mipmap_level {
-                    let a = width * a.y as u32 + a.x as u32;
-                    let b = width * b.y as u32 + b.x as u32;
-                    a.cmp(&b)
-                } else {
-                    a.mipmap_level.cmp(&b.mipmap_level)
-                }
-            });
+            let pages: Vec<TileIndex> = uniq.keys().map(|x| *x).collect();
             drop(padded_buffer);
             output_buffer.unmap();
             pages
@@ -425,8 +423,8 @@ impl VirtualTextureSystem {
                 texture: self.physical_texture.as_ref().as_ref().unwrap(),
                 mip_level: page.mipmap_level as u32,
                 origin: Origin3d {
-                    x: page.x as u32 * texture.width(),
-                    y: page.y as u32 * texture.height(),
+                    x: page.tile_offset.x as u32 * texture.width(),
+                    y: page.tile_offset.y as u32 * texture.height(),
                     z: 0,
                 },
                 aspect: TextureAspect::All,
@@ -442,9 +440,13 @@ impl VirtualTextureSystem {
         let _ = queue.submit(std::iter::once(command_buffer));
     }
 
-    pub fn get_physical_texture_view(&self) -> wgpu::TextureView {
+    pub fn get_physical_texture_view(&self, base_mip_level: u32) -> wgpu::TextureView {
         match self.physical_texture.clone().as_ref() {
-            Some(texture) => texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            Some(texture) => {
+                let mut texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+                texture_view_descriptor.base_mip_level = base_mip_level;
+                texture.create_view(&texture_view_descriptor)
+            }
             None => DefaultTextures::default()
                 .lock()
                 .unwrap()
@@ -482,12 +484,12 @@ impl VirtualTextureSystem {
         debug: u8,
     ) {
         debug_assert!(
-            physical_tile_index.x
+            physical_tile_index.tile_offset.x
                 <= (self.virtual_texture_configuration.physical_texture_size
                     / self.virtual_texture_configuration.tile_size) as u16
         );
         debug_assert!(
-            physical_tile_index.y
+            physical_tile_index.tile_offset.y
                 <= (self.virtual_texture_configuration.physical_texture_size
                     / self.virtual_texture_configuration.tile_size) as u16
         );
@@ -496,14 +498,17 @@ impl VirtualTextureSystem {
         let chunks = self
             .page_table_data
             .chunks_mut(buffer_dimensions.get_padded_width() * 4);
-        let line = chunks.skip(virtual_tile_index.y as usize).next().unwrap();
-        let page_data = line
-            .chunks_mut(4)
-            .skip(virtual_tile_index.x as usize)
+        let line = chunks
+            .skip(virtual_tile_index.tile_offset.y as usize)
             .next()
             .unwrap();
-        page_data[0] = physical_tile_index.x as u8;
-        page_data[1] = physical_tile_index.y as u8;
+        let page_data = line
+            .chunks_mut(4)
+            .skip(virtual_tile_index.tile_offset.x as usize)
+            .next()
+            .unwrap();
+        page_data[0] = physical_tile_index.tile_offset.x as u8;
+        page_data[1] = physical_tile_index.tile_offset.y as u8;
         page_data[2] = physical_tile_index.mipmap_level;
         page_data[3] = debug;
     }

@@ -1,7 +1,7 @@
 use crate::{actor::Actor, camera::Camera, yuv420p_image::YUV420pImage};
 use glam::{Vec3Swizzles, Vec4Swizzles};
 use rs_foundation::{cast_to_raw_buffer, math_remap_value_range};
-use std::io::Write;
+use std::{io::Write, sync::Arc};
 use wgpu::TextureFormat;
 
 #[derive(Clone, Debug)]
@@ -77,21 +77,31 @@ pub fn shape(
 }
 
 pub fn init_log() {
+    std::fs::create_dir_all("./log").unwrap();
+    let world_file = Arc::new(std::sync::RwLock::new(std::io::BufWriter::new(
+        std::fs::File::create(format!(
+            "./log/{}.log",
+            chrono::Local::now().format("%Y_%m_%d-%H_%M_%S")
+        ))
+        .unwrap(),
+    )));
     let log_env =
         env_logger::Env::default().default_filter_or("rs_computer_graphics,rs_dotnet,rs_media");
     env_logger::Builder::from_env(log_env)
-        .format(|buf, record| {
+        .format(move |buf, record| {
+            let mut writer = world_file.write().unwrap();
             let level = record.level();
             let level_style = buf.default_level_style(level);
-            writeln!(
-                buf,
+            let content = format!(
                 "[{}] {}:{} {} {}",
                 level_style.value(level),
                 record.file().unwrap_or("Unknown"),
                 record.line().unwrap_or(0),
                 buf.timestamp_millis(),
                 record.args()
-            )
+            );
+            let _ = writer.write_fmt(format_args!("{}\n", content));
+            writeln!(buf, "{}", content)
         })
         .init();
 }

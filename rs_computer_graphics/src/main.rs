@@ -28,7 +28,8 @@ use rs_computer_graphics::{
     user_script_change_monitor::UserScriptChangeMonitor,
     util::{change_working_directory, init_log},
     virtual_texture::{
-        block_image::BlockImage, tile_index::TileIndex,
+        block_image::BlockImage,
+        tile_index::{TileIndex, TileOffset},
         virtual_texture_configuration::VirtualTextureConfiguration,
         virtual_texture_system::VirtualTextureSystem,
     },
@@ -36,13 +37,7 @@ use rs_computer_graphics::{
 };
 use rs_media::{audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer};
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{
-    borrow::{Borrow, BorrowMut},
-    cell::RefCell,
-    collections::HashMap,
-    sync::Arc,
-    time::Duration,
-};
+use std::{borrow::Borrow, collections::HashMap, sync::Arc, time::Duration};
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event::*, VirtualKeyCode},
@@ -50,8 +45,8 @@ use winit::{
 };
 
 fn main() {
-    init_log();
     change_working_directory();
+    init_log();
 
     // thread_pool::ThreadPool::global().lock().unwrap().spawn(|| {
     //     rs_media::hw::hw_test(&rs_computer_graphics::util::get_resource_path(
@@ -112,8 +107,12 @@ fn main() {
 
     let mut wgpu_context = WGPUContext::new(
         &native_window.window,
-        Some(wgpu::PowerPreference::HighPerformance),
+        Some(wgpu::PowerPreference::LowPower),
         None,
+        // Some(wgpu::InstanceDescriptor {
+        //     backends: wgpu::Backends::VULKAN,
+        //     dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+        // }),
     );
 
     #[cfg(feature = "rs_dotnet")]
@@ -288,6 +287,7 @@ fn main() {
         player_time: 0.0,
         seek_time: 0.0,
         is_seek: false,
+        mipmap_level: 0,
     };
 
     let frmae_buffer = FrameBuffer::new(
@@ -311,7 +311,7 @@ fn main() {
     );
 
     let mut block_image = BlockImage::new(&rs_computer_graphics::util::get_resource_path(
-        "Remote/Untitled_4k.png",
+        "Remote/Untitled.png",
     ));
 
     let virtual_texture_mesh_pipeline = VirtualTextureMeshPipeline::new(
@@ -400,35 +400,40 @@ fn main() {
                     );
 
                     let pages = virtual_texture_system.read(device, queue);
-                    // log::trace!("{:#?}", pages);
-                    for page in pages {
-                        let range =
-                            (page.mipmap_level as i32 - 3).max(0)..(page.mipmap_level as i32 + 3);
-                        for mipmap in range {
+
+                    let mut pages_map: HashMap<TileOffset, Vec<u8>> = HashMap::new();
+                    for page in pages.iter() {
+                        let key = page.tile_offset;
+                        if pages_map.contains_key(&key) {
+                            pages_map.get_mut(&key).unwrap().push(page.mipmap_level);
+                        } else {
+                            pages_map.insert(key, vec![page.mipmap_level]);
+                        }
+                    }
+                    for (offset, mipmaps) in pages_map.iter() {
+                        let mut hash_map: HashMap<i32, bool> = HashMap::new();
+                        for &mipmap in mipmaps {
+                            for mipmap in (mipmap as i32 - 2)..(mipmap as i32 + 2) {
+                                hash_map.insert(mipmap.max(0), true);
+                            }
+                        }
+
+                        for mipmap in hash_map.keys().map(|x| *x as u8) {
                             let page = TileIndex {
-                                x: page.x,
-                                y: page.y,
-                                mipmap_level: mipmap as u8,
+                                tile_offset: *offset,
+                                mipmap_level: mipmap,
                             };
                             if let Some(cache_texture) =
                                 block_image.get_texture(device, queue, page)
                             {
-                                let (physical_page_x, physical_page_y) =
-                                    (page.x as u16, page.y as u16);
-
-                                let tile_index = TileIndex {
-                                    x: physical_page_x,
-                                    y: physical_page_y,
-                                    mipmap_level: page.mipmap_level,
-                                };
-                                if !uploaded_tile_index.contains_key(&tile_index) {
+                                if !uploaded_tile_index.contains_key(&page) {
                                     virtual_texture_system.upload_page_texture(
                                         device,
                                         queue,
-                                        tile_index,
+                                        page,
                                         cache_texture,
                                     );
-                                    uploaded_tile_index.insert(tile_index, true);
+                                    uploaded_tile_index.insert(page, true);
                                 }
                             };
                         }
@@ -465,7 +470,7 @@ fn main() {
 
                     data_source.draw_image = Some(egui_context.create_image(
                         device,
-                        &virtual_texture_system.get_physical_texture_view(),
+                        &virtual_texture_system.get_physical_texture_view(data_source.mipmap_level),
                         egui::Vec2 {
                             x: 256 as f32,
                             y: 256 as f32,

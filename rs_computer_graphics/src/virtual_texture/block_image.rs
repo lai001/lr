@@ -1,5 +1,8 @@
 use super::tile_index::TileIndex;
-use crate::{file_manager::FileManager, mipmap_generator::MipmapGenerator, util};
+use crate::{
+    file_manager::FileManager, mipmap_generator::MipmapGenerator, util,
+    virtual_texture::tile_index::TileOffset,
+};
 use image::{GenericImage, ImageBuffer, Rgba};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -105,8 +108,10 @@ impl BlockImage {
                             results.push(BlockImageMakeResult {
                                 image: image.to_rgba8(),
                                 tile_index: TileIndex {
-                                    x: w as u16,
-                                    y: h as u16,
+                                    tile_offset: TileOffset {
+                                        x: w as u16,
+                                        y: h as u16,
+                                    },
                                     mipmap_level: index as u8,
                                 },
                             });
@@ -134,7 +139,9 @@ impl BlockImage {
             let prefix = "block_";
             let name = format!(
                 "{}_{}_{}",
-                result.tile_index.x, result.tile_index.y, result.tile_index.mipmap_level
+                result.tile_index.tile_offset.x,
+                result.tile_index.tile_offset.y,
+                result.tile_index.mipmap_level
             );
             let save_path = format!("{}/{}{}.png", &dir, prefix, &name);
             infos.push(PersistentBlockImageInfo {
