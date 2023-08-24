@@ -1,183 +1,189 @@
-use crate::{
-    audio_format::{AudioFormat, EAudioSampleType},
-    audio_pcmbuffer::AudioPcmbuffer,
-    time_range::TimeRangeRational,
+use crate::audio_frame_extractor::{AudioFrame, AudioFrameExtractor};
+use std::{
+    collections::VecDeque,
+    sync::mpsc::{Receiver, Sender},
 };
-use ffmpeg_next::{
-    ffi::{av_rescale_q_rnd, av_seek_frame, AVRational, AVRounding, AVSEEK_FLAG_BACKWARD},
-    util::format,
-};
-use rs_foundation::TimeRange;
+
+#[derive(Debug)]
+struct Protocol {
+    frame: Option<AudioFrame>,
+    request_more_frames: Option<usize>,
+    seek_time: Option<f32>,
+    eof: Option<bool>,
+}
 
 pub struct AudioPlayerItem {
-    format_input: ffmpeg_next::format::context::Input,
-    audio_decoder: ffmpeg_next::codec::decoder::Audio,
-    audio_stream_index: usize,
-    time_base: ffmpeg_next::Rational,
-}
-
-pub struct AudioFrame {
-    pub time_range_rational: TimeRangeRational,
-    pub pcm_buffer: AudioPcmbuffer,
-}
-
-impl AudioFrame {
-    pub fn get_time_range_second(&self) -> TimeRange {
-        let start = self.time_range_rational.start.numerator() as f32
-            / self.time_range_rational.start.denominator() as f32;
-        let end = self.time_range_rational.end.numerator() as f32
-            / self.time_range_rational.end.denominator() as f32;
-        TimeRange { start, end }
-    }
+    filepath: String,
+    audio_receiver: Option<Receiver<Protocol>>,
+    user_sender: Option<Sender<Protocol>>,
 }
 
 impl AudioPlayerItem {
     pub fn new(filepath: &str) -> AudioPlayerItem {
-        let format_input = ffmpeg_next::format::input(&filepath.to_owned()).unwrap();
-        let input_stream = format_input
-            .streams()
-            .best(ffmpeg_next::media::Type::Audio)
-            .unwrap();
-        let time_base = input_stream.time_base();
-        let audio_stream_index = input_stream.index();
-        let context_decoder =
-            ffmpeg_next::codec::context::Context::from_parameters(input_stream.parameters())
-                .unwrap();
-        let mut audio_decoder = context_decoder.decoder().audio().unwrap();
-        unsafe { (*audio_decoder.as_mut_ptr()).pkt_timebase = time_base.into() };
-        let mut item = AudioPlayerItem {
-            format_input,
-            audio_decoder,
-            audio_stream_index,
-            time_base,
+        let mut player = AudioPlayerItem {
+            filepath: filepath.to_string(),
+            audio_receiver: None,
+            user_sender: None,
         };
-        item.seek(0.0);
-        item
+        player.init();
+        player
     }
 
-    pub fn get_stream_time_base(&self) -> ffmpeg_next::Rational {
-        self.time_base
-    }
+    fn init(&mut self) {
+        let (audio_sender, audio_receiver) = std::sync::mpsc::channel();
+        let (user_sender, user_receiver): (Sender<Protocol>, Receiver<Protocol>) =
+            std::sync::mpsc::channel();
 
-    pub fn seek(&mut self, second: f32) {
-        let seek_time: f32;
-        {
-            let stream = self.format_input.stream(self.audio_stream_index).unwrap();
-            seek_time = second * stream.time_base().denominator() as f32;
-        }
-        unsafe {
-            match av_seek_frame(
-                self.format_input.as_mut_ptr(),
-                self.audio_stream_index as i32,
-                seek_time as i64,
-                AVSEEK_FLAG_BACKWARD,
-            ) {
-                s if s >= 0 => {}
-                e => {
-                    let error = ffmpeg_next::Error::from(e);
-                    log::error!("seek error: {}", error);
+        let audio_sender_clone = audio_sender.clone();
+
+        let filepath = self.filepath.to_string();
+        std::thread::spawn(move || {
+            let mut audio_frame_extractor = AudioFrameExtractor::new(&filepath);
+            let mut resp_protocols: VecDeque<Protocol> = VecDeque::new();
+
+            loop {
+                let mut req_protocols: Vec<Protocol> = vec![];
+
+                match user_receiver.recv() {
+                    Ok(protocol) => req_protocols.push(protocol),
+                    Err(_) => break,
                 }
-            }
-        };
-    }
 
-    fn find_next_packet(&mut self) -> Option<(ffmpeg_next::Stream, ffmpeg_next::Packet)> {
-        let mut packet_iter = self.format_input.packets();
-        loop {
-            match packet_iter.next() {
-                Some((stream, packet)) => {
-                    if stream.index() == self.audio_stream_index {
-                        return Some((stream, packet));
-                    }
-                }
-                None => {
-                    break;
-                }
-            }
-        }
-        return None;
-    }
+                req_protocols
+                    .append(&mut user_receiver.try_iter().map(|element| element).collect());
+                let seek_protocols: Vec<&Protocol> = req_protocols
+                    .iter()
+                    .filter(|element| {
+                        if element.seek_time.is_none() == false {
+                            true
+                        } else {
+                            false
+                        }
+                    })
+                    .collect();
 
-    pub fn next_frames(&mut self) -> Option<Vec<AudioFrame>> {
-        match self.find_next_packet() {
-            Some((stream, packet)) => {
-                let mut audio_frames: Vec<AudioFrame> = vec![];
-                self.audio_decoder.send_packet(&packet).unwrap();
-                let mut decoded_audio_frame = ffmpeg_next::frame::Audio::empty();
-                let mut resample_audio_frame = ffmpeg_next::frame::Audio::empty();
-                while self
-                    .audio_decoder
-                    .receive_frame(&mut decoded_audio_frame)
-                    .is_ok()
-                {
-                    let sample_rate: i32;
-                    let rescale_start_pts: i64;
-                    let rescale_end_pts: i64;
-                    let nb_samples: i32;
-                    unsafe {
-                        sample_rate = (*decoded_audio_frame.as_mut_ptr()).sample_rate;
-                        let pts = (*decoded_audio_frame.as_mut_ptr()).pts;
-                        let duration = (*decoded_audio_frame.as_mut_ptr()).nb_samples;
-                        nb_samples = duration;
-                        rescale_start_pts = av_rescale_q_rnd(
-                            pts,
-                            self.time_base.into(),
-                            AVRational {
-                                num: 1,
-                                den: sample_rate,
-                            },
-                            AVRounding::AV_ROUND_INF,
-                        );
-                        rescale_end_pts = rescale_start_pts + duration as i64;
-                    }
+                let request_more_frames_protocols: Vec<&Protocol> = req_protocols
+                    .iter()
+                    .filter(|element| {
+                        if element.request_more_frames.is_none() == false {
+                            true
+                        } else {
+                            false
+                        }
+                    })
+                    .collect();
 
-                    let mut resample = ffmpeg_next::software::resampling::context::Context::get(
-                        decoded_audio_frame.format(),
-                        decoded_audio_frame.channel_layout(),
-                        sample_rate as u32,
-                        format::Sample::F32(ffmpeg_next::format::sample::Type::Planar),
-                        ffmpeg_next::ChannelLayout::STEREO,
-                        sample_rate as u32,
-                    )
-                    .unwrap();
-                    resample
-                        .run(&decoded_audio_frame, &mut resample_audio_frame)
-                        .unwrap();
+                if let Some(seek_protocol) = seek_protocols.last() {
+                    resp_protocols.clear();
+                    audio_frame_extractor.seek(seek_protocol.seek_time.unwrap());
 
-                    let audio_format = AudioFormat::from(
-                        sample_rate as u32,
-                        resample_audio_frame.channel_layout().channels() as u32,
-                        EAudioSampleType::Float32,
-                        true,
-                    );
-                    let mut pcm_buffer = AudioPcmbuffer::from(audio_format, nb_samples as usize);
-
-                    for channel in 0..resample_audio_frame.channel_layout().channels() {
-                        let buffer = pcm_buffer.get_mut_channel_data_view::<f32>(channel as usize);
-                        let data_buffer: &[f32];
-                        unsafe {
-                            let raw_buffer = resample_audio_frame.data(channel as usize);
-                            data_buffer = std::slice::from_raw_parts::<f32>(
-                                raw_buffer.as_ptr() as *const f32,
-                                raw_buffer.len() / std::mem::size_of::<f32>(),
-                            );
-                        };
-                        if data_buffer.len() == buffer.len() {
-                            buffer.copy_from_slice(data_buffer);
+                    while resp_protocols.is_empty() {
+                        match audio_frame_extractor.next_frames() {
+                            Some(frames) => {
+                                for frame in frames {
+                                    if frame.get_time_range_second().end
+                                        >= seek_protocol.seek_time.unwrap()
+                                    {
+                                        resp_protocols.push_back(Protocol {
+                                            frame: Some(frame),
+                                            request_more_frames: None,
+                                            seek_time: None,
+                                            eof: None,
+                                        });
+                                    }
+                                }
+                            }
+                            None => {
+                                resp_protocols.push_back(Protocol {
+                                    frame: None,
+                                    request_more_frames: None,
+                                    seek_time: None,
+                                    eof: Some(true),
+                                });
+                                break;
+                            }
                         }
                     }
-                    let audio_frame = AudioFrame {
-                        pcm_buffer,
-                        time_range_rational: TimeRangeRational {
-                            start: ffmpeg_next::Rational(rescale_start_pts as i32, sample_rate),
-                            end: ffmpeg_next::Rational(rescale_end_pts as i32, sample_rate),
-                        },
-                    };
-                    audio_frames.push(audio_frame);
+                    if let Some(resp_protocol) = resp_protocols.pop_front() {
+                        let _ = audio_sender_clone.send(resp_protocol);
+                    }
+                } else if request_more_frames_protocols.is_empty() == false {
+                    while resp_protocols.len() < 6 {
+                        match audio_frame_extractor.next_frames() {
+                            Some(frames) => {
+                                for frame in frames {
+                                    resp_protocols.push_back(Protocol {
+                                        frame: Some(frame),
+                                        request_more_frames: None,
+                                        seek_time: None,
+                                        eof: Some(true),
+                                    });
+                                }
+                            }
+                            None => {
+                                resp_protocols.push_back(Protocol {
+                                    frame: None,
+                                    request_more_frames: None,
+                                    seek_time: None,
+                                    eof: Some(true),
+                                });
+                                break;
+                            }
+                        }
+                    }
+
+                    if let Some(resp_protocol) = resp_protocols.pop_front() {
+                        let _ = audio_sender_clone.send(resp_protocol);
+                    }
                 }
-                return Some(audio_frames);
             }
-            None => None,
+        });
+        self.audio_receiver = Some(audio_receiver);
+        self.user_sender = Some(user_sender);
+    }
+
+    pub fn try_recv(&mut self) -> Result<AudioFrame, crate::error::Error> {
+        let protocal_result = self.audio_receiver.as_ref().unwrap().try_recv();
+        match protocal_result {
+            Ok(protocal) => {
+                if let Some(frame) = protocal.frame {
+                    let _ = self.user_sender.as_ref().unwrap().send(Protocol {
+                        frame: None,
+                        request_more_frames: Some(1),
+                        seek_time: None,
+                        eof: None,
+                    });
+                    Ok(frame)
+                } else if let Some(_) = protocal.eof {
+                    Err(crate::error::Error::EndOfFile)
+                } else {
+                    panic!()
+                }
+            }
+            Err(error) => match error {
+                std::sync::mpsc::TryRecvError::Empty => {
+                    let _ = self.user_sender.as_ref().unwrap().send(Protocol {
+                        frame: None,
+                        request_more_frames: Some(1),
+                        seek_time: None,
+                        eof: None,
+                    });
+                    Err(crate::error::Error::TryAgain)
+                }
+                std::sync::mpsc::TryRecvError::Disconnected => {
+                    Err(crate::error::Error::Disconnected)
+                }
+            },
         }
+    }
+
+    pub fn seek(&mut self, time: f32) {
+        self.audio_receiver.as_ref().unwrap().try_iter();
+        let _ = self.user_sender.as_ref().unwrap().send(Protocol {
+            request_more_frames: None,
+            seek_time: Some(time),
+            eof: None,
+            frame: None,
+        });
     }
 }

@@ -1,5 +1,8 @@
 use crate::video_frame_extractor::{EVideoDecoderType, VideoFrame, VideoFrameExtractor};
-use std::sync::mpsc::{Receiver, Sender};
+use std::{
+    collections::VecDeque,
+    sync::mpsc::{Receiver, Sender},
+};
 struct Protocol {
     frame: Option<VideoFrame>,
     request_more_frames: Option<usize>,
@@ -33,19 +36,21 @@ impl VideoPlayerItem {
 
         let filepath = self.filepath.to_string();
         std::thread::spawn(move || {
-            let mut video_player_item =
+            let mut video_frame_extractor =
                 VideoFrameExtractor::new(&filepath, Some(EVideoDecoderType::Hardware));
+            let mut resp_protocols: VecDeque<Protocol> = VecDeque::new();
 
             loop {
-                let mut protocols: Vec<Protocol> = vec![];
+                let mut req_protocols: Vec<Protocol> = vec![];
 
                 match user_receiver.recv() {
-                    Ok(protocol) => protocols.push(protocol),
+                    Ok(protocol) => req_protocols.push(protocol),
                     Err(_) => break,
                 }
-                protocols.append(&mut user_receiver.try_iter().map(|element| element).collect());
+                req_protocols
+                    .append(&mut user_receiver.try_iter().map(|element| element).collect());
 
-                let seek_protocols: Vec<&Protocol> = protocols
+                let seek_protocols: Vec<&Protocol> = req_protocols
                     .iter()
                     .filter(|element| {
                         if element.seek_time.is_none() == false {
@@ -56,7 +61,7 @@ impl VideoPlayerItem {
                     })
                     .collect();
 
-                let request_more_frames_protocols: Vec<&Protocol> = protocols
+                let request_more_frames_protocols: Vec<&Protocol> = req_protocols
                     .iter()
                     .filter(|element| {
                         if element.request_more_frames.is_none() == false {
@@ -68,17 +73,17 @@ impl VideoPlayerItem {
                     .collect();
 
                 if let Some(seek_protocol) = seek_protocols.last() {
-                    let mut count = 0;
-                    video_player_item.seek(seek_protocol.seek_time.unwrap());
-                    loop {
-                        match video_player_item.next_frames() {
+                    resp_protocols.clear();
+                    video_frame_extractor.seek(seek_protocol.seek_time.unwrap());
+
+                    while resp_protocols.is_empty() {
+                        match video_frame_extractor.next_frames() {
                             Some(frames) => {
                                 for frame in frames {
                                     if frame.get_time_range_second().end
                                         >= seek_protocol.seek_time.unwrap()
                                     {
-                                        count += 1;
-                                        let _ = video_sender_clone.send(Protocol {
+                                        resp_protocols.push_back(Protocol {
                                             frame: Some(frame),
                                             request_more_frames: None,
                                             seek_time: None,
@@ -88,34 +93,46 @@ impl VideoPlayerItem {
                                 }
                             }
                             None => {
+                                resp_protocols.push_back(Protocol {
+                                    frame: None,
+                                    request_more_frames: None,
+                                    seek_time: None,
+                                    eof: Some(true),
+                                });
                                 break;
                             }
                         }
-                        if count > 0 {
-                            break;
-                        }
+                    }
+                    if let Some(resp_protocol) = resp_protocols.pop_front() {
+                        let _ = video_sender_clone.send(resp_protocol);
                     }
                 } else if request_more_frames_protocols.is_empty() == false {
-                    match video_player_item.next_frames() {
-                        Some(frames) => {
-                            for frame in frames {
-                                let _ = video_sender_clone.send(Protocol {
-                                    frame: Some(frame),
+                    while resp_protocols.len() < 6 {
+                        match video_frame_extractor.next_frames() {
+                            Some(frames) => {
+                                for frame in frames {
+                                    resp_protocols.push_back(Protocol {
+                                        frame: Some(frame),
+                                        request_more_frames: None,
+                                        seek_time: None,
+                                        eof: Some(true),
+                                    });
+                                }
+                            }
+                            None => {
+                                resp_protocols.push_back(Protocol {
+                                    frame: None,
                                     request_more_frames: None,
                                     seek_time: None,
-                                    eof: None,
+                                    eof: Some(true),
                                 });
+                                break;
                             }
                         }
-                        None => {
-                            let _ = video_sender_clone.send(Protocol {
-                                frame: None,
-                                request_more_frames: None,
-                                seek_time: None,
-                                eof: Some(true),
-                            });
-                            break;
-                        }
+                    }
+
+                    if let Some(resp_protocol) = resp_protocols.pop_front() {
+                        let _ = video_sender_clone.send(resp_protocol);
                     }
                 }
             }

@@ -35,7 +35,10 @@ use rs_computer_graphics::{
     },
     wgpu_context::WGPUContext,
 };
-use rs_media::{audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer};
+use rs_media::{
+    audio_format::EAudioSampleType, audio_frame_extractor::AudioFrameExtractor,
+    audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer,
+};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{borrow::Borrow, collections::HashMap, sync::Arc, time::Duration};
 use winit::{
@@ -48,27 +51,61 @@ fn main() {
     change_working_directory();
     init_log();
 
-    // thread_pool::ThreadPool::global().lock().unwrap().spawn(|| {
-    //     rs_media::hw::hw_test(&rs_computer_graphics::util::get_resource_path(
-    //         "Remote/BigBuckBunny.mp4",
-    //     ));
-    // });
-    // thread_pool::ThreadPool::global().lock().unwrap().spawn(|| {
-    //     rs_media::sw::sw_test(&rs_computer_graphics::util::get_resource_path(
-    //         "Remote/BigBuckBunny.mp4",
-    //     ));
-    // });
     rs_media::init();
     let mut video_frame_player = VideoFramePlayer::new(
         &rs_computer_graphics::util::get_resource_path("Remote/BigBuckBunny.mp4"),
     );
 
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let sender_clone = sender.clone();
     ThreadPool::audio().lock().unwrap().spawn(move || {
-        let mut player_item = AudioPlayerItem::new(&rs_computer_graphics::util::get_resource_path(
-            "Remote/sample-15s.mp3",
-        ));
+        let mut audio_device = rs_media::audio_device::AudioDevice::new();
+        audio_device.play();
+        let mut audio_player_item = AudioPlayerItem::new(
+            &rs_computer_graphics::util::get_resource_path("Remote/BigBuckBunny.mp4"),
+        );
+
+        loop {
+            {
+                let buffer_mut = audio_device.get_buffer_mut();
+                let mut buffer_mut = buffer_mut.lock().unwrap();
+
+                while buffer_mut.len() < 1024 * 8 {
+                    match audio_player_item.try_recv() {
+                        Ok(frame) => {
+                            let pcm_buffer = &frame.pcm_buffer;
+                            let mut data: Vec<f32> = Vec::new();
+                            let format = pcm_buffer.get_audio_format();
+                            debug_assert_eq!(format.channels_per_frame, 2);
+                            debug_assert_eq!(format.get_sample_type(), EAudioSampleType::Float32);
+                            debug_assert_eq!(format.is_non_interleaved(), true);
+
+                            let channel_data_0: &[f32] = pcm_buffer.get_channel_data_view(0);
+                            let channel_data_1: &[f32] = pcm_buffer.get_channel_data_view(1);
+                            for (first, second) in channel_data_0.iter().zip(channel_data_1.iter())
+                            {
+                                data.push(*first);
+                                data.push(*second);
+                            }
+                            buffer_mut.append(&mut data);
+                        }
+                        Err(error) => match error {
+                            rs_media::error::Error::EndOfFile => break,
+                            rs_media::error::Error::TryAgain => {
+                                std::thread::sleep(Duration::from_secs_f32(0.015));
+                            }
+                            rs_media::error::Error::Disconnected => break,
+                        },
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_secs_f32(0.01));
+        }
+    });
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    ThreadPool::global().lock().unwrap().spawn(move || {
+        let mut player_item = AudioFrameExtractor::new(
+            &rs_computer_graphics::util::get_resource_path("Remote/sample-15s.mp3"),
+        );
         // player_item.seek(5.0);
         let mut index = 0;
         let _ = std::fs::remove_dir_all("./dsp");
@@ -92,16 +129,12 @@ fn main() {
                 let audio_image =
                     image::GrayImage::from_vec(image_datas.len() as u32, 1, image_datas).unwrap();
                 std::thread::sleep(Duration::from_secs_f32(0.1));
-                let _ = sender_clone.send(audio_image);
+                let _ = sender.send(audio_image);
                 // save_fft_result(&format!("./dsp/fft_{}.png", index), &result);
                 index += 1;
             }
         }
-        let mut audio_device = rs_media::audio_device::AudioDevice::new();
-        audio_device.run();
     });
-
-    drop(sender);
 
     let native_window = NativeWindow::new();
 

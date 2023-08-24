@@ -1,5 +1,6 @@
 use rs_foundation::TimeRange;
 
+#[derive(Debug)]
 pub struct TimeRangeRational {
     pub start: ffmpeg_next::Rational,
     pub end: ffmpeg_next::Rational,

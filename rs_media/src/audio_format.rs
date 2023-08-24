@@ -151,4 +151,9 @@ impl AudioFormat {
             _ => panic!(),
         }
     }
+
+    pub fn is_non_interleaved(&self) -> bool {
+        self.format_flags
+            .contains(AudioFormatFlag::isNonInterleaved)
+    }
 }

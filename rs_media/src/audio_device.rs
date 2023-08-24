@@ -1,7 +1,5 @@
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    FromSample, Sample, SizedSample,
-};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use std::sync::{Arc, Mutex};
 
 pub struct Opt {
     pub device: String,
@@ -11,6 +9,8 @@ pub struct AudioDevice {
     host: cpal::platform::Host,
     device: cpal::Device,
     config: cpal::SupportedStreamConfig,
+    stream: cpal::Stream,
+    buffer: Arc<Mutex<Vec<f32>>>,
 }
 
 impl AudioDevice {
@@ -32,71 +32,45 @@ impl AudioDevice {
 
         let config = device.default_output_config().unwrap();
         log::trace!("Default output config: {:?}", config);
-        AudioDevice {
-            host,
-            device,
-            config,
-        }
-    }
 
-    pub fn run(&mut self) {
-        let device = &self.device;
-        let config = self.config.clone();
-        match self.config.sample_format() {
-            cpal::SampleFormat::I8 => Self::run_inner::<i8>(&device, &config.into()),
-            cpal::SampleFormat::I16 => Self::run_inner::<i16>(&device, &config.into()),
-            cpal::SampleFormat::I32 => Self::run_inner::<i32>(&device, &config.into()),
-            cpal::SampleFormat::I64 => Self::run_inner::<i64>(&device, &config.into()),
-            cpal::SampleFormat::U8 => Self::run_inner::<u8>(&device, &config.into()),
-            cpal::SampleFormat::U16 => Self::run_inner::<u16>(&device, &config.into()),
-            cpal::SampleFormat::U32 => Self::run_inner::<u32>(&device, &config.into()),
-            cpal::SampleFormat::U64 => Self::run_inner::<u64>(&device, &config.into()),
-            cpal::SampleFormat::F32 => Self::run_inner::<f32>(&device, &config.into()),
-            cpal::SampleFormat::F64 => Self::run_inner::<f64>(&device, &config.into()),
-            sample_format => panic!("Unsupported sample format '{sample_format}'"),
-        }
-    }
+        let err_fn = |err| log::error!("an error occurred on stream: {}", err);
+        let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(vec![]));
 
-    pub fn run_inner<T>(device: &cpal::Device, config: &cpal::StreamConfig)
-    where
-        T: SizedSample + FromSample<f32> + std::fmt::Debug,
-    {
-        let sample_rate = config.sample_rate.0 as f32;
-        let channels = config.channels as usize;
-
-        // Produce a sinusoid of maximum amplitude.
-        let mut sample_clock = 0f32;
-        let mut next_value = move || {
-            sample_clock = (sample_clock + 1.0) % sample_rate;
-            (sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin()
-        };
-
-        let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
-
+        let buffer_clone = buffer.clone();
         let stream = device
             .build_output_stream(
-                config,
-                move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                    Self::write_data(data, channels, &mut next_value)
+                &config.config(),
+                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    let mut buffer = buffer_clone.lock().unwrap();
+                    let (left, right) = buffer.split_at(data.len().min(buffer.len()));
+                    let mut write_data = left.to_vec();
+                    write_data.resize(data.len(), 0.0);
+                    data.copy_from_slice(&write_data);
+                    *buffer = right.to_vec();
                 },
                 err_fn,
                 None,
             )
             .unwrap();
-        stream.play().unwrap();
 
-        std::thread::sleep(std::time::Duration::from_secs(1000000));
+        AudioDevice {
+            host,
+            device,
+            config,
+            stream,
+            buffer,
+        }
     }
 
-    fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> f32)
-    where
-        T: Sample + FromSample<f32> + std::fmt::Debug,
-    {
-        for frame in output.chunks_mut(channels) {
-            let value: T = T::from_sample(next_sample());
-            for (channel, sample) in frame.iter_mut().enumerate() {
-                *sample = value;
-            }
-        }
+    pub fn play(&mut self) {
+        self.stream.play().unwrap();
+    }
+
+    pub fn get_config(&self) -> cpal::StreamConfig {
+        self.config.config()
+    }
+
+    pub fn get_buffer_mut(&self) -> Arc<Mutex<Vec<f32>>> {
+        self.buffer.clone()
     }
 }

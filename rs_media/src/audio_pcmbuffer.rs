@@ -1,5 +1,6 @@
 use crate::{audio_format::AudioFormat, audio_format_flag::AudioFormatFlag};
 
+#[derive(Debug)]
 pub struct AudioPcmbuffer {
     pub(crate) channel_data: Vec<Box<Vec<u8>>>,
     pub(crate) audio_format: AudioFormat,
