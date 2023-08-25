@@ -20,7 +20,7 @@ pub struct BlockImageMakeResult {
 
 pub struct BlockImage {
     persistent_block_image_infos: Vec<PersistentBlockImageInfo>,
-    cache_images: std::collections::HashMap<TileIndex, ImageBuffer<Rgba<u8>, Vec<u8>>>,
+    cache_images: std::collections::HashMap<TileIndex, Arc<image::RgbaImage>>,
     cache_textures: std::collections::HashMap<TileIndex, Arc<wgpu::Texture>>,
 }
 
@@ -160,7 +160,7 @@ impl BlockImage {
         infos
     }
 
-    pub fn get_image(&mut self, tile_index: TileIndex) -> Option<&ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    pub fn get_image(&mut self, tile_index: TileIndex) -> Option<Arc<image::RgbaImage>> {
         let key = tile_index;
         let cache_images = &mut self.cache_images;
         let is_contains_key = cache_images.contains_key(&key);
@@ -169,11 +169,11 @@ impl BlockImage {
                 if block_image_info.tile_index == tile_index {
                     let image = image::open(&block_image_info.path).unwrap();
                     let image = image.to_rgba8();
-                    self.cache_images.insert(key, image);
+                    self.cache_images.insert(key, Arc::new(image));
                 }
             }
         }
-        let image: Option<&ImageBuffer<Rgba<u8>, Vec<u8>>> = self.cache_images.get(&key);
+        let image: Option<Arc<image::RgbaImage>> = self.cache_images.get(&key).cloned();
         match image {
             Some(image) => Some(image),
             None => {
@@ -195,7 +195,8 @@ impl BlockImage {
         if is_contains_key == false {
             match self.get_image(tile_index) {
                 Some(cache_image) => {
-                    let texture = util::texture2d_from_rgba_image(device, queue, cache_image);
+                    let texture =
+                        util::texture2d_from_rgba_image(device, queue, cache_image.as_ref());
                     self.cache_textures.insert(key, Arc::new(texture));
                 }
                 None => {}

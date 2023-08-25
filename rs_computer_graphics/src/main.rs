@@ -30,6 +30,7 @@ use rs_computer_graphics::{
     virtual_texture::{
         block_image::BlockImage,
         tile_index::{TileIndex, TileOffset},
+        virtual_texture_async_loader::VirtualTextureAsyncLoader,
         virtual_texture_configuration::VirtualTextureConfiguration,
         virtual_texture_system::VirtualTextureSystem,
     },
@@ -343,9 +344,11 @@ fn main() {
         wgpu::TextureFormat::Rgba8Unorm,
     );
 
-    let mut block_image = BlockImage::new(&rs_computer_graphics::util::get_resource_path(
-        "Remote/Untitled.png",
-    ));
+    let mut virtual_texture_cache = VirtualTextureAsyncLoader::new();
+    virtual_texture_cache.push(
+        &rs_computer_graphics::util::get_resource_path("Remote/Untitled.png"),
+        "Untitled",
+    );
 
     let virtual_texture_mesh_pipeline = VirtualTextureMeshPipeline::new(
         &wgpu_context.device,
@@ -457,7 +460,7 @@ fn main() {
                                 mipmap_level: mipmap,
                             };
                             if let Some(cache_texture) =
-                                block_image.get_texture(device, queue, page)
+                                virtual_texture_cache.get_texture(device, queue, "Untitled", &page)
                             {
                                 if !uploaded_tile_index.contains_key(&page) {
                                     virtual_texture_system.upload_page_texture(
