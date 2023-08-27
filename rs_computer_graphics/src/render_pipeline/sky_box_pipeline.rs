@@ -23,6 +23,8 @@ pub struct SkyBoxPipeline {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     index_count: u32,
+    sampler: Sampler,
+    sampler_bind_group: BindGroup,
 }
 
 impl SkyBoxPipeline {
@@ -128,6 +130,17 @@ impl SkyBoxPipeline {
             crate::util::create_gpu_vertex_buffer_from(device, &primitive_data.vertices, None);
         let index_buffer =
             crate::util::create_gpu_index_buffer_from(device, &primitive_data.indices, None);
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+        let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &sampler_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            }],
+            label: None,
+        });
+
         SkyBoxPipeline {
             render_pipeline,
             sampler_bind_group_layout,
@@ -141,6 +154,8 @@ impl SkyBoxPipeline {
             vertex_buffer,
             index_buffer,
             index_count: primitive_data.indices.len() as u32,
+            sampler,
+            sampler_bind_group,
         }
     }
 
@@ -171,17 +186,6 @@ impl SkyBoxPipeline {
                 mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
-            });
-            let mut sampler_description = wgpu::SamplerDescriptor::default();
-            // sampler_description.compare = Some(CompareFunction::LessEqual);
-            let sampler = device.create_sampler(&sampler_description);
-            let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &self.sampler_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                }],
-                label: None,
             });
 
             let textures_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -234,7 +238,7 @@ impl SkyBoxPipeline {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &uniform_bind_group, &[]);
             render_pass.set_bind_group(1, &textures_bind_group, &[]);
-            render_pass.set_bind_group(2, &sampler_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.sampler_bind_group, &[]);
 
             let vertex_buffer = &self.vertex_buffer;
             let index_buffer = &self.index_buffer;

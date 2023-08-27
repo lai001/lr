@@ -1,25 +1,27 @@
-// @group(1)
-// @binding(0)
-// var<storage, read_write> query: array<vec4<u32>>;
+struct Element {
+    virtual_index_x: i32,
+    virtual_index_y: i32,
+    physical_offset_x: i32,
+    physical_offset_y: i32,
+    physical_array_index: i32,
+    virtual_mimap: i32,
+};
+
+@group(1)
+@binding(0)
+var<storage, read> query: array<Element>;
 
 @group(0)
 @binding(0)
-var feed_back_texture: texture_storage_2d<rgba16uint, read>;
-
-@group(0)
-@binding(1)
-var page_table: texture_storage_2d<rgba8uint, write>;
+var page_table: texture_storage_2d_array<rgba16uint, write>;
 
 @compute
-@workgroup_size(16, 16, 1)
+@workgroup_size(1, 1, 1)
 fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    // var length = arrayLength(&query);
-
-    var data = textureLoad(feed_back_texture, global_id.xy);
-    if data.w == u32(1) {
-        let x = data.x;
-        let y = data.y;
-        let mipmap_level = data.z;
-        textureStore(page_table, data.xy, vec4<u32>(x, y, mipmap_level, u32(0)));
+    var length = arrayLength(&query);
+    for (var i: u32 = u32(0); i < length ; i++) {
+        var element = query[i];
+        var value: vec4<u32> = vec4<u32>(u32(element.physical_offset_x), u32(element.physical_offset_y), u32(element.physical_array_index), u32(0));
+        textureStore(page_table, vec2<i32>(element.virtual_index_x, element.virtual_index_y), element.virtual_mimap, value);
     }
 }

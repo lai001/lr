@@ -13,9 +13,94 @@ struct Constants {
     physical_texture_size: u32,
     virtual_texture_size: u32,
     tile_size: u32,
+    mipmap_level_bias: f32,
+    mipmap_level_scale: f32,
+};
+
+struct PhysicalPixelInfo {
+    array_index: u32,
+    tex_coord: vec2<f32>,
+    color: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> constants: Constants;
+
+@group(1) @binding(0) var page_table_texture: texture_2d_array<u32>;
+
+@group(1) @binding(1) var physical_texture: texture_2d_array<f32>;
+
+@group(2) @binding(0) var filterable_sampler: sampler;
+
+fn mipmap_level(uv: vec2<f32>, texture_size: vec2<f32>) -> f32 {
+    var s = dpdx(uv) * texture_size;
+    var t = dpdy(uv) * texture_size;
+    var delta = max(dot(s, s), dot(t, t));
+    return 0.5 * log2(delta);
+}
+
+fn page_size(level: u32) -> u32 {
+    return max(u32(1), constants.tile_size >> level);
+}
+
+fn remap_value_range(
+    value: f32,
+    from_range_lower: f32,
+    from_range_upper: f32,
+    to_range_lower: f32,
+    to_range_upper: f32,
+) -> f32 {
+    return (value - from_range_lower) / (from_range_upper - from_range_lower)
+        * (to_range_upper - to_range_lower)
+        + to_range_lower;
+}
+
+fn get_physical_pixel_info(virtual_tex_coord: vec2<f32>, virtual_page: vec2<u32>, level: i32) -> PhysicalPixelInfo {
+    var indirect = textureLoad(page_table_texture, vec2<i32>(virtual_page), level, 0);
+
+    var sub_tile_size: u32 = page_size(u32(level));
+
+    var physical_tex_coord = vec2<f32>(0.0);
+
+    physical_tex_coord.x = f32(indirect.x) / f32(constants.physical_texture_size);
+    physical_tex_coord.y = f32(indirect.y) / f32(constants.physical_texture_size);
+
+    var offset_x = remap_value_range(virtual_tex_coord.x - f32(virtual_page.x * constants.tile_size), 0.0, f32(constants.tile_size), 0.0, f32(sub_tile_size) / f32(constants.physical_texture_size));
+    var offset_y = remap_value_range(virtual_tex_coord.y - f32(virtual_page.y * constants.tile_size), 0.0, f32(constants.tile_size), 0.0, f32(sub_tile_size) / f32(constants.physical_texture_size));
+
+    physical_tex_coord.x += offset_x;
+    physical_tex_coord.y += offset_y;
+
+    var pixel_info: PhysicalPixelInfo;
+    pixel_info.array_index = indirect.z;
+    pixel_info.tex_coord = physical_tex_coord;
+    pixel_info.color = textureSampleGrad(physical_texture, filterable_sampler, pixel_info.tex_coord, i32(pixel_info.array_index), vec2<f32>(5.0), vec2<f32>(5.0));
+    return pixel_info;
+}
+
+fn physical_texture_mipmap_sample(virtual_tex_coord: vec2<f32>, level: f32) -> vec4<f32> {
+    var virtual_page = vec2<u32>(virtual_tex_coord / f32(constants.tile_size));
+    var p: i32 = max(i32(level) - 1, 0);
+    var m: i32 = i32(level);
+    var n: i32 = i32(level) + 1;
+    var pixel_info_p = get_physical_pixel_info(virtual_tex_coord, virtual_page, p);
+    var pixel_info_m = get_physical_pixel_info(virtual_tex_coord, virtual_page, m);
+    var pixel_info_n = get_physical_pixel_info(virtual_tex_coord, virtual_page,n);
+    var color_0 = mix(pixel_info_m.color, pixel_info_n.color, fract(level));
+    var color_1 = mix(pixel_info_p.color, pixel_info_m.color, fract(level));
+    return (color_0 + color_1) / 2.0;
+}
+
+fn physical_texture_sample(virtual_tex_coord: vec2<f32>, level: f32) -> vec4<f32> {
+    var virtual_page = vec2<u32>(floor(virtual_tex_coord / f32(constants.tile_size)));
+    var pixel_info = get_physical_pixel_info(virtual_tex_coord, virtual_page, i32(level));
+    return pixel_info.color;
+}
+
+fn hsv2rgb(c: vec3<f32>) -> vec3<f32> {
+    var K = vec4<f32>(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    var p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, vec3<f32>(0.0), vec3<f32>(1.0)), c.y);
+}
 
 @vertex 
 fn vs_main(
@@ -37,30 +122,15 @@ fn vs_main(
     return result;
 }
 
-@group(1) @binding(0) var page_table_texture: texture_2d<u32>;
-
-@group(1) @binding(1) var physical_texture: texture_2d<f32>;
-
-@group(2) @binding(0) var filterable_sampler: sampler;
-
 @fragment 
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
-    var page_x = u32(vertex.tex_coord.x / f32(constants.tile_size));
-    var page_y = u32(vertex.tex_coord.y / f32(constants.tile_size));
-    var indirect = textureLoad(page_table_texture, vec2<i32>(i32(page_x), i32(page_y)), 0);
-
-    var tex_coord = vec2<f32>(0.0);
-
-    tex_coord.x = f32(indirect.x) * f32(constants.tile_size) / f32(constants.physical_texture_size);
-    tex_coord.y = f32(indirect.y) * f32(constants.tile_size) / f32(constants.physical_texture_size);
-
-    var offset_x = (vertex.tex_coord.x - f32(page_x * constants.tile_size)) / f32(constants.physical_texture_size);
-    var offset_y = (vertex.tex_coord.y - f32(page_y * constants.tile_size)) / f32(constants.physical_texture_size);
-
-    tex_coord.x += offset_x;
-    tex_coord.y += offset_y;
-
-    var color = textureSample(physical_texture, filterable_sampler, tex_coord).xyz;
-
-    return vec4<f32>(color, 1.0);
+    var virtual_texture_size = vec2<f32>(f32(constants.virtual_texture_size));
+    var bias = constants.mipmap_level_bias;
+    var mip = max(mipmap_level(vertex.tex_coord / virtual_texture_size, virtual_texture_size) * constants.mipmap_level_scale + bias, 0.0);
+    var color = physical_texture_mipmap_sample(vertex.tex_coord, mip);
+    // var debug_color = hsv2rgb(vec3<f32>(mip / 8.0, 1.0, 1.0));
+    // color.r = debug_color.r;
+    // color.g = debug_color.g;
+    // color.b = debug_color.b;
+    return color;
 }

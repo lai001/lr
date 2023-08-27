@@ -34,6 +34,11 @@ pub struct PBRPipeline {
     depth_ops: Option<Operations<f32>>,
     stencil_ops: Option<Operations<u32>>,
     depth_stencil: Option<DepthStencilState>,
+    /**
+     * https://github.com/gfx-rs/wgpu/issues/3350
+     */
+    sampler: Sampler,
+    sampler_bind_group: BindGroup,
 }
 
 impl PBRPipeline {
@@ -207,6 +212,22 @@ impl PBRPipeline {
             multisample: MultisampleState::default(),
             multiview: None,
         });
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+        let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &sampler_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+            label: None,
+        });
+
         PBRPipeline {
             render_pipeline,
             sampler_bind_group_layout,
@@ -218,6 +239,8 @@ impl PBRPipeline {
             }),
             stencil_ops: None,
             depth_stencil,
+            sampler,
+            sampler_bind_group,
         }
     }
 
@@ -290,25 +313,6 @@ impl PBRPipeline {
             let roughness_texture_view = material.get_roughness_texture_view();
             let pre_filter_cube_map_texture_view = material.get_pre_filter_cube_map_texture_view();
             let normal_texture_view = material.get_normal_texture_view();
-
-            let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &self.sampler_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Sampler(
-                            &device.create_sampler(&wgpu::SamplerDescriptor::default()),
-                        ),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(
-                            &device.create_sampler(&wgpu::SamplerDescriptor::default()),
-                        ),
-                    },
-                ],
-                label: None,
-            });
 
             let textures_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.texture_bind_group_layout,
@@ -385,7 +389,7 @@ impl PBRPipeline {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &uniform_bind_group, &[]);
             render_pass.set_bind_group(1, &textures_bind_group, &[]);
-            render_pass.set_bind_group(2, &sampler_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.sampler_bind_group, &[]);
 
             let mesh_buffer = static_mesh.get_mesh_buffer();
             let vertex_buffer = mesh_buffer.get_vertex_buffer();

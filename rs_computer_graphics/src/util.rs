@@ -541,7 +541,28 @@ pub fn create_gpu_uniform_buffer_from<T>(
         &wgpu::util::BufferInitDescriptor {
             label,
             contents: unsafe_uniform_raw_buffer,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+        },
+    );
+    uniform_buf
+}
+
+pub fn create_gpu_uniform_buffer_from_array<T>(
+    device: &wgpu::Device,
+    data: &[T],
+    label: Option<&str>,
+) -> wgpu::Buffer {
+    let unsafe_uniform_raw_buffer: &[u8] = rs_foundation::cast_to_raw_buffer(data);
+    let uniform_buf = wgpu::util::DeviceExt::create_buffer_init(
+        device,
+        &wgpu::util::BufferInitDescriptor {
+            label,
+            contents: unsafe_uniform_raw_buffer,
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
         },
     );
     uniform_buf

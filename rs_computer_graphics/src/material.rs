@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
-use wgpu::{TextureFormat, TextureViewDimension};
-
 use crate::default_textures::DefaultTextures;
+use std::sync::Arc;
+use wgpu::TextureViewDimension;
 
 pub struct Material {
     diffuse_texture: Arc<Option<wgpu::Texture>>,
@@ -79,7 +77,13 @@ impl Material {
 
     pub fn get_physical_texture_view(&self) -> wgpu::TextureView {
         match self.physical_texture.clone().as_ref() {
-            Some(texture) => texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            Some(texture) => {
+                let mut texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+                texture_view_descriptor.label = Some(&"physical_texture_view");
+                texture_view_descriptor.dimension = Some(TextureViewDimension::D2Array);
+                texture_view_descriptor.format = Some(texture.format());
+                texture.create_view(&texture_view_descriptor)
+            }
             None => DefaultTextures::default()
                 .lock()
                 .unwrap()
@@ -96,18 +100,14 @@ impl Material {
     }
 
     pub fn get_page_table_texture_view(&self) -> wgpu::TextureView {
-        let texture_view_descriptor = wgpu::TextureViewDescriptor {
-            label: Some("page table"),
-            format: Some(TextureFormat::Rgba8Uint),
-            dimension: Some(TextureViewDimension::D2),
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: Some(1),
-            base_array_layer: 0,
-            array_layer_count: Some(1),
-        };
         match self.page_table_texture.clone().as_ref() {
-            Some(texture) => texture.create_view(&texture_view_descriptor),
+            Some(texture) => {
+                let mut texture_view_descriptor = wgpu::TextureViewDescriptor::default();
+                texture_view_descriptor.label = Some(&"page_table_texture_view");
+                texture_view_descriptor.dimension = Some(TextureViewDimension::D2Array);
+                texture_view_descriptor.format = Some(texture.format());
+                texture.create_view(&texture_view_descriptor)
+            }
             None => {
                 DefaultTextures::default()
                     .lock()

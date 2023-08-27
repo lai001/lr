@@ -36,6 +36,7 @@ impl WGPUContext {
                 features: {
                     let mut features = wgpu::Features::default();
                     features.insert(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
+                    features.insert(wgpu::Features::CLEAR_TEXTURE);
                     features
                 },
                 limits: wgpu::Limits::default(),

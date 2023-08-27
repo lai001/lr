@@ -1,7 +1,6 @@
 use super::{tile_index::TileIndex, virtual_texture_configuration::VirtualTextureConfiguration};
 use crate::{
     actor::Actor,
-    buffer_dimensions::BufferDimensions,
     compute_pipeline::update_page_table::UpdatePageTableCSPipeline,
     default_textures::DefaultTextures,
     depth_texture::DepthTexture,
@@ -25,8 +24,6 @@ pub struct VirtualTextureSystem {
     page_table_size: u32,
     feed_back_pipeline: FeedBackPipeline,
     feed_back_texture_clean_pipeline: VirtualTextureCleanPipeline,
-    page_table_data: Vec<u8>,
-    page_buffer_dimensions: BufferDimensions,
     virtual_texture_configuration: VirtualTextureConfiguration,
     update_page_table_cs_pipeline: UpdatePageTableCSPipeline,
 }
@@ -60,9 +57,9 @@ impl VirtualTextureSystem {
             size: Extent3d {
                 width: physical_texture_size,
                 height: physical_texture_size,
-                depth_or_array_layers: 1,
+                depth_or_array_layers: virtual_texture_configuration.physical_texture_array_size,
             },
-            mip_level_count: virtual_texture_configuration.get_max_mipmap_level() as u32,
+            mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: physical_texture_color_format,
@@ -78,12 +75,12 @@ impl VirtualTextureSystem {
             size: Extent3d {
                 width: page_table_size,
                 height: page_table_size,
-                depth_or_array_layers: 1,
+                depth_or_array_layers: virtual_texture_configuration.get_max_mipmap_level() as u32,
             },
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8Uint,
+            format: TextureFormat::Rgba16Uint,
             usage: TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_SRC
                 | TextureUsages::COPY_DST
@@ -121,20 +118,13 @@ impl VirtualTextureSystem {
                 bias: DepthBiasState::default(),
             }),
             &feed_back_texture.format(),
+            virtual_texture_configuration,
         );
 
         let feed_back_depth_texture =
             DepthTexture::new(feed_back_texture_width, feed_back_texture_height, device);
         let feed_back_texture_clean_pipeline =
             VirtualTextureCleanPipeline::new(device, &feed_back_texture.format());
-
-        let page_buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
-            page_table_size as usize,
-            page_table_size as usize,
-            4 * std::mem::size_of::<u8>(),
-        );
-        let page_table_data: Vec<u8> =
-            vec![0 as u8; page_buffer_dimensions.get_padded_width() * page_table_size as usize * 4];
 
         let update_page_table_cs_pipeline = UpdatePageTableCSPipeline::new(device);
 
@@ -146,14 +136,14 @@ impl VirtualTextureSystem {
             page_table_size,
             feed_back_pipeline,
             feed_back_texture_clean_pipeline,
-            page_table_data,
-            page_buffer_dimensions,
             virtual_texture_configuration,
             update_page_table_cs_pipeline,
         }
     }
 
     pub fn new_frame(&mut self, device: &Device, queue: &Queue) {
+        self.clear_physical_texture(device, queue);
+        self.clear_page_texture(device, queue);
         let output_texture_view_descriptor = TextureViewDescriptor {
             label: None,
             format: Some(self.feed_back_texture.format()),
@@ -174,7 +164,7 @@ impl VirtualTextureSystem {
             &output_view,
             &depth_view,
             wgpu::Operations {
-                load: wgpu::LoadOp::Load,
+                load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
                 store: true,
             },
             Some(wgpu::Operations {
@@ -313,102 +303,13 @@ impl VirtualTextureSystem {
         }
     }
 
-    pub fn upload_page_table(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        self.update_page_table_cs_pipeline.execute(
-            device,
-            queue,
-            &self.feed_back_texture,
-            self.page_table_texture.as_ref().as_ref().unwrap(),
-        );
-        // let buffer_dimensions = &self.page_buffer_dimensions;
-
-        // let texture_extent = wgpu::Extent3d {
-        //     depth_or_array_layers: 1,
-        //     width: self.page_table_size,
-        //     height: self.page_table_size,
-        // };
-
-        // queue.write_texture(
-        //     self.page_table_texture
-        //         .as_ref()
-        //         .as_ref()
-        //         .unwrap()
-        //         .as_image_copy(),
-        //     crate::util::cast_to_raw_buffer(&self.page_table_data),
-        //     wgpu::ImageDataLayout {
-        //         offset: 0,
-        //         bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
-        //         rows_per_image: None,
-        //     },
-        //     texture_extent,
-        // );
-    }
-
-    pub fn upload_page_image(
+    pub fn upload_physical_page_texture(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        page: (u16, u16),
-        image: &ImageBuffer<Rgba<u8>, Vec<u8>>,
+        texture: &Texture,
+        array_tile: &super::packing::ArrayTile,
     ) {
-        let tile_size = self.virtual_texture_configuration.tile_size;
-        debug_assert_eq!(image.width(), tile_size);
-        debug_assert_eq!(image.height(), tile_size);
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        let buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
-            image.width() as usize,
-            image.height() as usize,
-            4,
-        );
-        let page_texture = crate::util::texture2d_from_rgba_image(device, queue, image);
-
-        encoder.copy_texture_to_texture(
-            ImageCopyTexture {
-                texture: &page_texture,
-                mip_level: 0,
-                origin: Origin3d { x: 0, y: 0, z: 0 },
-                aspect: TextureAspect::All,
-            },
-            ImageCopyTexture {
-                texture: self.physical_texture.as_ref().as_ref().unwrap(),
-                mip_level: 0,
-                origin: Origin3d {
-                    x: page.0 as u32 * tile_size,
-                    y: page.1 as u32 * tile_size,
-                    z: 0,
-                },
-                aspect: TextureAspect::All,
-            },
-            Extent3d {
-                width: buffer_dimensions.get_padded_width() as u32,
-                height: image.height(),
-                depth_or_array_layers: 1,
-            },
-        );
-
-        let command_buffer = encoder.finish();
-        let _ = queue.submit(std::iter::once(command_buffer));
-    }
-
-    pub fn upload_page_texture(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        page: TileIndex,
-        texture: Arc<Texture>,
-    ) {
-        {
-            let size = wgpu::Extent3d {
-                width: self.virtual_texture_configuration.tile_size,
-                height: self.virtual_texture_configuration.tile_size,
-                depth_or_array_layers: 1,
-            };
-            let size = size.mip_level_size(page.mipmap_level as u32, TextureDimension::D2);
-            debug_assert_eq!(size.width, texture.size().width);
-            debug_assert_eq!(size.height, texture.size().width);
-        }
-
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
@@ -421,11 +322,11 @@ impl VirtualTextureSystem {
             },
             ImageCopyTexture {
                 texture: self.physical_texture.as_ref().as_ref().unwrap(),
-                mip_level: page.mipmap_level as u32,
+                mip_level: 0,
                 origin: Origin3d {
-                    x: page.tile_offset.x as u32 * texture.width(),
-                    y: page.tile_offset.y as u32 * texture.height(),
-                    z: 0,
+                    x: array_tile.offset_x,
+                    y: array_tile.offset_y,
+                    z: array_tile.index,
                 },
                 aspect: TextureAspect::All,
             },
@@ -440,11 +341,11 @@ impl VirtualTextureSystem {
         let _ = queue.submit(std::iter::once(command_buffer));
     }
 
-    pub fn get_physical_texture_view(&self, base_mip_level: u32) -> wgpu::TextureView {
+    pub fn get_physical_texture_view(&self) -> wgpu::TextureView {
         match self.physical_texture.clone().as_ref() {
             Some(texture) => {
                 let mut texture_view_descriptor = wgpu::TextureViewDescriptor::default();
-                texture_view_descriptor.base_mip_level = base_mip_level;
+                texture_view_descriptor.dimension = Some(TextureViewDimension::D2);
                 texture.create_view(&texture_view_descriptor)
             }
             None => DefaultTextures::default()
@@ -455,18 +356,20 @@ impl VirtualTextureSystem {
     }
 
     pub fn get_page_table_texture_view(&self) -> wgpu::TextureView {
-        let texture_view_descriptor = wgpu::TextureViewDescriptor {
-            label: Some("page table"),
-            format: Some(TextureFormat::Rgba16Uint),
-            dimension: Some(TextureViewDimension::D2),
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: Some(1),
-            base_array_layer: 0,
-            array_layer_count: Some(1),
-        };
         match self.page_table_texture.clone().as_ref() {
-            Some(texture) => texture.create_view(&texture_view_descriptor),
+            Some(texture) => {
+                let texture_view_descriptor = wgpu::TextureViewDescriptor {
+                    label: Some("VirtualTextureSystem.page_table_texture_view"),
+                    format: Some(TextureFormat::Rgba8Uint),
+                    dimension: Some(TextureViewDimension::D2),
+                    aspect: wgpu::TextureAspect::All,
+                    base_mip_level: 0,
+                    mip_level_count: None,
+                    base_array_layer: 0,
+                    array_layer_count: None,
+                };
+                texture.create_view(&texture_view_descriptor)
+            }
             None => {
                 DefaultTextures::default()
                     .lock()
@@ -479,42 +382,55 @@ impl VirtualTextureSystem {
 
     pub fn update_page_table(
         &mut self,
-        virtual_tile_index: TileIndex,
-        physical_tile_index: TileIndex,
-        debug: u8,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        pack_result: &HashMap<TileIndex, super::packing::ArrayTile>,
     ) {
-        debug_assert!(
-            physical_tile_index.tile_offset.x
-                <= (self.virtual_texture_configuration.physical_texture_size
-                    / self.virtual_texture_configuration.tile_size) as u16
+        self.update_page_table_cs_pipeline.execute(
+            device,
+            queue,
+            self.page_table_texture.as_ref().as_ref().unwrap(),
+            pack_result,
         );
-        debug_assert!(
-            physical_tile_index.tile_offset.y
-                <= (self.virtual_texture_configuration.physical_texture_size
-                    / self.virtual_texture_configuration.tile_size) as u16
-        );
-
-        let buffer_dimensions = &self.page_buffer_dimensions;
-        let chunks = self
-            .page_table_data
-            .chunks_mut(buffer_dimensions.get_padded_width() * 4);
-        let line = chunks
-            .skip(virtual_tile_index.tile_offset.y as usize)
-            .next()
-            .unwrap();
-        let page_data = line
-            .chunks_mut(4)
-            .skip(virtual_tile_index.tile_offset.x as usize)
-            .next()
-            .unwrap();
-        page_data[0] = physical_tile_index.tile_offset.x as u8;
-        page_data[1] = physical_tile_index.tile_offset.y as u8;
-        page_data[2] = physical_tile_index.mipmap_level;
-        page_data[3] = debug;
     }
 
-    pub fn clean_page_table(&mut self, value: u8) {
-        self.page_table_data.fill(value);
+    pub fn clear_physical_texture(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("clear_physical_texture"),
+        });
+
+        encoder.clear_texture(
+            self.physical_texture.as_ref().as_ref().unwrap(),
+            &ImageSubresourceRange {
+                aspect: TextureAspect::All,
+                base_mip_level: 0,
+                mip_level_count: Some(1),
+                base_array_layer: 0,
+                array_layer_count: None,
+            },
+        );
+
+        let command_buffer = encoder.finish();
+        let _ = queue.submit(std::iter::once(command_buffer));
+    }
+
+    pub fn clear_page_texture(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        encoder.clear_texture(
+            self.page_table_texture.as_ref().as_ref().unwrap(),
+            &ImageSubresourceRange {
+                aspect: TextureAspect::All,
+                base_mip_level: 0,
+                mip_level_count: Some(1),
+                base_array_layer: 0,
+                array_layer_count: None,
+            },
+        );
+
+        let command_buffer = encoder.finish();
+        let _ = queue.submit(std::iter::once(command_buffer));
     }
 
     pub fn get_physical_texture(&self) -> Arc<Option<Texture>> {

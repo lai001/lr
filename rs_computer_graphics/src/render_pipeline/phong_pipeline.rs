@@ -23,6 +23,8 @@ pub struct PhongPipeline {
     depth_ops: Option<Operations<f32>>,
     stencil_ops: Option<Operations<u32>>,
     depth_stencil: Option<DepthStencilState>,
+    sampler: Sampler,
+    sampler_bind_group: BindGroup,
 }
 
 impl PhongPipeline {
@@ -136,6 +138,16 @@ impl PhongPipeline {
             multiview: None,
         });
 
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+        let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &sampler_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            }],
+            label: None,
+        });
+
         PhongPipeline {
             render_pipeline,
             sampler_bind_group_layout,
@@ -147,6 +159,8 @@ impl PhongPipeline {
             }),
             stencil_ops: None,
             depth_stencil,
+            sampler,
+            sampler_bind_group,
         }
     }
 
@@ -201,16 +215,6 @@ impl PhongPipeline {
             let diffuse_texture_view = material.get_diffuse_texture_view();
             let specular_texture_view = material.get_specular_texture_view();
 
-            let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-            let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &self.sampler_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                }],
-                label: None,
-            });
-
             let textures_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.texture_bind_group_layout,
                 entries: &[
@@ -258,7 +262,7 @@ impl PhongPipeline {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &uniform_bind_group, &[]);
             render_pass.set_bind_group(1, &textures_bind_group, &[]);
-            render_pass.set_bind_group(2, &sampler_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.sampler_bind_group, &[]);
 
             let mesh_buffer = static_mesh.get_mesh_buffer();
             let vertex_buffer = mesh_buffer.get_vertex_buffer();

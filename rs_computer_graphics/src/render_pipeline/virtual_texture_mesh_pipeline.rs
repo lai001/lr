@@ -8,7 +8,7 @@ use crate::virtual_texture::virtual_texture_configuration::VirtualTextureConfigu
 use crate::{util, VertexBufferLayout};
 use wgpu::*;
 
-#[repr(C)]
+#[repr(align(16), C)]
 #[derive(Clone, Copy, Debug)]
 struct Constants {
     model: glam::Mat4,
@@ -17,6 +17,8 @@ struct Constants {
     physical_texture_size: u32,
     virtual_texture_size: u32,
     tile_size: u32,
+    mipmap_level_bias: f32,
+    mipmap_level_scale: f32,
 }
 
 pub struct VirtualTextureMeshPipeline {
@@ -25,6 +27,8 @@ pub struct VirtualTextureMeshPipeline {
     texture_bind_group_layout: BindGroupLayout,
     uniform_bind_group_layout: BindGroupLayout,
     virtual_texture_configuration: VirtualTextureConfiguration,
+    sampler: Sampler,
+    sampler_bind_group: BindGroup,
 }
 
 impl VirtualTextureMeshPipeline {
@@ -43,7 +47,7 @@ impl VirtualTextureMeshPipeline {
                         visibility: ShaderStages::FRAGMENT,
                         ty: BindingType::Texture {
                             sample_type: TextureSampleType::Uint,
-                            view_dimension: TextureViewDimension::D2,
+                            view_dimension: TextureViewDimension::D2Array,
                             multisampled: false,
                         },
                         count: None,
@@ -53,7 +57,7 @@ impl VirtualTextureMeshPipeline {
                         visibility: ShaderStages::FRAGMENT,
                         ty: BindingType::Texture {
                             sample_type: TextureSampleType::Float { filterable: true },
-                            view_dimension: TextureViewDimension::D2,
+                            view_dimension: TextureViewDimension::D2Array,
                             multisampled: false,
                         },
                         count: None,
@@ -134,12 +138,30 @@ impl VirtualTextureMeshPipeline {
             multiview: None,
         });
 
+        let sampler = device.create_sampler(&{
+            let mut sampler_descriptor = wgpu::SamplerDescriptor::default();
+            // sampler_descriptor.mipmap_filter = wgpu::FilterMode::Linear;
+            // sampler_descriptor.min_filter = wgpu::FilterMode::Linear;
+            // sampler_descriptor.mag_filter = wgpu::FilterMode::Linear;
+            sampler_descriptor
+        });
+        let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &sampler_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            }],
+            label: None,
+        });
+
         VirtualTextureMeshPipeline {
             render_pipeline,
             sampler_bind_group_layout,
             texture_bind_group_layout,
             uniform_bind_group_layout,
             virtual_texture_configuration,
+            sampler,
+            sampler_bind_group,
         }
     }
 
@@ -199,21 +221,6 @@ impl VirtualTextureMeshPipeline {
 
             let page_table_texture_view = material.get_page_table_texture_view();
             let physical_texture_view = material.get_physical_texture_view();
-            let sampler = device.create_sampler(&{
-                let mut sampler_descriptor = wgpu::SamplerDescriptor::default();
-                sampler_descriptor.mipmap_filter = wgpu::FilterMode::Linear;
-                sampler_descriptor.min_filter = wgpu::FilterMode::Linear;
-                sampler_descriptor.mag_filter = wgpu::FilterMode::Linear;
-                sampler_descriptor
-            });
-            let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &self.sampler_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                }],
-                label: None,
-            });
 
             let textures_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.texture_bind_group_layout,
@@ -237,6 +244,8 @@ impl VirtualTextureMeshPipeline {
                 physical_texture_size: self.virtual_texture_configuration.physical_texture_size,
                 virtual_texture_size: self.virtual_texture_configuration.virtual_texture_size,
                 tile_size: self.virtual_texture_configuration.tile_size,
+                mipmap_level_bias: 0.0,
+                mipmap_level_scale: 1.0,
             };
             let uniform_buf = util::create_gpu_uniform_buffer_from(device, &constants, None);
             let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -263,7 +272,7 @@ impl VirtualTextureMeshPipeline {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &uniform_bind_group, &[]);
             render_pass.set_bind_group(1, &textures_bind_group, &[]);
-            render_pass.set_bind_group(2, &sampler_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.sampler_bind_group, &[]);
 
             let mesh_buffer = static_mesh.get_mesh_buffer();
             let vertex_buffer = mesh_buffer.get_vertex_buffer();

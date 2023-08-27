@@ -245,18 +245,6 @@ mod test {
             name: "Constants".to_string(),
             members: vec![
                 WGStructMember {
-                    name: "directional_light".to_string(),
-                    data_type: EDataType::Struct(directional_light),
-                },
-                WGStructMember {
-                    name: "point_light".to_string(),
-                    data_type: EDataType::Struct(point_light),
-                },
-                WGStructMember {
-                    name: "spot_light".to_string(),
-                    data_type: EDataType::Struct(spot_light),
-                },
-                WGStructMember {
                     name: "model".to_string(),
                     data_type: EDataType::Mat4x4f32,
                 },
@@ -269,16 +257,16 @@ mod test {
                     data_type: EDataType::Mat4x4f32,
                 },
                 WGStructMember {
-                    name: "view_position".to_string(),
-                    data_type: EDataType::Vec3f32,
+                    name: "physical_texture_size".to_string(),
+                    data_type: EDataType::Uint32,
                 },
                 WGStructMember {
-                    name: "roughness_factor".to_string(),
-                    data_type: EDataType::Float32,
+                    name: "virtual_texture_size".to_string(),
+                    data_type: EDataType::Uint32,
                 },
                 WGStructMember {
-                    name: "metalness_factor".to_string(),
-                    data_type: EDataType::Float32,
+                    name: "tile_size".to_string(),
+                    data_type: EDataType::Uint32,
                 },
             ],
         };

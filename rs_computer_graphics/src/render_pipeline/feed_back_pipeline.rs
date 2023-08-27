@@ -3,6 +3,7 @@ use crate::brigde_data::mesh_vertex::MeshVertex;
 use crate::camera::Camera;
 use crate::shader::shader_library::ShaderLibrary;
 use crate::static_mesh::StaticMesh;
+use crate::virtual_texture::virtual_texture_configuration::VirtualTextureConfiguration;
 use crate::{util, VertexBufferLayout};
 use wgpu::*;
 
@@ -18,11 +19,13 @@ struct VSConstants {
     feed_back_texture_width: u32,
     feed_back_texture_height: u32,
     mipmap_level_bias: f32,
+    mipmap_level_scale: f32,
 }
 
 pub struct FeedBackPipeline {
     render_pipeline: RenderPipeline,
     uniform_bind_group_layout: BindGroupLayout,
+    virtual_texture_configuration: VirtualTextureConfiguration,
 }
 
 impl FeedBackPipeline {
@@ -30,6 +33,7 @@ impl FeedBackPipeline {
         device: &Device,
         depth_stencil: Option<DepthStencilState>,
         output_texture_format: &wgpu::TextureFormat,
+        virtual_texture_configuration: VirtualTextureConfiguration,
     ) -> FeedBackPipeline {
         let uniform_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -55,7 +59,7 @@ impl FeedBackPipeline {
         let shader = ShaderLibrary::default()
             .lock()
             .unwrap()
-            .get_shader("feed_back.wgsl");
+            .get_shader("virtual_texture_feed_back.wgsl");
         let vertex_buffer_layouts = [VertexBufferLayout!(
             MeshVertex,
             [
@@ -94,6 +98,7 @@ impl FeedBackPipeline {
         FeedBackPipeline {
             render_pipeline,
             uniform_bind_group_layout,
+            virtual_texture_configuration,
         }
     }
 
@@ -151,19 +156,19 @@ impl FeedBackPipeline {
                 stencil_ops,
             };
 
-            let phong_shading_vshconstants = VSConstants {
+            let constants = VSConstants {
                 model: model_matrix.clone(),
                 view: camera.get_view_matrix(),
                 projection: camera.get_projection_matrix(),
-                physical_texture_size: 4096,
-                virtual_texture_size: 512 * 1000,
-                tile_size: 256,
+                physical_texture_size: self.virtual_texture_configuration.physical_texture_size,
+                virtual_texture_size: self.virtual_texture_configuration.virtual_texture_size,
+                tile_size: self.virtual_texture_configuration.tile_size,
                 feed_back_texture_width,
                 feed_back_texture_height,
                 mipmap_level_bias: 0.0,
+                mipmap_level_scale: 1.0,
             };
-            let uniform_buf =
-                util::create_gpu_uniform_buffer_from(device, &phong_shading_vshconstants, None);
+            let uniform_buf = util::create_gpu_uniform_buffer_from(device, &constants, None);
             let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &self.uniform_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {

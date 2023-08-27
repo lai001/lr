@@ -29,6 +29,7 @@ use rs_computer_graphics::{
     util::{change_working_directory, init_log},
     virtual_texture::{
         block_image::BlockImage,
+        packing::{ArrayTile, Packing},
         tile_index::{TileIndex, TileOffset},
         virtual_texture_async_loader::VirtualTextureAsyncLoader,
         virtual_texture_configuration::VirtualTextureConfiguration,
@@ -41,7 +42,12 @@ use rs_media::{
     audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer,
 };
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{borrow::Borrow, collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event::*, VirtualKeyCode},
@@ -141,12 +147,12 @@ fn main() {
 
     let mut wgpu_context = WGPUContext::new(
         &native_window.window,
-        Some(wgpu::PowerPreference::LowPower),
-        None,
-        // Some(wgpu::InstanceDescriptor {
-        //     backends: wgpu::Backends::VULKAN,
-        //     dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
-        // }),
+        Some(wgpu::PowerPreference::HighPerformance),
+        // None,
+        Some(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::DX12,
+            dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+        }),
     );
 
     #[cfg(feature = "rs_dotnet")]
@@ -334,13 +340,15 @@ fn main() {
         physical_texture_size: 4096,
         virtual_texture_size: 512 * 1000,
         tile_size: 256,
+        physical_texture_array_size: 1,
     };
 
+    let div: u32 = 4;
     let mut virtual_texture_system = VirtualTextureSystem::new(
         &wgpu_context.device,
         virtual_texture_configuration,
-        window_size.width / 4,
-        window_size.height / 4,
+        window_size.width / div,
+        window_size.height / div,
         wgpu::TextureFormat::Rgba8Unorm,
     );
 
@@ -365,7 +373,6 @@ fn main() {
 
     let mut under_cursor_actor_index: Option<usize> = None;
     let mut selected_actor_index: Option<usize> = None;
-    let mut uploaded_tile_index: HashMap<TileIndex, bool> = HashMap::new();
 
     native_window.event_loop.run(move |event, _, control_flow| {
         egui_context.handle_event(&event);
@@ -435,47 +442,43 @@ fn main() {
                         &vt_camera,
                     );
 
-                    let pages = virtual_texture_system.read(device, queue);
+                    let mut pages = virtual_texture_system.read(device, queue);
 
-                    let mut pages_map: HashMap<TileOffset, Vec<u8>> = HashMap::new();
-                    for page in pages.iter() {
-                        let key = page.tile_offset;
-                        if pages_map.contains_key(&key) {
-                            pages_map.get_mut(&key).unwrap().push(page.mipmap_level);
-                        } else {
-                            pages_map.insert(key, vec![page.mipmap_level]);
-                        }
-                    }
-                    for (offset, mipmaps) in pages_map.iter() {
-                        let mut hash_map: HashMap<i32, bool> = HashMap::new();
-                        for &mipmap in mipmaps {
-                            for mipmap in (mipmap as i32 - 2)..(mipmap as i32 + 2) {
-                                hash_map.insert(mipmap.max(0), true);
+                    {
+                        let mut extend: HashSet<TileIndex> = HashSet::new();
+                        for page in pages.iter() {
+                            let s = ((page.mipmap_level as i32) - 3).max(0);
+                            let e = (page.mipmap_level as i32) + 3;
+                            for mip_level in s..=e {
+                                extend.insert(TileIndex {
+                                    tile_offset: page.tile_offset,
+                                    mipmap_level: mip_level as u8,
+                                });
                             }
                         }
-
-                        for mipmap in hash_map.keys().map(|x| *x as u8) {
-                            let page = TileIndex {
-                                tile_offset: *offset,
-                                mipmap_level: mipmap,
-                            };
-                            if let Some(cache_texture) =
-                                virtual_texture_cache.get_texture(device, queue, "Untitled", &page)
-                            {
-                                if !uploaded_tile_index.contains_key(&page) {
-                                    virtual_texture_system.upload_page_texture(
-                                        device,
-                                        queue,
-                                        page,
-                                        cache_texture,
-                                    );
-                                    uploaded_tile_index.insert(page, true);
-                                }
-                            };
-                        }
+                        pages = extend.into_iter().collect();
                     }
 
-                    virtual_texture_system.upload_page_table(device, queue);
+                    let packing = Packing {
+                        virtual_texture_configuration,
+                    };
+                    let pack_result = packing.pack(&pages);
+
+                    for (page, array_tile) in pack_result.iter() {
+                        if let Some(cache_texture) =
+                            virtual_texture_cache.get_texture(device, queue, "Untitled", &page)
+                        {
+                            virtual_texture_system.upload_physical_page_texture(
+                                device,
+                                queue,
+                                cache_texture.as_ref(),
+                                array_tile,
+                            );
+                        };
+                    }
+                    if pack_result.is_empty() == false {
+                        virtual_texture_system.update_page_table(device, queue, &pack_result);
+                    }
 
                     for mesh in cube_virtual_texture_actor.get_static_meshs_mut() {
                         let mut material = rs_computer_graphics::material::Material::default();
@@ -504,14 +507,16 @@ fn main() {
                         }),
                     );
 
-                    data_source.draw_image = Some(egui_context.create_image(
-                        device,
-                        &virtual_texture_system.get_physical_texture_view(data_source.mipmap_level),
-                        egui::Vec2 {
-                            x: 256 as f32,
-                            y: 256 as f32,
-                        },
-                    ));
+                    if data_source.draw_image.is_none() {
+                        data_source.draw_image = Some(egui_context.create_image(
+                            device,
+                            &virtual_texture_system.get_physical_texture_view(),
+                            egui::Vec2 {
+                                x: 256 as f32,
+                                y: 256 as f32,
+                            },
+                        ));
+                    }
                 }
 
                 // #[cfg(feature = "rs_dotnet")]
@@ -637,11 +642,11 @@ fn main() {
 
                 {
                     let mut actors = vec![
-                        &mut actor,
+                        // &mut actor,
                         &mut audio_quad_actor,
                         &mut video_quad_actor,
-                        &mut actor_pbr,
-                        &mut cone_actor,
+                        // &mut actor_pbr,
+                        // &mut cone_actor,
                         &mut cube_virtual_texture_actor,
                     ];
                     match selected_actor_index {
@@ -769,11 +774,11 @@ fn main() {
                     if is_cursor_visible {
                         match ActorSelector::select(
                             vec![
-                                &actor,
+                                // &actor,
                                 &audio_quad_actor,
                                 &video_quad_actor,
-                                &actor_pbr,
-                                &cone_actor,
+                                // &actor_pbr,
+                                // &cone_actor,
                                 &cube_virtual_texture_actor,
                             ],
                             position,

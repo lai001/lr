@@ -1,9 +1,25 @@
-use crate::shader::shader_library::ShaderLibrary;
+use crate::{
+    shader::shader_library::ShaderLibrary,
+    virtual_texture::{packing::ArrayTile, tile_index::TileIndex},
+};
+use std::collections::HashMap;
 use wgpu::*;
+
+#[repr(C)]
+#[derive(Debug)]
+struct Element {
+    virtual_index_x: i32,
+    virtual_index_y: i32,
+    physical_offset_x: i32,
+    physical_offset_y: i32,
+    physical_array_index: i32,
+    virtual_mimap: i32,
+}
 
 pub struct UpdatePageTableCSPipeline {
     compute_pipeline: ComputePipeline,
     textures_bind_group_layout: BindGroupLayout,
+    uniform_bind_group_layout: BindGroupLayout,
 }
 
 impl UpdatePageTableCSPipeline {
@@ -14,34 +30,39 @@ impl UpdatePageTableCSPipeline {
             .get_shader("update_page_table.cs.wgsl");
         let textures_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("UpdatePageTableCSPipeline"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: StorageTextureAccess::ReadOnly,
-                            format: TextureFormat::Rgba16Uint,
-                            view_dimension: TextureViewDimension::D2,
-                        },
-                        count: None,
+                label: Some("UpdatePageTableCSPipeline.textures_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: StorageTextureAccess::WriteOnly,
+                        format: TextureFormat::Rgba16Uint,
+                        view_dimension: TextureViewDimension::D2Array,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: StorageTextureAccess::WriteOnly,
-                            format: TextureFormat::Rgba8Uint,
-                            view_dimension: TextureViewDimension::D2,
-                        },
-                        count: None,
+                    count: None,
+                }],
+            });
+
+        let uniform_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("UpdatePageTableCSPipeline.uniform_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(
+                            std::mem::size_of::<Element>() as u64
+                        ),
                     },
-                ],
+                    count: None,
+                }],
             });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&textures_bind_group_layout],
+            bind_group_layouts: &[&textures_bind_group_layout, &uniform_bind_group_layout],
             push_constant_ranges: &[],
         });
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -53,6 +74,7 @@ impl UpdatePageTableCSPipeline {
         UpdatePageTableCSPipeline {
             compute_pipeline,
             textures_bind_group_layout,
+            uniform_bind_group_layout,
         }
     }
 
@@ -60,28 +82,45 @@ impl UpdatePageTableCSPipeline {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        feed_back_texture: &wgpu::Texture,
         page_table: &wgpu::Texture,
+        pack_result: &HashMap<TileIndex, ArrayTile>,
     ) {
-        debug_assert_eq!(feed_back_texture.format(), TextureFormat::Rgba16Uint);
-        debug_assert_eq!(page_table.format(), TextureFormat::Rgba8Uint);
-        let feed_back_texture_view =
-            feed_back_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        debug_assert_eq!(page_table.format(), TextureFormat::Rgba16Uint);
         let page_table_texture_view =
             page_table.create_view(&wgpu::TextureViewDescriptor::default());
+
         let textures_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.textures_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&feed_back_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&page_table_texture_view),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&page_table_texture_view),
+            }],
+        });
+
+        let mut elements: Vec<Element> = Vec::new();
+        for (k, v) in pack_result {
+            let element = Element {
+                physical_array_index: v.index as i32,
+                virtual_mimap: k.mipmap_level as i32,
+                virtual_index_x: k.tile_offset.x as i32,
+                virtual_index_y: k.tile_offset.y as i32,
+                physical_offset_x: v.offset_x as i32,
+                physical_offset_y: v.offset_y as i32,
+            };
+            elements.push(element);
+        }
+
+        let uniform_buf =
+            crate::util::create_gpu_uniform_buffer_from_array(device, &elements, None);
+
+        let constants_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buf.as_entire_binding(),
+            }],
         });
 
         let mut encoder =
@@ -91,11 +130,8 @@ impl UpdatePageTableCSPipeline {
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, &textures_bind_group, &[]);
-            cpass.dispatch_workgroups(
-                feed_back_texture.width() / 16,
-                feed_back_texture.height() / 16,
-                6,
-            );
+            cpass.set_bind_group(1, &constants_bind_group, &[]);
+            cpass.dispatch_workgroups(1, 1, 1);
         }
         let _ = queue.submit(Some(encoder.finish()));
     }
