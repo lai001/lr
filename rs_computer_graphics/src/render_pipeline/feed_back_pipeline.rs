@@ -20,6 +20,7 @@ struct VSConstants {
     feed_back_texture_height: u32,
     mipmap_level_bias: f32,
     mipmap_level_scale: f32,
+    feedback_bias: f32,
 }
 
 pub struct FeedBackPipeline {
@@ -112,6 +113,7 @@ impl FeedBackPipeline {
         camera: &Camera,
         feed_back_texture_width: u32,
         feed_back_texture_height: u32,
+        window_width: u32,
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
     ) {
@@ -127,6 +129,7 @@ impl FeedBackPipeline {
                 camera,
                 feed_back_texture_width,
                 feed_back_texture_height,
+                window_width,
                 depth_ops,
                 stencil_ops,
             )
@@ -144,6 +147,7 @@ impl FeedBackPipeline {
         camera: &Camera,
         feed_back_texture_width: u32,
         feed_back_texture_height: u32,
+        window_width: u32,
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
     ) {
@@ -167,6 +171,7 @@ impl FeedBackPipeline {
                 feed_back_texture_height,
                 mipmap_level_bias: 0.0,
                 mipmap_level_scale: 1.0,
+                feedback_bias: (feed_back_texture_width as f32 / window_width as f32).log2(),
             };
             let uniform_buf = util::create_gpu_uniform_buffer_from(device, &constants, None);
             let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

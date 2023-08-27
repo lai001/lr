@@ -142,8 +142,8 @@ impl VirtualTextureSystem {
     }
 
     pub fn new_frame(&mut self, device: &Device, queue: &Queue) {
-        self.clear_physical_texture(device, queue);
-        self.clear_page_texture(device, queue);
+        // self.clear_physical_texture(device, queue);
+        // self.clear_page_texture(device, queue);
         let output_texture_view_descriptor = TextureViewDescriptor {
             label: None,
             format: Some(self.feed_back_texture.format()),
@@ -164,7 +164,7 @@ impl VirtualTextureSystem {
             &output_view,
             &depth_view,
             wgpu::Operations {
-                load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
+                load: wgpu::LoadOp::Load,
                 store: true,
             },
             Some(wgpu::Operations {
@@ -183,6 +183,7 @@ impl VirtualTextureSystem {
         device: &Device,
         queue: &Queue,
         actor: &Actor,
+        window_width: u32,
         camera: &crate::camera::Camera,
     ) {
         let output_texture_view_descriptor = TextureViewDescriptor {
@@ -208,6 +209,7 @@ impl VirtualTextureSystem {
             camera,
             self.feed_back_texture.size().width,
             self.feed_back_texture.size().height,
+            window_width,
             Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
                 store: true,
@@ -338,7 +340,8 @@ impl VirtualTextureSystem {
         );
 
         let command_buffer = encoder.finish();
-        let _ = queue.submit(std::iter::once(command_buffer));
+        let submission_index = queue.submit(std::iter::once(command_buffer));
+        // device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index));
     }
 
     pub fn get_physical_texture_view(&self) -> wgpu::TextureView {

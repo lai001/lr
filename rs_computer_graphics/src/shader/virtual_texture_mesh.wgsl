@@ -73,7 +73,14 @@ fn get_physical_pixel_info(virtual_tex_coord: vec2<f32>, virtual_page: vec2<u32>
     var pixel_info: PhysicalPixelInfo;
     pixel_info.array_index = indirect.z;
     pixel_info.tex_coord = physical_tex_coord;
-    pixel_info.color = textureSampleGrad(physical_texture, filterable_sampler, pixel_info.tex_coord, i32(pixel_info.array_index), vec2<f32>(5.0), vec2<f32>(5.0));
+    // pixel_info.color = textureSampleGrad(physical_texture, filterable_sampler, pixel_info.tex_coord, i32(pixel_info.array_index), vec2<f32>(5.0), vec2<f32>(5.0));
+    pixel_info.color = textureSample(physical_texture, filterable_sampler, pixel_info.tex_coord, i32(pixel_info.array_index));
+    // if (indirect.w != u32(1)) {
+    //     pixel_info.color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    // }
+    // if (pixel_info.color.r == 0.0) {
+    //     pixel_info.color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    // }
     return pixel_info;
 }
 

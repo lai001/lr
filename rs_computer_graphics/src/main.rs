@@ -150,7 +150,7 @@ fn main() {
         Some(wgpu::PowerPreference::HighPerformance),
         // None,
         Some(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::DX12,
+            backends: wgpu::Backends::VULKAN,
             dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
         }),
     );
@@ -343,7 +343,7 @@ fn main() {
         physical_texture_array_size: 1,
     };
 
-    let div: u32 = 4;
+    let div: u32 = 10;
     let mut virtual_texture_system = VirtualTextureSystem::new(
         &wgpu_context.device,
         virtual_texture_configuration,
@@ -427,19 +427,12 @@ fn main() {
                 {
                     virtual_texture_system.new_frame(device, queue);
 
-                    let mut vt_camera = camera.clone();
-                    let feed_back_texture_size =
-                        virtual_texture_system.get_feed_back_texture_size();
-                    vt_camera.set_window_size(
-                        feed_back_texture_size.width,
-                        feed_back_texture_size.height,
-                    );
-
                     virtual_texture_system.render_actor(
                         device,
                         queue,
                         &cube_virtual_texture_actor,
-                        &vt_camera,
+                        window_size.width,
+                        &camera,
                     );
 
                     let mut pages = virtual_texture_system.read(device, queue);
@@ -474,7 +467,7 @@ fn main() {
                                 cache_texture.as_ref(),
                                 array_tile,
                             );
-                        };
+                        }
                     }
                     if pack_result.is_empty() == false {
                         virtual_texture_system.update_page_table(device, queue, &pack_result);
@@ -772,6 +765,7 @@ fn main() {
                     modifiers: _,
                 } => {
                     if is_cursor_visible {
+                        let window_size = native_window.window.inner_size();
                         match ActorSelector::select(
                             vec![
                                 // &actor,
