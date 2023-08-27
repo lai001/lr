@@ -164,7 +164,8 @@ impl VirtualTextureSystem {
             &output_view,
             &depth_view,
             wgpu::Operations {
-                load: wgpu::LoadOp::Load,
+                // load: wgpu::LoadOp::Load,
+                load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
                 store: true,
             },
             Some(wgpu::Operations {
@@ -178,7 +179,7 @@ impl VirtualTextureSystem {
         );
     }
 
-    pub fn render_actor(
+    pub fn render_actor_feed_back(
         &self,
         device: &Device,
         queue: &Queue,
@@ -338,6 +339,50 @@ impl VirtualTextureSystem {
                 depth_or_array_layers: 1,
             },
         );
+
+        let command_buffer = encoder.finish();
+        let submission_index = queue.submit(std::iter::once(command_buffer));
+        // device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index));
+    }
+
+    pub fn upload_physical_page_textures(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        textures: &Vec<Arc<Texture>>,
+        array_tiles: &Vec<&super::packing::ArrayTile>,
+    ) {
+        if textures.is_empty() || array_tiles.is_empty() {
+            return;
+        }
+        debug_assert_eq!(textures.len(), array_tiles.len());
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        for (array_tile, texture) in std::iter::zip(array_tiles, textures) {
+            encoder.copy_texture_to_texture(
+                ImageCopyTexture {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: Origin3d { x: 0, y: 0, z: 0 },
+                    aspect: TextureAspect::All,
+                },
+                ImageCopyTexture {
+                    texture: self.physical_texture.as_ref().as_ref().unwrap(),
+                    mip_level: 0,
+                    origin: Origin3d {
+                        x: array_tile.offset_x,
+                        y: array_tile.offset_y,
+                        z: array_tile.index,
+                    },
+                    aspect: TextureAspect::All,
+                },
+                Extent3d {
+                    width: texture.width(),
+                    height: texture.height(),
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
 
         let command_buffer = encoder.finish();
         let submission_index = queue.submit(std::iter::once(command_buffer));

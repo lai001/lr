@@ -1,4 +1,4 @@
-use super::tile_index::TileIndex;
+use super::{tile_index::TileIndex, virtual_texture_configuration::VirtualTextureConfiguration};
 use crate::{
     file_manager::FileManager, mipmap_generator::MipmapGenerator, util,
     virtual_texture::tile_index::TileOffset,
@@ -22,10 +22,16 @@ pub struct BlockImage {
     persistent_block_image_infos: Vec<PersistentBlockImageInfo>,
     cache_images: std::collections::HashMap<TileIndex, Arc<image::RgbaImage>>,
     cache_textures: std::collections::HashMap<TileIndex, Arc<wgpu::Texture>>,
+    virtual_texture_configuration: VirtualTextureConfiguration,
+    id: u32,
 }
 
 impl BlockImage {
-    pub fn new(file_path: &str) -> BlockImage {
+    pub fn new(
+        file_path: &str,
+        virtual_texture_configuration: VirtualTextureConfiguration,
+        id: u32,
+    ) -> BlockImage {
         if Self::is_generated(file_path) {
             let persistent_block_image_infos =
                 Self::read_from_file(Self::get_json_file_path(file_path)).unwrap();
@@ -33,14 +39,18 @@ impl BlockImage {
                 persistent_block_image_infos,
                 cache_images: std::collections::HashMap::new(),
                 cache_textures: std::collections::HashMap::new(),
+                virtual_texture_configuration,
+                id,
             }
         } else {
-            let results = Self::make(file_path, 256).unwrap();
+            let results = Self::make(file_path, id, &virtual_texture_configuration).unwrap();
             let persistent_block_image_infos = Self::cache_to_disk(file_path, &results);
             BlockImage {
                 persistent_block_image_infos,
                 cache_images: std::collections::HashMap::new(),
                 cache_textures: std::collections::HashMap::new(),
+                virtual_texture_configuration,
+                id,
             }
         }
     }
@@ -81,8 +91,12 @@ impl BlockImage {
         std::path::Path::new(&path).exists()
     }
 
-    pub fn make(file_path: &str, tile_size: u32) -> Option<Vec<BlockImageMakeResult>> {
-        assert_eq!(tile_size, 256);
+    pub fn make(
+        file_path: &str,
+        id: u32,
+        virtual_texture_configuration: &VirtualTextureConfiguration,
+    ) -> Option<Vec<BlockImageMakeResult>> {
+        let tile_size = virtual_texture_configuration.tile_size;
         match image::open(file_path) {
             Ok(image) => {
                 assert_eq!(image.width() % tile_size, 0);
@@ -91,6 +105,12 @@ impl BlockImage {
                 let mut image = image.into_rgba8();
                 let width_pages = image.width() / tile_size;
                 let height_pages = image.height() / tile_size;
+                let index = id * virtual_texture_configuration.physical_texture_size / tile_size;
+                let mut virtual_offset: glam::UVec2 = glam::UVec2 { x: 0, y: 0 };
+                virtual_offset.x =
+                    index % (virtual_texture_configuration.virtual_texture_size / tile_size);
+                virtual_offset.y =
+                    index / (virtual_texture_configuration.virtual_texture_size / tile_size);
                 for w in 0..width_pages {
                     for h in 0..height_pages {
                         let sub_image =
@@ -109,8 +129,8 @@ impl BlockImage {
                                 image: image.to_rgba8(),
                                 tile_index: TileIndex {
                                     tile_offset: TileOffset {
-                                        x: w as u16,
-                                        y: h as u16,
+                                        x: virtual_offset.x as u16 + w as u16,
+                                        y: virtual_offset.y as u16 + h as u16,
                                     },
                                     mipmap_level: index as u8,
                                 },

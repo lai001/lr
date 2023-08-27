@@ -225,6 +225,13 @@ fn main() {
         &rs_computer_graphics::util::get_resource_path("Remote/CubeVirtualTexture.fbx"),
     );
 
+    let mut sphere_virtual_actor = Actor::load_from_file(
+        &wgpu_context.device,
+        &wgpu_context.queue,
+        &rs_computer_graphics::util::get_resource_path("Remote/SphereVirtual.fbx"),
+    );
+    sphere_virtual_actor.set_world_location(glam::vec3(0.0, 0.0, -3.0));
+
     let mut camera = Camera::default(window_size.width, window_size.height);
 
     let mut last_mouse_position: Option<PhysicalPosition<f64>> = None;
@@ -342,6 +349,7 @@ fn main() {
         tile_size: 256,
         physical_texture_array_size: 1,
     };
+    let packing = Packing::new(virtual_texture_configuration);
 
     let div: u32 = 10;
     let mut virtual_texture_system = VirtualTextureSystem::new(
@@ -352,10 +360,14 @@ fn main() {
         wgpu::TextureFormat::Rgba8Unorm,
     );
 
-    let mut virtual_texture_cache = VirtualTextureAsyncLoader::new();
+    let mut virtual_texture_cache = VirtualTextureAsyncLoader::new(virtual_texture_configuration);
     virtual_texture_cache.push(
         &rs_computer_graphics::util::get_resource_path("Remote/Untitled.png"),
         "Untitled",
+    );
+    virtual_texture_cache.push(
+        &rs_computer_graphics::util::get_resource_path("Remote/pexels-pixmike-413195.png"),
+        "pexels",
     );
 
     let virtual_texture_mesh_pipeline = VirtualTextureMeshPipeline::new(
@@ -427,14 +439,15 @@ fn main() {
                 {
                     virtual_texture_system.new_frame(device, queue);
 
-                    virtual_texture_system.render_actor(
-                        device,
-                        queue,
-                        &cube_virtual_texture_actor,
-                        window_size.width,
-                        &camera,
-                    );
-
+                    for actor in [&cube_virtual_texture_actor, &sphere_virtual_actor] {
+                        virtual_texture_system.render_actor_feed_back(
+                            device,
+                            queue,
+                            actor,
+                            window_size.width,
+                            &camera,
+                        );
+                    }
                     let mut pages = virtual_texture_system.read(device, queue);
 
                     {
@@ -452,53 +465,67 @@ fn main() {
                         pages = extend.into_iter().collect();
                     }
 
-                    let packing = Packing {
-                        virtual_texture_configuration,
-                    };
                     let pack_result = packing.pack(&pages);
+
+                    let mut batch_textures: Vec<Arc<wgpu::Texture>> = vec![];
+                    let mut batch_array_tiles: Vec<&ArrayTile> = vec![];
 
                     for (page, array_tile) in pack_result.iter() {
                         if let Some(cache_texture) =
                             virtual_texture_cache.get_texture(device, queue, "Untitled", &page)
                         {
-                            virtual_texture_system.upload_physical_page_texture(
-                                device,
-                                queue,
-                                cache_texture.as_ref(),
-                                array_tile,
-                            );
+                            batch_textures.push(cache_texture);
+                            batch_array_tiles.push(array_tile);
+                        }
+                        if let Some(cache_texture) =
+                            virtual_texture_cache.get_texture(device, queue, "pexels", &page)
+                        {
+                            batch_textures.push(cache_texture);
+                            batch_array_tiles.push(array_tile);
                         }
                     }
+                    virtual_texture_system.upload_physical_page_textures(
+                        device,
+                        queue,
+                        &batch_textures,
+                        &batch_array_tiles,
+                    );
+
                     if pack_result.is_empty() == false {
                         virtual_texture_system.update_page_table(device, queue, &pack_result);
                     }
 
-                    for mesh in cube_virtual_texture_actor.get_static_meshs_mut() {
-                        let mut material = rs_computer_graphics::material::Material::default();
-                        material.set_page_table_texture(
-                            virtual_texture_system.get_page_table_texture(),
-                        );
-                        material
-                            .set_physical_texture(virtual_texture_system.get_physical_texture());
-                        mesh.set_material_type(EMaterialType::Phong(material))
+                    for actor in [&mut cube_virtual_texture_actor, &mut sphere_virtual_actor] {
+                        for mesh in actor.get_static_meshs_mut() {
+                            let mut material = rs_computer_graphics::material::Material::default();
+                            material.set_page_table_texture(
+                                virtual_texture_system.get_page_table_texture(),
+                            );
+                            material.set_physical_texture(
+                                virtual_texture_system.get_physical_texture(),
+                            );
+                            mesh.set_material_type(EMaterialType::Phong(material))
+                        }
                     }
 
-                    virtual_texture_mesh_pipeline.render_actor(
-                        device,
-                        queue,
-                        &surface_texture_view,
-                        &wgpu_context.get_depth_texture_view(),
-                        &cube_virtual_texture_actor,
-                        &camera,
-                        Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: true,
-                        }),
-                        Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0),
-                            store: true,
-                        }),
-                    );
+                    for actor in [&mut cube_virtual_texture_actor, &mut sphere_virtual_actor] {
+                        virtual_texture_mesh_pipeline.render_actor(
+                            device,
+                            queue,
+                            &surface_texture_view,
+                            &wgpu_context.get_depth_texture_view(),
+                            actor,
+                            &camera,
+                            Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: true,
+                            }),
+                            Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: true,
+                            }),
+                        );
+                    }
 
                     if data_source.draw_image.is_none() {
                         data_source.draw_image = Some(egui_context.create_image(

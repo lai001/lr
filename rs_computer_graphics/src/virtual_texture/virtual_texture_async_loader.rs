@@ -1,4 +1,7 @@
-use super::{block_image::BlockImage, tile_index::TileIndex};
+use super::{
+    block_image::BlockImage, tile_index::TileIndex,
+    virtual_texture_configuration::VirtualTextureConfiguration,
+};
 use crate::{thread_pool::ThreadPool, util::texture2d_from_rgba_image};
 use std::{
     collections::HashMap,
@@ -27,7 +30,9 @@ pub struct VirtualTextureAsyncLoader {
 }
 
 impl VirtualTextureAsyncLoader {
-    pub fn new() -> VirtualTextureAsyncLoader {
+    pub fn new(
+        virtual_texture_configuration: VirtualTextureConfiguration,
+    ) -> VirtualTextureAsyncLoader {
         let (video_sender, video_receiver) = std::sync::mpsc::channel();
         let (user_sender, user_receiver) = std::sync::mpsc::channel();
 
@@ -46,7 +51,7 @@ impl VirtualTextureAsyncLoader {
                 let sender = video_sender_clone;
                 let receiver = user_receiver;
                 let mut block_images: HashMap<String, BlockImage> = HashMap::new();
-
+                let mut id: u32 = 0;
                 loop {
                     match receiver.recv() {
                         Ok(ref message) => {
@@ -54,8 +59,10 @@ impl VirtualTextureAsyncLoader {
                                 (message.key.as_ref(), message.path.as_ref())
                             {
                                 if block_images.contains_key(key) == false {
-                                    let block_image = BlockImage::new(&path);
+                                    let block_image =
+                                        BlockImage::new(&path, virtual_texture_configuration, id);
                                     block_images.insert(key.to_string(), block_image);
+                                    id += 1;
                                 }
                             } else if let (Some(key), Some(tile_index)) =
                                 (message.key.as_ref(), message.tile_index.as_ref())

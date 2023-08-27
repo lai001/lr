@@ -50,10 +50,30 @@ impl ArrayTile {
 }
 
 pub struct Packing {
-    pub virtual_texture_configuration: VirtualTextureConfiguration,
+    virtual_texture_configuration: VirtualTextureConfiguration,
+    all: Vec<ArrayTile>,
 }
 
 impl Packing {
+    pub fn new(virtual_texture_configuration: VirtualTextureConfiguration) -> Packing {
+        let all: Vec<ArrayTile> = (0..virtual_texture_configuration.physical_texture_array_size)
+            .flat_map(|index| {
+                let t = ArrayTile {
+                    index,
+                    page_size: virtual_texture_configuration.physical_texture_size,
+                    offset_x: 0,
+                    offset_y: 0,
+                };
+                let result = t.split(virtual_texture_configuration.tile_size);
+                result
+            })
+            .collect();
+        Packing {
+            virtual_texture_configuration,
+            all,
+        }
+    }
+
     fn page_size(size: u32, level: u8) -> u32 {
         u32::max(1, size >> level)
     }
@@ -75,22 +95,7 @@ impl Packing {
         let mut mip_levels: Vec<u8> = tile_index_map.keys().map(|x| *x).collect();
         mip_levels.sort();
 
-        let all: Vec<ArrayTile> = (0..self
-            .virtual_texture_configuration
-            .physical_texture_array_size)
-            .flat_map(|index| {
-                let t = ArrayTile {
-                    index,
-                    page_size: self.virtual_texture_configuration.physical_texture_size,
-                    offset_x: 0,
-                    offset_y: 0,
-                };
-                let result = t.split(self.virtual_texture_configuration.tile_size);
-                result
-            })
-            .collect();
-
-        let mut all = VecDeque::from(all);
+        let mut all = VecDeque::from(self.all.clone());
 
         let mut final_result: HashMap<TileIndex, ArrayTile> = HashMap::new();
 
