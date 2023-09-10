@@ -543,7 +543,8 @@ pub fn create_gpu_uniform_buffer_from<T>(
             contents: unsafe_uniform_raw_buffer,
             usage: wgpu::BufferUsages::UNIFORM
                 | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::STORAGE,
+                | wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::MAP_READ,
         },
     );
     uniform_buf
@@ -562,7 +563,8 @@ pub fn create_gpu_uniform_buffer_from_array<T>(
             contents: unsafe_uniform_raw_buffer,
             usage: wgpu::BufferUsages::UNIFORM
                 | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::STORAGE,
+                | wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::MAP_READ,
         },
     );
     uniform_buf

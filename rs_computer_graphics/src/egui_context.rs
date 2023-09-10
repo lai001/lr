@@ -14,6 +14,7 @@ pub struct EGUIContext {
     current_frame_start_time: Instant,
     render_ticks: usize,
     fps: u64,
+    current_fps: f32,
 }
 
 pub struct DataSource {
@@ -30,6 +31,13 @@ pub struct DataSource {
     pub seek_time: f32,
     pub is_seek: bool,
     pub mipmap_level: u32,
+    pub is_show_pannel: bool,
+    pub is_show_texture: bool,
+    pub is_show_gizmo_settings: bool,
+    pub is_show_property: bool,
+    pub gizmo: FGizmo,
+    pub camera: crate::camera::Camera,
+    pub model_matrix: Option<glam::Mat4>,
 }
 
 pub struct DrawImage {
@@ -61,6 +69,7 @@ impl EGUIContext {
             render_ticks: 0,
             current_frame_start_time: Instant::now(),
             fps: 60,
+            current_fps: 0.0,
         }
     }
 
@@ -69,7 +78,10 @@ impl EGUIContext {
     }
 
     pub fn tick(&mut self) {
-        self.current_frame_start_time = Instant::now();
+        let now = Instant::now();
+        let duration = now - self.current_frame_start_time;
+        self.current_fps = 1.0 / duration.as_secs_f32();
+        self.current_frame_start_time = now;
         self.render_ticks += 1;
         self.platform
             .update_time(self.start_time.elapsed().as_secs_f64());
@@ -93,87 +105,124 @@ impl EGUIContext {
 
     fn main_ui(&mut self, data_source: &mut DataSource) {
         let context = &self.platform.context();
-
         // self.demo_app.ui(context);
-        egui::Window::new("Pannel").show(context, |ui| {
-            let response = ui.button("Capture screen");
-            if response.clicked() {
-                data_source.is_captrue_enable = true;
-            }
-            if ui.button("Save frame buffer").clicked() {
-                data_source.is_save_frame_buffer = true;
-            }
-            ui.label(format!("Player time: {:.2}", data_source.player_time));
-            data_source.is_seek = ui
-                .add(
-                    egui::DragValue::new(&mut data_source.seek_time)
-                        .speed(0.1)
-                        .clamp_range(0.0..=60.0 * 5.0),
-                )
-                .changed();
-            egui::color_picker::color_edit_button_srgba(
-                ui,
-                &mut data_source.frame_buffer_color,
-                Alpha::Opaque,
-            );
-            ui.horizontal(|ui| {
-                ui.label("fps: ");
-                ui.add(egui::DragValue::new(&mut data_source.target_fps).clamp_range(1..=60));
+
+        egui::TopBottomPanel::top("menu_bar").show(context, |ui| {
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("Window", |ui| {
+                    ui.set_min_width(220.0);
+                    ui.style_mut().wrap = Some(false);
+                    if ui.add(egui::Button::new("Pannel")).clicked() {
+                        data_source.is_show_pannel = !data_source.is_show_pannel;
+                        ui.close_menu();
+                    }
+                    if ui.add(egui::Button::new("Texture")).clicked() {
+                        data_source.is_show_texture = !data_source.is_show_texture;
+                        ui.close_menu();
+                    }
+                    if ui.add(egui::Button::new("Gizmo Settings")).clicked() {
+                        data_source.is_show_gizmo_settings = !data_source.is_show_gizmo_settings;
+                        ui.close_menu();
+                    }
+                    if ui.add(egui::Button::new("Property")).clicked() {
+                        data_source.is_show_property = !data_source.is_show_property;
+                        ui.close_menu();
+                    }
+                });
             });
         });
 
-        egui::Window::new("Physical Texture")
-            // .vscroll(false)
-            // .resizable(true)
-            // .default_size([250.0, 150.0])
-            .show(context, |ui| {
-                egui::ComboBox::from_label("Mipmap")
-                    .selected_text(format!("{:?}", data_source.mipmap_level))
-                    .show_ui(ui, |ui| {
-                        ui.style_mut().wrap = Some(false);
-                        ui.set_min_width(60.0);
-                        ui.selectable_value(&mut data_source.mipmap_level, 0, "0");
-                        ui.selectable_value(&mut data_source.mipmap_level, 1, "1");
-                        ui.selectable_value(&mut data_source.mipmap_level, 2, "2");
-                        ui.selectable_value(&mut data_source.mipmap_level, 3, "3");
-                        ui.selectable_value(&mut data_source.mipmap_level, 4, "4");
-                        ui.selectable_value(&mut data_source.mipmap_level, 5, "5");
-                        ui.selectable_value(&mut data_source.mipmap_level, 6, "6");
-                        ui.selectable_value(&mut data_source.mipmap_level, 7, "7");
-                        ui.selectable_value(&mut data_source.mipmap_level, 8, "8");
-                    });
-                if let Some(draw_image) = &data_source.draw_image {
-                    ui.image(draw_image.texture_id, draw_image.size);
-                    // ui.allocate_space(ui.available_size());
+        if data_source.is_show_pannel {
+            egui::Window::new("Pannel").show(context, |ui| {
+                ui.label(format!("fps: {:.2}", self.current_fps));
+                let response = ui.button("Capture screen");
+                if response.clicked() {
+                    data_source.is_captrue_enable = true;
                 }
+                if ui.button("Save frame buffer").clicked() {
+                    data_source.is_save_frame_buffer = true;
+                }
+                ui.label(format!("Player time: {:.2}", data_source.player_time));
+                data_source.is_seek = ui
+                    .add(
+                        egui::DragValue::new(&mut data_source.seek_time)
+                            .speed(0.1)
+                            .clamp_range(0.0..=60.0 * 5.0),
+                    )
+                    .changed();
+                egui::color_picker::color_edit_button_srgba(
+                    ui,
+                    &mut data_source.frame_buffer_color,
+                    Alpha::Opaque,
+                );
+                ui.horizontal(|ui| {
+                    ui.label("fps: ");
+                    ui.add(egui::DragValue::new(&mut data_source.target_fps).clamp_range(1..=60));
+                });
             });
+        }
 
-        egui::Window::new("Property").show(context, |ui| {
-            ui.add(
-                egui::DragValue::new(&mut data_source.roughness_factor)
-                    .speed(0.01)
-                    .clamp_range(0.0..=1.0)
-                    .prefix("roughness_factor: "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut data_source.metalness_factor)
-                    .speed(0.01)
-                    .clamp_range(0.0..=1.0)
-                    .prefix("metalness_factor: "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut data_source.motion_speed)
-                    .speed(0.01)
-                    .clamp_range(0.0..=1.0)
-                    .prefix("motion_speed: "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut data_source.movement_speed)
-                    .speed(0.01)
-                    .clamp_range(0.0..=1.0)
-                    .prefix("movement_speed: "),
-            );
-        });
+        if data_source.is_show_texture {
+            egui::Window::new("Physical Texture")
+                // .vscroll(false)
+                // .resizable(true)
+                // .default_size([250.0, 150.0])
+                .show(context, |ui| {
+                    if let Some(draw_image) = &data_source.draw_image {
+                        ui.image(draw_image.texture_id, draw_image.size);
+                        // ui.allocate_space(ui.available_size());
+                    }
+                });
+        }
+
+        if data_source.is_show_property {
+            egui::Window::new("Property").show(context, |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut data_source.roughness_factor)
+                        .speed(0.01)
+                        .clamp_range(0.0..=1.0)
+                        .prefix("roughness_factor: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut data_source.metalness_factor)
+                        .speed(0.01)
+                        .clamp_range(0.0..=1.0)
+                        .prefix("metalness_factor: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut data_source.motion_speed)
+                        .speed(0.01)
+                        .clamp_range(0.0..=1.0)
+                        .prefix("motion_speed: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut data_source.movement_speed)
+                        .speed(0.01)
+                        .clamp_range(0.0..=1.0)
+                        .prefix("movement_speed: "),
+                );
+            });
+        }
+
+        if data_source.is_show_gizmo_settings {
+            self.gizmo_settings(data_source);
+        }
+
+        if let Some(model_matrix) = data_source.model_matrix {
+            egui::Area::new("Gizmo Viewport")
+                .fixed_pos((0.0, 0.0))
+                .show(&self.get_platform_context(), |ui| {
+                    ui.with_layer_id(egui::LayerId::background(), |ui| {
+                        if let Some(model_matrix) =
+                            data_source
+                                .gizmo
+                                .interact(&data_source.camera, ui, &model_matrix)
+                        {
+                            data_source.model_matrix = Some(model_matrix);
+                        }
+                    });
+                });
+        }
     }
 
     fn draw_rotator_control(&mut self, ui: &mut Ui, value: &mut Rotator, label: &str) {
@@ -281,7 +330,8 @@ impl EGUIContext {
         self.platform.context()
     }
 
-    pub fn gizmo_settings(&mut self, gizmo: &mut FGizmo, data_source: &mut DataSource) {
+    pub fn gizmo_settings(&mut self, data_source: &mut DataSource) {
+        let gizmo = &mut data_source.gizmo;
         let gizmo_mode = &mut gizmo.gizmo_mode;
         let gizmo_orientation = &mut gizmo.gizmo_orientation;
         let custom_highlight_color = &mut gizmo.custom_highlight_color;

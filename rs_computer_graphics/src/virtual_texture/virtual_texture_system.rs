@@ -10,7 +10,6 @@ use crate::{
     },
     virtual_texture::tile_index::TileOffset,
 };
-use image::{ImageBuffer, Rgba};
 use rs_foundation::cast_to_type_buffer;
 use std::{collections::HashMap, sync::Arc};
 use wgpu::*;
@@ -26,6 +25,7 @@ pub struct VirtualTextureSystem {
     feed_back_texture_clean_pipeline: VirtualTextureCleanPipeline,
     virtual_texture_configuration: VirtualTextureConfiguration,
     update_page_table_cs_pipeline: UpdatePageTableCSPipeline,
+    read_back_cpu_buffer: Buffer,
 }
 
 impl VirtualTextureSystem {
@@ -128,6 +128,21 @@ impl VirtualTextureSystem {
 
         let update_page_table_cs_pipeline = UpdatePageTableCSPipeline::new(device);
 
+        let read_back_cpu_buffer: Buffer;
+        {
+            let buffer_dimensions = crate::buffer_dimensions::BufferDimensions::new(
+                feed_back_texture.size().width as usize,
+                feed_back_texture.size().height as usize,
+                4 * std::mem::size_of::<u16>(),
+            );
+            read_back_cpu_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: (buffer_dimensions.padded_bytes_per_row * buffer_dimensions.height) as u64,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+
         VirtualTextureSystem {
             physical_texture: Arc::new(Some(physical_texture)),
             page_table_texture: Arc::new(Some(page_table_texture)),
@@ -138,6 +153,7 @@ impl VirtualTextureSystem {
             feed_back_texture_clean_pipeline,
             virtual_texture_configuration,
             update_page_table_cs_pipeline,
+            read_back_cpu_buffer,
         }
     }
 
@@ -230,7 +246,7 @@ impl VirtualTextureSystem {
         }
     }
 
-    pub fn read(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<TileIndex> {
+    pub fn read(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<TileIndex> {
         let texture_size = self.feed_back_texture.size();
 
         let width = texture_size.width;
@@ -243,12 +259,7 @@ impl VirtualTextureSystem {
         );
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: (buffer_dimensions.padded_bytes_per_row * buffer_dimensions.height) as u64,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+
         let texture_extent = wgpu::Extent3d {
             width: buffer_dimensions.width as u32,
             height: buffer_dimensions.height as u32,
@@ -257,7 +268,7 @@ impl VirtualTextureSystem {
         encoder.copy_texture_to_buffer(
             self.feed_back_texture.as_image_copy(),
             wgpu::ImageCopyBuffer {
-                buffer: &output_buffer,
+                buffer: &self.read_back_cpu_buffer,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
                     bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
@@ -268,7 +279,7 @@ impl VirtualTextureSystem {
         );
         let command_buffer = encoder.finish();
         let submission_index = queue.submit(std::iter::once(command_buffer));
-        let buffer_slice = output_buffer.slice(..);
+        let buffer_slice = self.read_back_cpu_buffer.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
         device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index));
@@ -299,7 +310,7 @@ impl VirtualTextureSystem {
             }
             let pages: Vec<TileIndex> = uniq.keys().map(|x| *x).collect();
             drop(padded_buffer);
-            output_buffer.unmap();
+            self.read_back_cpu_buffer.unmap();
             pages
         } else {
             panic!()

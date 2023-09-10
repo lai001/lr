@@ -13,6 +13,7 @@ pub struct PhongShadingVSHConstants {
     model: glam::Mat4,
     view: glam::Mat4,
     projection: glam::Mat4,
+    bans: f32,
 }
 
 pub struct AudioPipeline {
@@ -53,7 +54,7 @@ impl AudioPipeline {
                 label: Some("[AudioPipeline] uniform bind group layout"),
                 entries: &[BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: ShaderStages::VERTEX,
+                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -215,6 +216,7 @@ impl AudioPipeline {
                 model: model_matrix.clone(),
                 view: camera.get_view_matrix(),
                 projection: camera.get_projection_matrix(),
+                bans: 20.0,
             };
             let uniform_buf =
                 util::create_gpu_uniform_buffer_from(device, &phong_shading_vshconstants, None);

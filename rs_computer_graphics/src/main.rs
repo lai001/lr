@@ -12,7 +12,6 @@ use rs_computer_graphics::{
     demo::capture_screen::CaptureScreen,
     egui_context::{self, EGUIContext},
     file_manager::FileManager,
-    frame_buffer::FrameBuffer,
     gizmo::FGizmo,
     material_type::EMaterialType,
     native_window::NativeWindow,
@@ -22,32 +21,28 @@ use rs_computer_graphics::{
         pbr_pipeline::PBRPipeline, phong_pipeline::PhongPipeline, sky_box_pipeline::SkyBoxPipeline,
         virtual_texture_mesh_pipeline::VirtualTextureMeshPipeline,
     },
+    sdf_2d_generator::SDF2DGenerator,
     shader::shader_library::ShaderLibrary,
     static_mesh::StaticMesh,
     thread_pool::ThreadPool,
     user_script_change_monitor::UserScriptChangeMonitor,
     util::{change_working_directory, init_log},
     virtual_texture::{
-        block_image::BlockImage,
         packing::{ArrayTile, Packing},
-        tile_index::{TileIndex, TileOffset},
+        tile_index::TileIndex,
         virtual_texture_async_loader::VirtualTextureAsyncLoader,
         virtual_texture_configuration::VirtualTextureConfiguration,
         virtual_texture_system::VirtualTextureSystem,
     },
     wgpu_context::WGPUContext,
 };
+use rs_foundation::profiler::Profiler;
 use rs_media::{
     audio_format::EAudioSampleType, audio_frame_extractor::AudioFrameExtractor,
     audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer,
 };
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{
-    borrow::Borrow,
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Duration,
-};
+use std::{borrow::Borrow, collections::HashSet, sync::Arc, time::Duration};
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event::*, VirtualKeyCode},
@@ -57,6 +52,18 @@ use winit::{
 fn main() {
     change_working_directory();
     init_log();
+
+    {
+        // let start = std::time::Instant::now();
+        // let file_path = rs_computer_graphics::util::get_resource_path("Remote/abc.png");
+        // let source_image = image::open(&file_path).unwrap().to_rgba8();
+        // let sdf = SDF2DGenerator::create(&source_image);
+        // let sdf = SDF2DGenerator::sdf_vis(&sdf);
+        // let sdf = image::DynamicImage::ImageRgba8(sdf);
+        // let _ = sdf.save("path.png");
+        // let end = std::time::Instant::now();
+        // log::trace!("{:?}", end - start);
+    }
 
     rs_media::init();
     let mut video_frame_player = VideoFramePlayer::new(
@@ -319,8 +326,6 @@ fn main() {
         }
     }
 
-    let mut gizmo = FGizmo::default();
-
     let mut data_source = egui_context::DataSource {
         is_captrue_enable: false,
         is_save_frame_buffer: false,
@@ -335,13 +340,14 @@ fn main() {
         seek_time: 0.0,
         is_seek: false,
         mipmap_level: 0,
+        is_show_pannel: false,
+        is_show_texture: true,
+        is_show_gizmo_settings: false,
+        is_show_property: false,
+        gizmo: FGizmo::default(),
+        camera,
+        model_matrix: None,
     };
-
-    let frmae_buffer = FrameBuffer::new(
-        &wgpu_context.device,
-        winit::dpi::PhysicalSize::<u32>::new(1024, 1024),
-        swapchain_format,
-    );
 
     let virtual_texture_configuration = VirtualTextureConfiguration {
         physical_texture_size: 4096,
@@ -648,6 +654,23 @@ fn main() {
                 //     &camera,
                 // );
 
+                let mut actors = vec![
+                    &mut audio_quad_actor,
+                    &mut video_quad_actor,
+                    &mut cube_virtual_texture_actor,
+                ];
+
+                {
+                    data_source.model_matrix = None;
+                    if let Some(index) = selected_actor_index {
+                        if let Some(actor) = actors.get_mut(index) {
+                            data_source.model_matrix = Some(*actor.get_model_matrix());
+                        }
+                    }
+                }
+
+                data_source.camera = camera;
+
                 egui_context.draw_ui(
                     queue,
                     device,
@@ -658,42 +681,14 @@ fn main() {
 
                 egui_context.set_fps(data_source.target_fps);
                 egui_context.sync_fps(control_flow);
-                egui_context.gizmo_settings(&mut gizmo, &mut data_source);
 
-                {
-                    let mut actors = vec![
-                        // &mut actor,
-                        &mut audio_quad_actor,
-                        &mut video_quad_actor,
-                        // &mut actor_pbr,
-                        // &mut cone_actor,
-                        &mut cube_virtual_texture_actor,
-                    ];
-                    match selected_actor_index {
-                        Some(index) => match actors.get_mut(index) {
-                            Some(actor) => {
-                                egui::Area::new("Gizmo Viewport")
-                                    .fixed_pos((0.0, 0.0))
-                                    .show(&egui_context.get_platform_context(), |ui| {
-                                        ui.with_layer_id(egui::LayerId::background(), |ui| {
-                                            if let Some(model_matrix) = gizmo.interact(
-                                                &camera,
-                                                ui,
-                                                actor.get_model_matrix(),
-                                            ) {
-                                                actor.set_model_matrix(model_matrix);
-                                            }
-                                        });
-                                    });
-                            }
-                            None => {}
-                        },
-                        None => {}
+                if let Some(index) = selected_actor_index {
+                    if let Some(actor) = actors.get_mut(index) {
+                        if let Some(model_matrix) = data_source.model_matrix {
+                            actor.set_model_matrix(model_matrix);
+                        }
                     }
                 }
-
-                // actor.set_world_location(data_source.mesh_location);
-                // actor.set_rotator(data_source.mesh_rotator);
 
                 if data_source.is_captrue_enable {
                     CaptureScreen::capture(
@@ -705,43 +700,6 @@ fn main() {
                         &window_size,
                     );
                     data_source.is_captrue_enable = false;
-                }
-                if data_source.is_save_frame_buffer {
-                    let color = data_source.frame_buffer_color;
-                    let color = wgpu::Color {
-                        r: color.r() as f64 / 255.0,
-                        g: color.g() as f64 / 255.0,
-                        b: color.b() as f64 / 255.0,
-                        a: color.a() as f64 / 255.0,
-                    };
-                    attachment_pipeline.draw(
-                        device,
-                        queue,
-                        &frmae_buffer.get_color_texture_view(),
-                        &frmae_buffer.get_depth_texture_view(),
-                        wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(color),
-                            store: true,
-                        },
-                        Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: true,
-                        }),
-                        Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0),
-                            store: true,
-                        }),
-                    );
-                    if let Some(frame_buffer_image) = frmae_buffer.capture(device, queue) {
-                        ThreadPool::io().lock().unwrap().spawn(move || {
-                            match frame_buffer_image.save(std::format!("./frame_buffer_image.png"))
-                            {
-                                Ok(_) => {}
-                                Err(error) => panic!("{}", error),
-                            }
-                        });
-                    }
-                    data_source.is_save_frame_buffer = false;
                 }
 
                 surface.present();

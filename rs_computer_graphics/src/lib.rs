@@ -35,6 +35,7 @@ pub mod quickjs;
 pub mod render_pipeline;
 pub mod resource_manager;
 pub mod rotator;
+pub mod sdf_2d_generator;
 pub mod shader;
 pub mod static_mesh;
 pub mod texture_loader;

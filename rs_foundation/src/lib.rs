@@ -1,4 +1,5 @@
 pub mod id_generator;
+pub mod profiler;
 
 #[repr(C)]
 #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
