@@ -26,6 +26,7 @@ russimp = { version = "1.0.4", features = ["prebuilt"] }
 tokio = { version = "1.28.1" }
 winit = { version = "0.28.6" }
 wgpu = "0.16.0"
+naga = "0.12.3"
 epi = "0.17"
 egui = "0.21.0"
 egui_wgpu_backend = "0.23.0"
@@ -39,3 +40,6 @@ egui-gizmo = { version = "0.10.0", path = "../.xmake/deps/egui-gizmo" }
 indicatif = "0.17.5"
 plotters = "0.3.3"
 rustfft = "6.1.0"
+meshopt = "0.1.9"
+parry3d = "0.13.5"
+type-layout = "0.2.0"

@@ -21,6 +21,7 @@ pub mod ffi;
 pub mod file_manager;
 pub mod frame_buffer;
 pub mod gizmo;
+pub mod glam_color;
 pub mod light;
 pub mod material;
 pub mod material_type;

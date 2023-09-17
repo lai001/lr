@@ -1,3 +1,4 @@
+use super::reflection::Reflection;
 use std::{
     collections::HashMap,
     io::Read,
@@ -8,6 +9,7 @@ use walkdir::WalkDir;
 
 pub struct ShaderLibrary {
     shader_dic: HashMap<String, Arc<wgpu::ShaderModule>>,
+    reflection_dic: HashMap<String, Arc<Reflection>>,
 }
 
 lazy_static! {
@@ -19,6 +21,7 @@ impl ShaderLibrary {
     pub fn new() -> ShaderLibrary {
         ShaderLibrary {
             shader_dic: HashMap::new(),
+            reflection_dic: HashMap::new(),
         }
     }
 
@@ -28,6 +31,7 @@ impl ShaderLibrary {
 
     pub fn load_shader_from(&mut self, device: &wgpu::Device, search_dir: &str) {
         let mut shader_dic: HashMap<String, Arc<wgpu::ShaderModule>> = HashMap::new();
+        let mut reflection_dic: HashMap<String, Arc<Reflection>> = HashMap::new();
         let mut paths: Vec<String> = vec![];
         for entry in WalkDir::new(search_dir) {
             if let Ok(entry) = entry {
@@ -51,11 +55,16 @@ impl ShaderLibrary {
                         .to_string();
                     let mut contents = String::new();
                     if let Ok(_) = file.read_to_string(&mut contents) {
-                        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                            label: Some(&key),
-                            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(&contents)),
-                        });
-                        shader_dic.insert(key.to_string(), Arc::new(shader));
+                        let shader =
+                            Arc::new(device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                                label: Some(&key),
+                                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(
+                                    &contents,
+                                )),
+                            }));
+                        let reflection = Arc::new(Reflection::new(&path).unwrap());
+                        shader_dic.insert(key.to_string(), shader);
+                        reflection_dic.insert(key.to_string(), reflection);
                         log::trace!("{} shader preload.", path);
                     } else {
                         panic!()
@@ -69,6 +78,9 @@ impl ShaderLibrary {
         for (k, v) in shader_dic {
             self.shader_dic.insert(k, v);
         }
+        for (k, v) in reflection_dic {
+            self.reflection_dic.insert(k, v);
+        }
     }
 
     pub fn get_shader(&self, name: &str) -> Arc<wgpu::ShaderModule> {
@@ -76,6 +88,14 @@ impl ShaderLibrary {
             self.shader_dic
                 .get(name)
                 .expect(&format!("{} shader is not exist.", name)),
+        )
+    }
+
+    pub fn get_shader_reflection(&self, name: &str) -> Arc<Reflection> {
+        Arc::clone(
+            self.reflection_dic
+                .get(name)
+                .expect(&format!("{} shader reflection is not exist.", name)),
         )
     }
 }

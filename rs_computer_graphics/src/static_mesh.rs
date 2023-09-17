@@ -43,6 +43,14 @@ impl Mesh {
         }
         triangles
     }
+
+    pub fn get_vertex_buffer(&self) -> &[MeshVertex] {
+        self.vertex_buffer.as_ref()
+    }
+
+    pub fn get_index_buffer(&self) -> &[u32] {
+        self.index_buffer.as_ref()
+    }
 }
 
 pub struct MeshBuffer {
@@ -128,5 +136,9 @@ impl StaticMesh {
 
     pub fn set_material_type(&mut self, material_type: EMaterialType) {
         self.material_type = material_type;
+    }
+
+    pub fn get_mesh(&self) -> &Mesh {
+        &self.mesh
     }
 }

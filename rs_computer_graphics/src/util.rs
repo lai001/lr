@@ -1,5 +1,15 @@
-use crate::{actor::Actor, camera::Camera, yuv420p_image::YUV420pImage};
+use crate::{
+    actor::Actor,
+    brigde_data::{
+        color_vertex::{ColorVertex, ColorVertexCollection},
+        mesh_vertex::MeshVertex,
+    },
+    camera::Camera,
+    yuv420p_image::YUV420pImage,
+};
 use glam::{Vec3Swizzles, Vec4Swizzles};
+use meshopt::ffi::meshopt_Meshlet;
+use parry3d::bounding_volume::Aabb;
 use rs_foundation::{cast_to_raw_buffer, math_remap_value_range};
 use std::{io::Write, sync::Arc};
 use wgpu::TextureFormat;
@@ -809,6 +819,53 @@ pub fn index_2d_lookup(index: f32, width: f32) -> glam::Vec2 {
     let y = index / width;
     let x = index % width;
     glam::Vec2 { x, y }
+}
+
+pub fn meshlet_to_lines(
+    meshlet: &meshopt_Meshlet,
+    vertex_buffer: &[MeshVertex],
+    color: &glam::Vec4,
+) -> ColorVertexCollection {
+    let mut points: Vec<parry3d::math::Point<f32>> = Vec::new();
+    for vertex_index in meshlet.vertices.iter() {
+        let mesh_vertex = vertex_buffer.get(*vertex_index as usize).unwrap();
+        let point = parry3d::math::Point::<f32>::from_slice(&mesh_vertex.position.to_array());
+        points.push(point);
+    }
+    let aabb = parry3d::bounding_volume::Aabb::from_points(&points);
+    aabb_to_lines(&aabb, color)
+}
+
+pub fn aabbs_to_lines(aabbs: &[Aabb], color: &glam::Vec4) -> ColorVertexCollection {
+    let mut vertex_buffer: Vec<ColorVertex> = Vec::new();
+    let mut index_buffer: Vec<u32> = Vec::new();
+    for aabb in aabbs {
+        let (points, indices) = aabb.to_outline();
+        let mut points = points
+            .iter()
+            .map(|x| {
+                let position = glam::vec3(x.x, x.y, x.z);
+                ColorVertex::new(*color, position)
+            })
+            .collect();
+        let mut indices = indices.iter().flat_map(|x| *x).collect();
+        vertex_buffer.append(&mut points);
+        index_buffer.append(&mut indices);
+    }
+    ColorVertexCollection::new(vertex_buffer, index_buffer)
+}
+
+pub fn aabb_to_lines(aabb: &Aabb, color: &glam::Vec4) -> ColorVertexCollection {
+    let (points, indices) = aabb.to_outline();
+    let vertex_buffer = points
+        .iter()
+        .map(|x| {
+            let position = glam::vec3(x.x, x.y, x.z);
+            ColorVertex::new(*color, position)
+        })
+        .collect();
+    let index_buffer = indices.iter().flat_map(|x| *x).collect();
+    ColorVertexCollection::new(vertex_buffer, index_buffer)
 }
 
 #[cfg(test)]

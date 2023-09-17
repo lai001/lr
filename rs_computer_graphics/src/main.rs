@@ -1,3 +1,4 @@
+use parry3d::partitioning::QbvhDataGenerator;
 #[cfg(feature = "rs_dotnet")]
 use rs_computer_graphics::dotnet_runtime::DotnetRuntime;
 #[cfg(feature = "rs_quickjs")]
@@ -7,26 +8,32 @@ use rs_computer_graphics::{
     actor::Actor,
     actor_selector::ActorSelector,
     bake_info::BakeInfo,
+    brigde_data::color_vertex::{ColorVertex, ColorVertexBuffer},
     camera::{Camera, CameraInputEventHandle, DefaultCameraInputEventHandle},
     default_textures::DefaultTextures,
     demo::capture_screen::CaptureScreen,
     egui_context::{self, EGUIContext},
     file_manager::FileManager,
     gizmo::FGizmo,
+    glam_color,
     material_type::EMaterialType,
     native_window::NativeWindow,
     pbr_material::PBRMaterial,
     render_pipeline::{
-        attachment_pipeline::AttachmentPipeline, audio_pipeline::AudioPipeline,
-        pbr_pipeline::PBRPipeline, phong_pipeline::PhongPipeline, sky_box_pipeline::SkyBoxPipeline,
+        attachment_pipeline::AttachmentPipeline,
+        audio_pipeline::AudioPipeline,
+        base_render_pipeline::{BaseRenderPipeline, VertexBufferType},
+        line_3d_pipeline::Line3DPipeline,
+        pbr_pipeline::PBRPipeline,
+        phong_pipeline::PhongPipeline,
+        sky_box_pipeline::SkyBoxPipeline,
         virtual_texture_mesh_pipeline::VirtualTextureMeshPipeline,
     },
-    sdf_2d_generator::SDF2DGenerator,
     shader::shader_library::ShaderLibrary,
     static_mesh::StaticMesh,
     thread_pool::ThreadPool,
     user_script_change_monitor::UserScriptChangeMonitor,
-    util::{change_working_directory, init_log},
+    util::{change_working_directory, init_log, meshlet_to_lines},
     virtual_texture::{
         packing::{ArrayTile, Packing},
         tile_index::TileIndex,
@@ -36,7 +43,6 @@ use rs_computer_graphics::{
     },
     wgpu_context::WGPUContext,
 };
-use rs_foundation::profiler::Profiler;
 use rs_media::{
     audio_format::EAudioSampleType, audio_frame_extractor::AudioFrameExtractor,
     audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer,
@@ -48,6 +54,22 @@ use winit::{
     event::{ElementState, Event::*, VirtualKeyCode},
     event_loop::ControlFlow,
 };
+
+pub struct MyDataGenerator {
+    pub aabbs: Vec<parry3d::bounding_volume::Aabb>,
+}
+
+impl QbvhDataGenerator<usize> for MyDataGenerator {
+    fn size_hint(&self) -> usize {
+        self.aabbs.len()
+    }
+
+    fn for_each(&mut self, mut f: impl FnMut(usize, parry3d::bounding_volume::Aabb)) {
+        for (index, aabb) in self.aabbs.iter().enumerate() {
+            f(index, *aabb);
+        }
+    }
+}
 
 fn main() {
     change_working_directory();
@@ -238,6 +260,76 @@ fn main() {
         &rs_computer_graphics::util::get_resource_path("Remote/SphereVirtual.fbx"),
     );
     sphere_virtual_actor.set_world_location(glam::vec3(0.0, 0.0, -3.0));
+    let line3d_pipeline = Line3DPipeline::new(&wgpu_context.device, &swapchain_format);
+    let mut line3d_buffers: Vec<ColorVertexBuffer> = Vec::new();
+
+    {
+        let mut my_data_generator = MyDataGenerator { aabbs: Vec::new() };
+        let mut bvh = parry3d::partitioning::Qbvh::<usize>::new();
+        for (_, static_mesh) in sphere_virtual_actor.get_static_meshs().iter().enumerate() {
+            let indices = static_mesh.get_mesh().get_index_buffer();
+            let vertex_buffer = static_mesh.get_mesh().get_vertex_buffer();
+            let meshlets = meshopt::build_meshlets(indices, vertex_buffer.len(), 64, 126);
+
+            for meshlet in meshlets.iter() {
+                line3d_buffers.push(ColorVertexBuffer::from_interleaved(
+                    &wgpu_context.device,
+                    &meshlet_to_lines(meshlet, vertex_buffer, &glam_color::RED),
+                ));
+
+                let mut points: Vec<parry3d::math::Point<f32>> = Vec::new();
+                for vertex_index in meshlet.vertices.iter() {
+                    let mesh_vertex = vertex_buffer.get(*vertex_index as usize).unwrap();
+                    let point =
+                        parry3d::math::Point::<f32>::from_slice(&mesh_vertex.position.to_array());
+                    points.push(point);
+                }
+                let aabb = parry3d::bounding_volume::Aabb::from_points(&points);
+                {
+                    let outline = aabb.to_outline();
+
+                    log::trace!("outline: {:?}, outline.1.len: {}", outline, outline.1.len());
+                }
+                my_data_generator.aabbs.push(aabb);
+            }
+        }
+
+        bvh.clear_and_rebuild(my_data_generator, 0.01);
+
+        // for (current_index, current_node) in bvh.raw_nodes().iter().enumerate() {
+        //     if current_node.parent.index != u32::MAX {
+        //         let parent_node = bvh
+        //             .raw_nodes()
+        //             .get(current_node.parent.index as usize)
+        //             .expect(format!("{}", current_node.parent.index as usize).as_str());
+
+        //         log::trace!("current_index: {}", current_index);
+        //         log::trace!(
+        //             "current_node.parent: {:?}, current_node.children{:?}",
+        //             current_node.parent,
+        //             current_node.children,
+        //         );
+        //         log::trace!("parent_node.children{:?}\n", parent_node.children);
+        //         debug_assert!(parent_node.children.contains(&(current_index as u32)));
+        //     }
+        // }
+
+        let mut max_volume: f32 = 0.0;
+        for (node_index, &leaf_data) in bvh.iter_data() {
+            match bvh.node_aabb(node_index) {
+                Some(aabb) => {
+                    max_volume = max_volume.max(aabb.volume());
+                    // log::trace!(
+                    //     "index: {}, leaf_data: {}, volume: {}",
+                    //     node_index.index,
+                    //     leaf_data,
+                    //     aabb.volume()
+                    // );
+                }
+                None => {}
+            }
+        }
+    }
 
     let mut camera = Camera::default(window_size.width, window_size.height);
 
@@ -653,6 +745,15 @@ fn main() {
                 //     &actor,
                 //     &camera,
                 // );
+
+                line3d_pipeline.render(
+                    device,
+                    queue,
+                    &surface_texture_view,
+                    &wgpu_context.get_depth_texture_view(),
+                    &camera,
+                    &line3d_buffers,
+                );
 
                 let mut actors = vec![
                     &mut audio_quad_actor,

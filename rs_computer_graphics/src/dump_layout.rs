@@ -5,6 +5,7 @@ enum EDataType {
     Float16,
     Vec2int32,
     Vec3f32,
+    Vec4f32,
     Mat4x4f32,
     Struct(WGStruct),
 }
@@ -20,6 +21,7 @@ impl EDataType {
             EDataType::Struct(s) => s.align_of(),
             EDataType::Mat4x4f32 => 16,
             EDataType::Vec3f32 => 16,
+            EDataType::Vec4f32 => 16,
         }
     }
     fn size_of(&self) -> usize {
@@ -32,6 +34,7 @@ impl EDataType {
             EDataType::Struct(s) => s.size_of(),
             EDataType::Mat4x4f32 => 64,
             EDataType::Vec3f32 => 12,
+            EDataType::Vec4f32 => 16,
         }
     }
 }
