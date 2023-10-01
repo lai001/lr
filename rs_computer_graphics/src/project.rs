@@ -4,12 +4,12 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectDescriptionUserScriptField {
     pub path: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectDescriptionDotnetField {
     pub config_path: String,
     pub assembly_path: String,
@@ -17,15 +17,16 @@ pub struct ProjectDescriptionDotnetField {
     pub method_name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectDescriptionFileField {
     pub resource_dir: String,
     pub shader_dir: String,
     pub intermediate_dir: String,
     pub scripts_dir: String,
+    pub gpmetis_program_path: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectDescription {
     paths: ProjectDescriptionFileField,
     dotnet: ProjectDescriptionDotnetField,

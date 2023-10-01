@@ -1,3 +1,8 @@
+use std::{
+    env, io,
+    path::{Path, PathBuf},
+};
+
 pub mod id_generator;
 pub mod profiler;
 
@@ -91,6 +96,16 @@ pub fn next_highest_power_of_two(v: isize) -> isize {
     v |= v >> 16;
     v = v + 1;
     v
+}
+
+pub fn absolute_path(path: impl AsRef<Path>) -> io::Result<PathBuf> {
+    let path = path.as_ref();
+    let absolute_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        env::current_dir()?.join(path)
+    };
+    Ok(absolute_path)
 }
 
 #[cfg(test)]

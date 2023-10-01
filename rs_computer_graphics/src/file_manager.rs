@@ -65,4 +65,10 @@ impl FileManager {
             .intermediate_dir
             .clone()
     }
+
+    pub fn get_project_description(&self) -> ProjectDescription {
+        let project_description = self.project_description.lock().unwrap();
+        let project_description = project_description.clone();
+        project_description
+    }
 }

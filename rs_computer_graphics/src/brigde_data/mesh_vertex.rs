@@ -8,7 +8,7 @@
 // }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct MeshVertex {
     pub vertex_color: glam::Vec4,
     pub position: glam::Vec3,

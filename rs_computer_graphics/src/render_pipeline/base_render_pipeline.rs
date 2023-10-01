@@ -84,7 +84,7 @@ impl BaseRenderPipeline {
         }
     }
 
-    pub fn draw_indexed<T>(
+    pub fn draw<T>(
         &self,
         device: &Device,
         queue: &Queue,
@@ -147,13 +147,19 @@ impl BaseRenderPipeline {
             }
 
             for mesh_buffer in mesh_buffers {
-                let index_buffer = mesh_buffer.get_index_buffer();
-                render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
-                for slot in 0..self.slots {
-                    let vertex_buffer = mesh_buffer.get_vertex_buffer(slot);
-                    render_pass.set_vertex_buffer(slot, vertex_buffer.slice(..));
+                debug_assert_eq!(self.slots as usize, mesh_buffer.get_vertex_buffers().len());
+                for (slot, vertex_buffer) in mesh_buffer.get_vertex_buffers().iter().enumerate() {
+                    render_pass.set_vertex_buffer(slot as u32, vertex_buffer.slice(..));
                 }
-                render_pass.draw_indexed(0..mesh_buffer.get_index_count(), 0, 0..1);
+                if let (Some(index_buffer), Some(index_count)) = (
+                    mesh_buffer.get_index_buffer(),
+                    mesh_buffer.get_index_count(),
+                ) {
+                    render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..index_count, 0, 0..1);
+                } else {
+                    render_pass.draw(0..mesh_buffer.get_vertex_count(), 0..1);
+                }
             }
         }
         queue.submit(Some(encoder.finish()));

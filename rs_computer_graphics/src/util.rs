@@ -95,8 +95,8 @@ pub fn init_log() {
         ))
         .unwrap(),
     )));
-    let log_env =
-        env_logger::Env::default().default_filter_or("rs_computer_graphics,rs_dotnet,rs_media");
+    let log_env = env_logger::Env::default()
+        .default_filter_or("rs_computer_graphics,rs_dotnet,rs_media,rs_metis");
     env_logger::Builder::from_env(log_env)
         .format(move |buf, record| {
             let mut writer = world_file.write().unwrap();
@@ -502,7 +502,7 @@ pub fn textures_from_yuv420p_image(
 
 pub fn create_gpu_vertex_buffer_from<T>(
     device: &wgpu::Device,
-    vertex: &Vec<T>,
+    vertex: &[T],
     label: Option<&str>,
 ) -> wgpu::Buffer {
     let vertex_buf = wgpu::util::DeviceExt::create_buffer_init(
@@ -518,7 +518,7 @@ pub fn create_gpu_vertex_buffer_from<T>(
 
 pub fn create_gpu_index_buffer_from(
     device: &wgpu::Device,
-    index_data: &Vec<u32>,
+    index_data: &[u32],
     label: Option<&str>,
 ) -> wgpu::Buffer {
     let unsafe_index_data_raw_buffer: &[u8] = unsafe {
@@ -822,7 +822,7 @@ pub fn index_2d_lookup(index: f32, width: f32) -> glam::Vec2 {
 }
 
 pub fn meshlet_to_lines(
-    meshlet: &meshopt_Meshlet,
+    meshlet: &meshopt::Meshlet,
     vertex_buffer: &[MeshVertex],
     color: &glam::Vec4,
 ) -> ColorVertexCollection {

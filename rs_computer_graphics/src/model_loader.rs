@@ -152,9 +152,31 @@ impl ModelLoader {
                         }
                     }
 
-                    let normal = imported_mesh.normals.get(*index as usize).unwrap();
-                    let tangent = imported_mesh.tangents.get(*index as usize).unwrap();
-                    let bitangent = imported_mesh.bitangents.get(*index as usize).unwrap();
+                    let normal =
+                        imported_mesh
+                            .normals
+                            .get(*index as usize)
+                            .unwrap_or(&russimp::Vector3D {
+                                x: 0.5,
+                                y: 0.5,
+                                z: 1.0,
+                            });
+                    let tangent =
+                        imported_mesh
+                            .tangents
+                            .get(*index as usize)
+                            .unwrap_or(&russimp::Vector3D {
+                                x: 0.0,
+                                y: 0.0,
+                                z: 0.0,
+                            });
+                    let bitangent = imported_mesh.bitangents.get(*index as usize).unwrap_or(
+                        &russimp::Vector3D {
+                            x: 0.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                    );
 
                     let vertex = MeshVertex {
                         vertex_color: glam::vec4(

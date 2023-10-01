@@ -1,6 +1,7 @@
 rs_dotnet/target
 rs_computer_graphics/target
 rs_quickjs/target
+rs_metis/target
 Cargo.lock
 .xmake
 .vscode

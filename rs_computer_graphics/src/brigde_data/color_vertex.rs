@@ -43,56 +43,92 @@ impl ColorVertexCollection {
 
 pub struct ColorVertexBuffer {
     vertex_buffer: Vec<wgpu::Buffer>,
-    index_buffer: wgpu::Buffer,
-    index_count: u32,
+    index_buffer: Option<wgpu::Buffer>,
+    index_count: Option<u32>,
+    vertex_count: u32,
 }
 
 impl TGpuVertexBuffer for ColorVertexBuffer {
-    fn get_vertex_buffer(&self, slot: u32) -> &wgpu::Buffer {
-        self.vertex_buffer
-            .get(slot as usize)
-            .expect(&format!("invalid slot: {}", slot))
+    fn get_vertex_buffers(&self) -> &[wgpu::Buffer] {
+        &self.vertex_buffer
     }
 
-    fn get_index_buffer(&self) -> &wgpu::Buffer {
-        &self.index_buffer
+    fn get_index_buffer(&self) -> Option<&wgpu::Buffer> {
+        if let Some(index_buffer) = &self.index_buffer {
+            Some(index_buffer)
+        } else {
+            None
+        }
     }
 
-    fn get_index_count(&self) -> u32 {
-        self.index_count
+    fn get_index_count(&self) -> Option<u32> {
+        if let Some(index_count) = self.index_count {
+            Some(index_count)
+        } else {
+            None
+        }
+    }
+
+    fn get_vertex_count(&self) -> u32 {
+        self.vertex_count
     }
 }
 
 impl ColorVertexBuffer {
     pub fn from_interleaved(
         device: &wgpu::Device,
-        line3d_collection: &ColorVertexCollection,
+        vertex_buffer: &[ColorVertex],
     ) -> ColorVertexBuffer {
+        let vertex_count = vertex_buffer.len() as u32;
         let vertex_buffer = create_gpu_vertex_buffer_from(
             device,
-            &line3d_collection.vertex_buffer,
+            &vertex_buffer,
             Some("ColorVertexBuffer.vertex_buffer"),
-        );
-        let index_buffer = create_gpu_index_buffer_from(
-            device,
-            &line3d_collection.index_buffer,
-            Some("ColorVertexBuffer.index_buffer"),
         );
         let buffer = ColorVertexBuffer {
             vertex_buffer: vec![vertex_buffer],
-            index_buffer,
-            index_count: line3d_collection.index_buffer.len() as u32,
+            index_buffer: None,
+            index_count: None,
+            vertex_count,
         };
         buffer
     }
 
-    pub fn from_noninterleaved(
+    pub fn from_interleaved_indexed(
+        device: &wgpu::Device,
+        vertex_buffer: &[ColorVertex],
+        index_buffer: &[u32],
+    ) -> ColorVertexBuffer {
+        let vertex_count = vertex_buffer.len() as u32;
+        let index_count = index_buffer.len() as u32;
+        let vertex_buffer = create_gpu_vertex_buffer_from(
+            device,
+            &vertex_buffer,
+            Some("ColorVertexBuffer.vertex_buffer"),
+        );
+        let index_buffer = create_gpu_index_buffer_from(
+            device,
+            &index_buffer,
+            Some("ColorVertexBuffer.index_buffer"),
+        );
+        let buffer = ColorVertexBuffer {
+            vertex_buffer: vec![vertex_buffer],
+            index_buffer: Some(index_buffer),
+            index_count: Some(index_count),
+            vertex_count,
+        };
+        buffer
+    }
+
+    pub fn from_noninterleaved_indexed(
         device: &wgpu::Device,
         vertex_colors: Vec<glam::Vec4>,
         positions: Vec<glam::Vec3>,
         index_buffer: Vec<u32>,
     ) -> ColorVertexBuffer {
+        debug_assert_eq!(vertex_colors.len(), positions.len());
         let index_count = index_buffer.len() as u32;
+        let vertex_count = vertex_colors.len() as u32;
         let vertex_color_buffer = create_gpu_vertex_buffer_from(
             device,
             &vertex_colors,
@@ -110,8 +146,35 @@ impl ColorVertexBuffer {
         );
         let buffer = ColorVertexBuffer {
             vertex_buffer: vec![vertex_color_buffer, position_buffer],
-            index_buffer,
-            index_count,
+            index_buffer: Some(index_buffer),
+            index_count: Some(index_count),
+            vertex_count,
+        };
+        buffer
+    }
+
+    pub fn from_noninterleaved(
+        device: &wgpu::Device,
+        vertex_colors: &[glam::Vec4],
+        positions: &[glam::Vec3],
+    ) -> ColorVertexBuffer {
+        debug_assert_eq!(vertex_colors.len(), positions.len());
+        let vertex_count = vertex_colors.len() as u32;
+        let vertex_color_buffer = create_gpu_vertex_buffer_from(
+            device,
+            vertex_colors,
+            Some("ColorVertexBuffer.vertex_color_buffer"),
+        );
+        let position_buffer = create_gpu_vertex_buffer_from(
+            device,
+            positions,
+            Some("ColorVertexBuffer.position_buffer"),
+        );
+        let buffer = ColorVertexBuffer {
+            vertex_buffer: vec![vertex_color_buffer, position_buffer],
+            index_buffer: None,
+            index_count: None,
+            vertex_count,
         };
         buffer
     }

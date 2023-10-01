@@ -36,10 +36,12 @@ rs_dotnet = { version = "0.1.0", path = "../rs_dotnet", optional = true, default
 rs_quickjs = { version = "0.1.0", path = "../rs_quickjs", optional = true, default-features = false }
 rs_media = { version = "0.1.0", path = "../rs_media" }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
+rs_metis = { version = "0.1.0", path = "../rs_metis" }
 egui-gizmo = { version = "0.10.0", path = "../.xmake/deps/egui-gizmo" }
+meshopt = { version = "0.1.9", path = "../.xmake/deps/meshopt-rs" }
 indicatif = "0.17.5"
 plotters = "0.3.3"
 rustfft = "6.1.0"
-meshopt = "0.1.9"
 parry3d = "0.13.5"
 type-layout = "0.2.0"
+rand = "0.8.5"

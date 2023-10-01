@@ -43,6 +43,7 @@ pub mod texture_loader;
 pub mod thread_pool;
 pub mod user_script_change_monitor;
 pub mod util;
+pub mod vg;
 pub mod virtual_texture;
 pub mod wgpu_context;
 pub mod yuv420p_image;

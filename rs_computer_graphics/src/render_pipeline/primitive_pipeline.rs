@@ -12,15 +12,21 @@ struct Constants {
     projection: glam::Mat4,
 }
 
-pub struct Line3DPipeline {
+pub struct PrimitivePipeline {
     base_render_pipeline: BaseRenderPipeline,
 }
 
-impl Line3DPipeline {
-    pub fn new(device: &Device, texture_format: &wgpu::TextureFormat) -> Line3DPipeline {
+impl PrimitivePipeline {
+    pub fn new(
+        device: &Device,
+        texture_format: &wgpu::TextureFormat,
+        topology: PrimitiveTopology,
+        polygon_mode: PolygonMode,
+        is_noninterleaved: bool,
+    ) -> PrimitivePipeline {
         let base_render_pipeline = BaseRenderPipeline::new(
             device,
-            "line_3d.wgsl",
+            "primitive.wgsl",
             texture_format,
             Some(wgpu::DepthStencilState {
                 depth_compare: wgpu::CompareFunction::Less,
@@ -32,20 +38,23 @@ impl Line3DPipeline {
             None,
             None,
             Some(PrimitiveState {
-                topology: PrimitiveTopology::LineList,
+                topology,
                 cull_mode: None,
-                polygon_mode: PolygonMode::Line,
+                polygon_mode,
                 ..Default::default()
             }),
-            VertexBufferType::Interleaved(ColorVertex::type_layout()),
-            // VertexBufferType::Noninterleaved,
+            if is_noninterleaved {
+                VertexBufferType::Noninterleaved
+            } else {
+                VertexBufferType::Interleaved(ColorVertex::type_layout())
+            },
         );
-        Line3DPipeline {
+        PrimitivePipeline {
             base_render_pipeline,
         }
     }
 
-    pub fn render(
+    pub fn draw(
         &self,
         device: &Device,
         queue: &Queue,
@@ -63,7 +72,7 @@ impl Line3DPipeline {
             None,
         );
 
-        self.base_render_pipeline.draw_indexed(
+        self.base_render_pipeline.draw(
             device,
             queue,
             vec![vec![wgpu::BindGroupEntry {

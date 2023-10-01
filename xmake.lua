@@ -5,6 +5,8 @@ local rs_project_name = "rs_computer_graphics"
 local csharp_workspace_name = "ExampleApplication"
 local gizmo_dir = deps_dir .. "egui-gizmo"
 local quickjs_dir = deps_dir .. "quickjs"
+local metis_dir = path.absolute(deps_dir .. "METIS")
+local gklib_dir = deps_dir .. "GKlib"
 local ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
 
 option("enable_dotnet")
@@ -17,15 +19,16 @@ option("enable_quickjs")
     set_showmenu(true)
 option_end()
 
-local is_enable_dotnet = get_config("enable_dotnet")
-if is_enable_dotnet == nil then
-    is_enable_dotnet = false
+local function get_config_default(name, default_value) 
+    local cfg_value = get_config(name)
+    if cfg_value == nil then
+        cfg_value = default_value
+    end
+    return cfg_value
 end
 
-local is_enable_quickjs = get_config("enable_quickjs")
-if is_enable_quickjs == nil then
-    is_enable_quickjs = false
-end
+local is_enable_dotnet = get_config_default("enable_dotnet", false)
+local is_enable_quickjs = get_config_default("enable_quickjs", false)
 
 task("code_workspace")
     on_run(function()
@@ -143,6 +146,22 @@ task("download_deps")
             local link = "https://download.samplelib.com/mp3/sample-15s.mp3"
             http.download(link, "Resource/Remote/sample-15s.mp3")
         end
+
+        local meshopt_rs_dir = deps_dir .. "meshopt-rs"
+        if os.exists(meshopt_rs_dir) == false then
+            git.clone("https://github.com/gwihlidal/meshopt-rs.git", { outputdir = meshopt_rs_dir })
+            git.checkout("master", { repodir = meshopt_rs_dir })
+        end
+
+        if os.exists(metis_dir) == false then
+            git.clone("https://github.com/KarypisLab/METIS.git", { outputdir = metis_dir })
+            git.checkout("v5.2.1", { repodir = metis_dir })
+        end
+
+        if os.exists(gklib_dir) == false then
+            git.clone("https://github.com/KarypisLab/GKlib.git", { outputdir = gklib_dir })
+            git.checkout("master", { repodir = gklib_dir })
+        end        
     end)
     set_menu {
         usage = "xmake download_deps",
@@ -156,7 +175,7 @@ task_end()
 task("fmt")
     on_run(function()
         import("lib.detect.find_program")
-        local rs_projects = { "rs_computer_graphics", "rs_dotnet", "rs_media", "rs_quickjs", "rs_foundation" }
+        local rs_projects = { "rs_computer_graphics", "rs_dotnet", "rs_media", "rs_quickjs", "rs_foundation", "rs_metis" }
         local rustfmt_args = { "--edition=2018" }
         for _, project in ipairs(rs_projects) do
             for _, file in ipairs(os.files(project .. "/src/**.rs")) do
@@ -197,6 +216,8 @@ task("build_target")
         local csharp_workspace_path = "$(scriptdir)" .. "/" .. csharp_workspace_name
 
         local function build(rs_build_args, csharp_build_args, mode)
+            os.execv(find_program("xmake"), { "f", "-m", mode })
+            os.execv(find_program("xmake"), { "build", "gpmetis" })
             if is_enable_quickjs then
                 os.cd("$(scriptdir)")
                 if mode == "debug" then
@@ -223,6 +244,7 @@ task("build_target")
                     shader_dir = absolute("rs_computer_graphics/src/shader"),
                     intermediate_dir = "./Intermediate",
                     scripts_dir = absolute("./Scripts"),
+                    gpmetis_program_path = absolute(format("%s/%s/%s/%s/gpmetis.exe", get_config("buildir"), get_config("plat"), get_config("arch"), get_config("mode"))),
                 },
                 dotnet = {
                     config_path = "./ExampleApplication.runtimeconfig.json",
@@ -390,3 +412,81 @@ if is_enable_quickjs then
             add_cflags(format([[-D_GNU_SOURCE -DCONFIG_VERSION="%s" -DCONFIG_BIGNUM]], os.date('%Y-%m-%d %H:%M:%S')))
         end
 end
+
+function gklib_add_defines()
+    add_defines("USE_GKREGEX")
+    add_defines("IDXTYPEWIDTH=32")
+    add_defines("REALTYPEWIDTH=32")
+    if is_plat("windows") then
+        add_defines("__thread=__declspec(thread)")
+        add_defines("MSC")
+        add_defines("WIN32")
+        add_defines("_CRT_SECURE_NO_DEPRECATE")
+    end
+    if is_mode("debug") then
+        add_defines("DEBUG")
+    else
+        add_defines("NDEBUG")
+    end
+end
+
+function create_metis_program(target_name, source_files, source_files2)
+    target(target_name)
+        set_languages("c11")
+        add_rules("mode.debug", "mode.release")
+        for _, file in ipairs(source_files) do
+            add_files(metis_dir .. "/programs/" .. file)
+        end
+        if source_files ~= nil then
+            add_files(source_files2)
+        end
+        add_deps("GKlib")
+        add_deps("metis")
+        gklib_add_defines()
+        add_includedirs(metis_dir .. "/libmetis")
+    target_end()
+end
+
+target("GKlib")
+    set_kind("$(kind)")
+    set_languages("c11")
+    add_rules("mode.debug", "mode.release")
+    add_files(gklib_dir .. "/*.c")
+    add_headerfiles(gklib_dir .. "/*.h")
+    add_includedirs(gklib_dir, { public = true })
+    if is_plat("windows") then 
+        add_headerfiles(gklib_dir .. "/win32/*.h")
+        add_includedirs(gklib_dir .. "/win32", { public = true })
+        add_files(gklib_dir .. "/win32/*.c")
+    end
+    gklib_add_defines()
+
+target("metis")
+    set_kind("$(kind)")
+    set_languages("c11")
+    add_rules("mode.debug", "mode.release")
+    add_files(metis_dir .. "/libmetis/*.c")
+    add_headerfiles(metis_dir .. "/libmetis/*.h")
+    add_includedirs(metis_dir .. "/include", { public = true })  
+    add_deps("GKlib")
+    gklib_add_defines()
+
+target("gpmetis")
+    set_languages("c11")
+    add_rules("mode.debug", "mode.release")
+    local c_files = { "gpmetis.c", "cmdline_gpmetis.c", "io.c", "stat.c" }
+    for _, file in ipairs(c_files) do
+        add_files(metis_dir .. "/programs/" .. file)
+    end
+    add_deps("GKlib")
+    add_deps("metis")
+    gklib_add_defines()
+    add_includedirs(metis_dir .. "/libmetis")  
+
+create_metis_program("gpmetis", { "gpmetis.c", "cmdline_gpmetis.c", "io.c", "stat.c" })
+-- create_metis_program("ndmetis", { "ndmetis.c", "cmdline_ndmetis.c", "io.c", "smbfactor.c" })
+-- create_metis_program("mpmetis", { "mpmetis.c", "cmdline_mpmetis.c", "io.c", "stat.c" })
+-- create_metis_program("m2gmetis", { "m2gmetis.c", "cmdline_m2gmetis.c", "io.c" })
+-- create_metis_program("graphchk", { "graphchk.c", "io.c" })
+-- create_metis_program("cmpfillin", { "cmpfillin.c", "io.c", "smbfactor.c" })
+-- create_metis_program("metis_test", {}, { metis_dir .. "/test/mtest.c" })
