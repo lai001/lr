@@ -48,6 +48,7 @@ impl PrimitivePipeline {
             } else {
                 VertexBufferType::Interleaved(ColorVertex::type_layout())
             },
+            None,
         );
         PrimitivePipeline {
             base_render_pipeline,
@@ -72,13 +73,10 @@ impl PrimitivePipeline {
             None,
         );
 
-        self.base_render_pipeline.draw(
+        self.base_render_pipeline.draw_resources(
             device,
             queue,
-            vec![vec![wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buf.as_entire_binding(),
-            }]],
+            vec![vec![uniform_buf.as_entire_binding()]],
             line3d_buffers,
             None,
             None,

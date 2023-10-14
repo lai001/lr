@@ -1,3 +1,5 @@
+use type_layout::TypeLayout;
+
 // #[repr(C)]
 // #[derive(Clone, Copy, Debug)]
 // pub struct MeshVertex {
@@ -8,7 +10,7 @@
 // }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, TypeLayout)]
 pub struct MeshVertex {
     pub vertex_color: glam::Vec4,
     pub position: glam::Vec3,

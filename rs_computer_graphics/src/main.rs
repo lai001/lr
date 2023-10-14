@@ -1,3 +1,4 @@
+use parry3d::na::coordinates::X;
 #[cfg(feature = "rs_dotnet")]
 use rs_computer_graphics::dotnet_runtime::DotnetRuntime;
 #[cfg(feature = "rs_quickjs")]
@@ -9,6 +10,7 @@ use rs_computer_graphics::{
     bake_info::BakeInfo,
     brigde_data::color_vertex::ColorVertexBuffer,
     camera::{Camera, CameraInputEventHandle, DefaultCameraInputEventHandle},
+    compute_pipeline::rgba32float2rgba8unorm_cs::Rgba32float2rgba8unormCSPipeline,
     default_textures::DefaultTextures,
     demo::capture_screen::CaptureScreen,
     egui_context::{self, EGUIContext},
@@ -336,6 +338,9 @@ fn main() {
         &swapchain_format,
     );
 
+    let rgba32float2rgba8unorm_cs_pipeline =
+        Rgba32float2rgba8unormCSPipeline::new(&wgpu_context.device);
+
     let pbr_pipeline = PBRPipeline::new(
         &wgpu_context.device,
         Some(wgpu::DepthStencilState {
@@ -373,6 +378,14 @@ fn main() {
         },
     );
     baker.bake(&wgpu_context.device, &wgpu_context.queue);
+
+    if let Some(source_texture) = baker.get_brdflut_texture().as_ref() {
+        let converted_texture = rgba32float2rgba8unorm_cs_pipeline.execute(
+            &wgpu_context.device,
+            &wgpu_context.queue,
+            source_texture,
+        );
+    };
 
     {
         let default_textures = DefaultTextures::default();

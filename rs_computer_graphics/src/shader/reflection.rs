@@ -3,6 +3,12 @@ use naga::*;
 use std::collections::HashMap;
 use wgpu::*;
 
+#[derive(Debug, Clone, Copy)]
+enum EPipelineType {
+    Render,
+    Compute,
+}
+
 pub struct VertexBufferLayoutBuilder {
     vertex_attributes: Vec<Vec<VertexAttribute>>,
     vertex_buffer_type: VertexBufferType,
@@ -53,6 +59,7 @@ pub struct Reflection {
     array_stride: u64,
     vs_entry_point: String,
     fs_entry_point: String,
+    cs_entry_point: String,
     bind_group_layout_entrys: Vec<Vec<BindGroupLayoutEntry>>,
 }
 
@@ -61,10 +68,28 @@ impl Reflection {
         let module = Self::get_module_from_path(&shader_path);
         match module {
             Some(module) => {
-                let (vertex_attributes, array_stride) = Self::extract_vertex_attributes(&module);
                 let vs_entry_point = Self::extract_vertex_entry_point_name(&module);
                 let fs_entry_point = Self::extract_fragment_entry_point_name(&module);
-                let bind_group_layout_entrys = Self::extract_bind_group_layout_entrys(&module);
+                let cs_entry_point = Self::extract_compute_entry_point_name(&module);
+                let pipeline_type: EPipelineType;
+
+                if !vs_entry_point.is_empty()
+                    && !fs_entry_point.is_empty()
+                    && cs_entry_point.is_empty()
+                {
+                    pipeline_type = EPipelineType::Render;
+                } else if vs_entry_point.is_empty()
+                    && fs_entry_point.is_empty()
+                    && !cs_entry_point.is_empty()
+                {
+                    pipeline_type = EPipelineType::Compute;
+                } else {
+                    panic!()
+                }
+
+                let (vertex_attributes, array_stride) = Self::extract_vertex_attributes(&module);
+                let bind_group_layout_entrys =
+                    Self::extract_bind_group_layout_entrys(&module, pipeline_type);
 
                 let mut noninterleaved_vertex_attributes = Vec::<Vec<wgpu::VertexAttribute>>::new();
                 for mut vertex_attribute in vertex_attributes.to_vec() {
@@ -75,11 +100,12 @@ impl Reflection {
                 let reflection = Reflection {
                     module,
                     interleaved_vertex_attributes: vertex_attributes,
+                    noninterleaved_vertex_attributes,
                     array_stride,
                     vs_entry_point,
                     fs_entry_point,
+                    cs_entry_point,
                     bind_group_layout_entrys,
-                    noninterleaved_vertex_attributes,
                 };
 
                 Some(reflection)
@@ -143,7 +169,7 @@ impl Reflection {
         }
     }
 
-    pub fn extract_vertex_entry_point_name(module: &naga::Module) -> String {
+    fn extract_vertex_entry_point_name(module: &naga::Module) -> String {
         let mut name = String::new();
         for entry_point in module.entry_points.iter() {
             match entry_point.stage {
@@ -158,7 +184,7 @@ impl Reflection {
         name
     }
 
-    pub fn extract_fragment_entry_point_name(module: &naga::Module) -> String {
+    fn extract_fragment_entry_point_name(module: &naga::Module) -> String {
         let mut name = String::new();
         for entry_point in module.entry_points.iter() {
             match entry_point.stage {
@@ -173,7 +199,22 @@ impl Reflection {
         name
     }
 
-    pub fn extract_vertex_attributes(module: &naga::Module) -> (Vec<wgpu::VertexAttribute>, u64) {
+    fn extract_compute_entry_point_name(module: &naga::Module) -> String {
+        let mut name = String::new();
+        for entry_point in module.entry_points.iter() {
+            match entry_point.stage {
+                ShaderStage::Vertex => {}
+                ShaderStage::Fragment => {}
+                ShaderStage::Compute => {
+                    name = entry_point.name.clone();
+                    break;
+                }
+            }
+        }
+        name
+    }
+
+    fn extract_vertex_attributes(module: &naga::Module) -> (Vec<wgpu::VertexAttribute>, u64) {
         let mut attributes = Vec::new();
         for entry_point in module.entry_points.iter() {
             match entry_point.stage {
@@ -261,8 +302,9 @@ impl Reflection {
         (attributes, array_stride)
     }
 
-    pub fn extract_bind_group_layout_entrys(
+    fn extract_bind_group_layout_entrys(
         module: &naga::Module,
+        pipeline_type: EPipelineType,
     ) -> Vec<Vec<BindGroupLayoutEntry>> {
         let mut bind_group_layout_entrys_map: HashMap<u32, Vec<BindGroupLayoutEntry>> =
             HashMap::new();
@@ -277,7 +319,10 @@ impl Reflection {
                 AddressSpace::Uniform => {
                     let bind_group_layout_entry = BindGroupLayoutEntry {
                         binding: binding.clone().unwrap().binding,
-                        visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                        visibility: match pipeline_type {
+                            EPipelineType::Render => ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                            EPipelineType::Compute => ShaderStages::COMPUTE,
+                        },
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -298,15 +343,41 @@ impl Reflection {
                     }
                 }
                 AddressSpace::Handle => match &arg_type.inner {
-                    TypeInner::Image { dim, .. } => {
+                    TypeInner::Image {
+                        dim,
+                        arrayed,
+                        class,
+                    } => {
+                        let binding_type: BindingType = match class {
+                            ImageClass::Sampled { kind, multi } => BindingType::Texture {
+                                sample_type: match kind {
+                                    ScalarKind::Sint => TextureSampleType::Sint,
+                                    ScalarKind::Uint => TextureSampleType::Uint,
+                                    ScalarKind::Float => {
+                                        TextureSampleType::Float { filterable: true }
+                                    }
+                                    ScalarKind::Bool => todo!(),
+                                },
+                                view_dimension: Self::image_dimension2texture_dimension(*dim),
+                                multisampled: *multi,
+                            },
+                            ImageClass::Depth { multi } => todo!(),
+                            ImageClass::Storage { format, access } => BindingType::StorageTexture {
+                                access: Self::storage_access2storage_texture_access(access),
+                                format: Self::storage_format2texture_format(format),
+                                view_dimension: Self::image_dimension2texture_dimension(*dim),
+                            },
+                        };
+
                         let bind_group_layout_entry = BindGroupLayoutEntry {
                             binding: binding.clone().unwrap().binding,
-                            visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                            ty: BindingType::Texture {
-                                sample_type: TextureSampleType::Float { filterable: true },
-                                view_dimension: Self::image_dimension2texture_dimension(*dim),
-                                multisampled: false,
+                            visibility: match pipeline_type {
+                                EPipelineType::Render => {
+                                    ShaderStages::VERTEX | ShaderStages::FRAGMENT
+                                }
+                                EPipelineType::Compute => ShaderStages::COMPUTE,
                             },
+                            ty: binding_type,
                             count: None,
                         };
 
@@ -332,7 +403,12 @@ impl Reflection {
                         }
                         let bind_group_layout_entry = BindGroupLayoutEntry {
                             binding: binding.clone().unwrap().binding,
-                            visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                            visibility: match pipeline_type {
+                                EPipelineType::Render => {
+                                    ShaderStages::VERTEX | ShaderStages::FRAGMENT
+                                }
+                                EPipelineType::Compute => ShaderStages::COMPUTE,
+                            },
                             ty: BindingType::Sampler(sampler_binding_type),
                             count: None,
                         };
@@ -380,6 +456,59 @@ impl Reflection {
         }
     }
 
+    fn storage_access2storage_texture_access(access: &StorageAccess) -> StorageTextureAccess {
+        if access.contains(StorageAccess::LOAD) && access.contains(StorageAccess::STORE) {
+            StorageTextureAccess::ReadWrite
+        } else if access.contains(StorageAccess::LOAD) {
+            StorageTextureAccess::ReadOnly
+        } else {
+            StorageTextureAccess::WriteOnly
+        }
+    }
+
+    fn storage_format2texture_format(storage_format: &StorageFormat) -> TextureFormat {
+        match storage_format {
+            StorageFormat::R8Unorm => TextureFormat::R8Unorm,
+            StorageFormat::R8Snorm => TextureFormat::R8Snorm,
+            StorageFormat::R8Uint => TextureFormat::R8Uint,
+            StorageFormat::R8Sint => TextureFormat::R8Sint,
+            StorageFormat::R16Uint => TextureFormat::R16Uint,
+            StorageFormat::R16Sint => TextureFormat::R16Sint,
+            StorageFormat::R16Float => TextureFormat::R16Float,
+            StorageFormat::Rg8Unorm => TextureFormat::Rg8Unorm,
+            StorageFormat::Rg8Snorm => TextureFormat::Rg8Snorm,
+            StorageFormat::Rg8Uint => TextureFormat::Rg8Uint,
+            StorageFormat::Rg8Sint => TextureFormat::Rg8Sint,
+            StorageFormat::R32Uint => TextureFormat::R32Uint,
+            StorageFormat::R32Sint => TextureFormat::R32Sint,
+            StorageFormat::R32Float => TextureFormat::R32Float,
+            StorageFormat::Rg16Uint => TextureFormat::Rg16Uint,
+            StorageFormat::Rg16Sint => TextureFormat::Rg16Sint,
+            StorageFormat::Rg16Float => TextureFormat::Rg16Float,
+            StorageFormat::Rgba8Unorm => TextureFormat::Rgba8Unorm,
+            StorageFormat::Rgba8Snorm => TextureFormat::Rgba8Snorm,
+            StorageFormat::Rgba8Uint => TextureFormat::Rgba8Uint,
+            StorageFormat::Rgba8Sint => TextureFormat::Rgba8Sint,
+            StorageFormat::Rgb10a2Unorm => TextureFormat::Rgb10a2Unorm,
+            StorageFormat::Rg11b10Float => TextureFormat::Rg11b10Float,
+            StorageFormat::Rg32Uint => TextureFormat::Rg32Uint,
+            StorageFormat::Rg32Sint => TextureFormat::Rg32Sint,
+            StorageFormat::Rg32Float => TextureFormat::Rg32Float,
+            StorageFormat::Rgba16Uint => TextureFormat::Rgba16Uint,
+            StorageFormat::Rgba16Sint => TextureFormat::Rgba16Sint,
+            StorageFormat::Rgba16Float => TextureFormat::Rgba16Float,
+            StorageFormat::Rgba32Uint => TextureFormat::Rgba32Uint,
+            StorageFormat::Rgba32Sint => TextureFormat::Rgba32Sint,
+            StorageFormat::Rgba32Float => TextureFormat::Rgba32Float,
+            StorageFormat::R16Unorm => TextureFormat::R16Unorm,
+            StorageFormat::R16Snorm => TextureFormat::R16Snorm,
+            StorageFormat::Rg16Unorm => TextureFormat::Rg16Unorm,
+            StorageFormat::Rg16Snorm => TextureFormat::Rg16Snorm,
+            StorageFormat::Rgba16Unorm => TextureFormat::Rgba16Unorm,
+            StorageFormat::Rgba16Snorm => TextureFormat::Rgba16Snorm,
+        }
+    }
+
     pub fn get_array_stride(&self) -> u64 {
         self.array_stride
     }
@@ -409,5 +538,9 @@ impl Reflection {
             .get(index)
             .unwrap()
             .as_ref()
+    }
+
+    pub fn get_cs_entry_point(&self) -> &str {
+        self.cs_entry_point.as_ref()
     }
 }

@@ -71,6 +71,10 @@ impl WGPUContext {
             "default TextureViewDescriptor: {:?}",
             wgpu::TextureViewDescriptor::default()
         );
+        log::info!(
+            "default PrimitiveState: {:?}",
+            wgpu::PrimitiveState::default()
+        );
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
