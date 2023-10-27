@@ -116,7 +116,7 @@ pub fn init_log() {
         .init();
 }
 
-pub fn change_working_directory() {
+pub fn change_working_directory() -> Option<String> {
     if let (Ok(current_dir), Ok(current_exe)) = (std::env::current_dir(), std::env::current_exe()) {
         let current_exe_dir = std::path::Path::new(&current_exe)
             .parent()
@@ -126,9 +126,10 @@ pub fn change_working_directory() {
         let current_dir = current_dir.to_str().unwrap();
         if current_dir != current_exe_dir {
             std::env::set_current_dir(current_exe_dir).unwrap();
-            log::trace!("current_dir: {}", current_exe_dir);
+            return Some(current_exe_dir.to_string());
         }
     }
+    return None;
 }
 
 pub fn calculate_mipmap_level(length: u32) -> u32 {
@@ -866,6 +867,19 @@ pub fn aabb_to_lines(aabb: &Aabb, color: &glam::Vec4) -> ColorVertexCollection {
         .collect();
     let index_buffer = indices.iter().flat_map(|x| *x).collect();
     ColorVertexCollection::new(vertex_buffer, index_buffer)
+}
+
+pub fn rand(n: f32) -> f32 {
+    (n.sin() * 43758.5453123).fract()
+}
+
+pub fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
+    let y = ((x - a) / (b - a)).clamp(0.0, 1.0);
+    y * y * (3.0 - 2.0 * y)
+}
+
+pub fn smoothstep_vec2(a: glam::Vec2, b: glam::Vec2, x: glam::Vec2) -> glam::Vec2 {
+    glam::vec2(smoothstep(a.x, b.x, x.x), smoothstep(a.y, b.y, x.y))
 }
 
 #[cfg(test)]

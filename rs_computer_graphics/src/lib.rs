@@ -2,6 +2,7 @@ pub mod acceleration_bake;
 pub mod actor;
 pub mod actor_selector;
 pub mod application;
+pub mod atlas;
 pub mod bake;
 pub mod bake_info;
 pub mod bind_group_layout_entry_hook;

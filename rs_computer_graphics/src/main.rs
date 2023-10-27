@@ -45,7 +45,12 @@ use rs_media::{
     audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer,
 };
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{borrow::Borrow, collections::HashSet, sync::Arc, time::Duration};
+use std::{
+    borrow::Borrow,
+    collections::{HashSet, VecDeque},
+    sync::Arc,
+    time::Duration,
+};
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event::*, VirtualKeyCode},
@@ -79,42 +84,37 @@ fn main() {
         let mut audio_player_item = AudioPlayerItem::new(
             &rs_computer_graphics::util::get_resource_path("Remote/BigBuckBunny.mp4"),
         );
+        let mut data: VecDeque<f32> = VecDeque::with_capacity(1024 * 8);
 
         loop {
-            {
-                let buffer_mut = audio_device.get_buffer_mut();
-                let mut buffer_mut = buffer_mut.lock().unwrap();
+            while audio_device.get_buffer_len() < 1024 * 8 {
+                match audio_player_item.try_recv() {
+                    Ok(frame) => {
+                        let pcm_buffer = &frame.pcm_buffer;
+                        let format = pcm_buffer.get_audio_format();
+                        debug_assert_eq!(format.channels_per_frame, 2);
+                        debug_assert_eq!(format.get_sample_type(), EAudioSampleType::Float32);
+                        debug_assert_eq!(format.is_non_interleaved(), true);
 
-                while buffer_mut.len() < 1024 * 8 {
-                    match audio_player_item.try_recv() {
-                        Ok(frame) => {
-                            let pcm_buffer = &frame.pcm_buffer;
-                            let mut data: Vec<f32> = Vec::new();
-                            let format = pcm_buffer.get_audio_format();
-                            debug_assert_eq!(format.channels_per_frame, 2);
-                            debug_assert_eq!(format.get_sample_type(), EAudioSampleType::Float32);
-                            debug_assert_eq!(format.is_non_interleaved(), true);
-
-                            let channel_data_0: &[f32] = pcm_buffer.get_channel_data_view(0);
-                            let channel_data_1: &[f32] = pcm_buffer.get_channel_data_view(1);
-                            for (first, second) in channel_data_0.iter().zip(channel_data_1.iter())
-                            {
-                                data.push(*first);
-                                data.push(*second);
-                            }
-                            buffer_mut.append(&mut data);
+                        let channel_data_0: &[f32] = pcm_buffer.get_channel_data_view(0);
+                        let channel_data_1: &[f32] = pcm_buffer.get_channel_data_view(1);
+                        data.clear();
+                        for (first, second) in channel_data_0.iter().zip(channel_data_1.iter()) {
+                            data.push_back(*first);
+                            data.push_back(*second);
                         }
-                        Err(error) => match error {
-                            rs_media::error::Error::EndOfFile => break,
-                            rs_media::error::Error::TryAgain => {
-                                std::thread::sleep(Duration::from_secs_f32(0.015));
-                            }
-                            rs_media::error::Error::Disconnected => break,
-                        },
+                        audio_device.push_buffer(data.make_contiguous());
                     }
+                    Err(error) => match error {
+                        rs_media::error::Error::EndOfFile => break,
+                        rs_media::error::Error::TryAgain => {
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                        }
+                        rs_media::error::Error::Disconnected => break,
+                    },
                 }
             }
-            std::thread::sleep(Duration::from_secs_f32(0.01));
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
     });
 
