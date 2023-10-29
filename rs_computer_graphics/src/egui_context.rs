@@ -1,5 +1,5 @@
 use crate::{gizmo::FGizmo, rotator::Rotator};
-use egui::{color_picker::Alpha, Context, Response, TextureId, Ui, Vec2, Widget};
+use egui::{color_picker::Alpha, Context, TextureId, Ui, Vec2, Widget};
 use egui_demo_lib::DemoWindows;
 use egui_gizmo::GizmoMode;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
@@ -8,13 +8,89 @@ use std::time::Instant;
 
 pub struct EGUIContext {
     platform: Platform,
-    egui_rpass: RenderPass,
     demo_app: DemoWindows,
     start_time: Instant,
     current_frame_start_time: Instant,
     render_ticks: usize,
     fps: u64,
     current_fps: f32,
+}
+
+pub struct EGUIContextRenderer {
+    context: Context,
+    egui_render_pass: RenderPass,
+}
+
+impl EGUIContextRenderer {
+    pub fn new(
+        context: Context,
+        device: &wgpu::Device,
+        output_format: wgpu::TextureFormat,
+        msaa_samples: u32,
+    ) -> EGUIContextRenderer {
+        let egui_render_pass =
+            egui_wgpu_backend::RenderPass::new(&device, output_format, msaa_samples);
+        EGUIContextRenderer {
+            context,
+            egui_render_pass,
+        }
+    }
+
+    pub fn create_image(
+        &mut self,
+        device: &wgpu::Device,
+        texture_view: &wgpu::TextureView,
+        size: Vec2,
+    ) -> DrawImage {
+        DrawImage {
+            texture_id: self.egui_render_pass.egui_texture_from_wgpu_texture(
+                device,
+                texture_view,
+                wgpu::FilterMode::Linear,
+            ),
+            size,
+        }
+    }
+
+    pub fn render(
+        &mut self,
+        full_output: egui::FullOutput,
+        queue: &wgpu::Queue,
+        device: &wgpu::Device,
+        screen_descriptor: &ScreenDescriptor,
+        output_view: &wgpu::TextureView,
+    ) {
+        let paint_jobs = self.context.tessellate(full_output.shapes);
+        let textures_delta: egui::TexturesDelta = full_output.textures_delta;
+        if let Err(error) = self
+            .egui_render_pass
+            .add_textures(&device, &queue, &textures_delta)
+        {
+            log::warn!("{error}");
+            return;
+        }
+        self.egui_render_pass
+            .update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("EGUIContextRenderer.CommandEncoder"),
+        });
+        if let Err(error) = self.egui_render_pass.execute(
+            &mut encoder,
+            &output_view,
+            &paint_jobs,
+            &screen_descriptor,
+            None,
+        ) {
+            log::warn!("{error}");
+            return;
+        }
+        if let Err(error) = self.egui_render_pass.remove_textures(textures_delta) {
+            log::warn!("{error}");
+            return;
+        }
+        queue.submit(std::iter::once(encoder.finish()));
+    }
 }
 
 pub struct DataSource {
@@ -45,25 +121,21 @@ pub struct DrawImage {
     pub size: Vec2,
 }
 
+unsafe impl Send for EGUIContext {}
+
 impl EGUIContext {
-    pub fn new(
-        device: &wgpu::Device,
-        swapchain_format: wgpu::TextureFormat,
-        window: &winit::window::Window,
-    ) -> EGUIContext {
+    pub fn new(screen_descriptor: &ScreenDescriptor) -> EGUIContext {
         let platform_descriptor = PlatformDescriptor {
-            physical_width: window.inner_size().width as u32,
-            physical_height: window.inner_size().height as u32,
-            scale_factor: window.scale_factor(),
+            physical_width: screen_descriptor.physical_width,
+            physical_height: screen_descriptor.physical_height,
+            scale_factor: screen_descriptor.scale_factor as f64,
             font_definitions: egui::FontDefinitions::default(),
             style: Default::default(),
         };
         let platform = Platform::new(platform_descriptor);
-        let egui_rpass = egui_wgpu_backend::RenderPass::new(&device, swapchain_format, 1);
         let demo_app = egui_demo_lib::DemoWindows::default();
         EGUIContext {
             platform,
-            egui_rpass,
             demo_app,
             start_time: Instant::now(),
             render_ticks: 0,
@@ -87,26 +159,7 @@ impl EGUIContext {
             .update_time(self.start_time.elapsed().as_secs_f64());
     }
 
-    pub fn create_image(
-        &mut self,
-        device: &wgpu::Device,
-        texture_view: &wgpu::TextureView,
-        size: Vec2,
-    ) -> DrawImage {
-        DrawImage {
-            texture_id: self.egui_rpass.egui_texture_from_wgpu_texture(
-                device,
-                texture_view,
-                wgpu::FilterMode::Linear,
-            ),
-            size,
-        }
-    }
-
-    fn main_ui(&mut self, data_source: &mut DataSource) {
-        let context = &self.platform.context();
-        // self.demo_app.ui(context);
-
+    fn main_ui(context: &Context, data_source: &mut DataSource) {
         egui::TopBottomPanel::top("menu_bar").show(context, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("Window", |ui| {
@@ -134,7 +187,7 @@ impl EGUIContext {
 
         if data_source.is_show_pannel {
             egui::Window::new("Pannel").show(context, |ui| {
-                ui.label(format!("fps: {:.2}", self.current_fps));
+                // ui.label(format!("fps: {:.2}", data_source.target_fps));
                 let response = ui.button("Capture screen");
                 if response.clicked() {
                     data_source.is_captrue_enable = true;
@@ -205,13 +258,13 @@ impl EGUIContext {
         }
 
         if data_source.is_show_gizmo_settings {
-            self.gizmo_settings(data_source);
+            Self::gizmo_settings(context, data_source);
         }
 
         if let Some(model_matrix) = data_source.model_matrix {
             egui::Area::new("Gizmo Viewport")
                 .fixed_pos((0.0, 0.0))
-                .show(&self.get_platform_context(), |ui| {
+                .show(context, |ui| {
                     ui.with_layer_id(egui::LayerId::background(), |ui| {
                         if let Some(model_matrix) =
                             data_source
@@ -273,64 +326,23 @@ impl EGUIContext {
         });
     }
 
-    pub fn draw_ui(
-        &mut self,
-        queue: &wgpu::Queue,
-        device: &wgpu::Device,
-        window: &winit::window::Window,
-        output_view: &wgpu::TextureView,
-        data_source: &mut DataSource,
-    ) /*-> DataSource*/
-    {
-        let screen_descriptor = ScreenDescriptor {
-            physical_width: window.inner_size().width,
-            physical_height: window.inner_size().height,
-            scale_factor: window.scale_factor() as f32,
-        };
-
-        // let data_source: DataSource;
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        {
-            self.platform.begin_frame();
-
-            /*data_source = */
-            self.main_ui(data_source);
-
-            let full_output = self.platform.end_frame(None);
-            let paint_jobs = self.platform.context().tessellate(full_output.shapes);
-
-            let tdelta: egui::TexturesDelta = full_output.textures_delta;
-            self.egui_rpass
-                .add_textures(&device, &queue, &tdelta)
-                .unwrap();
-            self.egui_rpass
-                .update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
-
-            self.egui_rpass
-                .execute(
-                    &mut encoder,
-                    &output_view,
-                    &paint_jobs,
-                    &screen_descriptor,
-                    None,
-                )
-                .unwrap();
-            self.egui_rpass.remove_textures(tdelta).unwrap();
-        }
-        queue.submit(std::iter::once(encoder.finish()));
-        // data_source
+    pub fn layout(&mut self, data_source: &mut DataSource) -> egui::FullOutput {
+        self.platform.begin_frame();
+        let context = self.get_platform_context();
+        // self.demo_app.ui(&context);
+        Self::main_ui(&context, data_source);
+        self.platform.end_frame(None)
     }
 
     pub fn handle_event(&mut self, event: &winit::event::Event<()>) {
         self.platform.handle_event(event);
     }
 
-    pub fn get_platform_context(&mut self) -> Context {
+    pub fn get_platform_context(&self) -> Context {
         self.platform.context()
     }
 
-    pub fn gizmo_settings(&mut self, data_source: &mut DataSource) {
+    pub fn gizmo_settings(context: &Context, data_source: &mut DataSource) {
         let gizmo = &mut data_source.gizmo;
         let gizmo_mode = &mut gizmo.gizmo_mode;
         let gizmo_orientation = &mut gizmo.gizmo_orientation;
@@ -345,7 +357,7 @@ impl EGUIContext {
         let s_color = &mut gizmo.visuals.s_color;
         let inactive_alpha = &mut gizmo.visuals.inactive_alpha;
         let highlight_alpha = &mut gizmo.visuals.highlight_alpha;
-        let egui_ctx = &self.platform.context();
+        let egui_ctx = context;
 
         egui::Window::new("Gizmo Settings")
             .resizable(false)

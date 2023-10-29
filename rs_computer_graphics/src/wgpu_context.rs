@@ -121,7 +121,7 @@ impl WGPUContext {
         self.depth_texture.get_view()
     }
 
-    pub fn get_current_surface_texture(&self) -> SurfaceTexture {
-        self.surface.get_current_texture().unwrap()
+    pub fn get_current_surface_texture(&self) -> Result<SurfaceTexture, wgpu::SurfaceError> {
+        self.surface.get_current_texture()
     }
 }

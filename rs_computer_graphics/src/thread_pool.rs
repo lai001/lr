@@ -26,6 +26,12 @@ lazy_static! {
                 .build()
                 .unwrap(),
         ));
+    static ref RENDER_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> = Arc::new(Mutex::new(
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap(),
+    ));
 }
 
 pub struct ThreadPool {}
@@ -41,6 +47,10 @@ impl ThreadPool {
 
     pub fn audio() -> Arc<Mutex<rayon::ThreadPool>> {
         GLOBAL_AUDIO_THREAD_POOL.clone()
+    }
+
+    pub fn render() -> Arc<Mutex<rayon::ThreadPool>> {
+        RENDER_THREAD_POOL.clone()
     }
 
     pub fn virtual_texture_cache() -> Arc<Mutex<rayon::ThreadPool>> {
