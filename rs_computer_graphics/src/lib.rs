@@ -1,7 +1,6 @@
 pub mod acceleration_bake;
 pub mod actor;
 pub mod actor_selector;
-pub mod application;
 pub mod atlas;
 pub mod bake;
 pub mod bake_info;
@@ -16,16 +15,17 @@ pub mod default_textures;
 pub mod demo;
 pub mod depth_texture;
 #[cfg(feature = "rs_dotnet")]
-pub mod dotnet_runtime;
+pub mod dotnet;
 pub mod dump_layout;
 pub mod egui_context;
-pub mod entry_info;
+pub mod example_application;
 pub mod ffi;
 pub mod file_manager;
 pub mod frame_buffer;
 pub mod gizmo;
 pub mod glam_color;
 pub mod light;
+pub mod logger;
 pub mod material;
 pub mod material_type;
 pub mod mipmap_generator;

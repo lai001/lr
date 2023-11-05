@@ -1,3 +1,4 @@
+console.log("QuickJS Javascript Engine is running.");
 let baker = new AccelerationBaker();
 console.log(baker);
 

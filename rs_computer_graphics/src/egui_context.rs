@@ -1,4 +1,4 @@
-use crate::{gizmo::FGizmo, rotator::Rotator};
+use crate::{camera::Camera, gizmo::FGizmo, rotator::Rotator};
 use egui::{color_picker::Alpha, Context, TextureId, Ui, Vec2, Widget};
 use egui_demo_lib::DemoWindows;
 use egui_gizmo::GizmoMode;
@@ -52,16 +52,29 @@ impl EGUIContextRenderer {
         }
     }
 
+    pub fn create_image2(
+        &mut self,
+        device: &wgpu::Device,
+        texture_view: &wgpu::TextureView,
+        texture_filter: Option<wgpu::FilterMode>,
+    ) -> TextureId {
+        self.egui_render_pass.egui_texture_from_wgpu_texture(
+            device,
+            texture_view,
+            texture_filter.unwrap_or(wgpu::FilterMode::Linear),
+        )
+    }
+
     pub fn render(
         &mut self,
-        full_output: egui::FullOutput,
+        full_output: &egui::FullOutput,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
         screen_descriptor: &ScreenDescriptor,
         output_view: &wgpu::TextureView,
     ) {
-        let paint_jobs = self.context.tessellate(full_output.shapes);
-        let textures_delta: egui::TexturesDelta = full_output.textures_delta;
+        let paint_jobs = self.context.tessellate(full_output.shapes.clone());
+        let textures_delta: egui::TexturesDelta = full_output.textures_delta.clone();
         if let Err(error) = self
             .egui_render_pass
             .add_textures(&device, &queue, &textures_delta)
@@ -85,11 +98,18 @@ impl EGUIContextRenderer {
             log::warn!("{error}");
             return;
         }
-        if let Err(error) = self.egui_render_pass.remove_textures(textures_delta) {
-            log::warn!("{error}");
-            return;
-        }
         queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    pub fn remove_texture_ids(&mut self, texture_ids: &[egui::TextureId]) {
+        let textures: egui::TexturesDelta = egui::TexturesDelta {
+            set: vec![],
+            free: texture_ids.to_vec(),
+        };
+        match self.egui_render_pass.remove_textures(textures.clone()) {
+            Ok(_) => {}
+            Err(error) => log::warn!("{error}"),
+        }
     }
 }
 
@@ -101,6 +121,7 @@ pub struct DataSource {
     pub roughness_factor: f32,
     pub metalness_factor: f32,
     pub draw_image: Option<DrawImage>,
+    pub video_frame: Option<DrawImage>,
     pub movement_speed: f32,
     pub motion_speed: f32,
     pub player_time: f32,
@@ -114,6 +135,34 @@ pub struct DataSource {
     pub gizmo: FGizmo,
     pub camera: crate::camera::Camera,
     pub model_matrix: Option<glam::Mat4>,
+}
+
+impl DataSource {
+    pub fn new(camera: Camera) -> DataSource {
+        Self {
+            is_captrue_enable: false,
+            is_save_frame_buffer: false,
+            frame_buffer_color: egui::Color32::BLACK,
+            target_fps: 60,
+            roughness_factor: 0.0,
+            metalness_factor: 1.0,
+            draw_image: None,
+            movement_speed: 0.01,
+            motion_speed: 0.1,
+            player_time: 0.0,
+            seek_time: 0.0,
+            is_seek: false,
+            mipmap_level: 0,
+            is_show_pannel: false,
+            is_show_texture: true,
+            is_show_gizmo_settings: false,
+            is_show_property: false,
+            gizmo: FGizmo::default(),
+            camera,
+            model_matrix: None,
+            video_frame: None,
+        }
+    }
 }
 
 pub struct DrawImage {
@@ -226,6 +275,12 @@ impl EGUIContext {
                         // ui.allocate_space(ui.available_size());
                     }
                 });
+
+            egui::Window::new("Video").show(context, |ui| {
+                if let Some(video_frame) = &data_source.video_frame {
+                    ui.image(video_frame.texture_id, video_frame.size);
+                }
+            });
         }
 
         if data_source.is_show_property {

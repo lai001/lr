@@ -14,6 +14,7 @@ pub struct VideoPlayerItem {
     filepath: String,
     video_receiver: Option<Receiver<Protocol>>,
     user_sender: Option<Sender<Protocol>>,
+    capacity: usize,
 }
 
 impl VideoPlayerItem {
@@ -22,6 +23,7 @@ impl VideoPlayerItem {
             filepath: filepath.to_string(),
             video_receiver: None,
             user_sender: None,
+            capacity: 3,
         };
         player.init();
         player
@@ -35,6 +37,7 @@ impl VideoPlayerItem {
         let video_sender_clone = video_sender.clone();
 
         let filepath = self.filepath.to_string();
+        let capacity = self.capacity;
         std::thread::spawn(move || {
             let mut video_frame_extractor =
                 VideoFrameExtractor::new(&filepath, Some(EVideoDecoderType::Hardware));
@@ -107,7 +110,7 @@ impl VideoPlayerItem {
                         let _ = video_sender_clone.send(resp_protocol);
                     }
                 } else if request_more_frames_protocols.is_empty() == false {
-                    while resp_protocols.len() < 6 {
+                    while resp_protocols.len() < capacity {
                         match video_frame_extractor.next_frames() {
                             Some(frames) => {
                                 for frame in frames {

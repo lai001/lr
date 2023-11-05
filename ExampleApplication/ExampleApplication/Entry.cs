@@ -36,6 +36,8 @@ namespace ExampleApplication
             ScriptEngine.Reload();
             Application.userSscript = ScriptEngine.userSscript;
             Application.Initialize();
+
+            Console.WriteLine(".NET C# Engine is running.");
         }
     }
 

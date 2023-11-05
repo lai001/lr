@@ -102,15 +102,19 @@ pub fn init_log() {
             let mut writer = world_file.write().unwrap();
             let level = record.level();
             let level_style = buf.default_level_style(level);
+            let current_thread = std::thread::current();
+            let thread_name = format!("Thread: {}", current_thread.name().unwrap_or("Unknown"));
             let content = format!(
-                "[{}] {}:{} {} {}",
+                "[{}][{}] {}:{} {} {}",
                 level_style.value(level),
+                thread_name,
                 record.file().unwrap_or("Unknown"),
                 record.line().unwrap_or(0),
                 buf.timestamp_millis(),
                 record.args()
             );
             let _ = writer.write_fmt(format_args!("{}\n", content));
+            let _ = writer.flush();
             writeln!(buf, "{}", content)
         })
         .init();

@@ -1,13 +1,11 @@
-use crate::{
-    application::{RuntimeApplicationFunctions, RuntimeInstanceType},
-    ffi::{
-        file_watch::FileWatch, native_command_encoder::NativeWGPUCommandEncoderFunctions,
-        native_device::NativeWGPUDeviceFunctions,
-        native_pipeline_layout::NativeWGPUPipelineLayoutFunctions,
-        native_queue::NativeWGPUQueueFunctions, native_render_pass::NativeWGPURenderPassFunctions,
-        native_render_pipeline::NativeWGPURenderPipelineFunctions,
-        native_shader_module::NativeWGPUShaderModuleFunctions,
-    },
+use super::application::{RuntimeApplicationFunctions, RuntimeInstanceType};
+use crate::ffi::{
+    file_watch::FileWatch, native_command_encoder::NativeWGPUCommandEncoderFunctions,
+    native_device::NativeWGPUDeviceFunctions,
+    native_pipeline_layout::NativeWGPUPipelineLayoutFunctions,
+    native_queue::NativeWGPUQueueFunctions, native_render_pass::NativeWGPURenderPassFunctions,
+    native_render_pipeline::NativeWGPURenderPipelineFunctions,
+    native_shader_module::NativeWGPUShaderModuleFunctions,
 };
 use wgpu::Device;
 

@@ -1,8 +1,8 @@
 use crate::{
-    application::{
-        RuntimeApplication, RuntimeApplicationFunctions, GLOBAL_RUNTIME_APPLICATION_FUNCTIONS,
+    dotnet::{
+        application::{RuntimeApplicationFunctions, GLOBAL_RUNTIME_APPLICATION_FUNCTIONS},
+        entry_info,
     },
-    entry_info,
     ffi::{
         file_watch::FileWatch, native_command_encoder::NativeWGPUCommandEncoderFunctions,
         native_device::NativeWGPUDeviceFunctions,
@@ -13,6 +13,8 @@ use crate::{
     },
     project::{ProjectDescription, ProjectDescriptionDotnetField},
 };
+
+use super::application::RuntimeApplication;
 
 pub struct DotnetRuntime {
     pub application: RuntimeApplication,

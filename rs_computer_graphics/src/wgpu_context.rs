@@ -31,7 +31,7 @@ impl WGPUContext {
         }))
         .unwrap();
 
-        let (device, queue) = pollster::block_on(adapter.request_device(
+        let request_device_result = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 features: {
                     let mut features = wgpu::Features::default();
@@ -45,8 +45,11 @@ impl WGPUContext {
                 label: None,
             },
             None,
-        ))
-        .unwrap();
+        ));
+        if let Err(error) = request_device_result {
+            panic!("{}", error)
+        }
+        let (device, queue) = request_device_result.unwrap();
 
         let window_size = window.inner_size();
         let swapchain_capabilities = surface.get_capabilities(&adapter);
