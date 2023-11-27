@@ -17,10 +17,7 @@ pub struct PanoramaToCubeDemo {
 
 impl PanoramaToCubeDemo {
     fn image_data() -> (Vec<f32>, (u32, u32)) {
-        let file_path = FileManager::default()
-            .lock()
-            .unwrap()
-            .get_resource_path("Panorama.exr");
+        let file_path = FileManager::default().get_resource_path("Panorama.exr");
 
         match image::open(&file_path) {
             Ok(dynamic_image) => {
@@ -248,7 +245,7 @@ impl PanoramaToCubeDemo {
             while let Some(data) = chunk.next() {
                 let deep_copy_data = data.to_vec();
                 let length = self.cube_length;
-                ThreadPool::io().lock().unwrap().spawn(move || {
+                ThreadPool::io().spawn(move || {
                     match image::save_buffer(
                         std::format!("./outputimage_{}.exr", index),
                         &deep_copy_data,

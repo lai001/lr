@@ -2,6 +2,8 @@ pub mod attachment_pipeline;
 pub mod audio_pipeline;
 pub mod base_render_pipeline;
 pub mod feed_back_pipeline;
+pub mod next_pbr_pipeline;
+pub mod next_phong_pipeline;
 pub mod pbr_pipeline;
 pub mod phong_pipeline;
 pub mod primitive_pipeline;

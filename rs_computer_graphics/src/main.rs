@@ -80,7 +80,7 @@ fn main() {
         &rs_computer_graphics::util::get_resource_path("Remote/BigBuckBunny.mp4"),
     );
 
-    ThreadPool::audio().lock().unwrap().spawn(move || {
+    ThreadPool::audio().spawn(move || {
         let mut audio_device = rs_media::audio_device::AudioDevice::new();
         audio_device.play();
         let mut audio_player_item = AudioPlayerItem::new(
@@ -121,7 +121,7 @@ fn main() {
     });
 
     let (sender, receiver) = std::sync::mpsc::channel();
-    ThreadPool::global().lock().unwrap().spawn(move || {
+    ThreadPool::global().spawn(move || {
         let mut player_item = AudioFrameExtractor::new(
             &rs_computer_graphics::util::get_resource_path("Remote/sample-15s.mp3"),
         );
@@ -173,7 +173,8 @@ fn main() {
     #[cfg(feature = "rs_quickjs")]
     let mut js_runtime = QuickJSRuntimeContext::new();
 
-    let mut user_script_change_monitor = UserScriptChangeMonitor::new();
+    let mut user_script_change_monitor =
+        UserScriptChangeMonitor::new(&FileManager::default().get_user_script_path());
 
     let window_size = native_window.window.inner_size();
     let swapchain_format = wgpu_context.get_current_swapchain_format();
@@ -197,7 +198,7 @@ fn main() {
             .init(&wgpu_context.device, &wgpu_context.queue);
         ShaderLibrary::default().lock().unwrap().load_shader_from(
             &wgpu_context.device,
-            &FileManager::default().lock().unwrap().get_shader_dir_path(),
+            &FileManager::default().get_shader_dir_path(),
         )
     }
 
@@ -284,10 +285,7 @@ fn main() {
                 graph = rs_metis::metis::Metis::to_graph(&indices, &vertices);
                 num_parts = (graph.get_num_vertices() / 40).max(2);
 
-                let fm = FileManager::default();
-                let fm = fm.lock().unwrap();
-
-                let project_description = fm.get_project_description();
+                let project_description = FileManager::default().get_project_description();
 
                 partition = rs_metis::metis::Metis::partition(
                     &project_description.get_paths().gpmetis_program_path.clone(),

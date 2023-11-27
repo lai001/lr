@@ -108,6 +108,21 @@ pub fn absolute_path(path: impl AsRef<Path>) -> io::Result<PathBuf> {
     Ok(absolute_path)
 }
 
+pub fn search_file(filename: PathBuf, dirs: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut paths = Vec::<PathBuf>::new();
+    if filename.is_absolute() && filename.exists() {
+        paths.push(filename);
+    } else {
+        for dir in dirs {
+            let absolute_path = dir.join(filename.clone());
+            if absolute_path.exists() {
+                paths.push(absolute_path);
+            }
+        }
+    }
+    paths
+}
+
 #[cfg(test)]
 pub mod test {
     use crate::{alignment, math_remap_value_range, next_highest_power_of_two};

@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectDescriptionUserScriptField {
@@ -52,8 +51,8 @@ impl ProjectDescription {
         project_description
     }
 
-    pub fn default() -> Arc<Mutex<ProjectDescription>> {
-        GLOBAL_PROJECT_DESCRIPTION.clone()
+    pub fn current() -> ProjectDescription {
+        ProjectDescription::new("./Project.json".to_string())
     }
 
     pub fn get_paths(&self) -> &ProjectDescriptionFileField {
@@ -67,10 +66,4 @@ impl ProjectDescription {
     pub fn get_user_script(&self) -> &ProjectDescriptionUserScriptField {
         &self.user_script
     }
-}
-
-lazy_static! {
-    static ref GLOBAL_PROJECT_DESCRIPTION: Arc<Mutex<ProjectDescription>> = Arc::new(Mutex::new(
-        ProjectDescription::new("./Project.json".to_string())
-    ));
 }

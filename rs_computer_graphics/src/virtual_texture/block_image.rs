@@ -69,10 +69,7 @@ impl BlockImage {
         let file_stem = file_path.file_stem().unwrap().to_str().unwrap();
         let dir = format!(
             "{}/{}",
-            FileManager::default()
-                .lock()
-                .unwrap()
-                .get_intermediate_dir_path(),
+            FileManager::default().get_intermediate_dir_path(),
             file_stem
         );
         dir

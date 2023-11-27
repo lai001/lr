@@ -259,7 +259,7 @@ impl EGUIContext {
                 );
                 ui.horizontal(|ui| {
                     ui.label("fps: ");
-                    ui.add(egui::DragValue::new(&mut data_source.target_fps).clamp_range(1..=60));
+                    ui.add(egui::DragValue::new(&mut data_source.target_fps).clamp_range(1..=300));
                 });
             });
         }

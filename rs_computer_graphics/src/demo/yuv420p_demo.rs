@@ -19,12 +19,7 @@ impl YUV420PDemo {
         let pipeline = YUV420pPipeline::new(device, texture_format);
 
         let image = YUV420pImage::from_file(
-            Path::new(
-                &FileManager::default()
-                    .lock()
-                    .unwrap()
-                    .get_resource_path("UVGrid.yuv420p"),
-            ),
+            Path::new(&FileManager::default().get_resource_path("UVGrid.yuv420p")),
             &glam::uvec2(128, 128),
         )
         .unwrap();

@@ -641,10 +641,7 @@ pub fn create_pure_color_rgba8_texture(
 }
 
 pub fn get_resource_path(resource_name: &str) -> String {
-    crate::file_manager::FileManager::default()
-        .lock()
-        .unwrap()
-        .get_resource_path(resource_name)
+    crate::file_manager::FileManager::default().get_resource_path(resource_name)
 }
 
 pub fn russimp_mat4_to_glam_mat4(transformation: &russimp::Matrix4x4) -> glam::Mat4 {

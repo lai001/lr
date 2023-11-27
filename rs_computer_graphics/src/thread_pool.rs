@@ -4,42 +4,42 @@ use std::sync::{
 };
 
 lazy_static! {
-    static ref GLOBAL_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> = Arc::new(Mutex::new(
+    static ref GLOBAL_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
             .thread_name(|_| { "Global".to_string() })
             .num_threads(std::thread::available_parallelism().unwrap().get())
             .build()
             .unwrap(),
     ));
-    static ref GLOBAL_IO_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> = Arc::new(Mutex::new(
+    static ref GLOBAL_IO_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
             .thread_name(|_| { "IO".to_string() })
             .num_threads(1)
             .build()
             .unwrap(),
     ));
-    static ref GLOBAL_AUDIO_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> = Arc::new(Mutex::new(
+    static ref GLOBAL_AUDIO_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
             .thread_name(|_| { "Audio".to_string() })
             .num_threads(1)
             .build()
             .unwrap(),
     ));
-    static ref VIRTUAL_TEXTURE_CACHE_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> =
-        Arc::new(Mutex::new(
+    static ref VIRTUAL_TEXTURE_CACHE_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> =
+        Mutex::new(Arc::new(
             rayon::ThreadPoolBuilder::new()
                 .num_threads(1)
                 .build()
                 .unwrap(),
         ));
-    static ref RENDER_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> = Arc::new(Mutex::new(
+    static ref RENDER_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
             .thread_name(|_| { "Render".to_string() })
             .num_threads(1)
             .build()
             .unwrap(),
     ));
-    static ref VIDEO_DECODE_THREAD_POOL: Arc<Mutex<rayon::ThreadPool>> = Arc::new(Mutex::new(
+    static ref VIDEO_DECODE_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
             .thread_name(|_| { "Video Decode".to_string() })
             .num_threads(1)
@@ -197,7 +197,7 @@ impl SyncWait {
         }
     }
 
-    pub fn accept_stop(&self) {
+    pub fn finish(&self) {
         match self.parallelism_thread_sender.lock().unwrap().send(()) {
             Ok(_) => {}
             Err(error) => panic!("{}", error),
@@ -239,36 +239,36 @@ impl MultipleSyncWait {
         self.inner.is_stop()
     }
 
-    pub fn accept_stop(&self) {
-        self.inner.accept_stop()
+    pub fn finish(&self) {
+        self.inner.finish()
     }
 }
 
 pub struct ThreadPool {}
 
 impl ThreadPool {
-    pub fn global() -> Arc<Mutex<rayon::ThreadPool>> {
-        GLOBAL_THREAD_POOL.clone()
+    pub fn global() -> Arc<rayon::ThreadPool> {
+        GLOBAL_THREAD_POOL.lock().unwrap().clone()
     }
 
-    pub fn io() -> Arc<Mutex<rayon::ThreadPool>> {
-        GLOBAL_IO_THREAD_POOL.clone()
+    pub fn io() -> Arc<rayon::ThreadPool> {
+        GLOBAL_IO_THREAD_POOL.lock().unwrap().clone()
     }
 
-    pub fn audio() -> Arc<Mutex<rayon::ThreadPool>> {
-        GLOBAL_AUDIO_THREAD_POOL.clone()
+    pub fn audio() -> Arc<rayon::ThreadPool> {
+        GLOBAL_AUDIO_THREAD_POOL.lock().unwrap().clone()
     }
 
-    pub fn render() -> Arc<Mutex<rayon::ThreadPool>> {
-        RENDER_THREAD_POOL.clone()
+    pub fn render() -> Arc<rayon::ThreadPool> {
+        RENDER_THREAD_POOL.lock().unwrap().clone()
     }
 
-    pub fn virtual_texture_cache() -> Arc<Mutex<rayon::ThreadPool>> {
-        VIRTUAL_TEXTURE_CACHE_THREAD_POOL.clone()
+    pub fn virtual_texture_cache() -> Arc<rayon::ThreadPool> {
+        VIRTUAL_TEXTURE_CACHE_THREAD_POOL.lock().unwrap().clone()
     }
 
-    pub fn video_decode() -> Arc<Mutex<rayon::ThreadPool>> {
-        VIDEO_DECODE_THREAD_POOL.clone()
+    pub fn video_decode() -> Arc<rayon::ThreadPool> {
+        VIDEO_DECODE_THREAD_POOL.lock().unwrap().clone()
     }
 }
 
@@ -277,15 +277,20 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_case() {
+    fn test_case_multiple_sync_wait0() {
         let wait = MultipleSyncWait::new();
         for i in 1..=50 {
-            ThreadPool::global().lock().unwrap().spawn({
+            ThreadPool::global().spawn({
                 let wait = wait.clone();
                 move || {
-                    std::thread::sleep(std::time::Duration::from_secs_f32(1.0f32));
-                    println!("{}", i);
-                    wait.accept_stop();
+                    let is_stop = wait.is_stop();
+                    if is_stop {
+                        println!("Stop work. {}", i);
+                    } else {
+                        std::thread::sleep(std::time::Duration::from_secs_f32(1.0f32));
+                        println!("Finish work. {}", i);
+                    }
+                    wait.finish();
                 }
             });
         }
@@ -294,18 +299,105 @@ mod test {
     }
 
     #[test]
-    fn test_case1() {
+    fn test_case_multiple_sync_wait1() {
+        let wait = MultipleSyncWait::new();
+        for i in 1..=50 {
+            ThreadPool::global().spawn({
+                let wait = wait.clone();
+                move || {
+                    std::thread::sleep(std::time::Duration::from_secs_f32(1.0f32));
+                    println!("Finish work. {}", i);
+                    wait.finish();
+                }
+            });
+        }
+        wait.send_stop_signal_and_wait();
+        println!("Exit.");
+    }
+
+    #[test]
+    fn test_case_multiple_sync_wait2() {
+        let wait = MultipleSyncWait::new();
+        for i in 1..=10 {
+            ThreadPool::global().spawn({
+                let wait = wait.clone();
+                move || {
+                    std::thread::sleep(std::time::Duration::from_secs_f32(1.0f32));
+                    println!("Finish work. {}", i);
+                    wait.finish();
+                }
+            });
+        }
+        std::thread::sleep(std::time::Duration::from_secs_f32(10.0f32));
+        wait.send_stop_signal_and_wait();
+        println!("Exit.");
+    }
+
+    #[test]
+    fn test_case_multiple_sync_wait3() {
+        let wait = MultipleSyncWait::new();
+        for i in 1..=10 {
+            ThreadPool::global().spawn({
+                let wait = wait.clone();
+                move || {
+                    std::thread::sleep(std::time::Duration::from_secs_f32(1.0f32));
+                    println!("Finish work. {}", i);
+                    wait.finish();
+                }
+            });
+        }
+        std::thread::sleep(std::time::Duration::from_secs_f32(10.0f32));
+        wait.send_stop_signal_and_wait();
+        println!("Exit.");
+    }
+
+    #[test]
+    fn test_case_sync_wait0() {
         let sync_wait = SyncWait::shared();
-        ThreadPool::render().lock().unwrap().spawn({
+        ThreadPool::render().spawn({
             let sync_wait = sync_wait.clone();
             move || {
                 println!("Finish work. {}", sync_wait.is_stop());
                 std::thread::sleep(std::time::Duration::from_secs_f32(1.0f32));
                 println!("Finish work. {}", sync_wait.is_stop());
-                sync_wait.accept_stop();
+                sync_wait.finish();
             }
         });
-        std::thread::sleep(std::time::Duration::from_secs_f32(0.2f32));
+        std::thread::sleep(std::time::Duration::from_secs_f32(3.0f32));
+        sync_wait.send_stop_signal_and_wait();
+        println!("Exit.");
+    }
+
+    #[test]
+    fn test_case_sync_wait1() {
+        let sync_wait = SyncWait::shared();
+        ThreadPool::render().spawn({
+            let sync_wait = sync_wait.clone();
+            move || {
+                std::thread::sleep(std::time::Duration::from_secs_f32(1.0f32));
+                println!("Finish work.");
+                sync_wait.finish();
+            }
+        });
+        sync_wait.send_stop_signal_and_wait();
+        println!("Exit.");
+    }
+
+    #[test]
+    fn test_case_sync_wait2() {
+        let sync_wait = SyncWait::shared();
+        ThreadPool::render().spawn({
+            let sync_wait = sync_wait.clone();
+            move || {
+                while sync_wait.is_stop() == false {
+                    println!("Working.");
+                    std::thread::sleep(std::time::Duration::from_secs_f32(1.0f32));
+                }
+                println!("Finish work.");
+                sync_wait.finish();
+            }
+        });
+        std::thread::sleep(std::time::Duration::from_secs_f32(3.0f32));
         sync_wait.send_stop_signal_and_wait();
         println!("Exit.");
     }

@@ -61,7 +61,7 @@ impl CaptureScreen {
             let deep_copy_data = padded_buffer.to_vec();
             let path = path.to_string();
             let window_size = window_size.clone();
-            ThreadPool::global().lock().unwrap().spawn(move || {
+            ThreadPool::global().spawn(move || {
                 match image::save_buffer(
                     path,
                     &deep_copy_data,

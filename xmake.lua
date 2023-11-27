@@ -72,9 +72,9 @@ task("code_workspace")
     end)
     set_menu {
         usage = "xmake code_workspace",
-        description = "",
+        description = "Generate vscode project workspace file.",
         options = {
-            { nil, "code_workspace", nil, nil, "xmake code_workspace" },
+            { nil, "code_workspace", nil, nil, nil },
         }
     }
 task_end()
@@ -165,9 +165,9 @@ task("download_deps")
     end)
     set_menu {
         usage = "xmake download_deps",
-        description = "",
+        description = "Download dependencies.",
         options = {
-            { nil, "download_deps", nil, nil, "xmake download_deps" },
+            { nil, "download_deps", nil, nil, nil },
         }
     }
 task_end()
@@ -195,9 +195,9 @@ task("fmt")
     end)
     set_menu {
         usage = "xmake fmt",
-        description = "",
+        description = "Format code",
         options = {
-            { nil, "fmt", nil, nil, "xmake fmt" },
+            { nil, "fmt", nil, nil, nil },
         }
     }
 task_end()
@@ -237,26 +237,26 @@ task("build_target")
 
         local function create_project_json(mode, absolute)
             os.cd("$(scriptdir)")
-            local path = "rs_computer_graphics/target/" .. mode .. "/Project.json"
+            local target_path = absolute("rs_computer_graphics/target/" .. mode)
             local project = {
                 paths = {
                     resource_dir = absolute("Resource"),
                     shader_dir = absolute("rs_computer_graphics/src/shader"),
-                    intermediate_dir = "./Intermediate",
+                    intermediate_dir = target_path .. "/Intermediate",
                     scripts_dir = absolute("./Scripts"),
                     gpmetis_program_path = absolute(format("%s/%s/%s/%s/gpmetis.exe", get_config("buildir"), get_config("plat"), get_config("arch"), get_config("mode"))),
                 },
                 dotnet = {
-                    config_path = "./ExampleApplication.runtimeconfig.json",
-                    assembly_path = "./ExampleApplication.dll",
+                    config_path = target_path .. "/ExampleApplication.runtimeconfig.json",
+                    assembly_path = target_path .. "/ExampleApplication.dll",
                     type_name = "ExampleApplication.Entry, ExampleApplication",
                     method_name = "Main",
                 },
                 user_script = {
-                    path = "./tmp/UserScript.dll"
+                    path = target_path .. "/tmp/UserScript.dll"
                 }
             }
-            json.savefile(path, project)
+            json.savefile(target_path .. "/Project.json", project)
         end
         local mode = option.get("mode")
         if mode == nil then
@@ -285,11 +285,10 @@ task("build_target")
         end
     end)
     set_menu {
-        usage = "xmake build_target",
-        description = "",
+        usage = "xmake build_target [mode]",
+        description = "Build target.",
         options = {
-            { nil, "build_target", nil,  nil, "xmake build_target" },
-            { "m", "mode",         "kv", nil, nil },
+            { "m", "mode", "kv", "debug", "Set the build mode.", " - debug", " - release" },
         }
     }
 task_end()
@@ -310,9 +309,9 @@ task("build_clean")
     end)
     set_menu {
         usage = "xmake build_clean",
-        description = "",
+        description = "Clean up build files.",
         options = {
-            { nil, "build_clean", nil, nil, "xmake build_clean" },
+            { nil, "build_clean", nil, nil, nil },
         }
     }
 task_end()
@@ -350,9 +349,9 @@ task("setup_project")
     end)
     set_menu {
         usage = "xmake setup_project",
-        description = "",
+        description = "Initialize Project",
         options = {
-            { nil, "setup_project", nil, nil, "xmake setup_project" },
+            { nil, "setup_project", nil, nil, nil },
         }
     }
 task_end()

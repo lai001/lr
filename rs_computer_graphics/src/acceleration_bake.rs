@@ -473,4 +473,59 @@ impl AccelerationBaker {
     pub fn get_pre_filter_cube_map_textures(&self) -> Arc<Option<wgpu::Texture>> {
         self.pre_filter_cube_map_lod_texture.clone()
     }
+
+    pub fn get_brdflut_texture_view(&self) -> wgpu::TextureView {
+        match self.brdflut_texture.as_ref() {
+            Some(brdflut_texture) => {
+                brdflut_texture.create_view(&wgpu::TextureViewDescriptor::default())
+            }
+            None => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn get_irradiance_texture_view(&self) -> wgpu::TextureView {
+        match self.irradiance_cube_map_texture.as_ref() {
+            Some(irradiance_texture) => {
+                let mip_level_count = irradiance_texture.mip_level_count();
+                let array_layer_count = irradiance_texture.depth_or_array_layers();
+                return irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
+                    label: None,
+                    format: Some(wgpu::TextureFormat::Rgba32Float),
+                    dimension: Some(wgpu::TextureViewDimension::Cube),
+                    aspect: wgpu::TextureAspect::All,
+                    base_mip_level: 0,
+                    mip_level_count: Some(mip_level_count),
+                    base_array_layer: 0,
+                    array_layer_count: Some(array_layer_count),
+                });
+            }
+            None => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn get_pre_filter_cube_map_texture_view(&self) -> wgpu::TextureView {
+        match self.pre_filter_cube_map_lod_texture.as_ref() {
+            Some(pre_filter_cube_map_texture) => {
+                let mip_level_count = pre_filter_cube_map_texture.mip_level_count();
+                let array_layer_count = pre_filter_cube_map_texture.depth_or_array_layers();
+                return pre_filter_cube_map_texture.create_view(&wgpu::TextureViewDescriptor {
+                    label: None,
+                    format: Some(wgpu::TextureFormat::Rgba32Float),
+                    dimension: Some(wgpu::TextureViewDimension::Cube),
+                    aspect: wgpu::TextureAspect::All,
+                    base_mip_level: 0,
+                    mip_level_count: Some(mip_level_count),
+                    base_array_layer: 0,
+                    array_layer_count: Some(array_layer_count),
+                });
+            }
+            None => {
+                panic!()
+            }
+        }
+    }
 }

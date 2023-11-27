@@ -44,48 +44,36 @@ impl VirtualTextureAsyncLoader {
             textures: HashMap::new(),
         };
 
-        ThreadPool::virtual_texture_cache()
-            .lock()
-            .unwrap()
-            .spawn(move || {
-                let sender = video_sender_clone;
-                let receiver = user_receiver;
-                let mut block_images: HashMap<String, BlockImage> = HashMap::new();
-                let mut id: u32 = 0;
-                loop {
-                    match receiver.recv() {
-                        Ok(ref message) => {
-                            if let (Some(key), Some(path)) =
-                                (message.key.as_ref(), message.path.as_ref())
-                            {
-                                if block_images.contains_key(key) == false {
-                                    let block_image =
-                                        BlockImage::new(&path, virtual_texture_configuration, id);
-                                    block_images.insert(key.to_string(), block_image);
-                                    id += 1;
-                                }
-                            } else if let (Some(key), Some(tile_index)) =
-                                (message.key.as_ref(), message.tile_index.as_ref())
-                            {
-                                match block_images.get_mut(key) {
-                                    Some(block_image) => match block_image.get_image(*tile_index) {
-                                        Some(page_image) => {
-                                            let _ = sender.send(Message {
-                                                path: None,
-                                                key: Some(key.to_string()),
-                                                tile_index: Some(tile_index.clone()),
-                                                image: Some(Ok(page_image)),
-                                            });
-                                        }
-                                        None => {
-                                            let _ = sender.send(Message {
-                                                path: None,
-                                                key: Some(key.to_string()),
-                                                tile_index: None,
-                                                image: Some(Err(Error::ImageNotFound)),
-                                            });
-                                        }
-                                    },
+        ThreadPool::virtual_texture_cache().spawn(move || {
+            let sender = video_sender_clone;
+            let receiver = user_receiver;
+            let mut block_images: HashMap<String, BlockImage> = HashMap::new();
+            let mut id: u32 = 0;
+            loop {
+                match receiver.recv() {
+                    Ok(ref message) => {
+                        if let (Some(key), Some(path)) =
+                            (message.key.as_ref(), message.path.as_ref())
+                        {
+                            if block_images.contains_key(key) == false {
+                                let block_image =
+                                    BlockImage::new(&path, virtual_texture_configuration, id);
+                                block_images.insert(key.to_string(), block_image);
+                                id += 1;
+                            }
+                        } else if let (Some(key), Some(tile_index)) =
+                            (message.key.as_ref(), message.tile_index.as_ref())
+                        {
+                            match block_images.get_mut(key) {
+                                Some(block_image) => match block_image.get_image(*tile_index) {
+                                    Some(page_image) => {
+                                        let _ = sender.send(Message {
+                                            path: None,
+                                            key: Some(key.to_string()),
+                                            tile_index: Some(tile_index.clone()),
+                                            image: Some(Ok(page_image)),
+                                        });
+                                    }
                                     None => {
                                         let _ = sender.send(Message {
                                             path: None,
@@ -94,13 +82,22 @@ impl VirtualTextureAsyncLoader {
                                             image: Some(Err(Error::ImageNotFound)),
                                         });
                                     }
+                                },
+                                None => {
+                                    let _ = sender.send(Message {
+                                        path: None,
+                                        key: Some(key.to_string()),
+                                        tile_index: None,
+                                        image: Some(Err(Error::ImageNotFound)),
+                                    });
                                 }
                             }
                         }
-                        Err(error) => {}
                     }
+                    Err(error) => {}
                 }
-            });
+            }
+        });
 
         cache
     }

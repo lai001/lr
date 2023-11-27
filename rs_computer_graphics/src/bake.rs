@@ -128,7 +128,7 @@ impl Baker {
             let equirectangular_hdr_image = self.equirectangular_hdr_image.clone();
             let roughness = roughness_delta * mipmap_level as f32;
             let progress_bar = progress_collection[mipmap_level as usize].to_owned();
-            ThreadPool::global().lock().unwrap().spawn(move || {
+            ThreadPool::global().spawn(move || {
                 let mut cube_map = CubeMap {
                     negative_x: image::ImageBuffer::<image::Rgba<f32>, Vec<f32>>::new(
                         length, length,
