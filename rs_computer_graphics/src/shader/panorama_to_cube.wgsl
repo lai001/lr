@@ -7,7 +7,7 @@ var equirectangular_texture: texture_2d<f32>;
 
 @group(0)
 @binding(1)
-var cube_map: texture_storage_2d_array<rgba32float, write>;
+var cube_map: texture_storage_2d_array<rg11b10float, write>;
 
 fn get_sample_picker(face : u32, uv: vec2<f32>) -> vec3<f32> {
 	var SamplePicker: vec3<f32>;

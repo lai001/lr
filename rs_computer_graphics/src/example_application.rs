@@ -269,6 +269,7 @@ pub struct RenderContext {
     next_phong_pipeline: NextPhongPipeline,
     pbr_pipeline: NextPBRPipeline,
     default_textures: DefaultTextures,
+    new_window_size: Option<winit::dpi::PhysicalSize<u32>>,
 }
 
 impl RenderContext {
@@ -316,6 +317,7 @@ impl RenderContext {
             pbr_pipeline,
             default_textures,
             ibl_textures: HashMap::new(),
+            new_window_size: None,
         }
     }
 
@@ -573,15 +575,22 @@ impl RenderContext {
 
         match render_message {
             RenderMessage::Resized(size) => {
-                self.screen_descriptor.physical_height = size.height;
-                self.screen_descriptor.physical_width = size.width;
-                self.wgpu_context.window_resized(size);
+                self.new_window_size = Some(size);
+                // self.screen_descriptor.physical_height = size.height;
+                // self.screen_descriptor.physical_width = size.width;
+                // self.wgpu_context.window_resized(size);
                 None
             }
             RenderMessage::CreateResource(create_resource_request_info) => {
                 self.process_create_requested_info(create_resource_request_info)
             }
             RenderMessage::Redraw(redraw_info) => {
+                if let Some(size) = self.new_window_size {
+                    self.screen_descriptor.physical_height = size.height;
+                    self.screen_descriptor.physical_width = size.width;
+                    self.wgpu_context.window_resized(size);
+                    self.new_window_size = None;
+                }
                 let result = self.wgpu_context.get_current_surface_texture();
                 if let Err(error) = result {
                     log::warn!("{error}");
@@ -654,7 +663,7 @@ impl RenderContext {
             &window,
             Some(wgpu::PowerPreference::LowPower),
             Some(wgpu::InstanceDescriptor {
-                backends: wgpu::Backends::DX12,
+                backends: wgpu::Backends::VULKAN,
                 dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
             }),
         );
@@ -844,21 +853,21 @@ impl ExampleApplication {
                         is_bake_irradiance: true,
                         is_bake_brdflut: true,
                         is_bake_pre_filter: true,
-                        environment_cube_map_length: 256,
-                        irradiance_cube_map_length: 256,
-                        irradiance_sample_count: 256,
-                        pre_filter_cube_map_length: 256,
-                        pre_filter_cube_map_max_mipmap_level: 6,
-                        pre_filter_sample_count: 256,
+                        environment_cube_map_length: 512,
+                        irradiance_cube_map_length: 32,
+                        irradiance_sample_count: 4096,
+                        pre_filter_cube_map_length: 2048,
+                        pre_filter_cube_map_max_mipmap_level: 5,
+                        pre_filter_sample_count: 1024,
                         brdflutmap_length: 256,
-                        brdf_sample_count: 256,
+                        brdf_sample_count: 4096,
                         is_read_back: false,
                     },
                 }]),
             ]));
 
             let clusters = model_loader::ModelLoader::load_from_file2(
-                &FileManager::default().get_resource_path("Remote/Monky.fbx"),
+                &FileManager::default().get_resource_path("Remote/Monkey.fbx"),
             );
 
             for cluster in clusters {
@@ -1008,6 +1017,7 @@ impl ExampleApplication {
                             }
                         }
                         winit::event::WindowEvent::Resized(size) => {
+                            log::trace!("Window Resized. {size:?}");
                             render_thread_channel.to_b(RenderMessage::Resized(*size));
                         }
                         _ => {}

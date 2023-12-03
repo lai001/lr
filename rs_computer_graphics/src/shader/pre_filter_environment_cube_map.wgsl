@@ -20,7 +20,7 @@ var equirectangular_texture: texture_2d<f32>;
 
 @group(0)
 @binding(1)
-var prefilterMap: texture_storage_2d_array<rgba32float, write>;
+var prefilterMap: texture_storage_2d_array<rg11b10float, write>;
 
 @group(1)
 @binding(0)
@@ -137,7 +137,7 @@ fn sample_equirectangular(texture: texture_2d<f32>, location: vec3<f32>, lod: i3
 @workgroup_size(16, 16, 1)
 fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	var cube_map_texture_dimensions = textureDimensions(prefilterMap);
-	var sample_uv = vec2<f32>(global_id.xy) / vec2<f32>(cube_map_texture_dimensions.xy) * 2.0 - 1.0;
+	var sample_uv = (vec2<f32>(global_id.xy) + vec2(0.5)) / vec2<f32>(cube_map_texture_dimensions.xy) * 2.0 - 1.0;
 
 	var N = get_sample_picker(global_id.z, sample_uv);
 

@@ -1,6 +1,3 @@
-use rs_foundation::cast_to_type_buffer;
-use std::sync::Arc;
-
 use crate::{
     bake_info::BakeInfo,
     compute_pipeline::{
@@ -9,8 +6,11 @@ use crate::{
         pre_filter_environment_cube_map_compute_pipeline::PreFilterEnvironmentCubeMapComputePipeline,
     },
     cube_map::CubeMap,
-    util::{calculate_mipmap_level, texture2d_from_rgba_rgba32_fimage},
+    texture_loader::TextureLoader,
+    util::calculate_mipmap_level,
 };
+use rs_foundation::cast_to_type_buffer;
+use std::sync::Arc;
 
 pub struct AccelerationBaker {
     bake_info: BakeInfo,
@@ -38,29 +38,33 @@ impl AccelerationBaker {
         assert!(bake_info.irradiance_cube_map_length > 0);
         assert!(bake_info.pre_filter_cube_map_length > 4);
         assert!(bake_info.pre_filter_cube_map_max_mipmap_level > 0);
-        match image::open(file_path) {
-            Ok(image) => {
-                let max_mipmap_level = calculate_mipmap_level(bake_info.pre_filter_cube_map_length)
-                    .min(bake_info.pre_filter_cube_map_max_mipmap_level);
-                assert!(max_mipmap_level > 0);
+        let max_mipmap_level = calculate_mipmap_level(bake_info.pre_filter_cube_map_length)
+            .min(bake_info.pre_filter_cube_map_max_mipmap_level);
+        assert!(max_mipmap_level > 0);
 
-                let equirectangular_hdr_image = image.into_rgba32f();
-                let equirectangular_hdr_texture =
-                    texture2d_from_rgba_rgba32_fimage(device, queue, &equirectangular_hdr_image, 1);
-                AccelerationBaker {
-                    bake_info,
-                    equirectangular_hdr_texture,
-                    brdflut_image: None,
-                    environment_cube_map: None,
-                    irradiance_cube_map: None,
-                    pre_filter_cube_maps: None,
-                    brdflut_texture: Arc::new(None),
-                    environment_cube_texture: Arc::new(None),
-                    irradiance_cube_map_texture: Arc::new(None),
-                    pre_filter_cube_map_textures: Arc::new(None),
-                    pre_filter_cube_map_lod_texture: Arc::new(None),
-                }
-            }
+        match TextureLoader::load_texture_2d_from_file(
+            file_path,
+            Some("equirectangular_hdr_texture"),
+            device,
+            queue,
+            None,
+            None,
+            None,
+            None,
+        ) {
+            Ok(equirectangular_hdr_texture) => AccelerationBaker {
+                bake_info,
+                equirectangular_hdr_texture,
+                brdflut_image: None,
+                environment_cube_map: None,
+                irradiance_cube_map: None,
+                pre_filter_cube_maps: None,
+                brdflut_texture: Arc::new(None),
+                environment_cube_texture: Arc::new(None),
+                irradiance_cube_map_texture: Arc::new(None),
+                pre_filter_cube_map_textures: Arc::new(None),
+                pre_filter_cube_map_lod_texture: Arc::new(None),
+            },
             Err(error) => {
                 log::warn!("{:?}", error);
                 panic!()
@@ -103,8 +107,8 @@ impl AccelerationBaker {
     ) -> wgpu::Texture {
         assert_eq!(cube_map_textures.is_empty(), false);
 
-        let cube_map_texture_descriptor = wgpu::TextureDescriptor {
-            label: None,
+        let pre_filter_cube_map_lod_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(&format!("Bake pre_filter_cube_map_lod_texture")),
             size: wgpu::Extent3d {
                 width: cube_map_textures.get(0).unwrap().size().width,
                 height: cube_map_textures.get(0).unwrap().size().height,
@@ -113,11 +117,10 @@ impl AccelerationBaker {
             mip_level_count: cube_map_textures.len() as u32,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
+            format: wgpu::TextureFormat::Rg11b10Float,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
-        };
-        let pre_filter_cube_map_lod_texture = device.create_texture(&cube_map_texture_descriptor);
+        });
 
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -490,9 +493,10 @@ impl AccelerationBaker {
             Some(irradiance_texture) => {
                 let mip_level_count = irradiance_texture.mip_level_count();
                 let array_layer_count = irradiance_texture.depth_or_array_layers();
+                let format = irradiance_texture.format();
                 return irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
                     label: None,
-                    format: Some(wgpu::TextureFormat::Rgba32Float),
+                    format: Some(format),
                     dimension: Some(wgpu::TextureViewDimension::Cube),
                     aspect: wgpu::TextureAspect::All,
                     base_mip_level: 0,
@@ -512,9 +516,10 @@ impl AccelerationBaker {
             Some(pre_filter_cube_map_texture) => {
                 let mip_level_count = pre_filter_cube_map_texture.mip_level_count();
                 let array_layer_count = pre_filter_cube_map_texture.depth_or_array_layers();
+                let format = pre_filter_cube_map_texture.format();
                 return pre_filter_cube_map_texture.create_view(&wgpu::TextureViewDescriptor {
                     label: None,
-                    format: Some(wgpu::TextureFormat::Rgba32Float),
+                    format: Some(format),
                     dimension: Some(wgpu::TextureViewDimension::Cube),
                     aspect: wgpu::TextureAspect::All,
                     base_mip_level: 0,

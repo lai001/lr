@@ -1,8 +1,9 @@
 use crate::shader::shader_library::ShaderLibrary;
 use wgpu::{
-    BindGroupLayout, ComputePipeline, StorageTextureAccess, TextureFormat, TextureSampleType,
-    TextureViewDimension,
+    BindGroupLayout, ComputePipeline, StorageTextureAccess, TextureSampleType, TextureViewDimension,
 };
+
+const PREFIX: &str = "IrradianceCubeMapPipeline ";
 
 struct Constants {
     sample_count: u32,
@@ -12,10 +13,12 @@ pub struct IrradianceCubeMapPipeline {
     compute_pipeline: ComputePipeline,
     textures_bind_group_layout: BindGroupLayout,
     constants_bind_group_layout: BindGroupLayout,
+    target_format: wgpu::TextureFormat,
 }
 
 impl IrradianceCubeMapPipeline {
     pub fn new(device: &wgpu::Device) -> IrradianceCubeMapPipeline {
+        let target_format = wgpu::TextureFormat::Rg11b10Float;
         let shader = ShaderLibrary::default()
             .lock()
             .unwrap()
@@ -23,13 +26,13 @@ impl IrradianceCubeMapPipeline {
 
         let textures_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
+                label: Some(&format!("{PREFIX} textures_bind_group_layout")),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: false },
+                            sample_type: TextureSampleType::Float { filterable: true },
                             view_dimension: TextureViewDimension::D2,
                             multisampled: false,
                         },
@@ -40,7 +43,7 @@ impl IrradianceCubeMapPipeline {
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::StorageTexture {
                             access: StorageTextureAccess::WriteOnly,
-                            format: TextureFormat::Rgba32Float,
+                            format: target_format,
                             view_dimension: TextureViewDimension::D2Array,
                         },
                         count: None,
@@ -49,7 +52,7 @@ impl IrradianceCubeMapPipeline {
             });
         let constants_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
+                label: Some(&format!("{PREFIX} constants_bind_group_layout")),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE,
@@ -64,12 +67,14 @@ impl IrradianceCubeMapPipeline {
                 }],
             });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
+            label: Some(&format!("{PREFIX} pipeline_layout")),
+
             bind_group_layouts: &[&textures_bind_group_layout, &constants_bind_group_layout],
             push_constant_ranges: &[],
         });
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
+            label: Some(&format!("{PREFIX} compute_pipeline")),
+
             layout: Some(&pipeline_layout),
             module: &shader,
             entry_point: "cs_main",
@@ -78,6 +83,7 @@ impl IrradianceCubeMapPipeline {
             compute_pipeline,
             constants_bind_group_layout,
             textures_bind_group_layout,
+            target_format,
         }
     }
 
@@ -89,8 +95,8 @@ impl IrradianceCubeMapPipeline {
         length: u32,
         sample_count: u32,
     ) -> wgpu::Texture {
-        let cube_map_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
+        let irradiance_cube_map_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(&format!("{PREFIX} irradiance_cube_map_texture")),
             size: wgpu::Extent3d {
                 width: length,
                 height: length,
@@ -99,39 +105,39 @@ impl IrradianceCubeMapPipeline {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
+            format: self.target_format,
             usage: wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
 
-        let equirectangular_texture_view_desc = wgpu::TextureViewDescriptor {
-            label: None,
-            format: Some(wgpu::TextureFormat::Rgba32Float),
-            dimension: Some(wgpu::TextureViewDimension::D2),
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: None,
-        };
-        let cube_map_texture_view_desc = wgpu::TextureViewDescriptor {
-            label: None,
-            format: Some(wgpu::TextureFormat::Rgba32Float),
-            dimension: Some(wgpu::TextureViewDimension::D2Array),
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None,
-            base_array_layer: 0,
-            array_layer_count: None,
-        };
         let equirectangular_texture_view =
-            equirectangular_texture.create_view(&equirectangular_texture_view_desc);
-        let cube_map_texture_view = cube_map_texture.create_view(&cube_map_texture_view_desc);
+            equirectangular_texture.create_view(&wgpu::TextureViewDescriptor {
+                label: None,
+                format: Some(equirectangular_texture.format()),
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                mip_level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            });
+        let irradiance_cube_map_texture_view =
+            irradiance_cube_map_texture.create_view(&wgpu::TextureViewDescriptor {
+                label: Some(&format!("{PREFIX} irradiance_cube_map_texture_view")),
+                format: Some(self.target_format),
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                mip_level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            });
 
         let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
+            label: Some(&format!("{PREFIX} texture_bind_group")),
+
             layout: &self.textures_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -140,7 +146,7 @@ impl IrradianceCubeMapPipeline {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&cube_map_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&irradiance_cube_map_texture_view),
                 },
             ],
         });
@@ -158,18 +164,20 @@ impl IrradianceCubeMapPipeline {
             }],
         });
 
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some(&format!("{PREFIX} command_encoder")),
+        });
         {
-            let mut cpass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-            cpass.set_pipeline(&self.compute_pipeline);
-            cpass.set_bind_group(0, &texture_bind_group, &[]);
-            cpass.set_bind_group(1, &constants_bind_group, &[]);
-            cpass.dispatch_workgroups(length / 16, length / 16, 6);
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some(&format!("{PREFIX} compute_pass")),
+            });
+            compute_pass.set_pipeline(&self.compute_pipeline);
+            compute_pass.set_bind_group(0, &texture_bind_group, &[]);
+            compute_pass.set_bind_group(1, &constants_bind_group, &[]);
+            compute_pass.dispatch_workgroups(length / 16, length / 16, 6);
         }
 
         let _ = queue.submit(Some(encoder.finish()));
-        cube_map_texture
+        irradiance_cube_map_texture
     }
 }

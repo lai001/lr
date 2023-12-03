@@ -127,15 +127,26 @@ fn G(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, k: f32) -> f32 {
     return ggx1 * ggx2;
 }
 
-fn IBL(shadingInfo: ShadingInfo, light_reflection_vec: vec3<f32>, irradiance_texture: texture_cube<f32>, pre_filter_cube_map_texture: texture_cube<f32>, brdflut_texture: texture_2d<f32>) -> vec3<f32> {
-    var irradiance = textureSample(irradiance_texture, base_color_sampler_non_filtering, shadingInfo.normal).xyz;
+fn ibl_diffuse_color(shadingInfo: ShadingInfo, irradiance_texture: texture_cube<f32>) -> vec3<f32> {
+    var irradiance = textureSample(irradiance_texture, base_color_sampler, shadingInfo.normal).xyz;
     var f = F(shadingInfo.halfway_direction, shadingInfo.view_direction, shadingInfo.f0);
     var fac = mix(vec3<f32>(1.0) - f, vec3<f32>(0.0), shadingInfo.metalness);
     var diffuse_color = fac * shadingInfo.base_color.rgb * irradiance;
-    var levels = textureNumLevels(pre_filter_cube_map_texture);
-    var pre_filter_value = textureSampleLevel(pre_filter_cube_map_texture, base_color_sampler_non_filtering, light_reflection_vec, shadingInfo.roughness * f32(levels)).xyz;
-    var brdf_value = textureSample(brdflut_texture, base_color_sampler_non_filtering, vec2<f32>(shadingInfo.nov, shadingInfo.roughness)).xy;
+    return diffuse_color;
+}
+
+fn ibl_specular_color(shadingInfo: ShadingInfo, light_reflection_vec: vec3<f32>, pre_filter_cube_map_texture: texture_cube<f32>, brdflut_texture: texture_2d<f32>) -> vec3<f32> {
+    var levels = f32(textureNumLevels(pre_filter_cube_map_texture)) - 1.0;
+    var lod = shadingInfo.roughness * levels;
+    var pre_filter_value = textureSampleLevel(pre_filter_cube_map_texture, base_color_sampler, light_reflection_vec, lod).xyz;
+    var brdf_value = textureSample(brdflut_texture, base_color_sampler, vec2<f32>(shadingInfo.nov, shadingInfo.roughness)).xy;
     var specular_color = (shadingInfo.f0 * brdf_value.x + brdf_value.y) * pre_filter_value;
+    return specular_color;
+}
+
+fn IBL(shadingInfo: ShadingInfo, light_reflection_vec: vec3<f32>, irradiance_texture: texture_cube<f32>, pre_filter_cube_map_texture: texture_cube<f32>, brdflut_texture: texture_2d<f32>) -> vec3<f32> {
+    var diffuse_color = ibl_diffuse_color(shadingInfo, irradiance_texture);
+    var specular_color = ibl_specular_color(shadingInfo, light_reflection_vec, pre_filter_cube_map_texture, brdflut_texture);
     return diffuse_color + specular_color;
 }
 
@@ -185,7 +196,7 @@ fn fs_main(vertex_output: VertexOutput) -> @location(0) vec4<f32> {
     var halfway_direction = normalize(directional_light_direction + view_direction);
     var nov = dot(normal_w, view_direction);
     var noh = dot(normal_w, halfway_direction);
-    var nol = dot(normal_w, directional_light_direction);
+    var nol = clamp(dot(normal_w, directional_light_direction), 0.0, 1.0);
     var d = D(normal_w, halfway_direction, roughness);
     var f = F(halfway_direction, view_direction, mix(vec3<f32>(1.0, 1.0, 1.0) * 0.04, albedo_color.xyz, metalness));
     var g = G(normal_w, view_direction, directional_light_direction, pow((roughness + 1.0), 2.0) / 8.0);

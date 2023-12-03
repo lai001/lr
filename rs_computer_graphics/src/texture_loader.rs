@@ -1,21 +1,26 @@
-use image::imageops;
+use image::{imageops, ImageError};
 use wgpu::{util::DeviceExt, *};
 
 pub struct TextureLoader {}
 
 impl TextureLoader {
-    pub fn load_from_file(
+    pub fn load_texture_2d_from_file(
         file_path: &str,
         label: Option<&str>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: Option<TextureFormat>,
-        mipmap: u8,
-    ) -> Option<Texture> {
+        sample_count: Option<u32>,
+        mipmap: Option<u8>,
+        usage: Option<TextureUsages>,
+    ) -> Result<Texture, ImageError> {
         let format = format.unwrap_or(TextureFormat::Rgba8Unorm);
+        let usage = usage.unwrap_or(TextureUsages::all());
+        let mipmap = mipmap.unwrap_or(1);
+        let sample_count = sample_count.unwrap_or(1);
 
         match Self::make_images(file_path, mipmap, None) {
-            Some(images) => {
+            Ok(images) => {
                 let texture_extent = wgpu::Extent3d {
                     width: images[0].width(),
                     height: images[0].height(),
@@ -26,12 +31,10 @@ impl TextureLoader {
                     label,
                     size: texture_extent,
                     mip_level_count: images.len() as u32,
-                    sample_count: 1,
+                    sample_count,
                     dimension: TextureDimension::D2,
                     format,
-                    usage: TextureUsages::COPY_DST
-                        | TextureUsages::COPY_DST
-                        | TextureUsages::TEXTURE_BINDING,
+                    usage,
                     view_formats: &[],
                 };
                 let mut data: Vec<u8> = vec![];
@@ -43,9 +46,9 @@ impl TextureLoader {
 
                 let texture = device.create_texture_with_data(queue, &texture_descriptor, &data);
 
-                Some(texture)
+                Ok(texture)
             }
-            None => None,
+            Err(error) => Err(error),
         }
     }
 
@@ -53,7 +56,7 @@ impl TextureLoader {
         file_path: &str,
         mipmap: u8,
         filter: Option<imageops::FilterType>,
-    ) -> Option<Vec<image::RgbaImage>> {
+    ) -> Result<Vec<image::RgbaImage>, ImageError> {
         match image::open(file_path) {
             Ok(image) => {
                 let max_mipmap = (image.width().min(image.height()).ilog2() + 1).min(mipmap as u32);
@@ -76,10 +79,9 @@ impl TextureLoader {
                     images.push(image);
                 }
 
-                return Some(images);
+                return Ok(images);
             }
-            Err(error) => log::warn!("{:?}", error),
+            Err(error) => Err(error),
         }
-        return None;
     }
 }

@@ -1,5 +1,5 @@
-const PI: f32 = 3.1415;
-const TAU: f32 = 6.283;
+const PI: f32 = 3.14159265359;
+const TAU: f32 = 6.28318530718;
 
 struct Constants
 {
@@ -15,7 +15,7 @@ struct CoordinateSystem
 
 @group(0)
 @binding(0)
-var lut_texture: texture_storage_2d<rgba32float, write>;
+var lut_texture: texture_storage_2d<rg16float, write>;
 
 @group(1)
 @binding(0)
@@ -75,7 +75,7 @@ fn convert_coordinate_system(v: vec3<f32>, coordinateSystem: CoordinateSystem) -
 }
 
 fn integrate_brdf(n_dot_v: f32, roughness: f32) -> vec2<f32> {
-    
+    var n_dot_v = max(n_dot_v, 0.001);
     var v = vec3<f32>(sqrt(1.0 - n_dot_v * n_dot_v), 0.0, n_dot_v);
 
     var a: f32 = 0.0;
@@ -120,7 +120,7 @@ fn integrate_brdf(n_dot_v: f32, roughness: f32) -> vec2<f32> {
 @workgroup_size(16, 16, 1)
 fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var lut_texture_dimensions = textureDimensions(lut_texture);
-    var uv = vec2<f32>(global_id.xy) / vec2<f32>(lut_texture_dimensions.xy);
+    var uv = (vec2<f32>(global_id.xy) + vec2(0.5)) / vec2<f32>(lut_texture_dimensions.xy);
     var v = integrate_brdf(uv.x, uv.y);
     var color = vec3<f32>(v.x, v.y, 0.0);
     textureStore(lut_texture, vec2<i32>(global_id.xy), vec4<f32>(color, 1.0));

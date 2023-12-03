@@ -113,14 +113,14 @@ impl NextPBRPipeline {
             } else {
                 VertexBufferType::Interleaved(MeshVertex::type_layout())
             },
-            Some(HashMap::from([(
-                glam::uvec2(2, 1),
-                EBindGroupLayoutEntryHookType::SamplerBindingType(
-                    wgpu::SamplerBindingType::NonFiltering,
-                ),
-            )])),
+            None,
         );
-        let base_color_sampler = device.create_sampler(&SamplerDescriptor::default());
+
+        let base_color_sampler = device.create_sampler(&{
+            let mut des = SamplerDescriptor::default();
+            des.mipmap_filter = FilterMode::Linear;
+            des
+        });
         let base_color_sampler_non_filtering = device.create_sampler(&SamplerDescriptor::default());
 
         NextPBRPipeline {

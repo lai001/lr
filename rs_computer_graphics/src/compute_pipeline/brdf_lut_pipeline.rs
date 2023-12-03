@@ -3,6 +3,8 @@ use wgpu::{
     BindGroupLayout, ComputePipeline, StorageTextureAccess, TextureFormat, TextureViewDimension,
 };
 
+const PREFIX: &str = "BrdfLutPipeline ";
+
 struct Constants {
     sample_count: u32,
 }
@@ -11,23 +13,25 @@ pub struct BrdfLutPipeline {
     compute_pipeline: ComputePipeline,
     textures_bind_group_layout: BindGroupLayout,
     constants_bind_group_layout: BindGroupLayout,
+    target_format: wgpu::TextureFormat,
 }
 
 impl BrdfLutPipeline {
     pub fn new(device: &wgpu::Device) -> BrdfLutPipeline {
+        let target_format = TextureFormat::Rg16Float;
         let shader = ShaderLibrary::default()
             .lock()
             .unwrap()
             .get_shader("brdf_lut.wgsl");
         let textures_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
+                label: Some(&format!("{PREFIX} textures_bind_group_layout")),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::StorageTexture {
                         access: StorageTextureAccess::WriteOnly,
-                        format: TextureFormat::Rgba32Float,
+                        format: target_format,
                         view_dimension: TextureViewDimension::D2,
                     },
                     count: None,
@@ -35,7 +39,7 @@ impl BrdfLutPipeline {
             });
         let constants_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
+                label: Some(&format!("{PREFIX} constants_bind_group_layout")),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE,
@@ -51,12 +55,12 @@ impl BrdfLutPipeline {
             });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
+            label: Some(&format!("{PREFIX} pipeline_layout")),
             bind_group_layouts: &[&textures_bind_group_layout, &constants_bind_group_layout],
             push_constant_ranges: &[],
         });
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
+            label: Some(&format!("{PREFIX} compute_pipeline")),
             layout: Some(&pipeline_layout),
             module: &shader,
             entry_point: "cs_main",
@@ -65,6 +69,7 @@ impl BrdfLutPipeline {
             compute_pipeline,
             textures_bind_group_layout,
             constants_bind_group_layout,
+            target_format,
         }
     }
 
@@ -76,7 +81,7 @@ impl BrdfLutPipeline {
         sample_count: u32,
     ) -> wgpu::Texture {
         let lut_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
+            label: Some(&format!("{PREFIX} brdf_lut_texture")),
             size: wgpu::Extent3d {
                 width: length,
                 height: length,
@@ -85,26 +90,25 @@ impl BrdfLutPipeline {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
+            format: self.target_format,
             usage: wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
 
-        let lut_texture_view_desc = wgpu::TextureViewDescriptor {
-            label: None,
-            format: Some(wgpu::TextureFormat::Rgba32Float),
+        let lut_texture_view = lut_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some(&format!("{PREFIX} brdf_lut_texture_view")),
+            format: Some(lut_texture.format()),
             dimension: Some(wgpu::TextureViewDimension::D2),
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
-        };
-        let lut_texture_view = lut_texture.create_view(&lut_texture_view_desc);
+        });
         let textures_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
+            label: Some(&format!("{PREFIX} textures_bind_group")),
             layout: &self.textures_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -117,7 +121,7 @@ impl BrdfLutPipeline {
         let uniform_buf = crate::util::create_gpu_uniform_buffer_from(device, &constants, None);
 
         let constants_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
+            label: Some(&format!("{PREFIX} constants_bind_group")),
             layout: &self.constants_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -125,27 +129,19 @@ impl BrdfLutPipeline {
             }],
         });
 
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some(&format!("{PREFIX} command_encoder")),
+        });
         {
-            let mut cpass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-            cpass.set_pipeline(&self.compute_pipeline);
-            cpass.set_bind_group(0, &textures_bind_group, &[]);
-            cpass.set_bind_group(1, &constants_bind_group, &[]);
-            cpass.dispatch_workgroups(length / 16, length / 16, 6);
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some(&format!("{PREFIX} compute_pass")),
+            });
+            compute_pass.set_pipeline(&self.compute_pipeline);
+            compute_pass.set_bind_group(0, &textures_bind_group, &[]);
+            compute_pass.set_bind_group(1, &constants_bind_group, &[]);
+            compute_pass.dispatch_workgroups(length / 16, length / 16, 1);
         }
         let _ = queue.submit(Some(encoder.finish()));
-        // let image_data = map_texture_cpu_sync(
-        //     device,
-        //     queue,
-        //     &lut_texture,
-        //     length,
-        //     length,
-        //     image::ColorType::Rgba32F,
-        // );
-        // let f32_data: &[f32] = crate::util::cast_to_type_buffer(&image_data);
-        // image::Rgba32FImage::from_vec(length, length, f32_data.to_vec()).unwrap()
         lut_texture
     }
 }

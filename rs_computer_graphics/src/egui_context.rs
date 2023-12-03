@@ -156,7 +156,7 @@ impl DataSource {
             is_show_pannel: false,
             is_show_texture: true,
             is_show_gizmo_settings: false,
-            is_show_property: false,
+            is_show_property: true,
             gizmo: FGizmo::default(),
             camera,
             model_matrix: None,
