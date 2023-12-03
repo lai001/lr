@@ -71,6 +71,7 @@ impl BaseComputePipeline {
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some(&format!("{} compute pass", self.tag)),
+                timestamp_writes: None,
             });
             compute_pass.set_pipeline(&self.compute_pipeline);
             for (index, bind_group) in bind_groups.iter().enumerate() {

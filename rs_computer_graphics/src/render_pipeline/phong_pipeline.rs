@@ -155,7 +155,7 @@ impl PhongPipeline {
             uniform_bind_group_layout,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
-                store: true,
+                store: StoreOp::Store,
             }),
             stencil_ops: None,
             depth_stencil,
@@ -253,11 +253,13 @@ impl PhongPipeline {
                     ops: wgpu::Operations {
                         // load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     },
                     view: output_view,
                 })],
                 depth_stencil_attachment: Some(render_pass_depth_stencil_attachment),
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &uniform_bind_group, &[]);

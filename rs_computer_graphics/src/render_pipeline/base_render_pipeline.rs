@@ -212,11 +212,11 @@ impl BaseRenderPipeline {
                     view: depth_view,
                     depth_ops: Some(depth_ops.unwrap_or(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     })),
                     stencil_ops: Some(stencil_ops.unwrap_or(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     })),
                 });
             }
@@ -238,11 +238,13 @@ impl BaseRenderPipeline {
                     resolve_target,
                     ops: color_ops.unwrap_or(Operations {
                         load: LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     }),
                     view: output_view,
                 })],
                 depth_stencil_attachment,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
             for (index, bind_group) in bind_groups.iter().enumerate() {
@@ -291,11 +293,11 @@ impl BaseRenderPipeline {
                     view: depth_view,
                     depth_ops: Some(depth_ops.unwrap_or(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     })),
                     stencil_ops: Some(stencil_ops.unwrap_or(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     })),
                 });
             }
@@ -317,11 +319,13 @@ impl BaseRenderPipeline {
                     resolve_target,
                     ops: color_ops.unwrap_or(Operations {
                         load: LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     }),
                     view: output_view,
                 })],
                 depth_stencil_attachment,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
             for (index, bind_group) in bind_groups.iter().enumerate() {

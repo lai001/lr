@@ -84,7 +84,7 @@ impl PBRMaterial {
             let array_layer_count = pre_filter_cube_map_texture.depth_or_array_layers();
             return pre_filter_cube_map_texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
-                format: Some(TextureFormat::Rgba32Float),
+                format: Some(pre_filter_cube_map_texture.format()),
                 dimension: Some(TextureViewDimension::Cube),
                 aspect: TextureAspect::All,
                 base_mip_level: 0,
@@ -103,7 +103,7 @@ impl PBRMaterial {
             let array_layer_count = irradiance_texture.depth_or_array_layers();
             return irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
-                format: Some(TextureFormat::Rgba32Float),
+                format: Some(irradiance_texture.format()),
                 dimension: Some(TextureViewDimension::Cube),
                 aspect: TextureAspect::All,
                 base_mip_level: 0,

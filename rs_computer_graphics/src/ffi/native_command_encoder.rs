@@ -30,10 +30,12 @@ pub extern "C" fn nativeCommandEncoderBeginRenderPass(
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
         let handle = Box::into_raw(Box::new(render_pass));
         log::trace!(

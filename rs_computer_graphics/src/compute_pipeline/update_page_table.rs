@@ -127,7 +127,7 @@ impl UpdatePageTableCSPipeline {
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
             let mut cpass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None, timestamp_writes: None });
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, &textures_bind_group, &[]);
             cpass.set_bind_group(1, &constants_bind_group, &[]);

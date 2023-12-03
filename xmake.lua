@@ -118,8 +118,8 @@ task("download_deps")
         end
 
         if os.exists(gizmo_dir) == false then
-            git.clone("https://github.com/jakobhellermann/egui-gizmo.git", { outputdir = gizmo_dir })
-            git.checkout("main", { repodir = gizmo_dir })
+            git.clone("https://github.com/urholaukkarinen/egui-gizmo.git", { outputdir = gizmo_dir })
+            git.checkout("45a4afb8900d7f46c50d2c35db7cf5a79cc23466", { repodir = gizmo_dir })
         end
 
         if os.exists("Resource/Remote/neon_photostudio_2k.exr") == false then

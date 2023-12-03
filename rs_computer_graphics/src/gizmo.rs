@@ -57,9 +57,9 @@ impl FGizmo {
         model_matrix: &glam::Mat4,
     ) -> Option<glam::Mat4> {
         let gizmo = egui_gizmo::Gizmo::new("Gizmo")
-            .view_matrix(camera.get_view_matrix().to_cols_array_2d())
-            .projection_matrix(camera.get_projection_matrix().to_cols_array_2d())
-            .model_matrix(model_matrix.to_cols_array_2d())
+            .view_matrix(camera.get_view_matrix().to_cols_array_2d().into())
+            .projection_matrix(camera.get_projection_matrix().to_cols_array_2d().into())
+            .model_matrix(model_matrix.to_cols_array_2d().into())
             .mode(self.gizmo_mode)
             .orientation(self.gizmo_orientation)
             .snapping(false)
@@ -70,7 +70,13 @@ impl FGizmo {
         if let Some(gizmo_response) = last_gizmo_response {
             Self::show_gizmo_status(ui, gizmo_response);
             let model_matrix = gizmo_response.transform();
-            Some(model_matrix)
+            let matrix = glam::Mat4::from_cols_array_2d(&[
+                model_matrix.x.as_ref().to_owned(),
+                model_matrix.y.as_ref().to_owned(),
+                model_matrix.z.as_ref().to_owned(),
+                model_matrix.w.as_ref().to_owned(),
+            ]);
+            Some(matrix)
         } else {
             None
         }

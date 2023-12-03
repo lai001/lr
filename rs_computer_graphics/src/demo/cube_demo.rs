@@ -400,7 +400,7 @@ impl CubeDemo {
                 view: &depth_view,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(1.0),
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 }),
                 stencil_ops: None,
             };
@@ -451,11 +451,13 @@ impl CubeDemo {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                     view: output_view,
                 })],
                 depth_stencil_attachment: Some(render_pass_depth_stencil_attachment),
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             // rpass.push_debug_group("Prepare data for draw.");
             rpass.set_pipeline(&self.render_pipeline);

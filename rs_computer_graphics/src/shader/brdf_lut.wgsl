@@ -22,8 +22,8 @@ var lut_texture: texture_storage_2d<rg16float, write>;
 var<uniform> constants: Constants;
 
 // http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
-fn radical_inverse_vd_c(bits: u32) -> f32 {
-	var bits = bits;
+fn radical_inverse_vd_c(in_bits: u32) -> f32 {
+	var bits = in_bits;
 	bits = (bits << 16u) | (bits >> 16u);
 	bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
 	bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
@@ -74,8 +74,8 @@ fn convert_coordinate_system(v: vec3<f32>, coordinateSystem: CoordinateSystem) -
 	return v1.xyz;
 }
 
-fn integrate_brdf(n_dot_v: f32, roughness: f32) -> vec2<f32> {
-    var n_dot_v = max(n_dot_v, 0.001);
+fn integrate_brdf(in_n_dot_v: f32, roughness: f32) -> vec2<f32> {
+    var n_dot_v = max(in_n_dot_v, 0.001);
     var v = vec3<f32>(sqrt(1.0 - n_dot_v * n_dot_v), 0.0, n_dot_v);
 
     var a: f32 = 0.0;

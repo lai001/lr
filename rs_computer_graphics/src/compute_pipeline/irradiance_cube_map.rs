@@ -170,6 +170,7 @@ impl IrradianceCubeMapPipeline {
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some(&format!("{PREFIX} compute_pass")),
+                timestamp_writes: None,
             });
             compute_pass.set_pipeline(&self.compute_pipeline);
             compute_pass.set_bind_group(0, &texture_bind_group, &[]);

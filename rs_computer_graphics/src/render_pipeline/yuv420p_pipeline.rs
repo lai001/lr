@@ -190,11 +190,13 @@ impl YUV420pPipeline {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     },
                     view: output_view,
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
 
             rpass.set_pipeline(&self.render_pipeline);

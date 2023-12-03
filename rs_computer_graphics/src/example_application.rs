@@ -329,15 +329,15 @@ impl RenderContext {
             &self.wgpu_context.get_depth_texture_view(),
             wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                store: true,
+                store: wgpu::StoreOp::Store,
             },
             Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(1.0),
-                store: true,
+                store: wgpu::StoreOp::Store,
             }),
             Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(0),
-                store: true,
+                store: wgpu::StoreOp::Store,
             }),
         );
     }
@@ -661,10 +661,12 @@ impl RenderContext {
 
         let wgpu_context = WGPUContext::new(
             &window,
-            Some(wgpu::PowerPreference::LowPower),
+            Some(wgpu::PowerPreference::HighPerformance),
             Some(wgpu::InstanceDescriptor {
-                backends: wgpu::Backends::VULKAN,
+                backends: wgpu::Backends::PRIMARY,
                 dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+                flags: wgpu::InstanceFlags::default(),
+                gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
             }),
         );
 

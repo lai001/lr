@@ -28,8 +28,8 @@ var<uniform> pre_filter_environment_cube_map_constants: Constants;
 
 
 // http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
-fn radical_inverse_vd_c(bits: u32) -> f32 {
-	var bits = bits;
+fn radical_inverse_vd_c(in_bits: u32) -> f32 {
+	var bits = in_bits;
 	bits = (bits << 16u) | (bits >> 16u);
 	bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
 	bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
@@ -38,8 +38,8 @@ fn radical_inverse_vd_c(bits: u32) -> f32 {
 	return f32(bits) * 2.3283064365386963e-10; // / 0x100000000
 }
 
-fn van_der_corpus(n: u32, base: u32) -> f32 {
-	var n = n;
+fn van_der_corpus(in_n: u32, base: u32) -> f32 {
+	var n = in_n;
     var invBase = 1.0 / f32(base);
     var denom: f32  = 1.0;
     var result  = 0.0;

@@ -77,8 +77,8 @@ fn hemisphere_sample_uniform(u: f32, v: f32) -> vec3<f32> {
 }
 
 // http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
-fn radical_inverse_vd_c(bits: u32) -> f32 {
-	var bits = bits;
+fn radical_inverse_vd_c(in_bits: u32) -> f32 {
+	var bits = in_bits;
 	bits = (bits << 16u) | (bits >> 16u);
 	bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
 	bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);

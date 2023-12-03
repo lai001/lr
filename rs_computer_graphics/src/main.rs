@@ -164,6 +164,8 @@ fn main() {
         Some(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+            flags: wgpu::InstanceFlags::default(),
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
         }),
     );
 
@@ -254,7 +256,7 @@ fn main() {
     let monky_actor = Actor::load_from_file(
         &wgpu_context.device,
         &wgpu_context.queue,
-        &rs_computer_graphics::util::get_resource_path("Remote/Monky.fbx"),
+        &rs_computer_graphics::util::get_resource_path("Remote/Cluster.fbx"),
     );
 
     let debug_triangle_pipeline = PrimitivePipeline::new(
@@ -493,15 +495,15 @@ fn main() {
                     &wgpu_context.get_depth_texture_view(),
                     wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                     Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     }),
                     Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     }),
                 );
 
@@ -577,8 +579,8 @@ fn main() {
                         }
                     }
 
-                    // for actor in [&mut cube_virtual_texture_actor, &mut sphere_virtual_actor] {
-                    for actor in [] {
+                    for actor in [&mut cube_virtual_texture_actor, &mut sphere_virtual_actor] {
+                    // for actor in [] {
                         virtual_texture_mesh_pipeline.render_actor(
                             device,
                             queue,
@@ -588,11 +590,11 @@ fn main() {
                             &camera,
                             Some(wgpu::Operations {
                                 load: wgpu::LoadOp::Load,
-                                store: true,
+                                store: wgpu::StoreOp::Store,
                             }),
                             Some(wgpu::Operations {
                                 load: wgpu::LoadOp::Load,
-                                store: true,
+                                store: wgpu::StoreOp::Store,
                             }),
                         );
                     }

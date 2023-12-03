@@ -188,7 +188,7 @@ impl PanoramaToCubeDemo {
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
             let mut cpass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None, timestamp_writes: None });
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.dispatch_workgroups(self.cube_length / 16, self.cube_length / 16, 6);

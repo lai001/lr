@@ -79,6 +79,8 @@ impl AttachmentPipeline {
                     ops: color_ops,
                 })],
                 depth_stencil_attachment: Some(render_pass_depth_stencil_attachment),
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             rpass.set_pipeline(&self.render_pipeline);
             rpass.draw(0..5, 0..1);

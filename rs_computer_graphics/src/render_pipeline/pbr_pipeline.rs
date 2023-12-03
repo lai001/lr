@@ -95,7 +95,7 @@ impl PBRPipeline {
                         binding: 4,
                         visibility: ShaderStages::FRAGMENT,
                         ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: false },
+                            sample_type: TextureSampleType::Float { filterable: true },
                             view_dimension: TextureViewDimension::D2,
                             multisampled: false,
                         },
@@ -105,7 +105,7 @@ impl PBRPipeline {
                         binding: 5,
                         visibility: ShaderStages::FRAGMENT,
                         ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: false },
+                            sample_type: TextureSampleType::Float { filterable: true },
                             view_dimension: TextureViewDimension::Cube,
                             multisampled: false,
                         },
@@ -115,7 +115,7 @@ impl PBRPipeline {
                         binding: 6,
                         visibility: ShaderStages::FRAGMENT,
                         ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float { filterable: false },
+                            sample_type: TextureSampleType::Float { filterable: true },
                             view_dimension: TextureViewDimension::Cube,
                             multisampled: false,
                         },
@@ -235,7 +235,7 @@ impl PBRPipeline {
             uniform_bind_group_layout,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
-                store: true,
+                store: StoreOp::Store,
             }),
             stencil_ops: None,
             depth_stencil,
@@ -380,11 +380,13 @@ impl PBRPipeline {
                     ops: wgpu::Operations {
                         // load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: StoreOp::Store,
                     },
                     view: output_view,
                 })],
                 depth_stencil_attachment: Some(render_pass_depth_stencil_attachment),
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &uniform_bind_group, &[]);

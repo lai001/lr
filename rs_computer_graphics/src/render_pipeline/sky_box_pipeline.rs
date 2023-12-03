@@ -95,7 +95,7 @@ impl SkyBoxPipeline {
 
         let cube_view = cube_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("[SkyBoxPipeline] cube_view"),
-            format: Some(wgpu::TextureFormat::Rgba32Float),
+            format: Some(cube_texture.format()),
             dimension: Some(wgpu::TextureViewDimension::Cube),
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,

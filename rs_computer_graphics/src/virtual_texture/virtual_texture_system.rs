@@ -182,15 +182,15 @@ impl VirtualTextureSystem {
             wgpu::Operations {
                 // load: wgpu::LoadOp::Load,
                 load: wgpu::LoadOp::Clear(Color::TRANSPARENT),
-                store: true,
+                store: StoreOp::Store,
             },
             Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(1.0),
-                store: true,
+                store: StoreOp::Store,
             }),
             Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(0),
-                store: true,
+                store: StoreOp::Store,
             }),
         );
     }
@@ -229,11 +229,11 @@ impl VirtualTextureSystem {
             window_width,
             Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
-                store: true,
+                store: StoreOp::Store,
             }),
             Some(wgpu::Operations {
                 load: wgpu::LoadOp::Load,
-                store: true,
+                store: StoreOp::Store,
             }),
         )
     }

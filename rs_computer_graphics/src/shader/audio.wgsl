@@ -21,13 +21,14 @@ struct VSConstants
 @group(2) @binding(0) var base_color_sampler : sampler;
 
 fn visualization(uv: vec2<f32>, bans: f32) -> vec4<f32> {
-    var color = mix(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 165.0 / 255.0, 0.0), uv.y);
+    var color = vec3<f32>(0.0);
     var frequency = textureSample(audio_texture, base_color_sampler, vec2<f32>(floor(uv.x * bans) / bans, 0.0)).x;
     if(uv.y < frequency) {
-        return vec4<f32>(vec3<f32>(0.0), 1.0);
+        return vec4<f32>(color, 1.0);
     } else {
         var mask = step(0.2, fract(uv.x * bans));
         var r = 1.0 + smoothstep(0.0, frequency, uv.y);
+        color = mix(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(1.0, 165.0 / 255.0, 0.0), uv.y);
         return  vec4<f32>(r * color * mask, 1.0);
     }
 }
