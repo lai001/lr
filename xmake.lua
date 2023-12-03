@@ -27,6 +27,33 @@ local function get_config_default(name, default_value)
     return cfg_value
 end
 
+local function ter_op(condition, true_value, false_value) 
+    return (condition and {true_value} or {false_value})[1]
+end
+
+local function create_project(buildir, plat, arch, mode, is_shipping, path_module)
+    local absolute = path_module.absolute
+    local project = {
+        paths = {
+            resource_dir = ter_op(is_shipping, "./Resource", absolute("Resource")),
+            shader_dir = ter_op(is_shipping, "./shader", absolute("rs_computer_graphics/src/shader")),
+            intermediate_dir = "./Intermediate",
+            scripts_dir = ter_op(is_shipping, "./Scripts", absolute("./Scripts")),
+            gpmetis_program_path = ter_op(is_shipping, "./gpmetis.exe", absolute(format("%s/%s/%s/%s/gpmetis.exe", buildir, plat, arch, mode))),
+        },
+        dotnet = {
+            config_path = "./ExampleApplication.runtimeconfig.json",
+            assembly_path = "./ExampleApplication.dll",
+            type_name = "ExampleApplication.Entry, ExampleApplication",
+            method_name = "Main",
+        },
+        user_script = {
+            path = "./tmp/UserScript.dll"
+        }
+    }
+    return project
+end
+
 local is_enable_dotnet = get_config_default("enable_dotnet", false)
 local is_enable_quickjs = get_config_default("enable_quickjs", false)
 
@@ -235,27 +262,10 @@ task("build_target")
             end
         end
 
-        local function create_project_json(mode, absolute)
+        local function create_project_json(mode, path_module)
             os.cd("$(scriptdir)")
-            local target_path = absolute("rs_computer_graphics/target/" .. mode)
-            local project = {
-                paths = {
-                    resource_dir = absolute("Resource"),
-                    shader_dir = absolute("rs_computer_graphics/src/shader"),
-                    intermediate_dir = target_path .. "/Intermediate",
-                    scripts_dir = absolute("./Scripts"),
-                    gpmetis_program_path = absolute(format("%s/%s/%s/%s/gpmetis.exe", get_config("buildir"), get_config("plat"), get_config("arch"), get_config("mode"))),
-                },
-                dotnet = {
-                    config_path = target_path .. "/ExampleApplication.runtimeconfig.json",
-                    assembly_path = target_path .. "/ExampleApplication.dll",
-                    type_name = "ExampleApplication.Entry, ExampleApplication",
-                    method_name = "Main",
-                },
-                user_script = {
-                    path = target_path .. "/tmp/UserScript.dll"
-                }
-            }
+            local target_path = path_module.absolute("rs_computer_graphics/target/" .. mode)
+            local project = create_project(get_config("buildir"), get_config("plat"), get_config("arch"), mode, false, path_module)
             json.savefile(target_path .. "/Project.json", project)
         end
         local mode = option.get("mode")
@@ -276,10 +286,10 @@ task("build_target")
             table.join2(rs_build_features, { "rs_quickjs" })
         end
         if mode == "debug" then
-            create_project_json("debug", path.absolute)
+            create_project_json("debug", path)
             build(table.join({ "build" }, rs_build_features), { "build", "./" .. csharp_workspace_name .. ".sln" }, mode)
         elseif mode == "release" then
-            create_project_json("release", path.absolute)
+            create_project_json("release", path)
             build(table.join({ "build", "--release" }, rs_build_features),
                 { "build", "-c", "Release", "./" .. csharp_workspace_name .. ".sln" }, mode)
         end
@@ -352,6 +362,44 @@ task("setup_project")
         description = "Initialize Project",
         options = {
             { nil, "setup_project", nil, nil, nil },
+        }
+    }
+task_end()
+
+task("install_target")
+    on_run(function()
+        import("core.base.option")
+        import("core.base.json")
+        import("core.project.config")
+        config.load()    
+        local function install_files(build_type, path_module)
+            local source_dir = "./rs_computer_graphics/target/" .. build_type
+            local install_dir = path_module.join(get_config("buildir"), get_config("plat"), "bin", build_type)
+            os.mkdir(install_dir)
+            os.trycp(source_dir .. "/*.dll", install_dir)
+            os.trycp(source_dir .. "/Project.json", install_dir)
+            os.trycp(source_dir .. "/*.exe", install_dir)
+            os.trycp("Resource", install_dir)
+            os.trycp("Scripts", install_dir)
+            os.trycp("rs_computer_graphics/src/shader", install_dir)
+            local project = create_project(get_config("buildir"), get_config("plat"), get_config("arch"), mode, true, path_module)
+            json.savefile(install_dir .. "/Project.json", project)            
+        end
+        local mode = option.get("mode")
+        if mode == nil then
+            mode = "debug"
+        end 
+        if mode == "debug" then
+            install_files("debug", path)
+        elseif mode == "release" then
+            install_files("release", path)
+        end
+    end)
+    set_menu {
+        usage = "xmake install_target",
+        description = "Install target.",
+        options = {
+            { "m", "mode", "kv", "debug", "Set the install mode.", " - debug", " - release" },
         }
     }
 task_end()

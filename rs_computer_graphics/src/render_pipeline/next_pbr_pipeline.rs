@@ -20,7 +20,10 @@ pub struct Constants {
     pub view_position: glam::Vec3,
     pub roughness_factor: f32,
     pub metalness_factor: f32,
-    _padding3: [u32; 3],
+    pub base_layer_ior: f32,
+    pub clear_coat: f32,                
+    pub clear_coat_roughness: f32,   
+    // _padding3: [u32; 3],
 }
 
 impl Constants {
@@ -45,7 +48,10 @@ impl Constants {
             view_position,
             roughness_factor,
             metalness_factor,
-            _padding3: [0, 0, 0],
+            base_layer_ior: 2.97,
+            clear_coat: 0.0,
+            clear_coat_roughness: 0.0,
+            // _padding3: [0, 0, 0],
         }
     }
 }
@@ -62,7 +68,10 @@ impl Constants {
             view_position: glam::Vec3::ZERO,
             roughness_factor: 0.0,
             metalness_factor: 0.0,
-            _padding3: [0, 0, 0],
+            base_layer_ior: 0.1,
+            clear_coat: 0.0,
+            clear_coat_roughness: 0.0,
+            // _padding3: [0, 0, 0],
         }
     }
 }

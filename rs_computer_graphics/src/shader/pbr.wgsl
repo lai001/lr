@@ -10,7 +10,10 @@ struct Constants {
     projection: mat4x4<f32>,                    
     view_position: vec3<f32>,                   
     roughness_factor: f32,                      
-    metalness_factor: f32,                      
+    metalness_factor: f32,      
+    base_layer_ior: f32,
+    clear_coat: f32,                
+    clear_coat_roughness: f32,               
 };
 
 struct VertexOutput {
@@ -66,6 +69,11 @@ struct ShadingInfo {
 	f0: vec3<f32>,
 };
 
+struct ClearCoatInfo {
+	attenuation: f32,
+	specular: vec3<f32>,  
+};
+
 @group(0) @binding(0) 
 var<uniform> constants: Constants;
 
@@ -108,9 +116,33 @@ fn D(N: vec3<f32>, H: vec3<f32>, a: f32) -> f32 {
     return nom / denom;
 }
 
-fn F(H: vec3<f32>, V: vec3<f32>, F0: vec3<f32>) -> vec3<f32> {
+fn cal_f0(ior: f32) -> f32 {
+    return pow((ior - 1.5)  / (ior + 1.5), 2.0);
+}
+
+fn D_GGX(NoH: f32, a: f32) -> f32 {
+    var a2 = a * a;
+    var f = (NoH * a2 - NoH) * NoH + 1.0;
+    return a2 / (PI * f * f);
+}
+
+fn V_Kelemen(LoH: f32) -> f32 {
+    return 0.25 / (LoH * LoH);
+}
+
+fn F(H: vec3<f32>, V: vec3<f32>, F0: f32) -> f32 {
     var cosTheta = dot(H, V);
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+fn F3(H: vec3<f32>, V: vec3<f32>, F0: vec3<f32>) -> vec3<f32> {
+    var cosTheta = dot(H, V);
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+fn F_Schlick(f0: f32, f90: f32, VoH: f32) -> f32 {
+    var a = 1.0 - VoH;
+    return f0 + (f90 - f0) * (a*a*a*a*a);
 }
 
 fn SubG(InAngle: f32, k: f32) -> f32 {
@@ -127,27 +159,40 @@ fn G(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, k: f32) -> f32 {
     return ggx1 * ggx2;
 }
 
-fn ibl_diffuse_color(shadingInfo: ShadingInfo, irradiance_texture: texture_cube<f32>) -> vec3<f32> {
+fn ibl_diffuse_color(shadingInfo: ShadingInfo, clear_coat_info: ClearCoatInfo, irradiance_texture: texture_cube<f32>) -> vec3<f32> {
     var irradiance = textureSample(irradiance_texture, base_color_sampler, shadingInfo.normal).xyz;
-    var f = F(shadingInfo.halfway_direction, shadingInfo.view_direction, shadingInfo.f0);
+    var f = F3(shadingInfo.halfway_direction, shadingInfo.view_direction, shadingInfo.f0);
     var fac = mix(vec3<f32>(1.0) - f, vec3<f32>(0.0), shadingInfo.metalness);
     var diffuse_color = fac * shadingInfo.base_color.rgb * irradiance;
-    return diffuse_color;
+    return diffuse_color * clear_coat_info.attenuation;
 }
 
-fn ibl_specular_color(shadingInfo: ShadingInfo, light_reflection_vec: vec3<f32>, pre_filter_cube_map_texture: texture_cube<f32>, brdflut_texture: texture_2d<f32>) -> vec3<f32> {
+fn ibl_specular_color(shadingInfo: ShadingInfo, clear_coat_info: ClearCoatInfo, light_reflection_vec: vec3<f32>, pre_filter_cube_map_texture: texture_cube<f32>, brdflut_texture: texture_2d<f32>) -> vec3<f32> {
     var levels = f32(textureNumLevels(pre_filter_cube_map_texture)) - 1.0;
     var lod = shadingInfo.roughness * levels;
     var pre_filter_value = textureSampleLevel(pre_filter_cube_map_texture, base_color_sampler, light_reflection_vec, lod).xyz;
     var brdf_value = textureSample(brdflut_texture, base_color_sampler, vec2<f32>(shadingInfo.nov, shadingInfo.roughness)).xy;
     var specular_color = (shadingInfo.f0 * brdf_value.x + brdf_value.y) * pre_filter_value;
-    return specular_color;
+    return specular_color * clear_coat_info.attenuation + clear_coat_info.specular;
 }
 
-fn IBL(shadingInfo: ShadingInfo, light_reflection_vec: vec3<f32>, irradiance_texture: texture_cube<f32>, pre_filter_cube_map_texture: texture_cube<f32>, brdflut_texture: texture_2d<f32>) -> vec3<f32> {
-    var diffuse_color = ibl_diffuse_color(shadingInfo, irradiance_texture);
-    var specular_color = ibl_specular_color(shadingInfo, light_reflection_vec, pre_filter_cube_map_texture, brdflut_texture);
+fn IBL(shadingInfo: ShadingInfo, clear_coat_info: ClearCoatInfo, light_reflection_vec: vec3<f32>, irradiance_texture: texture_cube<f32>, pre_filter_cube_map_texture: texture_cube<f32>, brdflut_texture: texture_2d<f32>) -> vec3<f32> {
+    var diffuse_color = ibl_diffuse_color(shadingInfo, clear_coat_info, irradiance_texture);
+    var specular_color = ibl_specular_color(shadingInfo, clear_coat_info, light_reflection_vec, pre_filter_cube_map_texture, brdflut_texture);
     return diffuse_color + specular_color;
+}
+
+fn fetchClearCoatInfo(nov: f32, shading_reflected: vec3<f32>) -> ClearCoatInfo {
+    var Fc = F_Schlick(0.04, 1.0, nov) * constants.clear_coat;
+    var attenuation = 1.0 - Fc;
+    var levels = f32(textureNumLevels(pre_filter_cube_map_texture)) - 1.0;
+    var lod = levels * constants.clear_coat_roughness * (2.0 - constants.clear_coat_roughness);
+    var pre_filter_value = textureSampleLevel(pre_filter_cube_map_texture, base_color_sampler, shading_reflected, lod).xyz;
+    var specular = pre_filter_value * Fc;
+    var info: ClearCoatInfo;
+    info.attenuation = attenuation;
+    info.specular = specular;
+    return info;
 }
 
 fn GetNormal(normal_texture: texture_2d<f32>, tex_coord: vec2<f32>, tbn: mat3x3<f32>) -> vec3<f32> {
@@ -198,7 +243,7 @@ fn fs_main(vertex_output: VertexOutput) -> @location(0) vec4<f32> {
     var noh = dot(normal_w, halfway_direction);
     var nol = clamp(dot(normal_w, directional_light_direction), 0.0, 1.0);
     var d = D(normal_w, halfway_direction, roughness);
-    var f = F(halfway_direction, view_direction, mix(vec3<f32>(1.0, 1.0, 1.0) * 0.04, albedo_color.xyz, metalness));
+    var f = F3(halfway_direction, view_direction, mix(vec3<f32>(1.0, 1.0, 1.0) * 0.04, albedo_color.xyz, metalness));
     var g = G(normal_w, view_direction, directional_light_direction, pow((roughness + 1.0), 2.0) / 8.0);
     var sbrdf = d * f * g / (4.0 * max(nov * nol, 0.01));
     var dbrdf = mix(vec3<f32>(1.0, 1.0, 1.0) - f, vec3<f32>(0.0, 0.0, 0.0), metalness) * albedo_color.xyz;
@@ -215,8 +260,11 @@ fn fs_main(vertex_output: VertexOutput) -> @location(0) vec4<f32> {
     shadingInfo.nov = nov;
     shadingInfo.noh = noh;
 
+    var shading_reflected = reflect(view_direction, normal_w);
+    var clear_coat_info = fetchClearCoatInfo(nov, shading_reflected);
+
     var light_reflection_vec = reflect(directional_light_direction, shadingInfo.normal);
-    var ibl_color = IBL(shadingInfo, light_reflection_vec, irradiance_texture, pre_filter_cube_map_texture, brdflut_texture);
+    var ibl_color = IBL(shadingInfo, clear_coat_info, shading_reflected, irradiance_texture, pre_filter_cube_map_texture, brdflut_texture);
 
     var color = directional_light_color + ibl_color;
 

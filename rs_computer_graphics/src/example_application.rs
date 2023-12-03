@@ -1109,6 +1109,9 @@ impl ExampleApplication {
                                         data_source.metalness_factor;
                                     material.constants.roughness_factor =
                                         data_source.roughness_factor;
+                                    material.constants.clear_coat = data_source.clear_coat;
+                                    material.constants.clear_coat_roughness =
+                                        data_source.clear_coat_roughness;
                                 }
                             }
                         }

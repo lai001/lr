@@ -135,6 +135,8 @@ pub struct DataSource {
     pub gizmo: FGizmo,
     pub camera: crate::camera::Camera,
     pub model_matrix: Option<glam::Mat4>,
+    pub clear_coat: f32,
+    pub clear_coat_roughness: f32,
 }
 
 impl DataSource {
@@ -161,6 +163,8 @@ impl DataSource {
             camera,
             model_matrix: None,
             video_frame: None,
+            clear_coat: 0.0,
+            clear_coat_roughness: 0.0,
         }
     }
 }
@@ -298,6 +302,18 @@ impl EGUIContext {
                         .speed(0.01)
                         .clamp_range(0.0..=1.0)
                         .prefix("metalness_factor: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut data_source.clear_coat)
+                        .speed(0.01)
+                        .clamp_range(0.0..=1.0)
+                        .prefix("clear coat: "),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut data_source.clear_coat_roughness)
+                        .speed(0.01)
+                        .clamp_range(0.0..=1.0)
+                        .prefix("clear coat roughness: "),
                 );
                 ui.add(
                     egui::DragValue::new(&mut data_source.motion_speed)
