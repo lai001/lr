@@ -275,7 +275,10 @@ impl EGUIContext {
                 // .default_size([250.0, 150.0])
                 .show(context, |ui| {
                     if let Some(draw_image) = &data_source.draw_image {
-                        let source = egui::ImageSource::Texture(egui::load::SizedTexture::new(draw_image.texture_id, draw_image.size));
+                        let source = egui::ImageSource::Texture(egui::load::SizedTexture::new(
+                            draw_image.texture_id,
+                            draw_image.size,
+                        ));
                         ui.image(source);
                         // ui.allocate_space(ui.available_size());
                     }
@@ -283,7 +286,10 @@ impl EGUIContext {
 
             egui::Window::new("Video").show(context, |ui| {
                 if let Some(video_frame) = &data_source.video_frame {
-                    let source = egui::ImageSource::Texture(egui::load::SizedTexture::new(video_frame.texture_id, video_frame.size));
+                    let source = egui::ImageSource::Texture(egui::load::SizedTexture::new(
+                        video_frame.texture_id,
+                        video_frame.size,
+                    ));
                     ui.image(source);
                 }
             });

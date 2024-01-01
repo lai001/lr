@@ -128,7 +128,6 @@ fn main() {
         // player_item.seek(5.0);
         let mut index = 0;
         let _ = std::fs::remove_dir_all("./dsp");
-        let _ = std::fs::create_dir("./dsp");
         while let Some(frames) = player_item.next_frames() {
             for frame in &frames {
                 let buffer: &[f32] = frame.pcm_buffer.get_channel_data_view(0);
@@ -149,6 +148,11 @@ fn main() {
                     image::GrayImage::from_vec(image_datas.len() as u32, 1, image_datas).unwrap();
                 std::thread::sleep(Duration::from_secs_f32(0.1));
                 let _ = sender.send(audio_image);
+                // if std::path::Path::new("./dsp").exists() == false {
+                //     let _ = std::fs::create_dir("./dsp");
+                // } else if std::path::Path::new("./dsp").is_dir() == false {
+                //     let _ = std::fs::create_dir("./dsp");
+                // }
                 // save_fft_result(&format!("./dsp/fft_{}.png", index), &result);
                 index += 1;
             }
@@ -580,7 +584,7 @@ fn main() {
                     }
 
                     for actor in [&mut cube_virtual_texture_actor, &mut sphere_virtual_actor] {
-                    // for actor in [] {
+                        // for actor in [] {
                         virtual_texture_mesh_pipeline.render_actor(
                             device,
                             queue,

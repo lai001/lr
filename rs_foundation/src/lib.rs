@@ -123,6 +123,22 @@ pub fn search_file(filename: PathBuf, dirs: Vec<PathBuf>) -> Vec<PathBuf> {
     paths
 }
 
+pub fn change_working_directory() -> Option<String> {
+    if let (Ok(current_dir), Ok(current_exe)) = (std::env::current_dir(), std::env::current_exe()) {
+        let current_exe_dir = std::path::Path::new(&current_exe)
+            .parent()
+            .unwrap()
+            .to_str()
+            .unwrap();
+        let current_dir = current_dir.to_str().unwrap();
+        if current_dir != current_exe_dir {
+            std::env::set_current_dir(current_exe_dir).unwrap();
+            return Some(current_exe_dir.to_string());
+        }
+    }
+    return None;
+}
+
 #[cfg(test)]
 pub mod test {
     use crate::{alignment, math_remap_value_range, next_highest_power_of_two};

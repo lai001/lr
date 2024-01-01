@@ -1,13 +1,18 @@
 set_xmakever("2.7.8")
 
 local deps_dir = ".xmake/deps/"
-local rs_project_name = "rs_computer_graphics"
+rs_project_name = "rs_computer_graphics"
 local csharp_workspace_name = "ExampleApplication"
 local gizmo_dir = deps_dir .. "egui-gizmo"
 local quickjs_dir = deps_dir .. "quickjs"
 local metis_dir = path.absolute(deps_dir .. "METIS")
 local gklib_dir = deps_dir .. "GKlib"
-local ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
+ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
+
+includes("BuildScripts/gen_config.lua")
+includes("BuildScripts/build_android_target.lua")
+includes("BuildScripts/code_workspace.lua")
+includes("BuildScripts/fmt.lua")
 
 option("enable_dotnet")
     set_default(false)
@@ -56,55 +61,6 @@ end
 
 local is_enable_dotnet = get_config_default("enable_dotnet", false)
 local is_enable_quickjs = get_config_default("enable_quickjs", false)
-
-task("code_workspace")
-    on_run(function()
-        import("core.project.config")
-        import("core.base.json")
-        config.load()
-        is_enable_dotnet = get_config("enable_dotnet")
-        is_enable_quickjs = get_config("enable_quickjs")
-        local features = { "" }
-        local linkedProjects = { path.absolute("./rs_computer_graphics/Cargo.toml") }
-        local associations = {}
-        local ffmpeg_env = {
-            ["FFMPEG_DIR"] = ffmpeg_dir
-        }
-
-        if is_enable_quickjs then
-            table.join2(features, "rs_quickjs")
-            table.join2(linkedProjects, path.absolute("./rs_quickjs/Cargo.toml"))
-            table.join2(associations, { ["quickjs.h"] = "c" })
-        end
-        if is_enable_dotnet then
-            table.join2(features, "rs_dotnet")
-            table.join2(linkedProjects, path.absolute("./rs_dotnet/Cargo.toml"))
-        end
-
-        local code_workspace = {
-            ["folders"] = { {
-                ["path"] = path.absolute("./")
-            } },
-            ["settings"] = {
-                ["rust-analyzer.cargo.features"] = features,
-                ["rust-analyzer.linkedProjects"] = linkedProjects,
-                ["files.associations"] = associations,
-                ["rust-analyzer.cargo.extraEnv"] = ffmpeg_env,
-                ["rust-analyzer.server.extraEnv"] = ffmpeg_env,
-                ["rust-analyzer.check.extraEnv"] = ffmpeg_env,
-                ["rust-analyzer.runnableEnv"] = ffmpeg_env
-            }
-        }
-        json.savefile("./" .. rs_project_name .. ".code-workspace", code_workspace)
-    end)
-    set_menu {
-        usage = "xmake code_workspace",
-        description = "Generate vscode project workspace file.",
-        options = {
-            { nil, "code_workspace", nil, nil, nil },
-        }
-    }
-task_end()
 
 task("download_deps")
     on_run(function()
@@ -195,36 +151,6 @@ task("download_deps")
         description = "Download dependencies.",
         options = {
             { nil, "download_deps", nil, nil, nil },
-        }
-    }
-task_end()
-
-task("fmt")
-    on_run(function()
-        import("lib.detect.find_program")
-        local rs_projects = { "rs_computer_graphics", "rs_dotnet", "rs_media", "rs_quickjs", "rs_foundation", "rs_metis" }
-        local rustfmt_args = { "--edition=2018" }
-        for _, project in ipairs(rs_projects) do
-            for _, file in ipairs(os.files(project .. "/src/**.rs")) do
-                table.insert(rustfmt_args, file)
-            end
-        end
-        local clang_format_args = { "-style=microsoft", "-i" }
-        for _, file in ipairs(os.files("rs_quickjs/src/**.h")) do
-            table.insert(clang_format_args, file)
-        end
-        for _, file in ipairs(os.files("rs_quickjs/src/**.c")) do
-            table.insert(clang_format_args, file)
-        end
-        os.execv(find_program("rustfmt"), rustfmt_args)
-        os.execv(find_program("clang-format"), clang_format_args)
-        os.execv(find_program("dotnet"), { "format", "./ExampleApplication/ExampleApplication.sln" })
-    end)
-    set_menu {
-        usage = "xmake fmt",
-        description = "Format code",
-        options = {
-            { nil, "fmt", nil, nil, nil },
         }
     }
 task_end()
@@ -382,6 +308,7 @@ task("install_target")
             os.trycp("Resource", install_dir)
             os.trycp("Scripts", install_dir)
             os.trycp("rs_computer_graphics/src/shader", install_dir)
+            os.trycp(path_module.join(get_config("buildir"), get_config("plat"), get_config("arch"), build_type, "gpmetis.exe"), install_dir)
             local project = create_project(get_config("buildir"), get_config("plat"), get_config("arch"), mode, true, path_module)
             json.savefile(install_dir .. "/Project.json", project)            
         end

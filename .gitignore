@@ -1,7 +1,38 @@
-rs_dotnet/target
-rs_computer_graphics/target
-rs_quickjs/target
-rs_metis/target
+# Gradle files
+.gradle/
+build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log/OS Files
+*.log
+
+# Android Studio generated files and folders
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+output.json
+
+# IntelliJ
+*.iml
+.idea/
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services (e.g. APIs or Firebase)
+google-services.json
+
+# Android Profiling
+*.hprof
+
+rs_*/target
 Cargo.lock
 .xmake
 .vscode
@@ -11,3 +42,19 @@ build
 vsxmake*
 Resource/Remote
 *.code-workspace
+/.cargo/config.toml
+
+*.iml
+.gradle
+/local.properties
+.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+jniLibs
+*.dll
+*.so
+assets

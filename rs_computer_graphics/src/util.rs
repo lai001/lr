@@ -121,19 +121,7 @@ pub fn init_log() {
 }
 
 pub fn change_working_directory() -> Option<String> {
-    if let (Ok(current_dir), Ok(current_exe)) = (std::env::current_dir(), std::env::current_exe()) {
-        let current_exe_dir = std::path::Path::new(&current_exe)
-            .parent()
-            .unwrap()
-            .to_str()
-            .unwrap();
-        let current_dir = current_dir.to_str().unwrap();
-        if current_dir != current_exe_dir {
-            std::env::set_current_dir(current_exe_dir).unwrap();
-            return Some(current_exe_dir.to_string());
-        }
-    }
-    return None;
+    rs_foundation::change_working_directory()
 }
 
 pub fn calculate_mipmap_level(length: u32) -> u32 {

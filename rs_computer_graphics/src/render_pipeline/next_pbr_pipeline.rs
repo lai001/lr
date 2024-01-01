@@ -21,8 +21,8 @@ pub struct Constants {
     pub roughness_factor: f32,
     pub metalness_factor: f32,
     pub base_layer_ior: f32,
-    pub clear_coat: f32,                
-    pub clear_coat_roughness: f32,   
+    pub clear_coat: f32,
+    pub clear_coat_roughness: f32,
     // _padding3: [u32; 3],
 }
 

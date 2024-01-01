@@ -40,9 +40,11 @@ rs_metis = { version = "0.1.0", path = "../rs_metis" }
 egui-gizmo = { version = "0.12.0", path = "../.xmake/deps/egui-gizmo" }
 meshopt = { version = "0.1.9", path = "../.xmake/deps/meshopt-rs" }
 indicatif = "0.17.5"
-plotters = "0.3.3"
 rustfft = "6.1.0"
 parry3d = "0.13.5"
 type-layout = "0.2.0"
 rand = "0.8.5"
 # crossbeam = "0.8.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+plotters = "0.3.3"
