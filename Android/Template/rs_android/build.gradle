@@ -27,6 +27,9 @@ android {
     kotlinOptions {
         jvmTarget = '1.8'
     }
+    packagingOptions {
+        doNotStrip "**/librs_android.so"
+    }
 }
 
 dependencies {

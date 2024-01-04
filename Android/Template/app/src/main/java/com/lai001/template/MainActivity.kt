@@ -108,7 +108,12 @@ class MTApp : Closeable {
                 when (message) {
                     is SMsgType.SurfaceCreated -> {
                         if (application == null) {
-                            application = context?.let { Application(it, "test.rs", message.surface) }
+                            try {
+                                application =
+                                    context?.let { Application(it, "test.rs", message.surface) }
+                            } catch (e: Exception) {
+
+                            }
                         } else {
                             application.setNewSurface(message.surface)
                         }

@@ -1,3 +1,6 @@
+use std::str::FromStr;
+
+use crate::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Deserialize, Serialize)]
@@ -66,8 +69,19 @@ impl ImageFormat {
 pub struct Image {
     pub name: String,
     pub id: uuid::Uuid,
+    pub url: url::Url,
     pub image_format: ImageFormat,
     pub data: Vec<u8>,
+}
+
+impl Asset for Image {
+    fn get_url(&self) -> url::Url {
+        self.url.clone()
+    }
+
+    fn get_resource_type(&self) -> EResourceType {
+        EResourceType::Image
+    }
 }
 
 impl Image {
@@ -89,6 +103,7 @@ impl Image {
                     id,
                     image_format: ImageFormat::from_external_format(format),
                     data,
+                    url: url::Url::from_str("").unwrap(),
                 });
             }
         }

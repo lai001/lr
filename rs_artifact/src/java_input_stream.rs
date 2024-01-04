@@ -65,6 +65,7 @@ impl JavaInputStream {
                 return Err(std::io::ErrorKind::InvalidInput.into());
             }
         };
+
         if pos < self.input_length as u64 {
             if pos > self.position as u64 {
                 if let Ok(JValueGen::Long(_)) = env.call_method(

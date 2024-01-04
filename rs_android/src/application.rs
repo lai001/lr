@@ -1,45 +1,26 @@
 use crate::enviroment::Enviroment;
-use crate::java_input_stream::JavaInputStream;
 use crate::motion_event;
+use rs_artifact::artifact::{ArtifactFileHeader, ArtifactReader};
+use rs_artifact::java_input_stream::JavaInputStream;
 use rs_artifact::{
-    file_header::{FileHeader, FILE_MAGIC_NUMBERS},
+    file_header::{FileHeader, ARTIFACT_FILE_MAGIC_NUMBERS},
     EEndianType,
 };
 
 pub struct Application {
     native_window: crate::native_window::NativeWindow,
     raw_input: egui::RawInput,
-    renderer: rs_render::renderer::Renderer,
     scale_factor: f32,
     enviroment: Option<Enviroment>,
-    logger: rs_engine::logger::Logger,
-    artifact_input_stream: JavaInputStream,
+    engine: rs_engine::engine::Engine,
 }
 
 impl Application {
     pub fn from_native_window(
         native_window: crate::native_window::NativeWindow,
         artifact_input_stream: JavaInputStream,
-    ) -> Application {
-        let wgpu_context = rs_render::wgpu_context::WGPUContext::new(
-            &native_window,
-            native_window.get_width(),
-            native_window.get_height(),
-            Some(wgpu::PowerPreference::HighPerformance),
-            Some(wgpu::InstanceDescriptor {
-                backends: wgpu::Backends::PRIMARY,
-                dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
-                flags: wgpu::InstanceFlags::default(),
-                gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
-            }),
-        );
+    ) -> Option<Application> {
         let scale_factor = 1.0f32;
-        let renderer = rs_render::renderer::Renderer::new(
-            wgpu_context,
-            native_window.get_width(),
-            native_window.get_height(),
-            scale_factor,
-        );
 
         let raw_input = egui::RawInput {
             pixels_per_point: Some(scale_factor as f32),
@@ -52,22 +33,41 @@ impl Application {
             )),
             ..Default::default()
         };
-        let logger = rs_engine::logger::Logger::new(rs_engine::logger::LoggerConfiguration {
-            is_write_to_file: true,
-        });
-        Application {
+        let artifact_reader =
+            match ArtifactReader::new(artifact_input_stream, Some(EEndianType::Little)) {
+                Ok(artifact_reader) => artifact_reader,
+                Err(err) => {
+                    log::warn!("{err:?}");
+                    return None;
+                }
+            };
+
+        let width = native_window.get_width();
+        let height = native_window.get_height();
+        let engine = match rs_engine::engine::Engine::new(
+            &native_window,
+            width,
+            height,
+            scale_factor,
+            Some(artifact_reader),
+        ) {
+            Ok(engine) => engine,
+            Err(err) => {
+                log::warn!("{err:?}");
+                return None;
+            }
+        };
+        Some(Application {
             native_window,
-            renderer,
             raw_input,
             scale_factor,
             enviroment: None,
-            logger,
-            artifact_input_stream,
-        }
+            engine,
+        })
     }
 
     pub fn redraw(&mut self) {
-        self.renderer.present(self.raw_input.clone());
+        self.engine.redraw(&self.raw_input);
     }
 
     pub fn get_status_bar_height(&self) -> i32 {
@@ -81,17 +81,19 @@ impl Application {
         status_bar_height
     }
 
-    pub fn set_new_window(&mut self, native_window: &crate::native_window::NativeWindow) {
+    pub fn set_new_window(&mut self, native_window: &crate::native_window::NativeWindow) -> bool {
         let surface_width = native_window.get_width();
         let surface_height = native_window.get_height();
-        self.renderer
+        let result = self
+            .engine
             .set_new_window(native_window, surface_width, surface_height);
-    }
-}
-
-impl Drop for Application {
-    fn drop(&mut self) {
-        self.logger.flush();
+        match result {
+            Ok(_) => true,
+            Err(err) => {
+                log::warn!("{err:?}");
+                false
+            }
+        }
     }
 }
 
@@ -104,20 +106,32 @@ pub fn Application_fromSurface(
     artifact_input_stream: jni::objects::JObject,
 ) -> *mut Application {
     debug_assert_ne!(surface, std::ptr::null_mut());
-
+    let logger = rs_engine::logger::Logger::new(rs_engine::logger::LoggerConfiguration {
+        is_write_to_file: false,
+    });
     let native_window = crate::native_window::NativeWindow::new(&mut env, surface);
     if let (Some(native_window), Some(mut artifact_input_stream)) = (
         native_window,
         JavaInputStream::new(env, artifact_input_stream),
     ) {
-        if FileHeader::check_identification(&mut artifact_input_stream, FILE_MAGIC_NUMBERS) {
-            let header: Option<FileHeader> =
-                FileHeader::get_header2(&mut artifact_input_stream, Some(EEndianType::Little));
-            if let Some(_) = header {
-                let application =
-                    Application::from_native_window(native_window, artifact_input_stream);
-                return Box::into_raw(Box::new(application));
-            }
+        if let Err(err) = FileHeader::check_identification(
+            &mut artifact_input_stream,
+            ARTIFACT_FILE_MAGIC_NUMBERS,
+        ) {
+            log::warn!("{err:?}");
+            return std::ptr::null_mut();
+        }
+        let header: ArtifactFileHeader =
+            match FileHeader::get_header2(&mut artifact_input_stream, Some(EEndianType::Little)) {
+                Ok(header) => header,
+                Err(err) => {
+                    log::warn!("{err:?}");
+                    return std::ptr::null_mut();
+                }
+            };
+        let application = Application::from_native_window(native_window, artifact_input_stream);
+        if let Some(application) = application {
+            return Box::into_raw(Box::new(application));
         }
     }
     return std::ptr::null_mut();

@@ -1,3 +1,5 @@
+use crate::error::Result;
+
 pub struct WGPUContext {
     instance: wgpu::Instance,
     surface: wgpu::Surface,
@@ -13,8 +15,8 @@ impl WGPUContext {
     >(
         instance: &wgpu::Instance,
         window: &W,
-    ) -> wgpu::Surface {
-        unsafe { instance.create_surface(window) }.unwrap()
+    ) -> std::result::Result<wgpu::Surface, wgpu::CreateSurfaceError> {
+        unsafe { instance.create_surface(window) }
     }
 
     fn surface_configure(
@@ -45,31 +47,36 @@ impl WGPUContext {
         surface_config
     }
 
-    pub fn new<
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
-    >(
+    pub fn new<W>(
         window: &W,
         surface_width: u32,
         surface_height: u32,
         power_preference: Option<wgpu::PowerPreference>,
         instance_desc: Option<wgpu::InstanceDescriptor>,
-    ) -> WGPUContext {
+    ) -> Result<WGPUContext>
+    where
+        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
+    {
         // let instance = wgpu::Instance::default();
         let instance = wgpu::Instance::new(instance_desc.unwrap_or_default());
-        let surface = Self::new_surface(&instance, window);
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        }));
+        let surface = match Self::new_surface(&instance, window) {
+            Ok(surface) => surface,
+            Err(err) => {
+                return Err(crate::error::Error::CreateSurfaceError(err));
+            }
+        };
 
-        if let None = adapter {
-            log::error!("request adapter failed.");
-            panic!()
-        }
-        let adapter = adapter.unwrap();
+        let Some(adapter) =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            }))
+        else {
+            return Err(crate::error::Error::RequestAdapterFailed);
+        };
 
-        let request_device_result = pollster::block_on(adapter.request_device(
+        let (device, queue) = match pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 features: {
                     let mut features = wgpu::Features::default();
@@ -82,12 +89,12 @@ impl WGPUContext {
                 label: None,
             },
             None,
-        ));
-        if let Err(error) = request_device_result {
-            log::error!("{}", error);
-            panic!()
-        }
-        let (device, queue) = request_device_result.unwrap();
+        )) {
+            Ok(request_device) => request_device,
+            Err(err) => {
+                return Err(crate::error::Error::RequestDeviceError(err));
+            }
+        };
 
         let surface_config =
             Self::surface_configure(&surface, surface_width, surface_height, &adapter, &device);
@@ -108,14 +115,14 @@ impl WGPUContext {
             wgpu::PrimitiveState::default()
         );
 
-        WGPUContext {
+        Ok(WGPUContext {
             instance,
             surface,
             adapter,
             device,
             queue,
             surface_config,
-        }
+        })
     }
 
     pub fn set_new_window<
@@ -125,8 +132,13 @@ impl WGPUContext {
         window: &W,
         surface_width: u32,
         surface_height: u32,
-    ) -> bool {
-        let surface = Self::new_surface(&self.instance, window);
+    ) -> Result<()> {
+        let surface = match Self::new_surface(&self.instance, window) {
+            Ok(surface) => surface,
+            Err(err) => {
+                return Err(crate::error::Error::CreateSurfaceError(err));
+            }
+        };
         if self.adapter.is_surface_supported(&surface) {
             let surface_config = Self::surface_configure(
                 &surface,
@@ -136,9 +148,9 @@ impl WGPUContext {
                 &self.device,
             );
             surface.configure(&self.device, &surface_config);
-            true
+            Ok(())
         } else {
-            false
+            return Err(crate::error::Error::SurfaceNotSupported);
         }
     }
 
@@ -158,7 +170,9 @@ impl WGPUContext {
         self.surface_config.format
     }
 
-    pub fn get_current_surface_texture(&self) -> Result<wgpu::SurfaceTexture, wgpu::SurfaceError> {
+    pub fn get_current_surface_texture(
+        &self,
+    ) -> std::result::Result<wgpu::SurfaceTexture, wgpu::SurfaceError> {
         self.surface.get_current_texture()
     }
 

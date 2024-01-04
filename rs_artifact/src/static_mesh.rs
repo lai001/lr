@@ -1,12 +1,35 @@
-use crate::mesh_vertex::MeshVertex;
+use crate::{asset::Asset, default_url, mesh_vertex::MeshVertex, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StaticMesh {
     pub name: String,
     pub id: uuid::Uuid,
+    pub url: url::Url,
     pub vertexes: Vec<MeshVertex>,
     pub indexes: Vec<u32>,
+}
+
+impl Asset for StaticMesh {
+    fn get_url(&self) -> url::Url {
+        self.url.clone()
+    }
+
+    fn get_resource_type(&self) -> EResourceType {
+        EResourceType::StaticMesh
+    }
+}
+
+impl Default for StaticMesh {
+    fn default() -> Self {
+        Self {
+            name: Default::default(),
+            id: Default::default(),
+            url: default_url().clone(),
+            vertexes: Default::default(),
+            indexes: Default::default(),
+        }
+    }
 }
 
 #[cfg(test)]

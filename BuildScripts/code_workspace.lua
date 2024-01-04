@@ -1,6 +1,7 @@
 
 local rs_project_name = rs_project_name
 local ffmpeg_dir = ffmpeg_dir
+local russimp_prebuild_dir = russimp_prebuild_dir
 task("code_workspace") do
     on_run(function()
         import("core.project.config")
@@ -11,19 +12,25 @@ task("code_workspace") do
         local is_enable_quickjs = get_config("enable_quickjs")
         local features = { }
         local linkedProjects = { 
-            path.absolute("./rs_computer_graphics/Cargo.toml") ,
-            path.absolute("./rs_editor/Cargo.toml") ,
             path.absolute("./rs_render/Cargo.toml") ,
             path.absolute("./rs_foundation/Cargo.toml") ,
             path.absolute("./rs_engine/Cargo.toml") ,
             path.absolute("./rs_artifact/Cargo.toml") ,
         }
-        if get_config("plat") == "android" then
+        local plat = ""
+        if get_config("plat") ~= nil then
+            plat = get_config("plat")
+        end
+        if plat == "android" then
             table.join2(linkedProjects, path.absolute("./rs_android/Cargo.toml"))
+        elseif plat == "windows" then
+            table.join2(linkedProjects, path.absolute("./rs_computer_graphics/Cargo.toml"))
+            table.join2(linkedProjects, path.absolute("./rs_editor/Cargo.toml"))
         end
         local associations = {}
-        local ffmpeg_env = {
-            ["FFMPEG_DIR"] = ffmpeg_dir
+        local extraEnv = {
+            ["FFMPEG_DIR"] = ffmpeg_dir,
+            ["RUSSIMP_PACKAGE_DIR"] = russimp_prebuild_dir
         }
 
         if is_enable_quickjs then
@@ -49,13 +56,14 @@ task("code_workspace") do
                 ["rust-analyzer.cargo.target"] = target,
                 ["rust-analyzer.runnables.extraArgs"] = {},
                 ["files.associations"] = associations,
-                ["rust-analyzer.cargo.extraEnv"] = ffmpeg_env,
-                ["rust-analyzer.server.extraEnv"] = ffmpeg_env,
-                ["rust-analyzer.check.extraEnv"] = ffmpeg_env,
-                ["rust-analyzer.runnableEnv"] = ffmpeg_env
+                ["rust-analyzer.cargo.extraEnv"] = extraEnv,
+                ["rust-analyzer.server.extraEnv"] = extraEnv,
+                ["rust-analyzer.check.extraEnv"] = extraEnv,
+                ["rust-analyzer.runnableEnv"] = extraEnv
             }
         }
-        local save_path = path.join(path.absolute("./"), rs_project_name .. ".code-workspace")
+        local file_name = format("%s_%s.code-workspace", rs_project_name, plat)
+        local save_path = path.join(path.absolute("./"), file_name)
         print(save_path)
         json.savefile(save_path, code_workspace)
     end)
@@ -63,7 +71,13 @@ task("code_workspace") do
         usage = "xmake code_workspace",
         description = "Generate vscode project workspace file.",
         options = {
-            { nil, "target", "kv", nil, "Set target.", " - aarch64-linux-android" },
+            { "t", "target", "kv", "aarch64-linux-android", "Set target.",
+                " - aarch64-linux-android",
+                " - armv7-linux-androideabi",
+                " - x86_64-linux-android",
+                " - i686-linux-android",
+                " - arm-linux-androideabi",
+                " - x86_64-pc-windows-msvc" },
         }
     }
 end

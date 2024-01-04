@@ -39,8 +39,15 @@ impl Logger {
         }
 
         let world_file = Arc::new(std::sync::RwLock::new(buf_writer));
-        let log_env = env_logger::Env::default();
-        env_logger::Builder::from_env(log_env)
+
+        let mut builder = env_logger::Builder::new();
+        builder.write_style(env_logger::WriteStyle::Auto);
+        builder.filter_level(log::LevelFilter::Trace);
+
+        // let log_env = env_logger::Env::default();
+        // let mut builder = env_logger::Builder::from_env(log_env);
+
+        builder
             .format({
                 let world_file = world_file.clone();
                 move |buf, record| {
@@ -50,12 +57,12 @@ impl Logger {
                     let thread_name =
                         format!("Thread: {}", current_thread.name().unwrap_or("Unknown"));
                     let content = format!(
-                        "[{}][{}] {}:{} {} {}",
+                        "{} [{}] [{}]:{} {} {}",
+                        buf.timestamp_millis(),
                         level_style.value(level),
                         thread_name,
                         record.file().unwrap_or("Unknown"),
                         record.line().unwrap_or(0),
-                        buf.timestamp_millis(),
                         record.args()
                     );
                     let writer = world_file.write();

@@ -1,6 +1,12 @@
+use rs_artifact::{
+    artifact::{encode_artifact_assets_disk, ArtifactReader},
+    build_asset_url, default_url,
+    resource_type::EResourceType,
+    shader_source_code::ShaderSourceCode,
+    EEndianType,
+};
 use rs_editor::model_loader::ModelLoader;
 use rs_engine::logger::LoggerConfiguration;
-use russimp::scene::PostProcessSteps;
 
 fn main() {
     let path = rs_foundation::change_working_directory();
@@ -21,8 +27,36 @@ fn main() {
                 id: uuid::Uuid::new_v4(),
                 vertexes: mesh_cluster.vertex_buffer,
                 indexes: mesh_cluster.index_buffer,
+                url: default_url().clone(),
             };
             bincode::serialize(&static_mesh);
+        }
+    }
+
+    let url = build_asset_url("attachment", EResourceType::ShaderSourceCode).unwrap();
+    let shader_source_code = ShaderSourceCode {
+        name: "attachment".to_string(),
+        id: uuid::Uuid::new_v4(),
+        code: std::fs::read_to_string("../../../rs_computer_graphics/src/shader/attachment.wgsl")
+            .unwrap(),
+        url: url.clone(),
+    };
+    let save_path = std::path::Path::new("./test.rs");
+    assert_eq!(
+        encode_artifact_assets_disk(&[shader_source_code], Some(EEndianType::Little), save_path),
+        true
+    );
+
+    match ArtifactReader::new(save_path, Some(EEndianType::Little)) {
+        Ok(mut artifact_reader) => {
+            assert_eq!(artifact_reader.check_assets(), true);
+            let shader_source_code: ShaderSourceCode = artifact_reader
+                .get_resource(&url, Some(EResourceType::ShaderSourceCode))
+                .unwrap();
+            log::trace!("{}", shader_source_code.code);
+        }
+        Err(err) => {
+            log::warn!("{:?}", err);
         }
     }
     logger.flush();

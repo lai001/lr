@@ -1,5 +1,9 @@
+use crate::error::Result;
 use crate::thread_pool::ThreadPool;
 use lazy_static::lazy_static;
+use rs_artifact::{
+    artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
+};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -12,13 +16,52 @@ struct LoadResult {
 
 struct STResourceManager {
     image_sync_cache: moka::sync::Cache<String, Arc<image::DynamicImage>>,
+    artifact_reader: Option<ArtifactReader>,
 }
 
 impl STResourceManager {
     fn new() -> STResourceManager {
         STResourceManager {
             image_sync_cache: moka::sync::Cache::new(1000),
+            artifact_reader: None,
         }
+    }
+
+    fn get_shader_source_code(&mut self, url: &url::Url) -> Result<ShaderSourceCode> {
+        if let Some(reader) = self.artifact_reader.as_mut() {
+            let shader = reader.get_resource::<rs_artifact::shader_source_code::ShaderSourceCode>(
+                url,
+                Some(EResourceType::ShaderSourceCode),
+            );
+            match shader {
+                Ok(shader) => Ok(shader),
+                Err(err) => return Err(crate::error::Error::Artifact(err, None)),
+            }
+        } else {
+            return Err(crate::error::Error::ArtifactReaderNotSet);
+        }
+    }
+
+    fn get_all_shader_source_codes(&mut self) -> Vec<ShaderSourceCode> {
+        let mut codes: Vec<ShaderSourceCode> = vec![];
+        if let Some(reader) = self.artifact_reader.as_mut() {
+            for (url, resource_info) in reader.get_artifact_file_header().resource_map.clone() {
+                if resource_info.resource_type == EResourceType::ShaderSourceCode {
+                    let shader = reader
+                        .get_resource::<rs_artifact::shader_source_code::ShaderSourceCode>(
+                            &url,
+                            Some(EResourceType::ShaderSourceCode),
+                        )
+                        .expect("Never");
+                    codes.push(shader);
+                }
+            }
+        }
+        return codes;
+    }
+
+    fn set_artifact_reader(&mut self, reader: Option<ArtifactReader>) {
+        self.artifact_reader = reader;
     }
 
     fn cache_image(&self, key: &str, image: Arc<image::DynamicImage>) {
@@ -82,18 +125,19 @@ impl STResourceManager {
     }
 }
 
+#[derive(Clone)]
 pub struct ResourceManager {
-    inner: Mutex<STResourceManager>,
+    inner: Arc<Mutex<STResourceManager>>,
 }
 
 impl ResourceManager {
     pub fn new() -> ResourceManager {
         ResourceManager {
-            inner: Mutex::new(STResourceManager::new()),
+            inner: Arc::new(Mutex::new(STResourceManager::new())),
         }
     }
 
-    pub fn default() -> Arc<ResourceManager> {
+    pub fn default() -> ResourceManager {
         GLOBAL_RESOURCE_MANAGER.clone()
     }
 
@@ -129,8 +173,20 @@ impl ResourceManager {
             .unwrap()
             .load_images_from_disk_and_cache_parallel(dic);
     }
+
+    pub fn set_artifact_reader(&mut self, reader: Option<ArtifactReader>) {
+        self.inner.lock().unwrap().set_artifact_reader(reader);
+    }
+
+    pub fn get_shader_source_code(&mut self, url: &url::Url) -> Result<ShaderSourceCode> {
+        self.inner.lock().unwrap().get_shader_source_code(url)
+    }
+
+    pub fn get_all_shader_source_codes(&mut self) -> Vec<ShaderSourceCode> {
+        self.inner.lock().unwrap().get_all_shader_source_codes()
+    }
 }
 
 lazy_static! {
-    static ref GLOBAL_RESOURCE_MANAGER: Arc<ResourceManager> = Arc::new(ResourceManager::new());
+    static ref GLOBAL_RESOURCE_MANAGER: ResourceManager = ResourceManager::new();
 }
