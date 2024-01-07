@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-
 use crate::error::Result;
 use crate::shader_library::ShaderLibrary;
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
+use std::collections::HashMap;
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
-    context: egui::Context,
     egui_render_pass: EGUIRenderer,
     screen_descriptor: egui_wgpu_backend::ScreenDescriptor,
     shader_library: ShaderLibrary,
@@ -14,18 +12,15 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn from_context(
+        gui_context: egui::Context,
         wgpu_context: WGPUContext,
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
     ) -> Renderer {
-        let context = egui::Context::default();
-        context.set_fonts(egui::FontDefinitions::default());
-        context.set_style(egui::Style::default());
-
         let egui_render_pass = EGUIRenderer::new(
             wgpu_context.get_device(),
-            context.clone(),
+            gui_context,
             wgpu_context.get_current_swapchain_format(),
             1,
         );
@@ -38,7 +33,6 @@ impl Renderer {
         Renderer {
             wgpu_context,
             egui_render_pass,
-            context,
             screen_descriptor,
             shader_library,
         }
@@ -46,6 +40,7 @@ impl Renderer {
 
     pub fn from_window<W>(
         window: &W,
+        gui_context: egui::Context,
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
@@ -70,6 +65,7 @@ impl Renderer {
             Err(err) => return Err(err),
         };
         Ok(Self::from_context(
+            gui_context,
             wgpu_context,
             surface_width,
             surface_height,
@@ -89,14 +85,16 @@ impl Renderer {
             .set_new_window(window, surface_width, surface_height)
     }
 
-    pub fn present(&mut self, raw_input: egui::RawInput) {
-        let texture = self.wgpu_context.get_current_surface_texture();
-        if let Err(error) = texture {
-            log::error!("{}", error);
-            panic!()
-        }
-
-        let texture = texture.unwrap();
+    pub fn present(&mut self, full_output: egui::FullOutput) {
+        let texture = match self.wgpu_context.get_current_surface_texture() {
+            Ok(texture) => texture,
+            Err(err) => {
+                if err != wgpu::SurfaceError::Outdated {
+                    log::warn!("{}", err);
+                }
+                return;
+            }
+        };
 
         let output_view = texture
             .texture
@@ -106,18 +104,6 @@ impl Renderer {
             let device = self.wgpu_context.get_device();
             let queue = self.wgpu_context.get_queue();
 
-            self.context.begin_frame(raw_input);
-
-            egui::Window::new("Pannel")
-                .default_pos((200.0, 200.0))
-                .show(&self.context, |ui| {
-                    let response = ui.button("Button");
-                    if response.clicked() {}
-                    if ui.button("Button2").clicked() {}
-                    ui.label(format!("Time: {:.2}", 0.0f32));
-                });
-
-            let full_output = self.context.end_frame();
             self.egui_render_pass.render(
                 &full_output,
                 queue,
@@ -136,5 +122,12 @@ impl Renderer {
     {
         self.shader_library
             .load_shader_from(shaders, self.wgpu_context.get_device());
+    }
+
+    pub fn resize(&mut self, surface_width: u32, surface_height: u32) {
+        self.screen_descriptor.physical_width = surface_width;
+        self.screen_descriptor.physical_height = surface_height;
+        self.wgpu_context
+            .window_resized(surface_width, surface_height);
     }
 }

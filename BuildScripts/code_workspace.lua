@@ -3,7 +3,7 @@ local rs_project_name = rs_project_name
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
 task("code_workspace") do
-    on_run(function()
+    on_run(function(in_plat, in_target)
         import("core.project.config")
         import("core.base.option")
         import("core.base.json")
@@ -17,15 +17,15 @@ task("code_workspace") do
             path.absolute("./rs_engine/Cargo.toml") ,
             path.absolute("./rs_artifact/Cargo.toml") ,
         }
-        local plat = ""
-        if get_config("plat") ~= nil then
-            plat = get_config("plat")
-        end
+        local plat = (in_plat and {in_plat} or {option.get("plat")})[1]
+        plat = (plat and {plat} or {"windows"})[1]
+        
         if plat == "android" then
             table.join2(linkedProjects, path.absolute("./rs_android/Cargo.toml"))
         elseif plat == "windows" then
             table.join2(linkedProjects, path.absolute("./rs_computer_graphics/Cargo.toml"))
             table.join2(linkedProjects, path.absolute("./rs_editor/Cargo.toml"))
+            table.join2(linkedProjects, path.absolute("./rs_hotreload_plugin/Cargo.toml"))
         end
         local associations = {}
         local extraEnv = {
@@ -42,10 +42,9 @@ task("code_workspace") do
             table.join2(features, "rs_dotnet")
             table.join2(linkedProjects, path.absolute("./rs_dotnet/Cargo.toml"))
         end
-        local target = nil
-        if option.get("target") ~= nil then
-            target = option.get("target")
-        end
+        local target = (in_target and {in_target} or {option.get("target")})[1]
+        target = (target and {target} or {"aarch64-linux-android"})[1]
+   
         local code_workspace = {
             ["folders"] = { {
                 ["path"] = path.absolute("./")
@@ -78,6 +77,9 @@ task("code_workspace") do
                 " - i686-linux-android",
                 " - arm-linux-androideabi",
                 " - x86_64-pc-windows-msvc" },
+            { "p", "plat", "kv", "windows", "Set platfrom.",
+                " - windows",
+                " - android" }
         }
     }
 end

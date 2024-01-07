@@ -67,7 +67,20 @@ impl Application {
     }
 
     pub fn redraw(&mut self) {
-        self.engine.redraw(&self.raw_input);
+        let context = self.engine.get_gui_context();
+        context.begin_frame(self.raw_input.clone());
+
+        egui::Window::new("Pannel")
+            .default_pos((200.0, 200.0))
+            .show(&context, |ui| {
+                let response = ui.button("Button");
+                if response.clicked() {}
+                if ui.button("Button2").clicked() {}
+                ui.label(format!("Time: {:.2}", 0.0f32));
+            });
+
+        let full_output = context.end_frame();
+        self.engine.redraw(full_output);
     }
 
     pub fn get_status_bar_height(&self) -> i32 {

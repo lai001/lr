@@ -1,19 +1,17 @@
-use std::collections::HashMap;
-
 use crate::error::Result;
 use crate::{
-    error,
     logger::{Logger, LoggerConfiguration},
     resource_manager::ResourceManager,
 };
-use egui::RawInput;
-use rs_artifact::{artifact::ArtifactReader, build_asset_url, resource_type::EResourceType};
+use rs_artifact::artifact::ArtifactReader;
 use rs_render::renderer::Renderer;
+use std::collections::HashMap;
 
 pub struct Engine {
     renderer: Renderer,
     resource_manager: ResourceManager,
     logger: Logger,
+    gui_context: egui::Context,
 }
 
 impl Engine {
@@ -22,6 +20,7 @@ impl Engine {
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
+        gui_context: egui::Context,
         artifact_reader: Option<ArtifactReader>,
     ) -> Result<Engine>
     where
@@ -31,8 +30,9 @@ impl Engine {
             is_write_to_file: true,
         });
 
-        let renderer = rs_render::renderer::Renderer::from_window(
+        let renderer = Renderer::from_window(
             window,
+            gui_context.clone(),
             surface_width,
             surface_height,
             scale_factor,
@@ -51,16 +51,21 @@ impl Engine {
 
         renderer.load_shader(shaders);
         let engine = Engine {
-            logger,
             renderer,
             resource_manager,
+            logger,
+            gui_context,
         };
 
         Ok(engine)
     }
 
-    pub fn redraw(&mut self, raw_input: &RawInput) {
-        self.renderer.present(raw_input.clone());
+    pub fn redraw(&mut self, full_output: egui::FullOutput) {
+        self.renderer.present(full_output);
+    }
+
+    pub fn resize(&mut self, surface_width: u32, surface_height: u32) {
+        self.renderer.resize(surface_width, surface_height);
     }
 
     pub fn set_new_window<W>(
@@ -79,6 +84,10 @@ impl Engine {
             Ok(_) => Ok(()),
             Err(err) => return Err(crate::error::Error::RendererError(err)),
         }
+    }
+
+    pub fn get_gui_context(&self) -> egui::Context {
+        self.gui_context.clone()
     }
 }
 

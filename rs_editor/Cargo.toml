@@ -10,11 +10,18 @@ log = "0.4.17"
 env_logger = "0.10.0"
 russimp = { version = "=2.0.5", features = ["prebuilt"] }
 serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.111"
 bincode = { version = "1.3.3" }
 glam = { version = "0.22.0" }
 uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 url = { version = "2.5.0", features = ["serde"]}
+winit = { version = "0.28.7" }
+egui = "0.23.0"
+egui_winit_platform = { version = "0.20.0", features = ["clipboard"] }
+rfd = "0.12.1"
+image = "0.24.5"
 rs_render = { version = "0.1.0", path = "../rs_render" }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
 rs_artifact = { version = "0.1.0", path = "../rs_artifact" }
 rs_engine = { version = "0.1.0", path = "../rs_engine" }
+rs_hotreload_plugin = { version = "0.1.0", path = "../rs_hotreload_plugin" }

@@ -183,4 +183,8 @@ impl WGPUContext {
     pub fn get_queue(&self) -> &wgpu::Queue {
         &self.queue
     }
+
+    pub fn get_surface_config(&self) -> &wgpu::SurfaceConfiguration {
+        &self.surface_config
+    }
 }

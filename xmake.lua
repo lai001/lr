@@ -65,7 +65,9 @@ end
 local is_enable_dotnet = get_config_default("enable_dotnet", false)
 local is_enable_quickjs = get_config_default("enable_quickjs", false)
 
-task("build_target")
+task("build_target") do
+    local rs_project_name = rs_project_name
+    local csharp_workspace_name = csharp_workspace_name
     on_run(function()
         import("lib.detect.find_program")
         import("core.base.json")
@@ -137,9 +139,11 @@ task("build_target")
             { "m", "mode", "kv", "debug", "Set the build mode.", " - debug", " - release" },
         }
     }
-task_end()
+end
 
-task("setup_project")
+task("setup_project") do
+    local rs_project_name = rs_project_name
+    local ffmpeg_dir = ffmpeg_dir
     on_run(function()
         import("net.http")
         import("utils.archive")
@@ -162,7 +166,7 @@ task("setup_project")
         end
 
         task.run("download_deps")
-        task.run("code_workspace")
+        task.run("code_workspace", {}, "windows", "x86_64-pc-windows-msvc")
         if is_enable_dotnet then
             setup_dotnet("debug")
             setup_dotnet("release")
@@ -177,7 +181,7 @@ task("setup_project")
             { nil, "setup_project", nil, nil, nil },
         }
     }
-task_end()
+end
 
 task("install_target")
     on_run(function()

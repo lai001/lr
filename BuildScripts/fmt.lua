@@ -1,19 +1,7 @@
 task("fmt")
     on_run(function()
         import("lib.detect.find_program")
-        local rs_projects = { 
-            "rs_computer_graphics",
-            "rs_dotnet",
-            "rs_media",
-            "rs_quickjs",
-            "rs_foundation",
-            "rs_metis",
-            "rs_engine",
-            "rs_editor",
-            "rs_render",
-            "rs_android",
-            "rs_artifact"
-        }
+        local rs_projects = os.dirs("rs_*")
         local rustfmt_args = { "--edition=2018" }
         for _, project in ipairs(rs_projects) do
             for _, file in ipairs(os.files(project .. "/src/**.rs")) do

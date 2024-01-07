@@ -51,6 +51,9 @@ impl Logger {
             .format({
                 let world_file = world_file.clone();
                 move |buf, record| {
+                    if !record.target().starts_with("rs_") {
+                        return Err(std::io::ErrorKind::Other.into());
+                    }
                     let level = record.level();
                     let level_style = buf.default_level_style(level);
                     let current_thread = std::thread::current();
