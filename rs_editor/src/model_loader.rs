@@ -1,9 +1,10 @@
 use rs_artifact::mesh_vertex::MeshVertex;
 use rs_engine::resource_manager::ResourceManager;
 use russimp::material::TextureType;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 pub struct MeshCluster {
+    pub name: String,
     pub vertex_buffer: Vec<MeshVertex>,
     pub index_buffer: Vec<u32>,
     pub textures_dic: HashMap<TextureType, String>,
@@ -13,13 +14,13 @@ pub struct ModelLoader {}
 
 impl ModelLoader {
     fn get_texture_absolute_path(
-        model_file_path: &str,
+        model_file_path: &Path,
         texture: &russimp::material::Texture,
-        additional_paths: &[&str],
+        additional_paths: &[&Path],
     ) -> String {
         let mut dirs: Vec<std::path::PathBuf> = Vec::new();
 
-        if let Some(p) = std::path::Path::new(model_file_path).parent() {
+        if let Some(p) = model_file_path.parent() {
             dirs.push(p.into());
         }
         for p in additional_paths {
@@ -35,9 +36,9 @@ impl ModelLoader {
     }
 
     fn collect_textures(
-        model_file_path: &str,
+        model_file_path: &Path,
         materials: &[russimp::material::Material],
-        additional_paths: &[&str],
+        additional_paths: &[&Path],
     ) -> HashMap<String, TextureType> {
         let mut result = HashMap::new();
         for material in materials {
@@ -119,10 +120,13 @@ impl ModelLoader {
         vertex
     }
 
-    pub fn load_from_file(file_path: &str, additional_paths: &[&str]) -> Vec<MeshCluster> {
+    pub fn load_from_file(
+        file_path: &Path,
+        additional_paths: &[&Path],
+    ) -> Option<Vec<MeshCluster>> {
         let resource_manager = ResourceManager::default();
         let load_result = russimp::scene::Scene::from_file(
-            &file_path,
+            &file_path.to_str().unwrap(),
             vec![
                 russimp::scene::PostProcess::Triangulate,
                 russimp::scene::PostProcess::CalculateTangentSpace,
@@ -130,7 +134,7 @@ impl ModelLoader {
         );
         if let Err(error) = load_result {
             log::warn!("{}", error);
-            return Vec::new();
+            return None;
         }
         let scene = load_result.unwrap();
         let mut mesh_clusters: Vec<MeshCluster> = Vec::new();
@@ -165,6 +169,7 @@ impl ModelLoader {
                 vertex_buffer,
                 index_buffer,
                 textures_dic: HashMap::new(),
+                name: imported_mesh.name.clone(),
             };
             if let Some(material) = scene.materials.get(imported_mesh.material_index as usize) {
                 for (texture_type, texture) in &material.textures {
@@ -178,6 +183,6 @@ impl ModelLoader {
             }
             mesh_clusters.push(cluster);
         }
-        mesh_clusters
+        Some(mesh_clusters)
     }
 }

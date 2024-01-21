@@ -64,4 +64,17 @@ impl EGUIRenderer {
             Err(error) => log::warn!("{error}"),
         }
     }
+
+    pub fn create_image2(
+        &mut self,
+        device: &wgpu::Device,
+        texture_view: &wgpu::TextureView,
+        texture_filter: Option<wgpu::FilterMode>,
+    ) -> egui::TextureId {
+        self.egui_render_pass.egui_texture_from_wgpu_texture(
+            device,
+            texture_view,
+            texture_filter.unwrap_or(wgpu::FilterMode::Linear),
+        )
+    }
 }

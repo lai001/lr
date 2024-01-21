@@ -50,7 +50,7 @@ impl ShaderLibrary {
         Arc::clone(
             self.shader_dic
                 .get(name)
-                .expect(&format!("{} shader is not exist.", name)),
+                .expect(&format!("{} shader is loaded.", name)),
         )
     }
 
@@ -58,7 +58,23 @@ impl ShaderLibrary {
         Arc::clone(
             self.reflection_dic
                 .get(name)
-                .expect(&format!("{} shader reflection is not exist.", name)),
+                .expect(&format!("{} shader reflection is loaded.", name)),
         )
+    }
+
+    pub(crate) fn load_inner_shader(&mut self, device: &wgpu::Device) {
+        let attachment_shader_code =
+            include_str!("../../rs_computer_graphics/src/shader/attachment.wgsl");
+        let next_phong_shader_code =
+            include_str!("../../rs_computer_graphics/src/shader/phong.wgsl");
+
+        let shaders = HashMap::from([
+            (
+                "attachment.wgsl".to_string(),
+                attachment_shader_code.to_string(),
+            ),
+            ("phong.wgsl".to_string(), next_phong_shader_code.to_string()),
+        ]);
+        self.load_shader_from(shaders, device);
     }
 }

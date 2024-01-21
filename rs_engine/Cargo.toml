@@ -17,6 +17,8 @@ rayon = "1.6"
 egui = "0.23.0"
 raw-window-handle = "0.5"
 url = { version = "2.5.0", features = ["serde"]}
+wgpu = "0.18.0"
+glam = { version = "0.22.0" }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
 rs_artifact = { version = "0.1.0", path = "../rs_artifact" }
 rs_render = { version = "0.1.0", path = "../rs_render" }

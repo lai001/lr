@@ -5,5 +5,6 @@ pub enum EResourceType {
     Image,
     StaticMesh,
     ShaderSourceCode,
+    Level,
     Binary,
 }

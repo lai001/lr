@@ -3,6 +3,7 @@ pub mod asset;
 pub mod error;
 pub mod file_header;
 pub mod image;
+pub mod level;
 pub mod mesh_vertex;
 pub mod mesh_vertex_visitor;
 pub mod resource_info;

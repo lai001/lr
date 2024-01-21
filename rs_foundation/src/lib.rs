@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub mod channel;
 pub mod id_generator;
 pub mod profiler;
 

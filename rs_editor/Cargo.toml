@@ -20,6 +20,10 @@ egui = "0.23.0"
 egui_winit_platform = { version = "0.20.0", features = ["clipboard"] }
 rfd = "0.12.1"
 image = "0.24.5"
+regex = "1.10.2"
+notify = "5.1.0"
+notify-debouncer-mini = { version = "0.2.0" }
+walkdir = "2"
 rs_render = { version = "0.1.0", path = "../rs_render" }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
 rs_artifact = { version = "0.1.0", path = "../rs_artifact" }

@@ -316,7 +316,7 @@ impl ArtifactReader {
                                 Err(err) => return false,
                             }
                         }
-                        EResourceType::Binary => todo!(),
+                        _ => {}
                     }
                 } else {
                     return false;

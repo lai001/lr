@@ -60,7 +60,7 @@ impl Logger {
                     let thread_name =
                         format!("Thread: {}", current_thread.name().unwrap_or("Unknown"));
                     let content = format!(
-                        "{} [{}] [{}]:{} {} {}",
+                        "{} [{}] [{}] {}:{} {}",
                         buf.timestamp_millis(),
                         level_style.value(level),
                         thread_name,

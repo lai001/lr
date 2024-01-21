@@ -1,5 +1,10 @@
+pub mod camera;
 pub mod engine;
 pub mod error;
+pub mod handle;
 pub mod logger;
+pub mod primitive_data;
 pub mod resource_manager;
+pub mod rotator;
+pub mod sync;
 pub mod thread_pool;

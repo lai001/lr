@@ -1,5 +1,5 @@
-use crate::error::Result;
 use crate::thread_pool::ThreadPool;
+use crate::{error::Result, handle::HandleManager};
 use lazy_static::lazy_static;
 use rs_artifact::{
     artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
@@ -17,6 +17,7 @@ struct LoadResult {
 struct STResourceManager {
     image_sync_cache: moka::sync::Cache<String, Arc<image::DynamicImage>>,
     artifact_reader: Option<ArtifactReader>,
+    handle_manager: HandleManager,
 }
 
 impl STResourceManager {
@@ -24,6 +25,7 @@ impl STResourceManager {
         STResourceManager {
             image_sync_cache: moka::sync::Cache::new(1000),
             artifact_reader: None,
+            handle_manager: HandleManager::new(),
         }
     }
 
@@ -123,6 +125,18 @@ impl STResourceManager {
             }
         }
     }
+
+    fn next_texture(&mut self) -> crate::handle::TextureHandle {
+        self.handle_manager.next_texture()
+    }
+
+    fn next_ui_texture(&mut self) -> crate::handle::EGUITextureHandle {
+        self.handle_manager.next_ui_texture()
+    }
+
+    fn next_buffer(&mut self) -> crate::handle::BufferHandle {
+        self.handle_manager.next_buffer()
+    }
 }
 
 #[derive(Clone)]
@@ -184,6 +198,18 @@ impl ResourceManager {
 
     pub fn get_all_shader_source_codes(&mut self) -> Vec<ShaderSourceCode> {
         self.inner.lock().unwrap().get_all_shader_source_codes()
+    }
+
+    pub fn next_texture(&mut self) -> crate::handle::TextureHandle {
+        self.inner.lock().unwrap().next_texture()
+    }
+
+    pub fn next_ui_texture(&mut self) -> crate::handle::EGUITextureHandle {
+        self.inner.lock().unwrap().next_ui_texture()
+    }
+
+    pub fn next_buffer(&mut self) -> crate::handle::BufferHandle {
+        self.inner.lock().unwrap().next_buffer()
     }
 }
 
