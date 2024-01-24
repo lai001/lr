@@ -1,9 +1,14 @@
 use crate::thread_pool::ThreadPool;
 use crate::{error::Result, handle::HandleManager};
 use lazy_static::lazy_static;
+use rs_artifact::asset::Asset;
+use rs_artifact::level::Level;
+use rs_artifact::resource_info::ResourceInfo;
+use rs_artifact::static_mesh::StaticMesh;
 use rs_artifact::{
     artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
 };
+use std::rc::Rc;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -18,6 +23,7 @@ struct STResourceManager {
     image_sync_cache: moka::sync::Cache<String, Arc<image::DynamicImage>>,
     artifact_reader: Option<ArtifactReader>,
     handle_manager: HandleManager,
+    static_meshs: HashMap<url::Url, Arc<StaticMesh>>,
 }
 
 impl STResourceManager {
@@ -26,6 +32,24 @@ impl STResourceManager {
             image_sync_cache: moka::sync::Cache::new(1000),
             artifact_reader: None,
             handle_manager: HandleManager::new(),
+            static_meshs: HashMap::new(),
+        }
+    }
+
+    fn load_static_meshs(&mut self) {
+        if let Some(reader) = self.artifact_reader.as_mut() {
+            for (url, resource_info) in reader.get_artifact_file_header().resource_map.clone() {
+                if resource_info.resource_type == EResourceType::StaticMesh {
+                    let static_mesh = reader
+                        .get_resource::<rs_artifact::static_mesh::StaticMesh>(
+                            &url,
+                            Some(EResourceType::StaticMesh),
+                        )
+                        .expect("Never");
+                    self.static_meshs
+                        .insert(static_mesh.url.clone(), Arc::new(static_mesh));
+                }
+            }
         }
     }
 
@@ -37,6 +61,70 @@ impl STResourceManager {
             );
             match shader {
                 Ok(shader) => Ok(shader),
+                Err(err) => return Err(crate::error::Error::Artifact(err, None)),
+            }
+        } else {
+            return Err(crate::error::Error::ArtifactReaderNotSet);
+        }
+    }
+
+    fn get_level(&mut self, url: &url::Url) -> Result<Level> {
+        if let Some(reader) = self.artifact_reader.as_mut() {
+            let level =
+                reader.get_resource::<rs_artifact::level::Level>(url, Some(EResourceType::Level));
+            match level {
+                Ok(level) => Ok(level),
+                Err(err) => return Err(crate::error::Error::Artifact(err, None)),
+            }
+        } else {
+            return Err(crate::error::Error::ArtifactReaderNotSet);
+        }
+    }
+
+    fn get_static_mesh(&mut self, url: &url::Url) -> Result<Arc<StaticMesh>> {
+        if let Some(loaded_mesh) = self.static_meshs.get(url) {
+            return Ok(loaded_mesh.clone());
+        }
+        if let Some(reader) = self.artifact_reader.as_mut() {
+            let static_mesh = reader.get_resource::<rs_artifact::static_mesh::StaticMesh>(
+                url,
+                Some(EResourceType::StaticMesh),
+            );
+            match static_mesh {
+                Ok(static_mesh) => {
+                    let static_mesh = Arc::new(static_mesh);
+                    self.static_meshs.insert(url.clone(), static_mesh.clone());
+                    return Ok(static_mesh);
+                }
+                Err(err) => return Err(crate::error::Error::Artifact(err, None)),
+            }
+        } else {
+            return Err(crate::error::Error::ArtifactReaderNotSet);
+        }
+    }
+
+    fn get_resource_map(&self) -> Option<HashMap<url::Url, ResourceInfo>> {
+        if let Some(artifact_reader) = &self.artifact_reader {
+            Some(
+                artifact_reader
+                    .get_artifact_file_header()
+                    .resource_map
+                    .clone(),
+            )
+        } else {
+            None
+        }
+    }
+
+    fn get_resource<T: Asset>(
+        &mut self,
+        url: &url::Url,
+        expected_resource_type: Option<EResourceType>,
+    ) -> Result<T> {
+        if let Some(reader) = self.artifact_reader.as_mut() {
+            let level = reader.get_resource::<T>(url, expected_resource_type);
+            match level {
+                Ok(level) => Ok(level),
                 Err(err) => return Err(crate::error::Error::Artifact(err, None)),
             }
         } else {
@@ -210,6 +298,33 @@ impl ResourceManager {
 
     pub fn next_buffer(&mut self) -> crate::handle::BufferHandle {
         self.inner.lock().unwrap().next_buffer()
+    }
+
+    pub fn get_level(&mut self, url: &url::Url) -> Result<Level> {
+        self.inner.lock().unwrap().get_level(url)
+    }
+
+    pub fn get_resource_map(&self) -> Option<HashMap<url::Url, ResourceInfo>> {
+        self.inner.lock().unwrap().get_resource_map()
+    }
+
+    pub fn get_resource<T: Asset>(
+        &mut self,
+        url: &url::Url,
+        expected_resource_type: Option<EResourceType>,
+    ) -> Result<T> {
+        self.inner
+            .lock()
+            .unwrap()
+            .get_resource(url, expected_resource_type)
+    }
+
+    pub fn get_static_mesh(&mut self, url: &url::Url) -> Result<Arc<StaticMesh>> {
+        self.inner.lock().unwrap().get_static_mesh(url)
+    }
+
+    pub fn load_static_meshs(&mut self) {
+        self.inner.lock().unwrap().load_static_meshs();
     }
 }
 

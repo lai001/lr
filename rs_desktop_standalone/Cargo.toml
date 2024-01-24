@@ -1,0 +1,16 @@
+[package]
+name = "rs_desktop_standalone"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4.17"
+winit = { version = "0.28.7" }
+egui = "0.23.0"
+egui_winit_platform = { version = "0.20.0", features = ["clipboard"] }
+rs_render = { version = "0.1.0", path = "../rs_render" }
+rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
+rs_artifact = { version = "0.1.0", path = "../rs_artifact" }
+rs_engine = { version = "0.1.0", path = "../rs_engine" }

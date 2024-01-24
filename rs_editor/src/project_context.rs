@@ -1,11 +1,12 @@
 use crate::{
+    build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
     error::Result,
     model_loader::{MeshCluster, ModelLoader},
     project::{Project, ASSET_FOLDER_NAME},
 };
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
-use rs_artifact::{static_mesh::StaticMesh, EEndianType};
+use rs_artifact::{artifact::ArtifactAssetEncoder, static_mesh::StaticMesh, EEndianType};
 use rs_hotreload_plugin::hot_reload::HotReload;
 use std::{
     collections::{HashMap, HashSet},
@@ -158,14 +159,93 @@ impl ProjectContext {
         self.project_folder_path.clone()
     }
 
-    pub fn export(&mut self) -> Result<()> {
+    pub fn get_default_build_folder_path(&self) -> PathBuf {
+        let output_folder_path = self.project_folder_path.join("build");
+        output_folder_path
+    }
+
+    pub fn create_build_folder_if_not_exist(&self, build_config: &BuildConfig) -> PathBuf {
+        let path = self.get_default_build_folder_path();
+        let platform: String;
+        let build_type: String;
+        let arch: String;
+        match build_config.build_platform {
+            EBuildPlatformType::Windows => {
+                platform = String::from("windows");
+            }
+        }
+        match build_config.build_type {
+            EBuildType::Debug => {
+                build_type = String::from("debug");
+            }
+            EBuildType::Release => {
+                build_type = String::from("release");
+            }
+        }
+        match build_config.arch_type {
+            EArchType::X64 => {
+                arch = String::from("x64");
+            }
+        }
+        let path = path.join(platform).join(build_type).join(arch);
+        let _ = std::fs::create_dir_all(path.clone());
+        path
+    }
+
+    fn node_to_artifact_node(node: &crate::level::Node) -> rs_artifact::level::ENodeType {
+        let mesh_reference = &node.mesh_reference.as_ref().unwrap();
+        let url = Self::build_static_mesh_url(
+            &mesh_reference.file_path,
+            &mesh_reference.referenced_mesh_name,
+        );
+        let mut childs: Vec<rs_artifact::level::ENodeType> = vec![];
+        for x in node.childs.iter() {
+            childs.push(Self::node_to_artifact_node(x));
+        }
+        let node3d = rs_artifact::level::Node3D {
+            name: node.name.clone(),
+            id: uuid::Uuid::new_v4(),
+            url: None,
+            mesh_url: Some(url),
+            childs,
+        };
+        rs_artifact::level::ENodeType::Node3D(node3d)
+    }
+
+    fn level_to_level(level: &crate::level::Level) -> rs_artifact::level::Level {
+        let mut nodes: Vec<rs_artifact::level::ENodeType> = vec![];
+        for x in level.nodes.iter() {
+            nodes.push(Self::node_to_artifact_node(x));
+        }
+        return rs_artifact::level::Level {
+            name: level.name.clone(),
+            id: uuid::Uuid::new_v4(),
+            url: url::Url::parse(&format!("asset://level/{}", level.name)).unwrap(),
+            nodes,
+        };
+    }
+
+    pub fn build_static_mesh_url(file_path: &Path, mesh_name: &str) -> url::Url {
+        url::Url::parse(&format!(
+            "asset://static_mesh/{}/{}",
+            file_path.to_str().unwrap(),
+            mesh_name
+        ))
+        .unwrap()
+    }
+
+    pub fn export(&mut self) -> Result<PathBuf> {
         let output_folder_path = self.project_folder_path.join("artifact");
         let _ = std::fs::create_dir(output_folder_path.clone());
-        let output_filename = self.project.project_name.clone() + ".rs";
+        // let output_filename = self.project.project_name.clone() + ".rs";
+        let output_filename = "main.rs";
 
         let mut referenced_meshs: HashMap<PathBuf, HashSet<String>> = HashMap::new();
         let mut static_meshs: Vec<StaticMesh> = Vec::new();
-
+        let mut artifact_asset_encoder = ArtifactAssetEncoder::new(
+            Some(EEndianType::Little),
+            &output_folder_path.join(output_filename),
+        );
         for node in &self.project.level.nodes {
             self.walk_node(node, &mut |child_node| {
                 Self::collect_resource(&mut referenced_meshs, child_node);
@@ -181,17 +261,13 @@ impl ProjectContext {
                     mesh_clusters_map.insert(&mesh_cluster.name, mesh_cluster);
                 }
             }
+
             for mesh_name in mesh_names {
                 if let Some(mesh_cluster) = mesh_clusters_map.get(mesh_name) {
                     let static_mesh = StaticMesh {
                         name: mesh_cluster.name.clone(),
                         id: uuid::Uuid::new_v4(),
-                        url: url::Url::parse(&format!(
-                            "asset://{}/{}",
-                            file_path.to_str().unwrap(),
-                            mesh_name
-                        ))
-                        .unwrap(),
+                        url: Self::build_static_mesh_url(file_path, mesh_name),
                         vertexes: mesh_cluster.vertex_buffer.clone(),
                         indexes: mesh_cluster.index_buffer.clone(),
                     };
@@ -199,15 +275,14 @@ impl ProjectContext {
                 }
             }
         }
+        artifact_asset_encoder.encode(&Self::level_to_level(&self.project.level));
+        for static_mesh in static_meshs.iter() {
+            artifact_asset_encoder.encode(static_mesh);
+        }
 
-        let result = rs_artifact::artifact::encode_artifact_assets_disk(
-            &static_meshs,
-            Some(EEndianType::Little),
-            &output_folder_path.join(output_filename),
-        );
-
+        let result = artifact_asset_encoder.finish();
         if result {
-            Ok(())
+            Ok(output_folder_path.join(output_filename))
         } else {
             Err(crate::error::Error::ExportFailed(None))
         }

@@ -1,4 +1,6 @@
 pub mod camera;
+#[cfg(not(target_os = "android"))]
+pub mod camera_input_event_handle;
 pub mod engine;
 pub mod error;
 pub mod handle;

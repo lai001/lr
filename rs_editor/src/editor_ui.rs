@@ -1,3 +1,4 @@
+use crate::build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType};
 use crate::data_source::{AssetFolder, DataSource, MeshItem};
 use egui::*;
 use std::{path::PathBuf, rc::Rc};
@@ -20,6 +21,7 @@ pub struct ClickEvent {
     pub open_visual_studio_code: bool,
     pub open_asset_file_path: Option<PathBuf>,
     pub mesh_item: Option<ClickMeshItem>,
+    pub build_config: Option<BuildConfig>,
 }
 
 pub struct EditorUI {}
@@ -53,8 +55,8 @@ impl EditorUI {
         TopBottomPanel::top("menu_bar").show(context, |ui| {
             menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    ui.set_min_width(220.0);
-                    ui.style_mut().wrap = Some(false);
+                    // ui.set_min_width(220.0);
+                    // ui.style_mut().wrap = Some(false);
                     if ui.add(Button::new("New Project")).clicked() {
                         data_source.is_new_project_window_open = true;
                         ui.close_menu();
@@ -79,6 +81,30 @@ impl EditorUI {
                         click.open_visual_studio_code = true;
                         ui.close_menu();
                     }
+                    ui.menu_button("Build", |ui| {
+                        ui.menu_button("Windows", |ui| {
+                            ui.menu_button("Debug", |ui| {
+                                if ui.add(Button::new("x64")).clicked() {
+                                    click.build_config = Some(BuildConfig {
+                                        build_platform: EBuildPlatformType::Windows,
+                                        build_type: EBuildType::Debug,
+                                        arch_type: EArchType::X64,
+                                    });
+                                    ui.close_menu();
+                                }
+                            });
+                            ui.menu_button("Release", |ui| {
+                                if ui.add(Button::new("x64")).clicked() {
+                                    click.build_config = Some(BuildConfig {
+                                        build_platform: EBuildPlatformType::Windows,
+                                        build_type: EBuildType::Release,
+                                        arch_type: EArchType::X64,
+                                    });
+                                    ui.close_menu();
+                                }
+                            });
+                        });
+                    });
                 });
                 ui.menu_button("Window", |ui| {
                     if ui.add(Button::new("Asset")).clicked() {

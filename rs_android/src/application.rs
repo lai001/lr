@@ -44,11 +44,13 @@ impl Application {
 
         let width = native_window.get_width();
         let height = native_window.get_height();
+        let gui_context = egui::Context::default();
         let engine = match rs_engine::engine::Engine::new(
             &native_window,
             width,
             height,
             scale_factor,
+            gui_context,
             Some(artifact_reader),
         ) {
             Ok(engine) => engine,

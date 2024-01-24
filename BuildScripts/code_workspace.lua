@@ -26,6 +26,7 @@ task("code_workspace") do
             table.join2(linkedProjects, path.absolute("./rs_computer_graphics/Cargo.toml"))
             table.join2(linkedProjects, path.absolute("./rs_editor/Cargo.toml"))
             table.join2(linkedProjects, path.absolute("./rs_hotreload_plugin/Cargo.toml"))
+            table.join2(linkedProjects, path.absolute("./rs_desktop_standalone/Cargo.toml"))
         end
         local associations = {}
         local extraEnv = {

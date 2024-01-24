@@ -12,6 +12,7 @@ use crate::{
     EEndianType,
 };
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::{
     collections::HashMap,
     io::{BufWriter, Cursor, Read, Seek, SeekFrom, Write},
@@ -105,6 +106,37 @@ where
         tasks.push(task);
     }
     return encode_artifact_tasks_disk(endian_type, &mut tasks, target_path);
+}
+
+pub struct ArtifactAssetEncoder {
+    tasks: Vec<ResourceEncodeTask<Cursor<Vec<u8>>>>,
+    endian_type: Option<EEndianType>,
+    target_path: PathBuf,
+}
+
+impl ArtifactAssetEncoder {
+    pub fn new(endian_type: Option<EEndianType>, target_path: &Path) -> Self {
+        Self {
+            tasks: vec![],
+            endian_type,
+            target_path: target_path.to_path_buf(),
+        }
+    }
+
+    pub fn encode<T>(&mut self, asset: &T)
+    where
+        T: Asset,
+    {
+        let asset_encoded_data =
+            asset::encode_asset(asset.get_resource_type(), self.endian_type, asset).unwrap();
+        let reader = Cursor::new(asset_encoded_data);
+        let task = asset.build_resource_encode_task(reader);
+        self.tasks.push(task);
+    }
+
+    pub fn finish(&mut self) -> bool {
+        return encode_artifact_tasks_disk(self.endian_type, &mut self.tasks, &self.target_path);
+    }
 }
 
 pub struct ArtifactReader {

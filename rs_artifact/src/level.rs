@@ -1,27 +1,18 @@
 use crate::{asset::Asset, resource_type::EResourceType};
-use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
-
-#[typetag::serde(tag = "type")]
-pub trait Node: typetag::Serialize + typetag::Deserialize + DynClone {
-    fn childs(&self) -> Vec<Box<dyn Node>>;
-}
-dyn_clone::clone_trait_object!(Node);
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Node3D {
     pub name: String,
     pub id: uuid::Uuid,
-    pub url: url::Url,
+    pub url: Option<url::Url>,
     pub mesh_url: Option<url::Url>,
-    pub childs: Vec<Box<dyn Node>>,
+    pub childs: Vec<ENodeType>,
 }
 
-#[typetag::serde]
-impl Node for Node3D {
-    fn childs(&self) -> Vec<Box<dyn Node>> {
-        self.childs.clone()
-    }
+#[derive(Serialize, Deserialize, Clone)]
+pub enum ENodeType {
+    Node3D(Node3D),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -29,7 +20,7 @@ pub struct Level {
     pub name: String,
     pub id: uuid::Uuid,
     pub url: url::Url,
-    pub nodes: Vec<Box<dyn Node>>,
+    pub nodes: Vec<ENodeType>,
 }
 
 impl Asset for Level {
@@ -44,17 +35,17 @@ impl Asset for Level {
 
 #[cfg(test)]
 mod test {
-    use super::{Node, Node3D};
-    use crate::default_url;
+    use super::Node3D;
+    use crate::{default_url, level::ENodeType};
 
     #[test]
     fn test_case() {
-        let mut nodes: Vec<Box<dyn Node>> = vec![];
+        let mut nodes: Vec<ENodeType> = vec![];
         for x in 0..10 {
-            nodes.push(Box::new(Node3D {
+            nodes.push(ENodeType::Node3D(Node3D {
                 name: x.to_string(),
                 id: uuid::Uuid::new_v4(),
-                url: default_url().clone(),
+                url: Some(default_url().clone()),
                 childs: vec![],
                 mesh_url: None,
             }));
@@ -63,7 +54,7 @@ mod test {
         let root_node = Node3D {
             name: "root".to_string(),
             id: uuid::Uuid::new_v4(),
-            url: default_url().clone(),
+            url: Some(default_url().clone()),
             childs: nodes,
             mesh_url: None,
         };

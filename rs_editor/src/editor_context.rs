@@ -1,4 +1,5 @@
 use crate::{
+    build_config::EBuildType,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource, MeshItem, ModelViewData},
@@ -12,6 +13,7 @@ use rs_engine::camera::Camera;
 use rs_render::command::{DrawObject, PhongMaterial};
 use std::{
     collections::HashMap,
+    fmt::Debug,
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
@@ -562,8 +564,48 @@ impl EditorContext {
                 Self::open_project_workspace(path);
             }
         }
+        if let Some(build_config) = click_event.build_config {
+            if let Some(project_context) = &mut self.project_context {
+                if let Ok(artifact_file_path) = project_context.export() {
+                    let folder_path =
+                        project_context.create_build_folder_if_not_exist(&build_config);
+                    if let Ok(current_dir) = std::env::current_dir() {
+                        let target = current_dir.join("../../../rs_desktop_standalone/target");
+                        let exe: PathBuf;
+                        match build_config.build_type {
+                            EBuildType::Debug => {
+                                exe = target.join("debug/rs_desktop_standalone.exe");
+                            }
+                            EBuildType::Release => {
+                                exe = target.join("release/rs_desktop_standalone.exe");
+                            }
+                        }
+                        let to = folder_path.join("rs_desktop_standalone.exe");
+                        let _ = Self::copy_file_and_log(exe, to);
+                        let to = folder_path.join(artifact_file_path.file_name().unwrap());
+                        let _ = Self::copy_file_and_log(artifact_file_path, to);
+                    }
+                }
+            }
+        }
         let full_output = self.platform.end_frame(None);
         full_output
+    }
+
+    pub fn copy_file_and_log<P: AsRef<Path> + Clone + Debug>(
+        from: P,
+        to: P,
+    ) -> std::io::Result<u64> {
+        let result = std::fs::copy(from.clone(), to.clone());
+        match &result {
+            Ok(_) => {
+                log::trace!("Copy {:?} to {:?}", from, to);
+            }
+            Err(err) => {
+                log::warn!("{}, can not copy {:?} to {:?}", err, from, to);
+            }
+        }
+        result
     }
 
     fn node_to_draw_object(
