@@ -110,7 +110,7 @@ class MTApp : Closeable {
                         if (application == null) {
                             try {
                                 application =
-                                    context?.let { Application(it, "test.rs", message.surface) }
+                                    context?.let { Application(it, "main.rs", message.surface) }
                             } catch (e: Exception) {
 
                             }

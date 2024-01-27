@@ -15,6 +15,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            packagingOptions {
+                doNotStrip '**/*.so'
+            }
+            debuggable true
+            jniDebuggable true
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -26,9 +33,6 @@ android {
     }
     kotlinOptions {
         jvmTarget = '1.8'
-    }
-    packagingOptions {
-        doNotStrip "**/librs_android.so"
     }
 }
 

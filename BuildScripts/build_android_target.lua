@@ -16,10 +16,15 @@ do
         end
         local project_name = "rs_android"
         local old = os.cd(project_name)
+
+        local jobs = option.get("jobs")
+        if jobs == nil then
+            jobs = os.meminfo().availsize//2000
+        end
         if mode == "debug" then
-            os.exec("cargo build --target %s ", target)
+            os.exec("cargo build --target %s -j %d", target, jobs)
         else
-            os.exec("cargo build --target %s -r", target)
+            os.exec("cargo build --target %s -r -j %d", target, jobs)
         end
         os.cd(old)
         local target_map = { }
@@ -48,6 +53,9 @@ do
             { "m", "mode", "kv", "debug", "Set the build mode.",
                 " - debug",
                 " - release" },
+            { "j", "jobs", "kv", nil, "Number of parallel jobs.",
+                " - <N>",
+                " - release" },                
             { "t", "target", "kv", "aarch64-linux-android", "Set target.",
                 " - aarch64-linux-android",
                 " - armv7-linux-androideabi",
