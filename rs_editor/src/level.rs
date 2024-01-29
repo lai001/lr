@@ -1,5 +1,6 @@
+use rs_artifact::property_value_type::EPropertyValueType;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub struct MeshReference {
@@ -11,6 +12,7 @@ pub struct MeshReference {
 pub struct Node {
     pub name: String,
     pub mesh_reference: Option<MeshReference>,
+    pub values: HashMap<String, EPropertyValueType>,
     pub childs: Vec<Node>,
 }
 

@@ -10,3 +10,5 @@ pub mod level;
 pub mod model_loader;
 pub mod project;
 pub mod project_context;
+pub mod texture;
+pub mod ui;

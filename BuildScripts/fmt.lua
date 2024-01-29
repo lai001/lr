@@ -1,4 +1,12 @@
-task("fmt")
+local last_str = ''
+local function io_overwrite(io, str)
+   io.write(('\b \b'):rep(#last_str))
+   io.write(str)
+   io.flush()
+   last_str = str
+end
+
+task("fmt") do
     on_run(function()
         import("lib.detect.find_program")
         local rs_projects = os.dirs("rs_*")
@@ -15,9 +23,13 @@ task("fmt")
         for _, file in ipairs(os.files("rs_quickjs/src/**.c")) do
             table.insert(clang_format_args, file)
         end
+        io_overwrite(io, "Formatting *.rs files, 0%")
         os.execv(find_program("rustfmt"), rustfmt_args)
+        io_overwrite(io, "Formatting *.c,*.h files, 33%")
         os.execv(find_program("clang-format"), clang_format_args)
+        io_overwrite(io, "Formatting *.cs files, 66%")
         os.execv(find_program("dotnet"), { "format", "./ExampleApplication/ExampleApplication.sln" })
+        io_overwrite(io, "Formatting, 100%")
     end)
     set_menu {
         usage = "xmake fmt",
@@ -26,4 +38,4 @@ task("fmt")
             { nil, "fmt", nil, nil, nil },
         }
     }
-task_end()
+end

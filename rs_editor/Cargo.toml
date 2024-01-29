@@ -17,6 +17,7 @@ uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "
 url = { version = "2.5.0", features = ["serde"]}
 winit = { version = "0.28.7" }
 egui = "0.23.0"
+egui_extras = { version = "0.23.0", features = ["all_loaders"] }
 egui_winit_platform = { version = "0.20.0", features = ["clipboard"] }
 rfd = "0.12.1"
 image = "0.24.5"

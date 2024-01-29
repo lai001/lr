@@ -6,7 +6,10 @@ use crate::{
 };
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
-use rs_artifact::{artifact::ArtifactAssetEncoder, static_mesh::StaticMesh, EEndianType};
+use rs_artifact::{
+    artifact::ArtifactAssetEncoder, property_value_type::EPropertyValueType,
+    static_mesh::StaticMesh, EEndianType,
+};
 use rs_hotreload_plugin::hot_reload::HotReload;
 use std::{
     collections::{HashMap, HashSet},
@@ -202,12 +205,17 @@ impl ProjectContext {
         for x in node.childs.iter() {
             childs.push(Self::node_to_artifact_node(x));
         }
+        let mut values: HashMap<String, EPropertyValueType> = HashMap::new();
+        for (key, value) in &node.values {
+            values.insert(key.clone(), value.clone());
+        }
         let node3d = rs_artifact::level::Node3D {
             name: node.name.clone(),
             id: uuid::Uuid::new_v4(),
             url: None,
             mesh_url: Some(url),
             childs,
+            values,
         };
         rs_artifact::level::ENodeType::Node3D(node3d)
     }
@@ -242,6 +250,7 @@ impl ProjectContext {
 
         let mut referenced_meshs: HashMap<PathBuf, HashSet<String>> = HashMap::new();
         let mut static_meshs: Vec<StaticMesh> = Vec::new();
+        let mut images: Vec<rs_artifact::image::Image> = Vec::new();
         let mut artifact_asset_encoder = ArtifactAssetEncoder::new(
             Some(EEndianType::Little),
             &output_folder_path.join(output_filename),
@@ -275,16 +284,88 @@ impl ProjectContext {
                 }
             }
         }
+
+        let mut texture_files: Vec<&crate::texture::TextureFile> = Vec::new();
+        Self::collect_texture_files(&self.project.texture_folder, &mut texture_files);
+        let image_files = Self::collect_image_files(&texture_files);
+        for image_file_path in image_files {
+            let absolute_image_file_path =
+                self.get_asset_folder_path().join(image_file_path.clone());
+            let file_stem = image_file_path.file_stem().unwrap();
+            let name = file_stem.to_str().unwrap().to_string();
+            let url = rs_engine::build_asset_url(image_file_path.to_str().unwrap()).unwrap();
+            match std::fs::read(absolute_image_file_path.clone()) {
+                Ok(buffer) => {
+                    if let Ok(format) = image::guess_format(&buffer) {
+                        let image_data = image::load_from_memory(&buffer);
+                        match image_data {
+                            Ok(_) => {
+                                let image = rs_artifact::image::Image {
+                                    name,
+                                    url,
+                                    image_format:
+                                        rs_artifact::image::ImageFormat::from_external_format(
+                                            format,
+                                        ),
+                                    data: buffer,
+                                };
+                                images.push(image);
+                            }
+                            Err(err) => {
+                                return Err(crate::error::Error::ExportFailed(Some(
+                                    err.to_string(),
+                                )));
+                            }
+                        }
+                    } else {
+                        return Err(crate::error::Error::ExportFailed(None));
+                    }
+                }
+                Err(err) => {
+                    return Err(crate::error::Error::IO(
+                        err,
+                        Some(absolute_image_file_path.to_str().unwrap().to_string()),
+                    ));
+                }
+            }
+        }
+
+        // FIXME: Out of memory
         artifact_asset_encoder.encode(&Self::level_to_level(&self.project.level));
         for static_mesh in static_meshs.iter() {
             artifact_asset_encoder.encode(static_mesh);
         }
-
+        for image in images.iter() {
+            artifact_asset_encoder.encode(image);
+        }
         let result = artifact_asset_encoder.finish();
         if result {
             Ok(output_folder_path.join(output_filename))
         } else {
             Err(crate::error::Error::ExportFailed(None))
+        }
+    }
+
+    fn collect_image_files(files: &[&crate::texture::TextureFile]) -> HashSet<PathBuf> {
+        let mut image_paths = HashSet::new();
+        for file in files {
+            if let Some(image_reference) = &file.image_reference {
+                let value = image_reference;
+                image_paths.insert(value.clone());
+            }
+        }
+        image_paths
+    }
+
+    fn collect_texture_files<'a>(
+        texture_folder: &'a crate::texture::TextureFolder,
+        files: &mut Vec<&'a crate::texture::TextureFile>,
+    ) {
+        for texture_file in &texture_folder.texture_files {
+            files.push(texture_file);
+        }
+        for sub_folder in &texture_folder.texture_folders {
+            Self::collect_texture_files(sub_folder, files);
         }
     }
 

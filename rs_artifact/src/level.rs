@@ -1,5 +1,6 @@
-use crate::{asset::Asset, resource_type::EResourceType};
+use crate::{asset::Asset, property_value_type::EPropertyValueType, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Node3D {
@@ -7,6 +8,7 @@ pub struct Node3D {
     pub id: uuid::Uuid,
     pub url: Option<url::Url>,
     pub mesh_url: Option<url::Url>,
+    pub values: HashMap<String, EPropertyValueType>,
     pub childs: Vec<ENodeType>,
 }
 
@@ -35,6 +37,8 @@ impl Asset for Level {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use super::Node3D;
     use crate::{default_url, level::ENodeType};
 
@@ -48,6 +52,7 @@ mod test {
                 url: Some(default_url().clone()),
                 childs: vec![],
                 mesh_url: None,
+                values: HashMap::new(),
             }));
         }
 
@@ -57,6 +62,7 @@ mod test {
             url: Some(default_url().clone()),
             childs: nodes,
             mesh_url: None,
+            values: HashMap::new(),
         };
 
         let data = serde_json::ser::to_string(&root_node).expect("Success.");

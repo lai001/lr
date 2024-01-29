@@ -1,3 +1,5 @@
+use crate::ui::{property_view, textures_view};
+use rs_engine::file_type::EFileType;
 use std::{path::PathBuf, rc::Rc};
 
 #[derive(Debug)]
@@ -12,13 +14,19 @@ pub struct ModelViewData {
     pub file_path: PathBuf,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssetFile {
     pub name: String,
     pub path: PathBuf,
 }
 
-#[derive(Debug)]
+impl AssetFile {
+    pub fn get_file_type(&self) -> EFileType {
+        EFileType::from_path(&self.path).expect("Supported file type.")
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct AssetFolder {
     pub name: String,
     pub path: PathBuf,
@@ -50,12 +58,16 @@ pub struct DataSource {
     pub is_model_hierarchy_open: bool,
     pub is_asset_folder_open: bool,
     pub asset_folder: Option<AssetFolder>,
+    pub current_asset_folder: Option<AssetFolder>,
+    pub highlight_asset_file: Option<AssetFile>,
     pub model_view_data: Option<ModelViewData>,
     pub is_level_view_open: bool,
     pub level: Option<Level>,
     pub is_cursor_visible: bool,
     pub camera_movement_speed: f32,
     pub camera_motion_speed: f32,
+    pub textures_view_data_source: textures_view::DataSource,
+    pub property_view_data_source: property_view::DataSource,
 }
 
 impl DataSource {
@@ -77,6 +89,10 @@ impl DataSource {
             is_cursor_visible: true,
             camera_movement_speed: 0.01,
             camera_motion_speed: 0.1,
+            current_asset_folder: None,
+            highlight_asset_file: None,
+            textures_view_data_source: textures_view::DataSource::new(),
+            property_view_data_source: property_view::DataSource::new(),
         }
     }
 

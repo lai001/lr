@@ -156,6 +156,9 @@ impl Renderer {
 
     pub fn present(&mut self) -> Option<RenderOutput> {
         for resize_command in &self.resize_commands {
+            if resize_command.width <= 0 || resize_command.height <= 0 {
+                continue;
+            }
             self.screen_descriptor.physical_width = resize_command.width;
             self.screen_descriptor.physical_height = resize_command.height;
             self.wgpu_context

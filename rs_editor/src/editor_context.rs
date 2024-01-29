@@ -8,8 +8,10 @@ use crate::{
     model_loader::ModelLoader,
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
+    texture::TextureFile,
+    ui::{asset_view, top_menu},
 };
-use rs_engine::camera::Camera;
+use rs_engine::{camera::Camera, file_type::EFileType};
 use rs_render::command::{DrawObject, PhongMaterial};
 use std::{
     collections::HashMap,
@@ -38,6 +40,7 @@ pub struct EditorContext {
     draw_objects: Vec<DrawObject>,
     camera: Camera,
     virtual_key_code_states: HashMap<winit::event::VirtualKeyCode, winit::event::ElementState>,
+    editor_ui: EditorUI,
 }
 
 impl EditorContext {
@@ -97,6 +100,7 @@ impl EditorContext {
         .unwrap();
         let data_source = DataSource::new();
         let camera = Camera::default(window_width, window_height);
+        let editor_ui = EditorUI::new(platform.context());
         Self {
             engine,
             platform,
@@ -105,6 +109,7 @@ impl EditorContext {
             draw_objects: Vec::new(),
             camera,
             virtual_key_code_states: HashMap::new(),
+            editor_ui,
         }
     }
 
@@ -187,7 +192,8 @@ impl EditorContext {
                                     &project_context.get_asset_folder_path(),
                                 );
                                 log::trace!("Update asset folder. {:?}", asset_folder);
-                                self.data_source.asset_folder = Some(asset_folder);
+                                self.data_source.asset_folder = Some(asset_folder.clone());
+                                self.data_source.current_asset_folder = Some(asset_folder);
                             }
                         }
                     }
@@ -325,6 +331,37 @@ impl EditorContext {
         return reg.is_match(name);
     }
 
+    fn open_project(&mut self, file_path: &Path, window: &mut winit::window::Window) {
+        let project_context = match ProjectContext::open(&file_path) {
+            Ok(project_context) => project_context,
+            Err(err) => {
+                log::warn!("{:?}", err);
+                return;
+            }
+        };
+        window.set_title(&format!("Editor({})", project_context.project.project_name));
+        let asset_folder_path = project_context.get_asset_folder_path();
+        let asset_folder = Self::build_asset_folder(&asset_folder_path);
+        self.editor_ui
+            .set_asset_folder_path(Some(asset_folder_path));
+        log::trace!("Update asset folder. {:?}", asset_folder);
+        self.data_source.asset_folder = Some(asset_folder.clone());
+        self.data_source.current_asset_folder = Some(asset_folder);
+        self.data_source.textures_view_data_source.texture_folder =
+            Some(project_context.project.texture_folder.clone());
+        self.data_source
+            .textures_view_data_source
+            .current_texture_folder = Some(project_context.project.texture_folder.clone());
+        self.data_source.level = project_context.build_ui_level();
+        self.draw_objects = Self::collect_draw_objects(
+            &mut self.engine,
+            &project_context.get_asset_folder_path(),
+            &self.camera,
+            &project_context.project.level.nodes,
+        );
+        self.project_context = Some(project_context);
+    }
+
     fn process_custom_event(
         &mut self,
         event: &ECustomEventType,
@@ -349,12 +386,7 @@ impl EditorContext {
                             return;
                         }
                     };
-                    let Ok(project_context) = ProjectContext::open(&project_file_path) else {
-                        return;
-                    };
-                    self.project_context = Some(project_context);
-                    window.set_title(&format!("Editor({})", name));
-
+                    self.open_project(&project_file_path, window);
                     self.data_source.is_new_project_window_open = false;
                 }
                 EFileDialogType::OpenProject => {
@@ -363,28 +395,7 @@ impl EditorContext {
                         return;
                     };
                     log::trace!("Selected file: {:?}", file_path);
-
-                    let project_context = match ProjectContext::open(&file_path) {
-                        Ok(project_context) => project_context,
-                        Err(err) => {
-                            log::warn!("{:?}", err);
-                            return;
-                        }
-                    };
-
-                    let asset_folder_path = project_context.get_asset_folder_path();
-                    let asset_folder = Self::build_asset_folder(&asset_folder_path);
-                    log::trace!("Update asset folder. {:?}", asset_folder);
-                    self.data_source.asset_folder = Some(asset_folder);
-                    window.set_title(&format!("Editor({})", project_context.project.project_name));
-                    self.data_source.level = project_context.build_ui_level();
-                    self.draw_objects = Self::collect_draw_objects(
-                        &mut self.engine,
-                        &project_context.get_asset_folder_path(),
-                        &self.camera,
-                        &project_context.project.level.nodes,
-                    );
-                    self.project_context = Some(project_context);
+                    self.open_project(&file_path, window);
                 }
                 EFileDialogType::ImportAsset => {
                     let mut filter = MODEL_EXTENSION.to_vec();
@@ -406,21 +417,17 @@ impl EditorContext {
         let extension = extension.to_str().unwrap();
 
         if MODEL_EXTENSION.contains(&extension) {
-            self.process_import_model(file_path.clone(), extension);
+            self.process_import_model(file_path.clone());
         } else if IMAGE_EXTENSION.contains(&extension) {
-            self.process_import_image(file_path.clone(), extension);
+            self.process_import_image(file_path.clone());
         }
     }
 
-    fn process_import_image(&mut self, file_path: PathBuf, extension: &str) {
+    fn process_import_image(&mut self, file_path: PathBuf) {
         let image = image::open(file_path);
         if let Ok(image) = image {
             log::trace!("Width: {}, Height: {}", image.width(), image.height());
         }
-    }
-
-    pub fn build_asset_url(name: &str) -> Result<url::Url, url::ParseError> {
-        url::Url::parse(&format!("asset://{}", name))
     }
 
     fn open_project_workspace(file_path: std::path::PathBuf) {
@@ -434,7 +441,8 @@ impl EditorContext {
         });
     }
 
-    fn process_import_model(&mut self, file_path: PathBuf, extension: &str) {
+    fn process_import_model(&mut self, file_path: PathBuf) {
+        let extension = file_path.extension().unwrap().to_str().unwrap();
         match extension {
             FBX_EXTENSION => {
                 debug_assert!(file_path.is_absolute());
@@ -484,7 +492,9 @@ impl EditorContext {
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     ) -> egui::FullOutput {
         self.platform.begin_frame();
-        let click_event = EditorUI::build(&self.platform.context(), &mut self.data_source);
+        let click_event = self
+            .editor_ui
+            .build(&self.platform.context(), &mut self.data_source);
 
         {
             if let Some(context) = self.project_context.as_mut() {
@@ -495,38 +505,149 @@ impl EditorContext {
                 }
             }
         }
-        if click_event.asset_folder {
-            self.data_source.is_asset_folder_open = true;
-        }
-        if click_event.is_new_project {
-            let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
-                EFileDialogType::NewProject(self.data_source.new_project_name.clone()),
-            ));
-        }
-        if click_event.is_open_project {
-            let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
-                EFileDialogType::OpenProject,
-            ));
-        }
-        if click_event.is_import_asset {
-            let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
-                EFileDialogType::ImportAsset,
-            ));
-        }
-        if click_event.is_save_project {
-            if let Some(project_context) = self.project_context.as_ref() {
-                let save_status = project_context.save();
-                log::trace!("Save: {}", save_status);
+
+        if let Some(menu_event) = click_event.menu_event {
+            match menu_event {
+                top_menu::EClickEventType::NewProject(projevt_name) => {
+                    let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
+                        EFileDialogType::NewProject(projevt_name.clone()),
+                    ));
+                }
+                top_menu::EClickEventType::OpenProject => {
+                    let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
+                        EFileDialogType::OpenProject,
+                    ));
+                }
+                top_menu::EClickEventType::ImportAsset => {
+                    let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
+                        EFileDialogType::ImportAsset,
+                    ));
+                }
+                top_menu::EClickEventType::SaveProject => {
+                    if let Some(project_context) = self.project_context.as_ref() {
+                        let save_status = project_context.save();
+                        log::trace!("Save: {}", save_status);
+                    }
+                }
+                top_menu::EClickEventType::Export => {
+                    if let Some(project_context) = self.project_context.as_mut() {
+                        let result = project_context.export();
+                        log::trace!("{:?}", result);
+                    }
+                }
+                top_menu::EClickEventType::OpenVisualStudioCode => {
+                    if let Some(project_context) = &self.project_context {
+                        let path = project_context.get_project_folder_path();
+                        Self::open_project_workspace(path);
+                    }
+                }
+                top_menu::EClickEventType::Build(build_config) => {
+                    if let Some(project_context) = &mut self.project_context {
+                        if let Ok(artifact_file_path) = project_context.export() {
+                            let folder_path =
+                                project_context.create_build_folder_if_not_exist(&build_config);
+                            if let Ok(current_dir) = std::env::current_dir() {
+                                let target =
+                                    current_dir.join("../../../rs_desktop_standalone/target");
+                                let exe: PathBuf;
+                                match build_config.build_type {
+                                    EBuildType::Debug => {
+                                        exe = target.join("debug/rs_desktop_standalone.exe");
+                                    }
+                                    EBuildType::Release => {
+                                        exe = target.join("release/rs_desktop_standalone.exe");
+                                    }
+                                }
+                                let to = folder_path.join("rs_desktop_standalone.exe");
+                                let _ = Self::copy_file_and_log(exe, to);
+                                let to = folder_path.join(artifact_file_path.file_name().unwrap());
+                                let _ = Self::copy_file_and_log(artifact_file_path, to);
+                            }
+                        }
+                    }
+                }
+                top_menu::EClickEventType::OpenWindow(window_type) => match window_type {
+                    top_menu::EWindowType::Asset => {
+                        self.data_source.is_asset_folder_open = true;
+                    }
+                    top_menu::EWindowType::Texture => {
+                        self.data_source
+                            .textures_view_data_source
+                            .is_textures_view_open = true;
+                    }
+                    top_menu::EWindowType::Property => {
+                        self.data_source.property_view_data_source.is_open = true;
+                    }
+                    top_menu::EWindowType::Level => {
+                        self.data_source.is_level_view_open = true;
+                    }
+                },
             }
         }
-        if let Some(open_asset_file_path) = click_event.open_asset_file_path {
-            let extension = open_asset_file_path.extension().unwrap().to_str().unwrap();
-            self.process_import_model(open_asset_file_path.clone(), extension);
-        }
-        if click_event.is_export {
-            if let Some(project_context) = self.project_context.as_mut() {
-                let result = project_context.export();
-                log::trace!("{:?}", result);
+        if let Some(click_aseet) = click_event.click_aseet {
+            match click_aseet {
+                asset_view::EClickItemType::Folder(folder) => {
+                    self.data_source.current_asset_folder = Some(folder);
+                }
+                asset_view::EClickItemType::File(asset_file) => {
+                    self.data_source.highlight_asset_file = Some(asset_file.clone());
+                    match asset_file.get_file_type() {
+                        EFileType::Fbx => {
+                            self.process_import_model(asset_file.path.clone());
+                        }
+                        EFileType::Jpeg => {}
+                        EFileType::Png => {}
+                    }
+                }
+                asset_view::EClickItemType::Back => todo!(),
+                asset_view::EClickItemType::SingleClickFile(asset_file) => {
+                    self.data_source.highlight_asset_file = Some(asset_file)
+                }
+                asset_view::EClickItemType::CreateTexture(asset_file) => {
+                    if let Some(project_context) = self.project_context.as_mut() {
+                        let asset_folder_path = project_context.get_asset_folder_path();
+                        let image_reference: PathBuf = {
+                            if asset_file.path.starts_with(asset_folder_path.clone()) {
+                                asset_file
+                                    .path
+                                    .strip_prefix(asset_folder_path)
+                                    .unwrap()
+                                    .to_path_buf()
+                            } else {
+                                asset_file.path
+                            }
+                        };
+                        if let Some(current_texture_folder) = self
+                            .data_source
+                            .textures_view_data_source
+                            .current_texture_folder
+                            .as_ref()
+                        {
+                            let url = current_texture_folder
+                                .url
+                                .join(&asset_file.name)
+                                .unwrap()
+                                .clone();
+                            let texture_file = TextureFile {
+                                name: asset_file.name,
+                                url,
+                                image_reference: Some(image_reference),
+                            };
+                            log::trace!("Create texture: {:?}", &texture_file.url);
+                            project_context
+                                .project
+                                .texture_folder
+                                .texture_files
+                                .push(texture_file);
+                            self.data_source.textures_view_data_source.texture_folder =
+                                Some(project_context.project.texture_folder.clone());
+                            self.data_source
+                                .textures_view_data_source
+                                .current_texture_folder =
+                                Some(project_context.project.texture_folder.clone());
+                        }
+                    }
+                }
             }
         }
         if let Some(mesh_item) = click_event.mesh_item {
@@ -542,6 +663,7 @@ impl EditorContext {
                         referenced_mesh_name: mesh_item.item.name.clone(),
                     }),
                     childs: vec![],
+                    values: HashMap::new(),
                 };
                 if let Some(draw_object) = Self::node_to_draw_object(
                     &mut self.engine,
@@ -553,39 +675,6 @@ impl EditorContext {
                 }
                 project_context.project.level.nodes.push(node);
                 self.data_source.level = project_context.build_ui_level();
-            }
-        }
-        if click_event.level_window {
-            self.data_source.is_level_view_open = true;
-        }
-        if click_event.open_visual_studio_code {
-            if let Some(project_context) = &self.project_context {
-                let path = project_context.get_project_folder_path();
-                Self::open_project_workspace(path);
-            }
-        }
-        if let Some(build_config) = click_event.build_config {
-            if let Some(project_context) = &mut self.project_context {
-                if let Ok(artifact_file_path) = project_context.export() {
-                    let folder_path =
-                        project_context.create_build_folder_if_not_exist(&build_config);
-                    if let Ok(current_dir) = std::env::current_dir() {
-                        let target = current_dir.join("../../../rs_desktop_standalone/target");
-                        let exe: PathBuf;
-                        match build_config.build_type {
-                            EBuildType::Debug => {
-                                exe = target.join("debug/rs_desktop_standalone.exe");
-                            }
-                            EBuildType::Release => {
-                                exe = target.join("release/rs_desktop_standalone.exe");
-                            }
-                        }
-                        let to = folder_path.join("rs_desktop_standalone.exe");
-                        let _ = Self::copy_file_and_log(exe, to);
-                        let to = folder_path.join(artifact_file_path.file_name().unwrap());
-                        let _ = Self::copy_file_and_log(artifact_file_path, to);
-                    }
-                }
             }
         }
         let full_output = self.platform.end_frame(None);

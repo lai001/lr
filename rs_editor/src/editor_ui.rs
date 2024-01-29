@@ -1,6 +1,9 @@
-use crate::build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType};
-use crate::data_source::{AssetFolder, DataSource, MeshItem};
+use crate::data_source::{DataSource, MeshItem};
+use crate::editor_ui::load::ImageLoader;
+use crate::ui::top_menu::TopMenu;
+use crate::ui::{asset_view, property_view, textures_view, top_menu};
 use egui::*;
+use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
 
 #[derive(Debug)]
@@ -11,113 +14,87 @@ pub struct ClickMeshItem {
 
 #[derive(Default, Debug)]
 pub struct ClickEvent {
-    pub is_open_project: bool,
-    pub is_new_project: bool,
-    pub is_save_project: bool,
-    pub is_import_asset: bool,
-    pub is_export: bool,
-    pub asset_folder: bool,
-    pub level_window: bool,
-    pub open_visual_studio_code: bool,
-    pub open_asset_file_path: Option<PathBuf>,
     pub mesh_item: Option<ClickMeshItem>,
-    pub build_config: Option<BuildConfig>,
+    pub click_aseet: Option<asset_view::EClickItemType>,
+    pub menu_event: Option<top_menu::EClickEventType>,
 }
 
-pub struct EditorUI {}
+pub struct EditorUI {
+    context: Context,
+    image_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
+    svg_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
+    asset_folder_path: Option<PathBuf>,
+    top_menu: TopMenu,
+}
 
 impl EditorUI {
-    pub fn build(context: &Context, data_source: &mut DataSource) -> ClickEvent {
-        let mut click = ClickEvent::default();
-        Self::menu(context, data_source, &mut click);
-
-        if data_source.is_asset_folder_open {
-            Self::asset_folder(context, data_source, &mut click);
+    pub fn new(context: Context) -> Self {
+        let image_loader_id = "egui_extras::loaders::image_loader::ImageCrateLoader";
+        let svg_loader_id = "egui_extras::loaders::svg_loader::SvgLoader";
+        let mut image_loader = None;
+        let mut svg_loader = None;
+        egui_extras::install_image_loaders(&context);
+        for item in context.loaders().image.lock().iter() {
+            if item.id() == image_loader_id {
+                image_loader = Some(item.clone());
+            }
+            if item.id() == svg_loader_id {
+                svg_loader = Some(item.clone());
+            }
         }
-        Self::model_hierarchy_window(context, data_source, &mut click);
-        Self::level_window(context, data_source, &mut click);
-        let mut is_new_project_window_open = data_source.is_new_project_window_open;
-        Window::new("New Project")
-            .open(&mut is_new_project_window_open)
-            .show(context, |ui| {
-                ui.text_edit_singleline(&mut data_source.new_project_name);
-
-                if ui.add(Button::new("OK")).clicked() {
-                    click.is_new_project = true;
-                    data_source.is_new_project_window_open = false;
-                }
-            });
-        data_source.is_new_project_window_open = is_new_project_window_open;
-        click
+        Self {
+            context,
+            image_loader,
+            svg_loader,
+            asset_folder_path: None,
+            top_menu: TopMenu {
+                new_project_name: String::new(),
+            },
+        }
     }
 
-    fn menu(context: &Context, data_source: &mut DataSource, click: &mut ClickEvent) {
-        TopBottomPanel::top("menu_bar").show(context, |ui| {
-            menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    // ui.set_min_width(220.0);
-                    // ui.style_mut().wrap = Some(false);
-                    if ui.add(Button::new("New Project")).clicked() {
-                        data_source.is_new_project_window_open = true;
-                        ui.close_menu();
-                    }
-                    if ui.add(Button::new("Open Project")).clicked() {
-                        click.is_open_project = true;
-                        ui.close_menu();
-                    }
-                    if ui.add(Button::new("Import Asset")).clicked() {
-                        click.is_import_asset = true;
-                        ui.close_menu();
-                    }
-                    if ui.add(Button::new("Save Project")).clicked() {
-                        click.is_save_project = true;
-                        ui.close_menu();
-                    }
-                    if ui.add(Button::new("Export")).clicked() {
-                        click.is_export = true;
-                        ui.close_menu();
-                    }
-                    if ui.add(Button::new("Open Visual Studio Code")).clicked() {
-                        click.open_visual_studio_code = true;
-                        ui.close_menu();
-                    }
-                    ui.menu_button("Build", |ui| {
-                        ui.menu_button("Windows", |ui| {
-                            ui.menu_button("Debug", |ui| {
-                                if ui.add(Button::new("x64")).clicked() {
-                                    click.build_config = Some(BuildConfig {
-                                        build_platform: EBuildPlatformType::Windows,
-                                        build_type: EBuildType::Debug,
-                                        arch_type: EArchType::X64,
-                                    });
-                                    ui.close_menu();
-                                }
-                            });
-                            ui.menu_button("Release", |ui| {
-                                if ui.add(Button::new("x64")).clicked() {
-                                    click.build_config = Some(BuildConfig {
-                                        build_platform: EBuildPlatformType::Windows,
-                                        build_type: EBuildType::Release,
-                                        arch_type: EArchType::X64,
-                                    });
-                                    ui.close_menu();
-                                }
-                            });
-                        });
-                    });
-                });
-                ui.menu_button("Window", |ui| {
-                    if ui.add(Button::new("Asset")).clicked() {
-                        click.asset_folder = true;
-                        ui.close_menu();
-                    }
-                    if ui.add(Button::new("Level")).clicked() {
-                        click.level_window = true;
-                        ui.close_menu();
-                    }
-                });
-            });
-        });
+    pub fn set_asset_folder_path(&mut self, asset_folder_path: Option<PathBuf>) {
+        self.asset_folder_path = asset_folder_path;
+    }
+
+    pub fn build(&mut self, context: &Context, data_source: &mut DataSource) -> ClickEvent {
+        let mut click = ClickEvent::default();
+        click.menu_event = self.top_menu.draw(context);
+
+        Self::model_hierarchy_window(context, data_source, &mut click);
+        if let Some(level) = &data_source.level {
+            crate::ui::level_view::draw(context, &mut data_source.is_level_view_open, level);
+        }
+        click.click_aseet = asset_view::draw(
+            context,
+            &mut data_source.is_asset_folder_open,
+            data_source.current_asset_folder.as_ref(),
+            data_source.highlight_asset_file.as_ref(),
+        );
+
+        if let Some(asset_folder_path) = self.asset_folder_path.as_ref() {
+            textures_view::draw(
+                context,
+                &mut data_source.textures_view_data_source.is_textures_view_open,
+                asset_folder_path,
+                data_source
+                    .textures_view_data_source
+                    .texture_folder
+                    .as_ref(),
+                data_source
+                    .textures_view_data_source
+                    .highlight_texture_file
+                    .as_ref(),
+            );
+        }
+
+        property_view::draw(
+            context,
+            &mut data_source.property_view_data_source.is_open,
+            &mut data_source.property_view_data_source.values,
+        );
+
+        click
     }
 
     fn model_hierarchy_window(
@@ -156,55 +133,5 @@ impl EditorUI {
                 Self::render_collapsing_header(ui, &mesh_item.childs, file_path, click);
             });
         }
-    }
-
-    fn asset_folder(context: &Context, data_source: &mut DataSource, click: &mut ClickEvent) {
-        Window::new("Asset")
-            .open(&mut data_source.is_asset_folder_open)
-            .show(context, |ui| {
-                ScrollArea::vertical().show(ui, |ui| {
-                    if let Some(asset_folder) = data_source.asset_folder.as_ref() {
-                        Self::asset_folder2(ui, asset_folder, click);
-                    }
-                });
-            });
-    }
-
-    fn asset_folder2(ui: &mut Ui, asset_folder: &AssetFolder, click: &mut ClickEvent) {
-        CollapsingHeader::new(asset_folder.name.clone()).show(ui, |ui| {
-            for folder in &asset_folder.folders {
-                Self::asset_folder2(ui, folder, click);
-            }
-            for file in &asset_folder.files {
-                if ui.button(file.name.clone()).double_clicked() {
-                    click.open_asset_file_path = Some(file.path.clone());
-                }
-            }
-        });
-    }
-
-    fn level_node(ui: &mut Ui, node: &crate::data_source::Node, click: &mut ClickEvent) {
-        CollapsingHeader::new(node.name.clone())
-            .id_source(node.id)
-            .show(ui, |ui| {
-                for child_node in &node.childs {
-                    Self::level_node(ui, child_node, click);
-                }
-            });
-    }
-
-    fn level_window(context: &Context, data_source: &mut DataSource, click: &mut ClickEvent) {
-        let Some(level) = data_source.level.as_ref() else {
-            return;
-        };
-        Window::new(format!("Level({})", level.name))
-            .open(&mut data_source.is_level_view_open)
-            .show(context, |ui| {
-                ScrollArea::vertical().show(ui, |ui| {
-                    for node in &level.nodes {
-                        Self::level_node(ui, node, click);
-                    }
-                });
-            });
     }
 }

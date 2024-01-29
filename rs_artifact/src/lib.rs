@@ -6,6 +6,7 @@ pub mod image;
 pub mod level;
 pub mod mesh_vertex;
 pub mod mesh_vertex_visitor;
+pub mod property_value_type;
 pub mod resource_info;
 pub mod resource_type;
 pub mod shader_source_code;
@@ -18,13 +19,6 @@ pub mod java_input_stream;
 pub fn default_url() -> &'static url::Url {
     static URL: std::sync::OnceLock<url::Url> = std::sync::OnceLock::new();
     URL.get_or_init(|| url::Url::parse("rs://").unwrap())
-}
-
-pub fn build_asset_url(
-    name: &str,
-    resource_type: resource_type::EResourceType,
-) -> Result<url::Url, url::ParseError> {
-    url::Url::parse(&format!("rs://Asset/{:?}/{}", resource_type, name))
 }
 
 #[derive(Debug, Clone, Copy)]

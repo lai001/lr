@@ -14,6 +14,7 @@ pub struct Project {
     pub version_str: String,
     pub project_name: String,
     pub level: Level,
+    pub texture_folder: crate::texture::TextureFolder,
 }
 
 impl Project {
@@ -39,6 +40,15 @@ impl Project {
         Ok(project_file_path)
     }
 
+    fn root_texture_folder() -> crate::texture::TextureFolder {
+        crate::texture::TextureFolder {
+            name: String::from("Textures"),
+            url: url::Url::parse("texture://Textures").unwrap(),
+            texture_files: Vec::new(),
+            texture_folders: Vec::new(),
+        }
+    }
+
     fn create_empty_project_file_to_disk(project_parent_folder: &Path, project_name: &str) -> bool {
         let project_folder = project_parent_folder.join(project_name);
         let project_file_path =
@@ -51,6 +61,7 @@ impl Project {
             version_str: VERSION_STR.to_string(),
             project_name: project_name.to_string(),
             level: Level::empty_level(),
+            texture_folder: Self::root_texture_folder(),
         };
 
         let Ok(json_str) = serde_json::ser::to_string_pretty(&empty_project) else {

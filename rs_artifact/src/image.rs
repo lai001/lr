@@ -68,7 +68,6 @@ impl ImageFormat {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Image {
     pub name: String,
-    pub id: uuid::Uuid,
     pub url: url::Url,
     pub image_format: ImageFormat,
     pub data: Vec<u8>,
@@ -100,7 +99,6 @@ impl Image {
             if let Some(format) = image_reader.format() {
                 return Some(Image {
                     name: name.to_string(),
-                    id,
                     image_format: ImageFormat::from_external_format(format),
                     data,
                     url: url::Url::from_str("").unwrap(),
