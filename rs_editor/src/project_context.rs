@@ -203,7 +203,7 @@ impl ProjectContext {
         );
         let mut childs: Vec<rs_artifact::level::ENodeType> = vec![];
         for x in node.childs.iter() {
-            childs.push(Self::node_to_artifact_node(x));
+            childs.push(Self::node_to_artifact_node(&x.borrow()));
         }
         let mut values: HashMap<String, EPropertyValueType> = HashMap::new();
         for (key, value) in &node.values {
@@ -223,7 +223,7 @@ impl ProjectContext {
     fn level_to_level(level: &crate::level::Level) -> rs_artifact::level::Level {
         let mut nodes: Vec<rs_artifact::level::ENodeType> = vec![];
         for x in level.nodes.iter() {
-            nodes.push(Self::node_to_artifact_node(x));
+            nodes.push(Self::node_to_artifact_node(&x.borrow()));
         }
         return rs_artifact::level::Level {
             name: level.name.clone(),
@@ -255,8 +255,8 @@ impl ProjectContext {
             Some(EEndianType::Little),
             &output_folder_path.join(output_filename),
         );
-        for node in &self.project.level.nodes {
-            self.walk_node(node, &mut |child_node| {
+        for node in &self.project.level.borrow().nodes {
+            self.walk_node(&node.borrow(), &mut |child_node| {
                 Self::collect_resource(&mut referenced_meshs, child_node);
             });
         }
@@ -331,7 +331,7 @@ impl ProjectContext {
         }
 
         // FIXME: Out of memory
-        artifact_asset_encoder.encode(&Self::level_to_level(&self.project.level));
+        artifact_asset_encoder.encode(&Self::level_to_level(&self.project.level.borrow()));
         for static_mesh in static_meshs.iter() {
             artifact_asset_encoder.encode(static_mesh);
         }
@@ -375,7 +375,7 @@ impl ProjectContext {
     {
         walk(node);
         for node in node.childs.iter() {
-            self.walk_node(node, walk);
+            self.walk_node(&node.borrow(), walk);
         }
     }
 
@@ -393,29 +393,5 @@ impl ProjectContext {
                 );
             }
         }
-    }
-
-    fn node_to_node(node: &crate::level::Node) -> crate::data_source::Node {
-        let mut childs: Vec<crate::data_source::Node> = Vec::new();
-        for child_node in &node.childs {
-            childs.push(Self::node_to_node(child_node));
-        }
-        crate::data_source::Node {
-            name: node.name.clone(),
-            childs,
-            id: uuid::Uuid::new_v4(),
-        }
-    }
-
-    pub fn build_ui_level(&self) -> Option<crate::data_source::Level> {
-        let level = &self.project.level;
-        let mut nodes: Vec<crate::data_source::Node> = Vec::new();
-        for node in &level.nodes {
-            nodes.push(Self::node_to_node(&node));
-        }
-        return Some(crate::data_source::Level {
-            name: level.name.clone(),
-            nodes,
-        });
     }
 }

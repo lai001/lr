@@ -8,12 +8,15 @@ use crate::{
     model_loader::ModelLoader,
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
+    property,
     texture::TextureFile,
-    ui::{asset_view, top_menu},
+    ui::{asset_view, level_view, property_view, textures_view, top_menu},
 };
+use rs_artifact::property_value_type::EPropertyValueType;
 use rs_engine::{camera::Camera, file_type::EFileType};
 use rs_render::command::{DrawObject, PhongMaterial};
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fmt::Debug,
     path::{Path, PathBuf},
@@ -37,7 +40,7 @@ pub struct EditorContext {
     platform: egui_winit_platform::Platform,
     data_source: DataSource,
     project_context: Option<ProjectContext>,
-    draw_objects: Vec<DrawObject>,
+    draw_objects: HashMap<uuid::Uuid, DrawObject>,
     camera: Camera,
     virtual_key_code_states: HashMap<winit::event::VirtualKeyCode, winit::event::ElementState>,
     editor_ui: EditorUI,
@@ -106,7 +109,7 @@ impl EditorContext {
             platform,
             data_source,
             project_context: None,
-            draw_objects: Vec::new(),
+            draw_objects: HashMap::new(),
             camera,
             virtual_key_code_states: HashMap::new(),
             editor_ui,
@@ -352,13 +355,25 @@ impl EditorContext {
         self.data_source
             .textures_view_data_source
             .current_texture_folder = Some(project_context.project.texture_folder.clone());
-        self.data_source.level = project_context.build_ui_level();
-        self.draw_objects = Self::collect_draw_objects(
-            &mut self.engine,
-            &project_context.get_asset_folder_path(),
-            &self.camera,
-            &project_context.project.level.nodes,
-        );
+        self.data_source.level = Some(project_context.project.level.clone());
+        for texture_file in &project_context.project.texture_folder.texture_files {
+            if let Some(image_reference) = &texture_file.image_reference {
+                let abs_path = project_context
+                    .get_asset_folder_path()
+                    .join(image_reference);
+                self.engine
+                    .create_texture_from_path(&abs_path, texture_file.url.clone());
+            }
+        }
+        {
+            let nodes = &project_context.project.level.borrow_mut().nodes;
+            self.draw_objects = Self::collect_draw_objects(
+                &mut self.engine,
+                &project_context.get_asset_folder_path(),
+                &self.camera,
+                nodes.iter(),
+            );
+        }
         self.project_context = Some(project_context);
     }
 
@@ -479,7 +494,7 @@ impl EditorContext {
         &mut self,
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     ) {
-        for draw_object in self.draw_objects.clone() {
+        for (id, draw_object) in self.draw_objects.clone() {
             self.engine.draw(draw_object);
         }
 
@@ -663,7 +678,11 @@ impl EditorContext {
                         referenced_mesh_name: mesh_item.item.name.clone(),
                     }),
                     childs: vec![],
-                    values: HashMap::new(),
+                    values: HashMap::from([(
+                        property::name::TEXTURE.to_string(),
+                        EPropertyValueType::Texture(None),
+                    )]),
+                    id: uuid::Uuid::new_v4(),
                 };
                 if let Some(draw_object) = Self::node_to_draw_object(
                     &mut self.engine,
@@ -671,10 +690,89 @@ impl EditorContext {
                     &self.camera,
                     &node,
                 ) {
-                    self.draw_objects.push(draw_object);
+                    self.draw_objects.insert(node.id, draw_object);
                 }
-                project_context.project.level.nodes.push(node);
-                self.data_source.level = project_context.build_ui_level();
+                project_context
+                    .project
+                    .level
+                    .borrow_mut()
+                    .nodes
+                    .push(Rc::new(RefCell::new(node)));
+                self.data_source.level = Some(project_context.project.level.clone());
+            }
+        }
+        if let Some(click_node) = click_event.click_node {
+            match click_node {
+                level_view::EClickEventType::Node(node) => {
+                    self.data_source.property_view_data_source.is_open = true;
+                    self.data_source.property_view_data_source.selected_node = Some(node.clone());
+                }
+            }
+        }
+        {
+            for (property_name, modifier) in click_event.property_event {
+                match modifier {
+                    property_view::EValueModifierType::ValueType(_) => {}
+                    property_view::EValueModifierType::Assign => {
+                        if property_name == property::name::TEXTURE {
+                            if let Some(selected_node) = self
+                                .data_source
+                                .property_view_data_source
+                                .selected_node
+                                .clone()
+                            {
+                                if let Some(highlight_texture_file) = &self
+                                    .data_source
+                                    .textures_view_data_source
+                                    .highlight_texture_file
+                                {
+                                    let url = &highlight_texture_file.url;
+                                    let mut selected_node = selected_node.borrow_mut();
+                                    let value = selected_node
+                                        .values
+                                        .get_mut(property::name::TEXTURE)
+                                        .unwrap();
+                                    *value = EPropertyValueType::Texture(Some(url.clone()));
+                                    if let Some(texture_handle) = self
+                                        .engine
+                                        .get_mut_resource_manager()
+                                        .get_texture_by_url(url)
+                                    {
+                                        if let Some(draw_object) =
+                                            self.draw_objects.get_mut(&selected_node.id)
+                                        {
+                                            match &mut draw_object.material_type {
+                                                rs_render::command::EMaterialType::Phong(
+                                                    material,
+                                                ) => {
+                                                    material.diffuse_texture =
+                                                        Some(*texture_handle);
+                                                    material.specular_texture =
+                                                        Some(*texture_handle);
+                                                }
+                                                rs_render::command::EMaterialType::PBR(_) => {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(texture_view_event) = &click_event.texture_view_event {
+            match texture_view_event {
+                textures_view::EClickItemType::Folder(_) => {}
+                textures_view::EClickItemType::File(_) => {}
+                textures_view::EClickItemType::SingleClickFile(file) => {
+                    self.data_source
+                        .textures_view_data_source
+                        .highlight_texture_file = Some(file.clone());
+                }
+                textures_view::EClickItemType::CreateTexture(_) => {}
+                textures_view::EClickItemType::CreateTextureFolder(_) => {}
+                textures_view::EClickItemType::Back => {}
             }
         }
         let full_output = self.platform.end_frame(None);
@@ -741,15 +839,39 @@ impl EditorContext {
         engine: &mut rs_engine::engine::Engine,
         asset_folder_path: &Path,
         camera: &Camera,
-        nodes: &[crate::level::Node],
-    ) -> Vec<DrawObject> {
-        let mut draw_objects: Vec<DrawObject> = Vec::new();
+        nodes: std::slice::Iter<'_, Rc<RefCell<crate::level::Node>>>,
+    ) -> HashMap<uuid::Uuid, DrawObject> {
+        let mut draw_objects: HashMap<uuid::Uuid, DrawObject> = HashMap::new();
         for node in nodes {
-            if let Some(draw_object) =
-                Self::node_to_draw_object(engine, asset_folder_path, camera, node)
+            let id: uuid::Uuid;
             {
-                draw_objects.push(draw_object);
+                id = node.borrow().id;
             }
+            let Some(mut draw_object) = Self::node_to_draw_object(
+                engine,
+                asset_folder_path,
+                camera,
+                &node.as_ref().borrow(),
+            ) else {
+                continue;
+            };
+            if let Some(texture_value) = node.borrow_mut().values.get_mut(property::name::TEXTURE) {
+                if let EPropertyValueType::Texture(Some(texture_url)) = texture_value {
+                    if let Some(texture_handle) = engine
+                        .get_mut_resource_manager()
+                        .get_texture_by_url(texture_url)
+                    {
+                        match &mut draw_object.material_type {
+                            rs_render::command::EMaterialType::Phong(material) => {
+                                material.diffuse_texture = Some(*texture_handle);
+                                material.specular_texture = Some(*texture_handle);
+                            }
+                            rs_render::command::EMaterialType::PBR(_) => {}
+                        }
+                    }
+                }
+            }
+            draw_objects.insert(id, draw_object);
         }
         draw_objects
     }
@@ -771,7 +893,7 @@ impl EditorContext {
     }
 
     fn camera_did_update(&mut self) {
-        for draw_objects in &mut self.draw_objects {
+        for (id, draw_objects) in &mut self.draw_objects {
             match &mut draw_objects.material_type {
                 rs_render::command::EMaterialType::Phong(material) => {
                     material.constants.projection = self.camera.get_projection_matrix();

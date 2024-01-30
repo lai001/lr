@@ -1,6 +1,6 @@
 use crate::ui::{property_view, textures_view};
 use rs_engine::file_type::EFileType;
-use std::{path::PathBuf, rc::Rc};
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 #[derive(Debug)]
 pub struct MeshItem {
@@ -34,19 +34,6 @@ pub struct AssetFolder {
     pub folders: Vec<AssetFolder>,
 }
 
-#[derive(Debug)]
-pub struct Node {
-    pub id: uuid::Uuid,
-    pub name: String,
-    pub childs: Vec<Node>,
-}
-
-#[derive(Debug)]
-pub struct Level {
-    pub name: String,
-    pub nodes: Vec<Node>,
-}
-
 pub struct DataSource {
     pub target_fps: u64,
     pub current_frame_start_time: std::time::Instant,
@@ -62,7 +49,7 @@ pub struct DataSource {
     pub highlight_asset_file: Option<AssetFile>,
     pub model_view_data: Option<ModelViewData>,
     pub is_level_view_open: bool,
-    pub level: Option<Level>,
+    pub level: Option<Rc<RefCell<crate::level::Level>>>,
     pub is_cursor_visible: bool,
     pub camera_movement_speed: f32,
     pub camera_motion_speed: f32,
@@ -80,11 +67,11 @@ impl DataSource {
             is_new_project_window_open: false,
             new_project_name: String::new(),
             input_method_editor_started: false,
-            is_asset_folder_open: false,
+            is_asset_folder_open: true,
             asset_folder: None,
             is_model_hierarchy_open: false,
             model_view_data: None,
-            is_level_view_open: false,
+            is_level_view_open: true,
             level: None,
             is_cursor_visible: true,
             camera_movement_speed: 0.01,

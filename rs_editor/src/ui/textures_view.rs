@@ -2,12 +2,12 @@ use egui::{Color32, Context, RichText, Ui, Window};
 use std::path::Path;
 
 #[derive(Debug)]
-pub enum EClickItemType<'a> {
-    Folder(&'a crate::texture::TextureFolder),
-    File(&'a crate::texture::TextureFile),
-    SingleClickFile(&'a crate::texture::TextureFile),
-    CreateTexture(&'a crate::texture::TextureFile),
-    CreateTextureFolder(&'a crate::texture::TextureFolder),
+pub enum EClickItemType {
+    Folder(crate::texture::TextureFolder),
+    File(crate::texture::TextureFile),
+    SingleClickFile(crate::texture::TextureFile),
+    CreateTexture(crate::texture::TextureFile),
+    CreateTextureFolder(crate::texture::TextureFolder),
     Back,
 }
 
@@ -21,7 +21,7 @@ pub struct DataSource {
 impl DataSource {
     pub fn new() -> Self {
         Self {
-            is_textures_view_open: false,
+            is_textures_view_open: true,
             texture_folder: None,
             current_texture_folder: None,
             highlight_texture_file: None,
@@ -29,16 +29,16 @@ impl DataSource {
     }
 }
 
-pub fn draw<'a>(
+pub fn draw(
     context: &Context,
     open: &mut bool,
     asset_folder_path: &Path,
-    textures_folder: Option<&'a crate::texture::TextureFolder>,
-    highlight_file: Option<&'a crate::texture::TextureFile>,
-) -> Option<EClickItemType<'a>> {
-    let mut click_back: Option<EClickItemType<'a>> = None;
-    let mut click_texture: Option<EClickItemType<'a>> = None;
-    let mut click_texture_folder: Option<EClickItemType<'a>> = None;
+    textures_folder: Option<&crate::texture::TextureFolder>,
+    highlight_file: Option<&crate::texture::TextureFile>,
+) -> Option<EClickItemType> {
+    let mut click_back: Option<EClickItemType> = None;
+    let mut click_texture: Option<EClickItemType> = None;
+    let mut click_texture_folder: Option<EClickItemType> = None;
     Window::new("Textures")
         .open(open)
         .vscroll(true)
@@ -46,7 +46,7 @@ pub fn draw<'a>(
         .resizable(true)
         .default_size([350.0, 150.0])
         .show(context, |ui| {
-            if let Some(textures_folder) = &textures_folder {
+            if let Some(textures_folder) = textures_folder {
                 let response = ui
                     .vertical(|ui| {
                         ui.set_max_height(250.0);
@@ -75,7 +75,7 @@ pub fn draw<'a>(
                 response.context_menu(|ui| {
                     if ui.button("Create texture folder").clicked() {
                         click_texture_folder =
-                            Some(EClickItemType::CreateTextureFolder(textures_folder));
+                            Some(EClickItemType::CreateTextureFolder(textures_folder.clone()));
                         ui.close_menu();
                     }
                 });
@@ -84,13 +84,13 @@ pub fn draw<'a>(
     click_texture.or(click_back)
 }
 
-fn draw_content<'a>(
+fn draw_content(
     ui: &mut Ui,
     asset_folder_path: &Path,
-    textures_folder: &'a crate::texture::TextureFolder,
-    highlight_file: Option<&'a crate::texture::TextureFile>,
-) -> Option<EClickItemType<'a>> {
-    let mut click_item: Option<EClickItemType<'a>> = None;
+    textures_folder: &crate::texture::TextureFolder,
+    highlight_file: Option<&crate::texture::TextureFile>,
+) -> Option<EClickItemType> {
+    let mut click_item: Option<EClickItemType> = None;
     for folder in &textures_folder.texture_folders {
         ui.push_id(folder.name.clone(), |ui| {
             let response = ui
@@ -103,7 +103,7 @@ fn draw_content<'a>(
                 .response;
             let response = response.interact(egui::Sense::click());
             if response.double_clicked() {
-                click_item = Some(EClickItemType::Folder(folder));
+                click_item = Some(EClickItemType::Folder(folder.clone()));
             }
         });
     }
@@ -132,10 +132,10 @@ fn draw_content<'a>(
             .response;
         let response = response.interact(egui::Sense::click());
         if response.clicked() {
-            click_item = Some(EClickItemType::SingleClickFile(file));
+            click_item = Some(EClickItemType::SingleClickFile(file.clone()));
         }
         if response.double_clicked() {
-            click_item = Some(EClickItemType::File(file));
+            click_item = Some(EClickItemType::File(file.clone()));
         }
     }
     click_item

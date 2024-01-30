@@ -1,8 +1,10 @@
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
+use crate::ui::property_view::EValueModifierType;
 use crate::ui::top_menu::TopMenu;
-use crate::ui::{asset_view, property_view, textures_view, top_menu};
+use crate::ui::{asset_view, level_view, property_view, textures_view, top_menu};
 use egui::*;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
 
@@ -14,9 +16,12 @@ pub struct ClickMeshItem {
 
 #[derive(Default, Debug)]
 pub struct ClickEvent {
+    pub click_node: Option<level_view::EClickEventType>,
     pub mesh_item: Option<ClickMeshItem>,
     pub click_aseet: Option<asset_view::EClickItemType>,
     pub menu_event: Option<top_menu::EClickEventType>,
+    pub property_event: HashMap<String, EValueModifierType>,
+    pub texture_view_event: Option<textures_view::EClickItemType>,
 }
 
 pub struct EditorUI {
@@ -63,7 +68,11 @@ impl EditorUI {
 
         Self::model_hierarchy_window(context, data_source, &mut click);
         if let Some(level) = &data_source.level {
-            crate::ui::level_view::draw(context, &mut data_source.is_level_view_open, level);
+            click.click_node = crate::ui::level_view::draw(
+                context,
+                &mut data_source.is_level_view_open,
+                &level.as_ref().borrow(),
+            );
         }
         click.click_aseet = asset_view::draw(
             context,
@@ -73,7 +82,7 @@ impl EditorUI {
         );
 
         if let Some(asset_folder_path) = self.asset_folder_path.as_ref() {
-            textures_view::draw(
+            click.texture_view_event = textures_view::draw(
                 context,
                 &mut data_source.textures_view_data_source.is_textures_view_open,
                 asset_folder_path,
@@ -87,12 +96,20 @@ impl EditorUI {
                     .as_ref(),
             );
         }
-
-        property_view::draw(
-            context,
-            &mut data_source.property_view_data_source.is_open,
-            &mut data_source.property_view_data_source.values,
-        );
+        if let Some(selected_node) = &mut data_source.property_view_data_source.selected_node {
+            let mut selected_node = selected_node.as_ref().borrow_mut();
+            click.property_event = property_view::draw(
+                context,
+                &mut data_source.property_view_data_source.is_open,
+                Some(&mut selected_node),
+            );
+        } else {
+            property_view::draw(
+                context,
+                &mut data_source.property_view_data_source.is_open,
+                None,
+            );
+        }
 
         click
     }
@@ -123,15 +140,19 @@ impl EditorUI {
         click: &mut ClickEvent,
     ) {
         for mesh_item in mesh_items {
-            CollapsingHeader::new(mesh_item.name.clone()).show(ui, |ui| {
-                if ui.button("Add").clicked() {
-                    click.mesh_item = Some(ClickMeshItem {
-                        item: mesh_item.clone(),
-                        file_path: file_path.to_path_buf(),
-                    });
-                }
-                Self::render_collapsing_header(ui, &mesh_item.childs, file_path, click);
-            });
+            let id = ui.make_persistent_id(mesh_item.name.clone());
+            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+                .show_header(ui, |ui| {
+                    if ui.button(mesh_item.name.clone()).clicked() {
+                        click.mesh_item = Some(ClickMeshItem {
+                            item: mesh_item.clone(),
+                            file_path: file_path.to_path_buf(),
+                        });
+                    }
+                })
+                .body(|ui| {
+                    Self::render_collapsing_header(ui, &mesh_item.childs, file_path, click);
+                });
         }
     }
 }

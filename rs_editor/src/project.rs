@@ -1,8 +1,10 @@
 use crate::{error::Result, level::Level};
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::RefCell,
     io::Write,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 pub const PROJECT_FILE_EXTENSION: &str = "rsproject";
@@ -13,7 +15,7 @@ pub const VERSION_STR: &str = "0.0.1";
 pub struct Project {
     pub version_str: String,
     pub project_name: String,
-    pub level: Level,
+    pub level: Rc<RefCell<Level>>,
     pub texture_folder: crate::texture::TextureFolder,
 }
 
@@ -60,7 +62,7 @@ impl Project {
         let empty_project = Project {
             version_str: VERSION_STR.to_string(),
             project_name: project_name.to_string(),
-            level: Level::empty_level(),
+            level: Rc::new(RefCell::new(Level::empty_level())),
             texture_folder: Self::root_texture_folder(),
         };
 

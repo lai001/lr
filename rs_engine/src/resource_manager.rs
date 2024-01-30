@@ -8,7 +8,6 @@ use rs_artifact::static_mesh::StaticMesh;
 use rs_artifact::{
     artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
 };
-use std::rc::Rc;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -21,6 +20,7 @@ struct LoadResult {
 
 struct STResourceManager {
     image_sync_cache: moka::sync::Cache<String, Arc<image::DynamicImage>>,
+    textures: HashMap<url::Url, crate::handle::TextureHandle>,
     artifact_reader: Option<ArtifactReader>,
     handle_manager: HandleManager,
     static_meshs: HashMap<url::Url, Arc<StaticMesh>>,
@@ -33,6 +33,7 @@ impl STResourceManager {
             artifact_reader: None,
             handle_manager: HandleManager::new(),
             static_meshs: HashMap::new(),
+            textures: HashMap::new(),
         }
     }
 
@@ -214,8 +215,10 @@ impl STResourceManager {
         }
     }
 
-    fn next_texture(&mut self) -> crate::handle::TextureHandle {
-        self.handle_manager.next_texture()
+    fn next_texture(&mut self, url: url::Url) -> crate::handle::TextureHandle {
+        let handle = self.handle_manager.next_texture();
+        self.textures.insert(url, handle.clone());
+        handle
     }
 
     fn next_ui_texture(&mut self) -> crate::handle::EGUITextureHandle {
@@ -224,6 +227,10 @@ impl STResourceManager {
 
     fn next_buffer(&mut self) -> crate::handle::BufferHandle {
         self.handle_manager.next_buffer()
+    }
+
+    fn get_texture_by_url(&self, url: &url::Url) -> Option<crate::handle::TextureHandle> {
+        self.textures.get(url).cloned()
     }
 }
 
@@ -288,8 +295,8 @@ impl ResourceManager {
         self.inner.lock().unwrap().get_all_shader_source_codes()
     }
 
-    pub fn next_texture(&mut self) -> crate::handle::TextureHandle {
-        self.inner.lock().unwrap().next_texture()
+    pub fn next_texture(&mut self, url: url::Url) -> crate::handle::TextureHandle {
+        self.inner.lock().unwrap().next_texture(url)
     }
 
     pub fn next_ui_texture(&mut self) -> crate::handle::EGUITextureHandle {
@@ -325,6 +332,10 @@ impl ResourceManager {
 
     pub fn load_static_meshs(&mut self) {
         self.inner.lock().unwrap().load_static_meshs();
+    }
+
+    pub fn get_texture_by_url(&self, url: &url::Url) -> Option<crate::handle::TextureHandle> {
+        self.inner.lock().unwrap().get_texture_by_url(url)
     }
 }
 

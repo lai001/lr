@@ -12,11 +12,12 @@ use rs_artifact::level::ENodeType;
 use rs_artifact::resource_info::ResourceInfo;
 use rs_foundation::channel::SingleConsumeChnnel;
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, DrawObject, EMaterialType, PhongMaterial, RenderCommand,
-    RenderOutput,
+    BufferCreateInfo, CreateBuffer, CreateTexture, DrawObject, EMaterialType, InitTextureData,
+    PhongMaterial, RenderCommand, RenderOutput, TextureDescriptorCreateInfo,
 };
 use rs_render::renderer::Renderer;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 struct State {
@@ -354,6 +355,48 @@ impl Engine {
                 rs_render::command::EMaterialType::PBR(_) => {}
             }
         }
+    }
+
+    pub fn get_mut_resource_manager(&mut self) -> &mut ResourceManager {
+        &mut self.resource_manager
+    }
+
+    pub fn create_texture_from_path(
+        &mut self,
+        path: &Path,
+        url: url::Url,
+    ) -> Option<crate::handle::TextureHandle> {
+        let image = match image::open(path) {
+            Ok(dynamic_image) => match dynamic_image {
+                image::DynamicImage::ImageRgba8(image) => image,
+                x => x.to_rgba8(),
+            },
+            Err(err) => {
+                log::warn!("{}", err);
+                return None;
+            }
+        };
+        let handle = self.resource_manager.next_texture(url.clone());
+        let create_texture = CreateTexture {
+            handle: *handle,
+            texture_descriptor_create_info: TextureDescriptorCreateInfo::d2(
+                Some(String::from(format!("{:?}", url))),
+                image.width(),
+                image.height(),
+                None,
+            ),
+            init_data: Some(InitTextureData {
+                data: image.to_vec(),
+                data_layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(image.width() * 4),
+                    rows_per_image: None,
+                },
+            }),
+        };
+        let render_command = RenderCommand::CreateTexture(create_texture);
+        self.channel.to_b(render_command);
+        return Some(handle);
     }
 }
 
