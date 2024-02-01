@@ -25,6 +25,7 @@ regex = "1.10.2"
 notify = "5.1.0"
 notify-debouncer-mini = { version = "0.2.0" }
 walkdir = "2"
+egui-gizmo = { version = "0.12.0", path = "../.xmake/deps/egui-gizmo" }
 rs_render = { version = "0.1.0", path = "../rs_render" }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
 rs_artifact = { version = "0.1.0", path = "../rs_artifact" }

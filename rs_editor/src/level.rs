@@ -1,3 +1,4 @@
+use crate::property;
 use rs_artifact::property_value_type::EPropertyValueType;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
@@ -17,6 +18,35 @@ pub struct Node {
     pub childs: Vec<Rc<RefCell<Node>>>,
 }
 
+impl Node {
+    pub fn get_model_matrix(&self) -> Option<glam::Mat4> {
+        let mut scale_matrix: Option<glam::Mat4> = None;
+        let mut translation_matrix: Option<glam::Mat4> = None;
+        let mut rotation_matrix: Option<glam::Mat4> = None;
+
+        if let Some(scale) = self.values.get(property::name::SCALE) {
+            if let EPropertyValueType::Vec3(scale) = scale {
+                scale_matrix = Some(glam::Mat4::from_scale(*scale));
+            }
+        }
+        if let Some(rotation) = self.values.get(property::name::ROTATION) {
+            if let EPropertyValueType::Quat(rotation) = rotation {
+                rotation_matrix = Some(glam::Mat4::from_quat(*rotation));
+            }
+        }
+        if let Some(translation) = self.values.get(property::name::TRANSLATION) {
+            if let EPropertyValueType::Vec3(translation) = translation {
+                translation_matrix = Some(glam::Mat4::from_translation(*translation));
+            }
+        }
+        if let (Some(s), Some(t), Some(r)) = (scale_matrix, translation_matrix, rotation_matrix) {
+            return Some(t * r * s);
+        } else {
+            return None;
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Level {
     pub name: String,
@@ -30,4 +60,25 @@ impl Level {
             nodes: vec![],
         }
     }
+}
+
+pub fn default_node3d_properties() -> HashMap<String, EPropertyValueType> {
+    HashMap::from([
+        (
+            property::name::TEXTURE.to_string(),
+            EPropertyValueType::Texture(None),
+        ),
+        (
+            property::name::SCALE.to_string(),
+            EPropertyValueType::Vec3(glam::Vec3::ONE),
+        ),
+        (
+            property::name::TRANSLATION.to_string(),
+            EPropertyValueType::Vec3(glam::Vec3::ZERO),
+        ),
+        (
+            property::name::ROTATION.to_string(),
+            EPropertyValueType::Quat(glam::Quat::IDENTITY),
+        ),
+    ])
 }

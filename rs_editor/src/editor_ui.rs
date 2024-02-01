@@ -1,9 +1,11 @@
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
+use crate::ui::gizmo_view::GizmoView;
 use crate::ui::property_view::EValueModifierType;
 use crate::ui::top_menu::TopMenu;
-use crate::ui::{asset_view, level_view, property_view, textures_view, top_menu};
+use crate::ui::{asset_view, gizmo_settings, level_view, property_view, textures_view, top_menu};
 use egui::*;
+use egui_gizmo::GizmoResult;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
@@ -22,6 +24,7 @@ pub struct ClickEvent {
     pub menu_event: Option<top_menu::EClickEventType>,
     pub property_event: HashMap<String, EValueModifierType>,
     pub texture_view_event: Option<textures_view::EClickItemType>,
+    pub gizmo_result: Option<GizmoResult>,
 }
 
 pub struct EditorUI {
@@ -30,6 +33,7 @@ pub struct EditorUI {
     svg_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
     asset_folder_path: Option<PathBuf>,
     top_menu: TopMenu,
+    gizmo_view: GizmoView,
 }
 
 impl EditorUI {
@@ -55,6 +59,7 @@ impl EditorUI {
             top_menu: TopMenu {
                 new_project_name: String::new(),
             },
+            gizmo_view: GizmoView::default(),
         }
     }
 
@@ -110,7 +115,25 @@ impl EditorUI {
                 None,
             );
         }
+        if let Some(selected_node) = &data_source.property_view_data_source.selected_node {
+            let node = selected_node.as_ref().borrow_mut();
+            if let Some(model_matrix) = node.get_model_matrix() {
+                click.gizmo_result = self.gizmo_view.draw(
+                    context,
+                    data_source.camera_view_matrix,
+                    data_source.camera_projection_matrix,
+                    model_matrix,
+                );
+            }
+        }
 
+        gizmo_settings::draw(
+            context,
+            &mut self.gizmo_view.visuals,
+            &mut self.gizmo_view.gizmo_mode,
+            &mut self.gizmo_view.gizmo_orientation,
+            &mut self.gizmo_view.custom_highlight_color,
+        );
         click
     }
 

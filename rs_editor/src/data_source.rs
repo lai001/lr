@@ -53,6 +53,8 @@ pub struct DataSource {
     pub is_cursor_visible: bool,
     pub camera_movement_speed: f32,
     pub camera_motion_speed: f32,
+    pub camera_view_matrix: glam::Mat4,
+    pub camera_projection_matrix: glam::Mat4,
     pub textures_view_data_source: textures_view::DataSource,
     pub property_view_data_source: property_view::DataSource,
 }
@@ -80,6 +82,8 @@ impl DataSource {
             highlight_asset_file: None,
             textures_view_data_source: textures_view::DataSource::new(),
             property_view_data_source: property_view::DataSource::new(),
+            camera_view_matrix: glam::Mat4::IDENTITY,
+            camera_projection_matrix: glam::Mat4::IDENTITY,
         }
     }
 

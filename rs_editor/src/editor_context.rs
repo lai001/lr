@@ -678,10 +678,7 @@ impl EditorContext {
                         referenced_mesh_name: mesh_item.item.name.clone(),
                     }),
                     childs: vec![],
-                    values: HashMap::from([(
-                        property::name::TEXTURE.to_string(),
-                        EPropertyValueType::Texture(None),
-                    )]),
+                    values: crate::level::default_node3d_properties(),
                     id: uuid::Uuid::new_v4(),
                 };
                 if let Some(draw_object) = Self::node_to_draw_object(
@@ -773,6 +770,46 @@ impl EditorContext {
                 textures_view::EClickItemType::CreateTexture(_) => {}
                 textures_view::EClickItemType::CreateTextureFolder(_) => {}
                 textures_view::EClickItemType::Back => {}
+            }
+        }
+        if let Some(gizmo_result) = &click_event.gizmo_result {
+            if let Some(selected_node) =
+                &mut self.data_source.property_view_data_source.selected_node
+            {
+                let mut selected_node = selected_node.borrow_mut();
+                if let Some(rotation) = selected_node.values.get_mut(property::name::ROTATION) {
+                    if let EPropertyValueType::Quat(rotation) = rotation {
+                        rotation.x = gizmo_result.rotation.v.x;
+                        rotation.y = gizmo_result.rotation.v.y;
+                        rotation.z = gizmo_result.rotation.v.z;
+                        rotation.w = gizmo_result.rotation.s;
+                    }
+                }
+                if let Some(translation) = selected_node.values.get_mut(property::name::TRANSLATION)
+                {
+                    if let EPropertyValueType::Vec3(translation) = translation {
+                        translation.x = gizmo_result.translation.x;
+                        translation.y = gizmo_result.translation.y;
+                        translation.z = gizmo_result.translation.z;
+                    }
+                }
+                if let Some(scale) = selected_node.values.get_mut(property::name::SCALE) {
+                    if let EPropertyValueType::Vec3(scale) = scale {
+                        scale.x = gizmo_result.scale.x;
+                        scale.y = gizmo_result.scale.y;
+                        scale.z = gizmo_result.scale.z;
+                    }
+                }
+                if let Some(draw_object) = self.draw_objects.get_mut(&selected_node.id) {
+                    match &mut draw_object.material_type {
+                        rs_render::command::EMaterialType::Phong(material) => {
+                            if let Some(model_matrix) = selected_node.get_model_matrix() {
+                                material.constants.model = model_matrix;
+                            }
+                        }
+                        rs_render::command::EMaterialType::PBR(_) => {}
+                    }
+                }
             }
         }
         let full_output = self.platform.end_frame(None);
@@ -893,7 +930,9 @@ impl EditorContext {
     }
 
     fn camera_did_update(&mut self) {
-        for (id, draw_objects) in &mut self.draw_objects {
+        self.data_source.camera_view_matrix = self.camera.get_view_matrix();
+        self.data_source.camera_projection_matrix = self.camera.get_projection_matrix();
+        for (_, draw_objects) in &mut self.draw_objects {
             match &mut draw_objects.material_type {
                 rs_render::command::EMaterialType::Phong(material) => {
                     material.constants.projection = self.camera.get_projection_matrix();

@@ -84,6 +84,48 @@ fn content(
                 EPropertyValueType::String(string) => {
                     if ui.add(egui::TextEdit::singleline(string)).changed() {}
                 }
+                EPropertyValueType::Vec2(vec2) => {
+                    if ui
+                        .add(egui::DragValue::new(&mut vec2.x).speed(0.01).prefix("x: "))
+                        .changed()
+                    {}
+                    if ui
+                        .add(egui::DragValue::new(&mut vec2.y).speed(0.01).prefix("y: "))
+                        .changed()
+                    {}
+                }
+                EPropertyValueType::Vec3(vec3) => {
+                    if ui
+                        .add(egui::DragValue::new(&mut vec3.x).speed(0.01).prefix("x: "))
+                        .changed()
+                    {}
+                    if ui
+                        .add(egui::DragValue::new(&mut vec3.y).speed(0.01).prefix("y: "))
+                        .changed()
+                    {}
+                    if ui
+                        .add(egui::DragValue::new(&mut vec3.z).speed(0.01).prefix("z: "))
+                        .changed()
+                    {}
+                }
+                EPropertyValueType::Quat(quat) => {
+                    if ui
+                        .add(egui::DragValue::new(&mut quat.x).speed(0.01).prefix("x: "))
+                        .changed()
+                    {}
+                    if ui
+                        .add(egui::DragValue::new(&mut quat.y).speed(0.01).prefix("y: "))
+                        .changed()
+                    {}
+                    if ui
+                        .add(egui::DragValue::new(&mut quat.z).speed(0.01).prefix("z: "))
+                        .changed()
+                    {}
+                    if ui
+                        .add(egui::DragValue::new(&mut quat.w).speed(0.01).prefix("w: "))
+                        .changed()
+                    {}
+                }
             }
             ui.end_row();
         }
