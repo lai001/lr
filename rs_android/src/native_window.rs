@@ -45,18 +45,32 @@ impl Drop for NativeWindow {
     }
 }
 
-unsafe impl raw_window_handle::HasRawWindowHandle for NativeWindow {
-    fn raw_window_handle(&self) -> raw_window_handle::RawWindowHandle {
-        let mut handle = raw_window_handle::AndroidNdkWindowHandle::empty();
-        handle.a_native_window = self.a_native_window as *mut _ as *mut core::ffi::c_void;
-        raw_window_handle::RawWindowHandle::AndroidNdk(handle)
+impl raw_window_handle::HasWindowHandle for NativeWindow {
+    fn window_handle(
+        &self,
+    ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
+        let mut handle = raw_window_handle::AndroidNdkWindowHandle::new(
+            std::ptr::NonNull::new(self.a_native_window as *mut _ as *mut core::ffi::c_void)
+                .unwrap(),
+        );
+        Ok(unsafe {
+            raw_window_handle::WindowHandle::borrow_raw(
+                raw_window_handle::RawWindowHandle::AndroidNdk(handle),
+            )
+        })
     }
 }
 
-unsafe impl raw_window_handle::HasRawDisplayHandle for NativeWindow {
-    fn raw_display_handle(&self) -> raw_window_handle::RawDisplayHandle {
-        raw_window_handle::RawDisplayHandle::Android(
-            raw_window_handle::AndroidDisplayHandle::empty(),
-        )
+impl raw_window_handle::HasDisplayHandle for NativeWindow {
+    fn display_handle(
+        &self,
+    ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
+        unsafe {
+            Ok(raw_window_handle::DisplayHandle::borrow_raw(
+                raw_window_handle::RawDisplayHandle::Android(
+                    raw_window_handle::AndroidDisplayHandle::new(),
+                ),
+            ))
+        }
     }
 }

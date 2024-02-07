@@ -13,6 +13,7 @@ pub struct Application {
     scale_factor: f32,
     enviroment: Option<Enviroment>,
     engine: rs_engine::engine::Engine,
+    gui_context: egui::Context,
 }
 
 impl Application {
@@ -23,7 +24,6 @@ impl Application {
         let scale_factor = 1.0f32;
 
         let raw_input = egui::RawInput {
-            pixels_per_point: Some(scale_factor as f32),
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::default(),
                 egui::vec2(
@@ -50,7 +50,6 @@ impl Application {
             width,
             height,
             scale_factor,
-            gui_context,
             Some(artifact_reader),
         ) {
             Ok(engine) => engine,
@@ -65,11 +64,12 @@ impl Application {
             scale_factor,
             enviroment: None,
             engine,
+            gui_context,
         })
     }
 
     pub fn redraw(&mut self) {
-        let context = self.engine.get_gui_context();
+        let context = &self.gui_context;
         context.begin_frame(self.raw_input.clone());
 
         egui::Window::new("Pannel")
@@ -82,7 +82,12 @@ impl Application {
             });
 
         let full_output = context.end_frame();
-        self.engine.redraw(full_output);
+        let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+            textures_delta: full_output.textures_delta,
+            clipped_primitives: context
+                .tessellate(full_output.shapes, full_output.pixels_per_point),
+        };
+        self.engine.redraw(gui_render_output);
     }
 
     pub fn get_status_bar_height(&self) -> i32 {

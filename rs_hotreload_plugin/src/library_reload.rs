@@ -1,16 +1,13 @@
 use crate::error::Result;
 use libloading::Library;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 pub struct LibraryReload {
     folder: PathBuf,
     lib_name: String,
     index: i32,
-    library: Option<Library>,
+    libraries: Vec<Library>,
 }
 
 impl LibraryReload {
@@ -19,20 +16,20 @@ impl LibraryReload {
             folder: folder.to_path_buf(),
             lib_name: lib_name.to_string(),
             index: 0,
-            library: None,
+            libraries: Vec::new(),
         };
         hot_reload_lib
     }
 
     pub fn is_loaded(&self) -> bool {
-        self.library.is_some()
+        self.libraries.is_empty() == false
     }
 
     pub fn load_symbol<Signature>(
         &self,
         symbol_name: &str,
     ) -> Result<libloading::Symbol<Signature>> {
-        match self.library {
+        match self.libraries.last() {
             Some(ref x) => unsafe {
                 let symbol = match x.get(symbol_name.as_bytes()) {
                     Ok(symbol) => symbol,
@@ -68,7 +65,7 @@ impl LibraryReload {
             }
         };
 
-        self.library = Some(library);
+        self.libraries.push(library);
         self.index = new_index;
         Ok(())
     }
@@ -186,10 +183,6 @@ impl LibraryReload {
             }
         }
     }
-}
-
-impl Drop for LibraryReload {
-    fn drop(&mut self) {}
 }
 
 #[cfg(test)]

@@ -108,35 +108,32 @@ fn draw_content(
         });
     }
     for file in &textures_folder.texture_files {
-        let response = ui
-            .push_id(file.name.clone(), |ui| {
-                ui.vertical(|ui| {
-                    ui.set_max_height(50.0);
-                    ui.set_max_width(50.0);
-                    if let Some(highlight_file) = highlight_file {
-                        if highlight_file.url == file.url {
-                            ui.painter()
-                                .rect_filled(ui.max_rect(), 0.0, Color32::LIGHT_BLUE);
-                        }
+        ui.push_id(file.name.clone(), |ui| {
+            ui.vertical(|ui| {
+                ui.set_max_height(50.0);
+                ui.set_max_width(50.0);
+                if let Some(highlight_file) = highlight_file {
+                    if highlight_file.url == file.url {
+                        ui.painter()
+                            .rect_filled(ui.max_rect(), 0.0, Color32::LIGHT_BLUE);
                     }
-                    if let Some(image_reference) = file.image_reference.as_ref() {
-                        let url = format!(
-                            "file://{}",
-                            asset_folder_path.join(image_reference).to_str().unwrap()
-                        );
-                        ui.image(url);
-                    }
-                    ui.label(file.name.clone());
-                });
-            })
-            .response;
-        let response = response.interact(egui::Sense::click());
-        if response.clicked() {
-            click_item = Some(EClickItemType::SingleClickFile(file.clone()));
-        }
-        if response.double_clicked() {
-            click_item = Some(EClickItemType::File(file.clone()));
-        }
+                }
+                if let Some(image_reference) = file.image_reference.as_ref() {
+                    let url = format!(
+                        "file://{}",
+                        asset_folder_path.join(image_reference).to_str().unwrap()
+                    );
+                    ui.image(url);
+                }
+                let response = ui.button(file.name.clone());
+                if response.clicked() {
+                    click_item = Some(EClickItemType::SingleClickFile(file.clone()));
+                }
+                if response.double_clicked() {
+                    click_item = Some(EClickItemType::File(file.clone()));
+                }
+            });
+        });
     }
     click_item
 }

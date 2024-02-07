@@ -1,4 +1,3 @@
-use crate::error::Result;
 use crate::library_reload::LibraryReload;
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{new_debouncer, DebouncedEvent, Debouncer};
@@ -40,23 +39,30 @@ impl HotReload {
         self.library_reload.clone()
     }
 
-    pub fn reload_if_need(&mut self) -> bool {
+    pub fn is_need_reload(&self) -> bool {
+        let library_reload = self.library_reload.lock().unwrap();
         for events in self.receiver.try_iter() {
             match events {
                 Ok(events) => {
-                    let mut library_reload = self.library_reload.lock().unwrap();
                     let file_path = library_reload.get_original_lib_file_path();
                     for event in events {
                         if file_path == event.path {
-                            let _ = library_reload.reload();
                             return true;
                         }
                     }
                 }
-                Err(errors) => {}
+                Err(_) => {}
             }
         }
         return false;
+    }
+
+    pub fn reload(&mut self) -> bool {
+        let mut library_reload = self.library_reload.lock().unwrap();
+        match library_reload.reload() {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 }
 
@@ -102,6 +108,6 @@ pub fn add(left: usize, right: usize) -> usize {
             let add_func = lib.load_symbol::<fn(usize, usize) -> usize>("add").unwrap();
             assert_eq!(add_func(1, 1), 3);
         }
-        assert_eq!(hot_reload.reload_if_need(), false);
+        assert_eq!(hot_reload.is_need_reload(), false);
     }
 }

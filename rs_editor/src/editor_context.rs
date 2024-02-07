@@ -1,6 +1,5 @@
 use crate::{
     build_config::EBuildType,
-    camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource, MeshItem, ModelViewData},
     editor_ui::EditorUI,
@@ -13,7 +12,12 @@ use crate::{
     ui::{asset_view, level_view, property_view, textures_view, top_menu},
 };
 use rs_artifact::property_value_type::EPropertyValueType;
-use rs_engine::{camera::Camera, file_type::EFileType};
+use rs_engine::{camera::Camera, file_type::EFileType, plugin_context::PluginContext};
+use rs_engine::{
+    camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
+    frame_sync::{EOptions, FrameSync},
+    plugin::Plugin,
+};
 use rs_render::command::{DrawObject, PhongMaterial};
 use std::{
     cell::RefCell,
@@ -22,10 +26,11 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
+    sync::{Arc, Mutex},
 };
 use winit::{
-    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::ControlFlow,
+    event::{ElementState, Event, WindowEvent},
+    keyboard::KeyCode,
 };
 
 const FBX_EXTENSION: &str = "fbx";
@@ -36,14 +41,18 @@ const IMAGE_EXTENSION: [&str; 2] = [PNG_EXTENSION, JPG_EXTENSION];
 const SUPPORT_ASSET_FILE_EXTENSIONS: [&str; 3] = [FBX_EXTENSION, PNG_EXTENSION, JPG_EXTENSION];
 
 pub struct EditorContext {
+    event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     engine: rs_engine::engine::Engine,
-    platform: egui_winit_platform::Platform,
+    egui_winit_state: egui_winit::State,
     data_source: DataSource,
     project_context: Option<ProjectContext>,
     draw_objects: HashMap<uuid::Uuid, DrawObject>,
     camera: Camera,
-    virtual_key_code_states: HashMap<winit::event::VirtualKeyCode, winit::event::ElementState>,
+    virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     editor_ui: EditorUI,
+    plugin_context: Arc<Mutex<PluginContext>>,
+    plugins: Vec<Box<dyn Plugin>>,
+    frame_sync: FrameSync,
 }
 
 impl EditorContext {
@@ -76,43 +85,59 @@ impl EditorContext {
         font_definitions
     }
 
-    pub fn new(window: &winit::window::Window) -> Self {
+    pub fn new(
+        window: &winit::window::Window,
+        event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
+    ) -> Self {
         rs_foundation::change_working_directory();
 
         let window_size = window.inner_size();
         let scale_factor = 1.0f32;
         let window_width = window_size.width;
         let window_height = window_size.height;
-        let descriptor = egui_winit_platform::PlatformDescriptor {
-            physical_width: window_width,
-            physical_height: window_height,
-            scale_factor: scale_factor as f64,
-            font_definitions: Self::load_font(),
-            style: egui::Style::default(),
-        };
-        let platform = egui_winit_platform::Platform::new(descriptor);
+        let egui_context = egui::Context::default();
+        egui_context.set_fonts(Self::load_font());
+        let style = egui::Style::default().clone();
+        egui_context.set_style(style);
+        let egui_winit_state = egui_winit::State::new(
+            egui_context,
+            egui::ViewportId::ROOT,
+            window,
+            Some(window.scale_factor() as f32),
+            None,
+        );
         let artifact_reader = None;
         let engine = rs_engine::engine::Engine::new(
             window,
             window_width,
             window_height,
             scale_factor,
-            platform.context(),
             artifact_reader,
         )
         .unwrap();
+
         let data_source = DataSource::new();
         let camera = Camera::default(window_width, window_height);
-        let editor_ui = EditorUI::new(platform.context());
+        let editor_ui = EditorUI::new(egui_winit_state.egui_ctx().clone());
+
+        let plugin_context = Arc::new(Mutex::new(PluginContext::new(
+            egui_winit_state.egui_ctx().clone(),
+        )));
+
+        let frame_sync = FrameSync::new(EOptions::FPS(60.0));
         Self {
+            event_loop_proxy,
             engine,
-            platform,
+            egui_winit_state,
             data_source,
             project_context: None,
             draw_objects: HashMap::new(),
             camera,
             virtual_key_code_states: HashMap::new(),
             editor_ui,
+            plugin_context,
+            plugins: vec![],
+            frame_sync,
         }
     }
 
@@ -120,11 +145,8 @@ impl EditorContext {
         &mut self,
         window: &mut winit::window::Window,
         event: &Event<ECustomEventType>,
-        event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
-        control_flow: &mut ControlFlow,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
-        self.platform.handle_event(&event);
-
         match event {
             Event::DeviceEvent { event, .. } => match event {
                 winit::event::DeviceEvent::MouseMotion { delta } => {
@@ -140,87 +162,101 @@ impl EditorContext {
             Event::UserEvent(event) => {
                 self.process_custom_event(event, window);
             }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                WindowEvent::Resized(size) => {
-                    log::trace!("Window resized: {:?}", size);
-                    self.engine.resize(size.width, size.height);
-                }
-                WindowEvent::KeyboardInput {
-                    input,
-                    is_synthetic,
-                    ..
-                } => {
-                    self.process_keyboard_input(window, control_flow, &input, *is_synthetic);
-                }
-                WindowEvent::DroppedFile(file_path) => {
-                    self.process_import_asset(file_path.to_owned());
-                }
-                WindowEvent::Ime(ime) => {
-                    match ime {
-                        winit::event::Ime::Enabled | winit::event::Ime::Disabled => (),
-                        winit::event::Ime::Commit(text) => {
-                            self.data_source.input_method_editor_started = false;
-                            self.platform
-                                .raw_input_mut()
-                                .events
-                                .push(egui::Event::CompositionEnd(text.clone()));
-                        }
-                        winit::event::Ime::Preedit(text, Some(_)) => {
-                            if !self.data_source.input_method_editor_started {
-                                self.data_source.input_method_editor_started = true;
-                                self.platform
-                                    .raw_input_mut()
-                                    .events
-                                    .push(egui::Event::CompositionStart);
-                            }
-                            self.platform
-                                .raw_input_mut()
-                                .events
-                                .push(egui::Event::CompositionUpdate(text.clone()));
-                        }
-                        winit::event::Ime::Preedit(_, None) => {}
-                    };
-                }
-                _ => {}
-            },
-            Event::RedrawRequested(_) => {
-                if let Some(project_context) = &mut self.project_context {
-                    if let Some(folder_update_type) = project_context.check_folder_notification() {
-                        match folder_update_type {
-                            EFolderUpdateType::Asset => {
-                                let asset_folder = Self::build_asset_folder(
-                                    &project_context.get_asset_folder_path(),
-                                );
-                                log::trace!("Update asset folder. {:?}", asset_folder);
-                                self.data_source.asset_folder = Some(asset_folder.clone());
-                                self.data_source.current_asset_folder = Some(asset_folder);
-                            }
-                        }
+            Event::WindowEvent { event, .. } => {
+                let _ = Some(self.egui_winit_state.on_window_event(window, event));
+                match event {
+                    WindowEvent::CloseRequested => {
+                        self.quit_app();
                     }
+                    WindowEvent::Resized(size) => {
+                        log::trace!("Window resized: {:?}", size);
+                        self.engine.resize(size.width, size.height);
+                    }
+                    WindowEvent::KeyboardInput {
+                        device_id,
+                        event,
+                        is_synthetic,
+                    } => {
+                        self.process_keyboard_input(window, device_id, event, *is_synthetic);
+                    }
+                    WindowEvent::DroppedFile(file_path) => {
+                        self.process_import_asset(file_path.to_owned());
+                    }
+                    WindowEvent::RedrawRequested => {
+                        let is_minimized = window.is_minimized().unwrap_or(false);
+                        let is_visible = window.is_visible().unwrap_or(true);
+                        if !is_visible || is_minimized {
+                            return;
+                        }
+                        if let Some(project_context) = &mut self.project_context {
+                            if project_context.is_need_reload_plugin() {
+                                self.try_load_plugin();
+                            }
+                        }
+                        if let Some(project_context) = &mut self.project_context {
+                            if let Some(folder_update_type) =
+                                project_context.check_folder_notification()
+                            {
+                                match folder_update_type {
+                                    EFolderUpdateType::Asset => {
+                                        let asset_folder = Self::build_asset_folder(
+                                            &project_context.get_asset_folder_path(),
+                                        );
+                                        log::trace!("Update asset folder. {:?}", asset_folder);
+                                        self.data_source.asset_folder = Some(asset_folder.clone());
+                                        self.data_source.current_asset_folder = Some(asset_folder);
+                                    }
+                                }
+                            }
+                        }
+
+                        for (virtual_key_code, element_state) in &self.virtual_key_code_states {
+                            DefaultCameraInputEventHandle::keyboard_input_handle(
+                                &mut self.camera,
+                                virtual_key_code,
+                                element_state,
+                                self.data_source.is_cursor_visible,
+                                self.data_source.camera_movement_speed,
+                            );
+                        }
+                        self.camera_did_update();
+
+                        self.process_redraw_request(window);
+                        let wait = self
+                            .frame_sync
+                            .tick()
+                            .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
+                        std::thread::sleep(wait);
+                        window.request_redraw();
+                    }
+                    WindowEvent::Destroyed => {}
+                    _ => {}
                 }
-                self.control_fps(control_flow);
-                for (virtual_key_code, element_state) in &self.virtual_key_code_states {
-                    DefaultCameraInputEventHandle::keyboard_input_handle(
-                        &mut self.camera,
-                        virtual_key_code,
-                        element_state,
-                        self.data_source.is_cursor_visible,
-                        self.data_source.camera_movement_speed,
-                    );
-                }
-                self.camera_did_update();
-                self.process_redraw_request(event_loop_proxy);
             }
-            Event::RedrawEventsCleared => {
-                if let Some(context) = self.project_context.as_mut() {
-                    context.reload_if_need();
-                }
-                window.request_redraw();
+            Event::NewEvents(_) => {}
+            Event::LoopExiting => {
+                self.quit_app();
             }
             _ => {}
+        }
+    }
+
+    fn quit_app(&mut self) {
+        std::process::exit(0);
+    }
+
+    fn try_load_plugin(&mut self) {
+        if let Some(project_context) = self.project_context.as_mut() {
+            project_context.reload();
+            let lib = project_context.hot_reload.get_library_reload();
+            let lib = lib.lock().unwrap();
+            if let Ok(func) = lib.load_symbol::<rs_engine::plugin::signature::From>(
+                rs_engine::plugin::symbol_name::FROM,
+            ) {
+                let plugin = func(Arc::clone(&self.plugin_context));
+                self.plugins.push(plugin);
+                log::trace!("Load plugin.");
+            }
         }
     }
 
@@ -260,22 +296,18 @@ impl EditorContext {
     fn process_keyboard_input(
         &mut self,
         window: &mut winit::window::Window,
-        control_flow: &mut ControlFlow,
-        input: &KeyboardInput,
+        device_id: &winit::event::DeviceId,
+        event: &winit::event::KeyEvent,
         is_synthetic: bool,
     ) {
-        let Some(virtual_keycode) = input.virtual_keycode else {
+        let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
             return;
         };
 
         self.virtual_key_code_states
-            .insert(virtual_keycode, input.state);
+            .insert(virtual_keycode, event.state);
 
-        if Self::is_keys_pressed(
-            &mut self.virtual_key_code_states,
-            &[VirtualKeyCode::F1],
-            true,
-        ) {
+        if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::F1], true) {
             self.data_source.is_cursor_visible = !self.data_source.is_cursor_visible;
             if self.data_source.is_cursor_visible {
                 window
@@ -291,19 +323,19 @@ impl EditorContext {
 
         if Self::is_keys_pressed(
             &mut self.virtual_key_code_states,
-            &[VirtualKeyCode::LAlt, VirtualKeyCode::F4],
+            &[KeyCode::AltLeft, KeyCode::F4],
             true,
         ) {
-            *control_flow = ControlFlow::Exit;
+            self.quit_app();
         }
     }
 
     fn is_keys_pressed(
-        virtual_key_code_states: &mut HashMap<VirtualKeyCode, ElementState>,
-        keys: &[VirtualKeyCode],
+        virtual_key_code_states: &mut HashMap<KeyCode, ElementState>,
+        keys: &[KeyCode],
         is_consume: bool,
     ) -> bool {
-        let mut states: HashMap<VirtualKeyCode, ElementState> = HashMap::new();
+        let mut states: HashMap<KeyCode, ElementState> = HashMap::new();
         for key in keys {
             if let Some(state) = virtual_key_code_states.get(key) {
                 states.insert(*key, *state);
@@ -335,7 +367,7 @@ impl EditorContext {
     }
 
     fn open_project(&mut self, file_path: &Path, window: &mut winit::window::Window) {
-        let project_context = match ProjectContext::open(&file_path) {
+        let mut project_context = match ProjectContext::open(&file_path) {
             Ok(project_context) => project_context,
             Err(err) => {
                 log::warn!("{:?}", err);
@@ -375,6 +407,7 @@ impl EditorContext {
             );
         }
         self.project_context = Some(project_context);
+        self.try_load_plugin();
     }
 
     fn process_custom_event(
@@ -484,59 +517,61 @@ impl EditorContext {
         }
     }
 
-    fn control_fps(&mut self, control_flow: &mut ControlFlow) {
-        let elapsed = std::time::Instant::now() - self.data_source.current_frame_start_time;
-        Self::sync_fps(elapsed, self.data_source.target_fps, control_flow);
-        self.data_source.current_frame_start_time = std::time::Instant::now();
-    }
-
-    fn process_redraw_request(
-        &mut self,
-        event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
-    ) {
+    fn process_redraw_request(&mut self, window: &mut winit::window::Window) {
         for (id, draw_object) in self.draw_objects.clone() {
             self.engine.draw(draw_object);
         }
+        let new_input = self.egui_winit_state.take_egui_input(window);
+        self.egui_winit_state.egui_ctx().begin_frame(new_input);
+        self.process_ui();
+        if let Some(plugin) = self.plugins.last_mut() {
+            plugin.tick();
+        }
 
-        let full_output = self.process_ui(event_loop_proxy);
-        self.engine.redraw(full_output);
+        let full_output = self.egui_winit_state.egui_ctx().end_frame();
+
+        self.egui_winit_state
+            .handle_platform_output(window, full_output.platform_output.clone());
+
+        let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+            textures_delta: full_output.textures_delta,
+            clipped_primitives: self
+                .egui_winit_state
+                .egui_ctx()
+                .tessellate(full_output.shapes, full_output.pixels_per_point),
+        };
+        self.engine.redraw(gui_render_output);
+        self.engine.present();
+        self.egui_winit_state.egui_ctx().clear_animations();
     }
 
-    fn process_ui(
-        &mut self,
-        event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
-    ) -> egui::FullOutput {
-        self.platform.begin_frame();
+    fn process_ui(&mut self) {
         let click_event = self
             .editor_ui
-            .build(&self.platform.context(), &mut self.data_source);
-
-        {
-            if let Some(context) = self.project_context.as_mut() {
-                let lib = context.hot_reload.get_library_reload();
-                let lib = lib.lock().unwrap();
-                if let Ok(func) = lib.load_symbol::<fn(&egui::Context)>("render") {
-                    func(&self.platform.context());
-                }
-            }
-        }
+            .build(self.egui_winit_state.egui_ctx(), &mut self.data_source);
 
         if let Some(menu_event) = click_event.menu_event {
             match menu_event {
                 top_menu::EClickEventType::NewProject(projevt_name) => {
-                    let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
-                        EFileDialogType::NewProject(projevt_name.clone()),
-                    ));
+                    let _ = self
+                        .event_loop_proxy
+                        .send_event(ECustomEventType::OpenFileDialog(
+                            EFileDialogType::NewProject(projevt_name.clone()),
+                        ));
                 }
                 top_menu::EClickEventType::OpenProject => {
-                    let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
-                        EFileDialogType::OpenProject,
-                    ));
+                    let _ = self
+                        .event_loop_proxy
+                        .send_event(ECustomEventType::OpenFileDialog(
+                            EFileDialogType::OpenProject,
+                        ));
                 }
                 top_menu::EClickEventType::ImportAsset => {
-                    let _ = event_loop_proxy.send_event(ECustomEventType::OpenFileDialog(
-                        EFileDialogType::ImportAsset,
-                    ));
+                    let _ = self
+                        .event_loop_proxy
+                        .send_event(ECustomEventType::OpenFileDialog(
+                            EFileDialogType::ImportAsset,
+                        ));
                 }
                 top_menu::EClickEventType::SaveProject => {
                     if let Some(project_context) = self.project_context.as_ref() {
@@ -812,8 +847,6 @@ impl EditorContext {
                 }
             }
         }
-        let full_output = self.platform.end_frame(None);
-        full_output
     }
 
     pub fn copy_file_and_log<P: AsRef<Path> + Clone + Debug>(
@@ -911,22 +944,6 @@ impl EditorContext {
             draw_objects.insert(id, draw_object);
         }
         draw_objects
-    }
-
-    fn sync_fps(
-        elapsed: std::time::Duration,
-        fps: u64,
-        control_flow: &mut winit::event_loop::ControlFlow,
-    ) {
-        let fps = std::time::Duration::from_secs_f32(1.0 / fps as f32);
-        let wait: std::time::Duration;
-        if fps < elapsed {
-            wait = std::time::Duration::from_millis(0);
-        } else {
-            wait = fps - elapsed;
-        }
-        let new_inst = std::time::Instant::now() + wait;
-        *control_flow = winit::event_loop::ControlFlow::WaitUntil(new_inst);
     }
 
     fn camera_did_update(&mut self) {

@@ -2,7 +2,7 @@ use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::error::Result;
-use crate::thread_pool;
+use crate::render_thread_mode::{ERenderThreadMode, MultipleThreadRenderer};
 use crate::{
     logger::{Logger, LoggerConfiguration},
     resource_manager::ResourceManager,
@@ -10,22 +10,21 @@ use crate::{
 use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::level::ENodeType;
 use rs_artifact::resource_info::ResourceInfo;
-use rs_foundation::channel::SingleConsumeChnnel;
 use rs_render::command::{
     BufferCreateInfo, CreateBuffer, CreateTexture, DrawObject, EMaterialType, InitTextureData,
-    PhongMaterial, RenderCommand, RenderOutput, TextureDescriptorCreateInfo,
+    PhongMaterial, RenderCommand, TextureDescriptorCreateInfo,
 };
+use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::renderer::Renderer;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
 struct State {
     is_cursor_visible: bool,
     camera_movement_speed: f32,
     camera_motion_speed: f32,
     #[cfg(not(target_os = "android"))]
-    virtual_key_code_states: HashMap<winit::event::VirtualKeyCode, winit::event::ElementState>,
+    virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
 }
 
 impl Default for State {
@@ -41,15 +40,14 @@ impl Default for State {
 }
 
 pub struct Engine {
-    renderer: Arc<Mutex<Renderer>>,
-    channel: Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput>>>,
+    render_thread_mode: ERenderThreadMode,
     resource_manager: ResourceManager,
     logger: Logger,
-    gui_context: egui::Context,
     level: Option<rs_artifact::level::Level>,
     draw_objects: Vec<DrawObject>,
     camera: Camera,
     state: State,
+    render_outputs: VecDeque<rs_render::command::RenderOutput>,
 }
 
 impl Engine {
@@ -58,28 +56,22 @@ impl Engine {
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
-        gui_context: egui::Context,
         artifact_reader: Option<ArtifactReader>,
     ) -> Result<Engine>
     where
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
+        let is_multiple_thread = true;
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
         });
 
-        let renderer = Renderer::from_window(
-            window,
-            gui_context.clone(),
-            surface_width,
-            surface_height,
-            scale_factor,
-        );
-        let renderer = match renderer {
+        let renderer = Renderer::from_window(window, surface_width, surface_height, scale_factor);
+        let mut renderer = match renderer {
             Ok(renderer) => renderer,
             Err(err) => return Err(crate::error::Error::RendererError(err)),
         };
-        let renderer = Arc::new(Mutex::new(renderer));
+
         let mut draw_objects: Vec<DrawObject> = Vec::new();
 
         let mut resource_manager = ResourceManager::default();
@@ -90,8 +82,14 @@ impl Engine {
         for shader_source_code in resource_manager.get_all_shader_source_codes() {
             shaders.insert(shader_source_code.url.to_string(), shader_source_code.code);
         }
-
-        let channel = Self::spawn_render_thread(renderer.clone(), shaders);
+        let mut render_thread_mode: ERenderThreadMode;
+        if is_multiple_thread {
+            render_thread_mode =
+                ERenderThreadMode::Multiple(MultipleThreadRenderer::new(renderer, shaders));
+        } else {
+            renderer.load_shader(shaders);
+            render_thread_mode = ERenderThreadMode::Single(renderer);
+        }
         let camera = Camera::default(surface_width, surface_height);
         let mut level: Option<rs_artifact::level::Level> = None;
         if let Some(url) = Self::find_first_level(&mut resource_manager) {
@@ -116,7 +114,7 @@ impl Engine {
 
                                     let draw_object =
                                         Self::create_draw_object_from_static_mesh_internal(
-                                            &channel,
+                                            &mut render_thread_mode,
                                             &mut resource_manager,
                                             &static_mesh.vertexes,
                                             &static_mesh.indexes,
@@ -133,15 +131,14 @@ impl Engine {
         }
 
         let engine = Engine {
-            renderer,
+            render_thread_mode,
             resource_manager,
             logger,
-            gui_context,
-            channel,
             level,
             draw_objects,
             camera,
             state: State::default(),
+            render_outputs: VecDeque::new(),
         };
 
         Ok(engine)
@@ -172,38 +169,30 @@ impl Engine {
         self.resource_manager.get_resource_map()
     }
 
-    fn spawn_render_thread(
-        renderer: Arc<Mutex<Renderer>>,
-        shaders: HashMap<String, String>,
-    ) -> Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput>>> {
-        let channel =
-            SingleConsumeChnnel::<RenderCommand, Option<RenderOutput>>::shared(Some(2), None);
-        thread_pool::ThreadPool::render().spawn({
-            let renderer = renderer.clone();
-            let shaders = shaders.clone();
-            let channel = channel.clone();
-
-            move || {
-                {
-                    let mut renderer = renderer.lock().unwrap();
-                    renderer.load_shader(shaders);
-                }
-
-                channel.from_a_block_current_thread(|command| {
-                    let mut renderer = renderer.lock().unwrap();
-                    let output = renderer.send_command(command);
-                    channel.to_a(output);
-                });
-            }
-        });
-        return channel;
-    }
-
-    pub fn redraw(&mut self, full_output: egui::FullOutput) {
+    pub fn redraw(&mut self, gui_render_output: EGUIRenderOutput) {
         loop {
-            match self.channel.from_b_try_recv() {
-                Ok(_) => {}
-                Err(_) => break,
+            match &self.render_thread_mode {
+                ERenderThreadMode::Single(_) => {
+                    break;
+                }
+                ERenderThreadMode::Multiple(renderer) => {
+                    let render_output = renderer.channel.from_b_try_recv();
+                    match render_output {
+                        Ok(render_output) => {
+                            if let Some(render_output) = render_output {
+                                self.render_outputs.push_back(render_output);
+                            }
+                        }
+                        Err(err) => match err {
+                            std::sync::mpsc::TryRecvError::Empty => {
+                                break;
+                            }
+                            std::sync::mpsc::TryRecvError::Disconnected => {
+                                panic!();
+                            }
+                        },
+                    }
+                }
             }
         }
         #[cfg(not(target_os = "android"))]
@@ -219,19 +208,25 @@ impl Engine {
         self.camera_did_update();
 
         for draw_object in &self.draw_objects {
-            self.channel
-                .to_b(RenderCommand::DrawObject(draw_object.clone()));
+            self.render_thread_mode
+                .send_command(RenderCommand::DrawObject(draw_object.clone()));
         }
-        self.channel.to_b(RenderCommand::UiOutput(full_output));
-        self.channel.to_b(RenderCommand::Present);
+
+        self.render_thread_mode
+            .send_command(RenderCommand::UiOutput(gui_render_output));
+    }
+
+    pub fn present(&mut self) {
+        self.render_thread_mode.send_command(RenderCommand::Present);
     }
 
     pub fn resize(&mut self, surface_width: u32, surface_height: u32) {
-        self.channel
-            .to_b(RenderCommand::Resize(rs_render::command::ResizeInfo {
+        self.render_thread_mode.send_command(RenderCommand::Resize(
+            rs_render::command::ResizeInfo {
                 width: surface_width,
                 height: surface_height,
-            }));
+            },
+        ));
     }
 
     pub fn set_new_window<W>(
@@ -241,25 +236,32 @@ impl Engine {
         surface_height: u32,
     ) -> Result<()>
     where
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        let result =
-            self.renderer
-                .lock()
-                .unwrap()
-                .set_new_window(window, surface_width, surface_height);
-        match result {
-            Ok(_) => Ok(()),
-            Err(err) => return Err(crate::error::Error::RendererError(err)),
+        match &mut self.render_thread_mode {
+            ERenderThreadMode::Single(renderer) => {
+                let result = renderer.set_new_window(window, surface_width, surface_height);
+                match result {
+                    Ok(_) => Ok(()),
+                    Err(err) => return Err(crate::error::Error::RendererError(err)),
+                }
+            }
+            ERenderThreadMode::Multiple(renderer) => {
+                let result = renderer.renderer.lock().unwrap().set_new_window(
+                    window,
+                    surface_width,
+                    surface_height,
+                );
+                match result {
+                    Ok(_) => Ok(()),
+                    Err(err) => return Err(crate::error::Error::RendererError(err)),
+                }
+            }
         }
     }
 
-    pub fn get_gui_context(&self) -> egui::Context {
-        self.gui_context.clone()
-    }
-
     fn create_draw_object_from_static_mesh_internal(
-        channel: &Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput>>>,
+        render_thread_mode: &mut ERenderThreadMode,
         resource_manager: &mut ResourceManager,
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
         indexes: &[u32],
@@ -276,7 +278,7 @@ impl Engine {
             buffer_create_info,
         };
         let message = RenderCommand::CreateBuffer(create_buffer);
-        channel.to_b(message);
+        render_thread_mode.send_command(message);
 
         let vertex_buffer_handle = resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -289,7 +291,7 @@ impl Engine {
             buffer_create_info,
         };
         let message = RenderCommand::CreateBuffer(create_buffer);
-        channel.to_b(message);
+        render_thread_mode.send_command(message);
 
         let draw_object = DrawObject {
             vertex_buffers: vec![*vertex_buffer_handle],
@@ -308,7 +310,7 @@ impl Engine {
         material_type: EMaterialType,
     ) -> DrawObject {
         Self::create_draw_object_from_static_mesh_internal(
-            &self.channel,
+            &mut self.render_thread_mode,
             &mut self.resource_manager,
             vertexes,
             indexes,
@@ -317,7 +319,8 @@ impl Engine {
     }
 
     pub fn draw(&mut self, draw_object: DrawObject) {
-        self.channel.to_b(RenderCommand::DrawObject(draw_object));
+        self.render_thread_mode
+            .send_command(RenderCommand::DrawObject(draw_object));
     }
 
     #[cfg(not(target_os = "android"))]
@@ -336,13 +339,18 @@ impl Engine {
     }
 
     #[cfg(not(target_os = "android"))]
-    pub fn process_keyboard_input(&mut self, input: winit::event::KeyboardInput) {
-        let Some(virtual_keycode) = input.virtual_keycode else {
+    pub fn process_keyboard_input(
+        &mut self,
+        device_id: winit::event::DeviceId,
+        event: winit::event::KeyEvent,
+        is_synthetic: bool,
+    ) {
+        let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
             return;
         };
         self.state
             .virtual_key_code_states
-            .insert(virtual_keycode, input.state);
+            .insert(virtual_keycode, event.state);
     }
 
     fn camera_did_update(&mut self) {
@@ -395,14 +403,19 @@ impl Engine {
             }),
         };
         let render_command = RenderCommand::CreateTexture(create_texture);
-        self.channel.to_b(render_command);
+        self.render_thread_mode.send_command(render_command);
         return Some(handle);
     }
 }
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        self.channel.send_stop_signal_and_wait();
+        match &self.render_thread_mode {
+            ERenderThreadMode::Single(_) => {}
+            ERenderThreadMode::Multiple(renderer) => {
+                renderer.channel.send_stop_signal_and_wait();
+            }
+        }
         self.logger.flush();
     }
 }

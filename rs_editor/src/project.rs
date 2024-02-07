@@ -1,4 +1,5 @@
 use crate::{error::Result, level::Level};
+use path_slash::PathBufExt;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
@@ -92,9 +93,18 @@ impl Project {
     }
 
     fn create_cargo_toml_file(project_parent_folder: &Path, project_name: &str) -> bool {
+        let Ok(current_dir) = std::env::current_dir() else {
+            return false;
+        };
+        let Ok(engien_dir) = current_dir.join("../../../").canonicalize() else {
+            return false;
+        };
+        let Ok(engien_dir) = dunce::canonicalize(&engien_dir) else {
+            return false;
+        };
         let project_folder = project_parent_folder.join(project_name);
         let toml_file_path = project_folder.join("Cargo.toml");
-        let content = fill_cargo_toml_template(project_name);
+        let content = fill_cargo_toml_template(project_name, &engien_dir.to_slash().unwrap());
         let Ok(mut file) = std::fs::File::create(toml_file_path) else {
             return false;
         };
@@ -126,23 +136,42 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-egui = "0.23.0"
+egui = { version = "0.26.0" }
 log = "0.4.17"
+glam = { version = "0.22.0" }
+uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+rs_engine = { version = "0.1.0", path = "@engine_path@/rs_engine" }
+rs_render = { version = "0.1.0", path = "@engine_path@/rs_render" }
 
 [lib]
-crate-type = ["rlib", "dylib"]
+crate-type = ["cdylib"]
     "#;
 }
 
 fn get_lib_template() -> &'static str {
     return r#"
-#[no_mangle]
-pub fn render(context: &egui::Context) {
-    egui::Area::new("Area")
-        .fixed_pos(egui::pos2(32.0, 32.0))
-        .show(&context, |ui| {
-            ui.label(egui::RichText::new("@name@").color(egui::Color32::WHITE))
+use rs_engine::{plugin::Plugin, plugin_context::PluginContext};
+use std::sync::{Arc, Mutex};
+
+pub struct MyPlugin {
+    plugin_context: Arc<Mutex<PluginContext>>,
+}
+
+impl Plugin for MyPlugin {
+    fn tick(&mut self) {
+        let plugin_context = self.plugin_context.clone();
+        let context = &plugin_context.lock().unwrap().context;
+        egui::Window::new("Plugin").show(context, |ui| {
+            ui.label(format!("Time: {:?}", std::time::Instant::now()));
         });
+    }
+
+    fn unload(&mut self) {}
+}
+
+#[no_mangle]
+pub fn from(plugin_context: Arc<Mutex<PluginContext>>) -> Box<dyn Plugin> {
+    Box::new(MyPlugin { plugin_context })
 }
     "#;
 }
@@ -153,8 +182,9 @@ fn fill_lib_template(name: &str) -> String {
     template
 }
 
-fn fill_cargo_toml_template(name: &str) -> String {
+fn fill_cargo_toml_template(name: &str, engine_path: &str) -> String {
     let mut template = get_cargo_toml_template().to_string();
     template = template.replace("@name@", name);
+    template = template.replace("@engine_path@", engine_path);
     template
 }

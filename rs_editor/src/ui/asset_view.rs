@@ -74,49 +74,47 @@ fn draw_content(
         });
     }
     for file in &asset_folder.files {
-        let response = ui
-            .push_id(file.name.clone(), |ui| {
-                ui.vertical(|ui| {
-                    ui.set_max_height(50.0);
-                    ui.set_max_width(50.0);
-                    if let Some(highlight_file) = highlight_file {
-                        if highlight_file.path == file.path {
-                            ui.painter()
-                                .rect_filled(ui.max_rect(), 0.0, Color32::LIGHT_BLUE);
-                        }
+        ui.push_id(file.name.clone(), |ui| {
+            ui.vertical(|ui| {
+                ui.set_max_height(50.0);
+                ui.set_max_width(50.0);
+                if let Some(highlight_file) = highlight_file {
+                    if highlight_file.path == file.path {
+                        ui.painter()
+                            .rect_filled(ui.max_rect(), 0.0, Color32::LIGHT_BLUE);
                     }
-                    match file.get_file_type() {
-                        EFileType::Fbx => {
-                            ui.image(egui::include_image!("../../../Resource/Editor/model.svg"));
-                        }
-                        EFileType::Jpeg | EFileType::Png => {
-                            let url = format!("file://{}", file.path.to_str().unwrap());
-                            ui.image(url);
-                        }
+                }
+                match file.get_file_type() {
+                    EFileType::Fbx => {
+                        ui.image(egui::include_image!("../../../Resource/Editor/model.svg"));
                     }
-                    ui.label(file.name.clone());
-                });
-            })
-            .response;
-        let response = response.interact(egui::Sense::click());
-        if response.clicked() {
-            highlight_item = Some(EClickItemType::SingleClickFile(file.clone()));
-        }
-        if response.double_clicked() {
-            click_item = Some(EClickItemType::File(file.clone()));
-        }
-        match file.get_file_type() {
-            EFileType::Fbx => {}
-            EFileType::Jpeg | EFileType::Png => {
-                response.context_menu(|ui| {
+                    EFileType::Jpeg | EFileType::Png => {
+                        let url = format!("file://{}", file.path.to_str().unwrap());
+                        ui.image(url);
+                    }
+                }
+                let response = ui.button(file.name.clone());
+                if response.clicked() {
                     highlight_item = Some(EClickItemType::SingleClickFile(file.clone()));
-                    if ui.button("Create texture").clicked() {
-                        click_item = Some(EClickItemType::CreateTexture(file.clone()));
-                        ui.close_menu();
+                }
+                if response.double_clicked() {
+                    click_item = Some(EClickItemType::File(file.clone()));
+                }
+                match file.get_file_type() {
+                    EFileType::Fbx => {}
+                    EFileType::Jpeg | EFileType::Png => {
+                        response.context_menu(|ui| {
+                            highlight_item = Some(EClickItemType::SingleClickFile(file.clone()));
+                            if ui.button("Create texture").clicked() {
+                                click_item = Some(EClickItemType::CreateTexture(file.clone()));
+                                ui.close_menu();
+                            }
+                        });
                     }
-                });
-            }
-        }
+                }
+            });
+        });
     }
-    click_item.or(highlight_item)
+    let item = click_item.or(highlight_item);
+    item
 }

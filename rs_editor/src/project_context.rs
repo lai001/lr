@@ -58,7 +58,10 @@ impl ProjectContext {
                 )));
             }
         };
+        #[cfg(debug_assertions)]
         let lib_folder = project_folder_path.join("target").join("debug");
+        #[cfg(not(debug_assertions))]
+        let lib_folder = project_folder_path.join("target").join("release");
         let hot_reload = HotReload::new(&project_folder_path, &lib_folder, &project.project_name);
         let mut context = ProjectContext {
             project,
@@ -122,8 +125,13 @@ impl ProjectContext {
         return None;
     }
 
-    pub fn reload_if_need(&mut self) -> bool {
-        let result = self.hot_reload.reload_if_need();
+    pub fn is_need_reload_plugin(&self) -> bool {
+        let result = self.hot_reload.is_need_reload();
+        return result;
+    }
+
+    pub fn reload(&mut self) -> bool {
+        let result = self.hot_reload.reload();
         return result;
     }
 

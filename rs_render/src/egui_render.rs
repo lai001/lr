@@ -1,57 +1,91 @@
 pub struct EGUIRenderer {
-    context: egui::Context,
-    egui_render_pass: egui_wgpu_backend::RenderPass,
+    // context: egui::Context,
+    egui_wgpu_renderer: egui_wgpu::Renderer,
+}
+
+#[derive(Clone)]
+pub struct EGUIRenderOutput {
+    pub textures_delta: egui::TexturesDelta,
+    pub clipped_primitives: Vec<egui::ClippedPrimitive>,
 }
 
 impl EGUIRenderer {
     pub fn new(
         device: &wgpu::Device,
-        context: egui::Context,
+        // context: egui::Context,
         output_format: wgpu::TextureFormat,
         msaa_samples: u32,
     ) -> EGUIRenderer {
-        let egui_render_pass =
-            egui_wgpu_backend::RenderPass::new(&device, output_format, msaa_samples);
+        let egui_wgpu_renderer =
+            egui_wgpu::Renderer::new(device, output_format, None, msaa_samples);
+
         EGUIRenderer {
-            context,
-            egui_render_pass,
+            // context,
+            egui_wgpu_renderer,
         }
     }
 
     pub fn render(
         &mut self,
-        full_output: &egui::FullOutput,
+        // full_output: egui::FullOutput,
+        // textures_delta: egui::TexturesDelta,
+        // clipped_primitives: Vec<egui::ClippedPrimitive>,
+        gui_render_output: EGUIRenderOutput,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
-        screen_descriptor: &egui_wgpu_backend::ScreenDescriptor,
+        screen_descriptor: &egui_wgpu::ScreenDescriptor,
         output_view: &wgpu::TextureView,
     ) {
-        let paint_jobs = self.context.tessellate(full_output.shapes.clone());
-        let textures_delta: egui::TexturesDelta = full_output.textures_delta.clone();
-        if let Err(error) = self
-            .egui_render_pass
-            .add_textures(&device, &queue, &textures_delta)
-        {
-            log::warn!("{error}");
-            return;
+        let EGUIRenderOutput {
+            textures_delta,
+            clipped_primitives,
+        } = gui_render_output;
+
+        // let clipped_primitives = self
+        //     .context
+        //     .tessellate(shapes, pixels_per_point);
+        // let textures_delta: egui::epaint::textures::TexturesDelta = full_output.textures_delta;
+
+        for (id, image_delta) in &textures_delta.set {
+            self.egui_wgpu_renderer
+                .update_texture(&device, &queue, *id, image_delta);
         }
-        self.egui_render_pass
-            .update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("EGUIRenderer.CommandEncoder"),
         });
-        if let Err(error) = self.egui_render_pass.execute(
+
+        let mut command_buffers = self.egui_wgpu_renderer.update_buffers(
+            &device,
+            &queue,
             &mut encoder,
-            &output_view,
-            &paint_jobs,
+            &clipped_primitives,
             &screen_descriptor,
-            None,
-        ) {
-            log::warn!("{error}");
-            return;
+        );
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("egui_render"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: output_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            self.egui_wgpu_renderer.render(
+                &mut render_pass,
+                &clipped_primitives,
+                screen_descriptor,
+            );
         }
-        queue.submit(std::iter::once(encoder.finish()));
+        command_buffers.push(encoder.finish());
+        queue.submit(command_buffers);
     }
 
     pub fn remove_texture_ids(&mut self, texture_ids: &[egui::TextureId]) {
@@ -59,9 +93,8 @@ impl EGUIRenderer {
             set: vec![],
             free: texture_ids.to_vec(),
         };
-        match self.egui_render_pass.remove_textures(textures.clone()) {
-            Ok(_) => {}
-            Err(error) => log::warn!("{error}"),
+        for id in &textures.free {
+            self.egui_wgpu_renderer.free_texture(id);
         }
     }
 
@@ -71,7 +104,7 @@ impl EGUIRenderer {
         texture_view: &wgpu::TextureView,
         texture_filter: Option<wgpu::FilterMode>,
     ) -> egui::TextureId {
-        self.egui_render_pass.egui_texture_from_wgpu_texture(
+        self.egui_wgpu_renderer.register_native_texture(
             device,
             texture_view,
             texture_filter.unwrap_or(wgpu::FilterMode::Linear),

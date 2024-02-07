@@ -7,14 +7,14 @@ use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::phong_pipeline::PhongPipeline;
 use crate::shader_library::ShaderLibrary;
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
     gui_renderer: EGUIRenderer,
-    screen_descriptor: egui_wgpu_backend::ScreenDescriptor,
+    screen_descriptor: egui_wgpu::ScreenDescriptor,
     shader_library: ShaderLibrary,
     create_iblbake_commands: Vec<CreateIBLBake>,
     create_texture_commands: Vec<CreateTexture>,
@@ -23,8 +23,8 @@ pub struct Renderer {
     update_buffer_commands: Vec<UpdateBuffer>,
     update_texture_commands: Vec<UpdateTexture>,
     draw_object_commands: Vec<DrawObject>,
-    ui_output_commands: Vec<egui::FullOutput>,
-    resize_commands: Vec<ResizeInfo>,
+    ui_output_commands: VecDeque<crate::egui_render::EGUIRenderOutput>,
+    resize_commands: VecDeque<ResizeInfo>,
 
     textures: HashMap<u64, Texture>,
     buffers: HashMap<u64, Buffer>,
@@ -42,7 +42,6 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn from_context(
-        gui_context: egui::Context,
         wgpu_context: WGPUContext,
         surface_width: u32,
         surface_height: u32,
@@ -50,14 +49,12 @@ impl Renderer {
     ) -> Renderer {
         let egui_render_pass = EGUIRenderer::new(
             wgpu_context.get_device(),
-            gui_context,
             wgpu_context.get_current_swapchain_format(),
             1,
         );
-        let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-            physical_width: surface_width,
-            physical_height: surface_height,
-            scale_factor,
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [surface_width, surface_height],
+            pixels_per_point: scale_factor,
         };
         let mut shader_library = ShaderLibrary::new();
         shader_library.load_inner_shader(wgpu_context.get_device());
@@ -90,8 +87,8 @@ impl Renderer {
             update_buffer_commands: Vec::new(),
             update_texture_commands: Vec::new(),
             draw_object_commands: Vec::new(),
-            ui_output_commands: Vec::new(),
-            resize_commands: Vec::new(),
+            ui_output_commands: VecDeque::new(),
+            resize_commands: VecDeque::new(),
             textures: HashMap::new(),
             buffers: HashMap::new(),
             ui_textures: HashMap::new(),
@@ -106,13 +103,12 @@ impl Renderer {
 
     pub fn from_window<W>(
         window: &W,
-        gui_context: egui::Context,
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
     ) -> Result<Renderer>
     where
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         let wgpu_context = WGPUContext::new(
             window,
@@ -134,7 +130,6 @@ impl Renderer {
             Err(err) => return Err(err),
         };
         Ok(Self::from_context(
-            gui_context,
             wgpu_context,
             surface_width,
             surface_height,
@@ -142,32 +137,33 @@ impl Renderer {
         ))
     }
 
-    pub fn set_new_window<
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
-    >(
+    pub fn set_new_window<W>(
         &mut self,
         window: &W,
         surface_width: u32,
         surface_height: u32,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
+    {
         self.wgpu_context
             .set_new_window(window, surface_width, surface_height)
     }
 
     pub fn present(&mut self) -> Option<RenderOutput> {
-        for resize_command in &self.resize_commands {
+        while let Some(resize_command) = self.resize_commands.pop_front() {
             if resize_command.width <= 0 || resize_command.height <= 0 {
                 continue;
             }
-            self.screen_descriptor.physical_width = resize_command.width;
-            self.screen_descriptor.physical_height = resize_command.height;
+            self.screen_descriptor.size_in_pixels[0] = resize_command.width;
+            self.screen_descriptor.size_in_pixels[1] = resize_command.height;
             self.wgpu_context
                 .window_resized(resize_command.width, resize_command.height);
             let device = self.wgpu_context.get_device();
             self.depth_texture =
                 DepthTexture::new(resize_command.width, resize_command.height, device);
         }
-        self.resize_commands.clear();
+
         let mut render_output = RenderOutput::default();
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
@@ -275,17 +271,10 @@ impl Renderer {
         self.draw_objects(&output_view);
         self.draw_object_commands.clear();
 
-        for full_output in &self.ui_output_commands {
-            self.gui_renderer.render(
-                full_output,
-                queue,
-                device,
-                &self.screen_descriptor,
-                &output_view,
-            )
+        while let Some(output) = self.ui_output_commands.pop_front() {
+            self.gui_renderer
+                .render(output, queue, device, &self.screen_descriptor, &output_view)
         }
-        self.ui_output_commands.clear();
-
         texture.present();
         return Some(render_output);
     }
@@ -328,8 +317,8 @@ impl Renderer {
             RenderCommand::UpdateBuffer(command) => self.update_buffer_commands.push(command),
             RenderCommand::UpdateTexture(command) => self.update_texture_commands.push(command),
             RenderCommand::DrawObject(command) => self.draw_object_commands.push(command),
-            RenderCommand::UiOutput(command) => self.ui_output_commands.push(command),
-            RenderCommand::Resize(command) => self.resize_commands.push(command),
+            RenderCommand::UiOutput(command) => self.ui_output_commands.push_back(command),
+            RenderCommand::Resize(command) => self.resize_commands.push_back(command),
             RenderCommand::Present => {
                 return self.present();
             }

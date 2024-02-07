@@ -3,14 +3,15 @@ local rs_project_name = rs_project_name
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
 task("code_workspace") do
-    on_run(function(in_plat, in_target)
+    on_run(function(in_plat, in_target, in_mode)
         import("core.project.config")
         import("core.base.option")
         import("core.base.json")
         config.load()
         local is_enable_dotnet = get_config("enable_dotnet")
         local is_enable_quickjs = get_config("enable_quickjs")
-        local features = { }
+        local features = {}
+        local extraArgs = {}
         local linkedProjects = { 
             path.absolute("./rs_render/Cargo.toml") ,
             path.absolute("./rs_foundation/Cargo.toml") ,
@@ -44,8 +45,14 @@ task("code_workspace") do
             table.join2(linkedProjects, path.absolute("./rs_dotnet/Cargo.toml"))
         end
         local target = (in_target and {in_target} or {option.get("target")})[1]
-        target = (target and {target} or {"aarch64-linux-android"})[1]
+        target = (target and {target} or {})[1]
    
+        local mode = (in_mode and {in_mode} or {option.get("mode")})[1]
+        mode = (mode and {mode} or {"debug"})[1]
+        if mode == "release" then
+            table.join2(extraArgs, "--release")
+        end
+
         local code_workspace = {
             ["folders"] = { {
                 ["path"] = path.absolute("./")
@@ -54,7 +61,7 @@ task("code_workspace") do
                 ["rust-analyzer.cargo.features"] = features,
                 ["rust-analyzer.linkedProjects"] = linkedProjects,
                 ["rust-analyzer.cargo.target"] = target,
-                ["rust-analyzer.runnables.extraArgs"] = {},
+                ["rust-analyzer.runnables.extraArgs"] = extraArgs,
                 ["files.associations"] = associations,
                 ["rust-analyzer.cargo.extraEnv"] = extraEnv,
                 ["rust-analyzer.server.extraEnv"] = extraEnv,
@@ -71,7 +78,7 @@ task("code_workspace") do
         usage = "xmake code_workspace",
         description = "Generate vscode project workspace file.",
         options = {
-            { "t", "target", "kv", "aarch64-linux-android", "Set target.",
+            { "t", "target", "kv", nil, "Set target.",
                 " - aarch64-linux-android",
                 " - armv7-linux-androideabi",
                 " - x86_64-linux-android",
@@ -80,7 +87,10 @@ task("code_workspace") do
                 " - x86_64-pc-windows-msvc" },
             { "p", "plat", "kv", "windows", "Set platfrom.",
                 " - windows",
-                " - android" }
+                " - android" },
+            { "m", "mode", "kv", "debug", "Set build configuration.",
+                " - debug",
+                " - release" }                
         }
     }
 end

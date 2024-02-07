@@ -1,11 +1,11 @@
 use crate::custom_event::ECustomEventType;
 use rs_artifact::{artifact::ArtifactReader, EEndianType};
-use rs_engine::engine::Engine;
-use std::path::Path;
-use winit::{
-    event::{Event, WindowEvent},
-    event_loop::ControlFlow,
+use rs_engine::{
+    engine::Engine,
+    frame_sync::{EOptions, FrameSync},
 };
+use std::path::Path;
+use winit::event::{Event, WindowEvent};
 
 struct State {
     target_fps: u64,
@@ -24,7 +24,8 @@ impl Default for State {
 pub struct ApplicationContext {
     engine: Engine,
     state: State,
-    platform: egui_winit_platform::Platform,
+    egui_winit_state: egui_winit::State,
+    frame_sync: FrameSync,
 }
 
 impl ApplicationContext {
@@ -34,14 +35,17 @@ impl ApplicationContext {
         let scale_factor = 1.0f32;
         let window_width = window_size.width;
         let window_height = window_size.height;
-        let descriptor = egui_winit_platform::PlatformDescriptor {
-            physical_width: window_width,
-            physical_height: window_height,
-            scale_factor: scale_factor as f64,
-            font_definitions: egui::FontDefinitions::default(),
-            style: egui::Style::default(),
-        };
-        let platform = egui_winit_platform::Platform::new(descriptor);
+
+        let egui_context = egui::Context::default();
+        egui_context.set_fonts(egui::FontDefinitions::default());
+        egui_context.set_style(egui::Style::default());
+        let egui_winit_state = egui_winit::State::new(
+            egui_context,
+            egui::ViewportId::ROOT,
+            window,
+            Some(window.scale_factor() as f32),
+            None,
+        );
         let artifact_filepath = Path::new("./main.rs");
         let artifact_reader =
             ArtifactReader::new(artifact_filepath, Some(EEndianType::Little)).unwrap();
@@ -50,7 +54,6 @@ impl ApplicationContext {
             window_width,
             window_height,
             scale_factor,
-            platform.context(),
             Some(artifact_reader),
         )
         .unwrap();
@@ -59,11 +62,13 @@ impl ApplicationContext {
             .set_cursor_grab(winit::window::CursorGrabMode::Confined)
             .unwrap();
         window.set_cursor_visible(false);
+        let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
         let application_context = Self {
             engine,
             state: State::default(),
-            platform,
+            egui_winit_state,
+            frame_sync,
         };
 
         application_context
@@ -74,7 +79,7 @@ impl ApplicationContext {
         window: &mut winit::window::Window,
         event: &Event<ECustomEventType>,
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
-        control_flow: &mut ControlFlow,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         match event {
             Event::DeviceEvent { device_id, event } => {
@@ -82,57 +87,52 @@ impl ApplicationContext {
             }
             Event::WindowEvent { window_id, event } => match event {
                 WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
+                    self.quit_app();
                 }
                 WindowEvent::KeyboardInput {
                     device_id,
-                    input,
+                    event,
                     is_synthetic,
                 } => {
-                    self.engine.process_keyboard_input(*input);
+                    self.engine
+                        .process_keyboard_input(*device_id, event.clone(), *is_synthetic);
+                }
+                WindowEvent::RedrawRequested => {
+                    let full_output = self.process_ui(window, event_loop_proxy);
+                    let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+                        textures_delta: full_output.textures_delta,
+                        clipped_primitives: self
+                            .egui_winit_state
+                            .egui_ctx()
+                            .tessellate(full_output.shapes, full_output.pixels_per_point),
+                    };
+                    self.engine.redraw(gui_render_output);
+                    self.engine.present();
+                    let wait = self
+                        .frame_sync
+                        .tick()
+                        .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
+                    std::thread::sleep(wait);
+                    window.request_redraw();
                 }
                 _ => {}
             },
-            Event::RedrawRequested(_) => {
-                self.control_fps(control_flow);
-                let full_output = self.process_ui(event_loop_proxy);
-                self.engine.redraw(full_output);
-            }
-            Event::RedrawEventsCleared => {
-                window.request_redraw();
-            }
             _ => {}
         }
     }
 
+    fn quit_app(&mut self) {
+        std::process::exit(0);
+    }
+
     fn process_ui(
         &mut self,
+        window: &mut winit::window::Window,
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     ) -> egui::FullOutput {
-        self.platform.begin_frame();
-        let full_output = self.platform.end_frame(None);
+        let new_input = self.egui_winit_state.take_egui_input(window);
+        self.egui_winit_state.egui_ctx().begin_frame(new_input);
+        let full_output = self.egui_winit_state.egui_ctx().end_frame();
         full_output
-    }
-
-    fn control_fps(&mut self, control_flow: &mut ControlFlow) {
-        let elapsed = std::time::Instant::now() - self.state.current_frame_start_time;
-        Self::sync_fps(elapsed, self.state.target_fps, control_flow);
-        self.state.current_frame_start_time = std::time::Instant::now();
-    }
-
-    fn sync_fps(
-        elapsed: std::time::Duration,
-        fps: u64,
-        control_flow: &mut winit::event_loop::ControlFlow,
-    ) {
-        let fps = std::time::Duration::from_secs_f32(1.0 / fps as f32);
-        let wait: std::time::Duration;
-        if fps < elapsed {
-            wait = std::time::Duration::from_millis(0);
-        } else {
-            wait = fps - elapsed;
-        }
-        let new_inst = std::time::Instant::now() + wait;
-        *control_flow = winit::event_loop::ControlFlow::WaitUntil(new_inst);
     }
 }

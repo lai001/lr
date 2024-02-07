@@ -209,7 +209,7 @@ impl Reflection {
                         // let arg_size = arg_type.inner.size(&module.constants);
 
                         match &arg_type.inner {
-                            naga::TypeInner::Scalar { kind, .. } => {
+                            naga::TypeInner::Scalar(scaler) => {
                                 let mut attribute = wgpu::VertexAttribute {
                                     format: wgpu::VertexFormat::Float32,
                                     offset,
@@ -228,7 +228,7 @@ impl Reflection {
                                         attribute.shader_location = location;
                                     }
                                 }
-                                match kind {
+                                match scaler.kind {
                                     naga::ScalarKind::Sint => {
                                         attribute.format = wgpu::VertexFormat::Sint32;
                                     }
@@ -238,12 +238,12 @@ impl Reflection {
                                     naga::ScalarKind::Float => {
                                         attribute.format = wgpu::VertexFormat::Float32;
                                     }
-                                    naga::ScalarKind::Bool => todo!(),
+                                    _ => todo!(),
                                 }
                                 offset += attribute.format.size();
                                 attributes.push(attribute);
                             }
-                            naga::TypeInner::Vector { size, kind, .. } => {
+                            naga::TypeInner::Vector { size, scalar } => {
                                 let mut attribute = wgpu::VertexAttribute {
                                     format: wgpu::VertexFormat::Float32,
                                     offset,
@@ -255,9 +255,7 @@ impl Reflection {
                                         attribute.shader_location = location;
                                     }
                                 }
-                                match kind {
-                                    naga::ScalarKind::Sint => todo!(),
-                                    naga::ScalarKind::Uint => todo!(),
+                                match scalar.kind {
                                     naga::ScalarKind::Float => match size {
                                         naga::VectorSize::Bi => {
                                             attribute.format = wgpu::VertexFormat::Float32x2;
@@ -269,7 +267,7 @@ impl Reflection {
                                             attribute.format = wgpu::VertexFormat::Float32x4;
                                         }
                                     },
-                                    naga::ScalarKind::Bool => todo!(),
+                                    _ => todo!(),
                                 }
                                 offset += attribute.format.size();
                                 attributes.push(attribute);
@@ -340,7 +338,7 @@ impl Reflection {
                                     ScalarKind::Float => {
                                         TextureSampleType::Float { filterable: true }
                                     }
-                                    ScalarKind::Bool => todo!(),
+                                    _ => todo!(),
                                 },
                                 view_dimension: Self::image_dimension2texture_dimension(*dim),
                                 multisampled: *multi,

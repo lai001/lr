@@ -2,7 +2,7 @@ use crate::error::Result;
 
 pub struct WGPUContext {
     instance: wgpu::Instance,
-    surface: wgpu::Surface,
+    surface: wgpu::Surface<'static>,
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -10,13 +10,17 @@ pub struct WGPUContext {
 }
 
 impl WGPUContext {
-    fn new_surface<
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
-    >(
+    fn new_surface<W>(
         instance: &wgpu::Instance,
         window: &W,
-    ) -> std::result::Result<wgpu::Surface, wgpu::CreateSurfaceError> {
-        unsafe { instance.create_surface(window) }
+    ) -> std::result::Result<wgpu::Surface<'static>, wgpu::CreateSurfaceError>
+    where
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
+    {
+        unsafe {
+            let surface_target = wgpu::SurfaceTargetUnsafe::from_window(window).unwrap();
+            instance.create_surface_unsafe(surface_target)
+        }
     }
 
     fn surface_configure(
@@ -41,6 +45,7 @@ impl WGPUContext {
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: swapchain_capabilities.alpha_modes[0],
             view_formats: vec![],
+            desired_maximum_frame_latency: 1,
         };
         log::info!("surface_config {:#?}", surface_config);
         surface.configure(device, &surface_config);
@@ -55,7 +60,7 @@ impl WGPUContext {
         instance_desc: Option<wgpu::InstanceDescriptor>,
     ) -> Result<WGPUContext>
     where
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         // let instance = wgpu::Instance::default();
         let instance = wgpu::Instance::new(instance_desc.unwrap_or_default());
@@ -78,14 +83,14 @@ impl WGPUContext {
 
         let (device, queue) = match pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
-                features: {
+                required_features: {
                     let mut features = wgpu::Features::default();
                     features.insert(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
                     features.insert(wgpu::Features::CLEAR_TEXTURE);
                     features.insert(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS);
                     features
                 },
-                limits: wgpu::Limits::default(),
+                required_limits: wgpu::Limits::default(),
                 label: None,
             },
             None,
@@ -125,14 +130,15 @@ impl WGPUContext {
         })
     }
 
-    pub fn set_new_window<
-        W: raw_window_handle::HasRawWindowHandle + raw_window_handle::HasRawDisplayHandle,
-    >(
+    pub fn set_new_window<W>(
         &mut self,
         window: &W,
         surface_width: u32,
         surface_height: u32,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
+    {
         let surface = match Self::new_surface(&self.instance, window) {
             Ok(surface) => surface,
             Err(err) => {

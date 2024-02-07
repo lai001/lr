@@ -1,4 +1,4 @@
-use crate::bake_info::BakeInfo;
+use crate::{bake_info::BakeInfo, egui_render::EGUIRenderOutput};
 use std::{collections::HashSet, path::PathBuf};
 use wgpu::*;
 
@@ -159,7 +159,7 @@ pub enum RenderCommand {
     UpdateBuffer(UpdateBuffer),
     UpdateTexture(UpdateTexture),
     DrawObject(DrawObject),
-    UiOutput(egui::FullOutput),
+    UiOutput(EGUIRenderOutput),
     Resize(ResizeInfo),
     Present,
 }

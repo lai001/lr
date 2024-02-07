@@ -12,7 +12,7 @@ impl Application {
     pub fn new() -> Self {
         let window_width = 1280;
         let window_height = 720;
-        let event_loop = EventLoopBuilder::with_user_event().build();
+        let event_loop = EventLoopBuilder::with_user_event().build().unwrap();
         let event_loop_proxy = event_loop.create_proxy();
         let window = winit::window::WindowBuilder::new()
             .with_decorations(true)
@@ -38,12 +38,12 @@ impl Application {
 
     pub fn run(mut self) {
         self.event_loop.run({
-            move |event, _, control_flow| {
+            move |event, event_loop_window_target| {
                 self.application_context.handle_event(
                     &mut self.window,
                     &event,
                     self.event_loop_proxy.clone(),
-                    control_flow,
+                    event_loop_window_target,
                 );
             }
         });
