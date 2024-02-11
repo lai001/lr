@@ -2,7 +2,6 @@ use crate::thread_pool;
 use rs_foundation::channel::SingleConsumeChnnel;
 use rs_render::command::{RenderCommand, RenderOutput};
 use rs_render::renderer::Renderer;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -12,29 +11,21 @@ pub struct MultipleThreadRenderer {
 }
 
 impl MultipleThreadRenderer {
-    pub fn new(renderer: Renderer, shaders: HashMap<String, String>) -> Self {
+    pub fn new(renderer: Renderer) -> Self {
         let renderer = Arc::new(Mutex::new(renderer));
-        let channel = Self::spawn_render_thread(renderer.clone(), shaders);
+        let channel = Self::spawn_render_thread(renderer.clone());
         Self { renderer, channel }
     }
 
     fn spawn_render_thread(
         renderer: Arc<Mutex<Renderer>>,
-        shaders: HashMap<String, String>,
     ) -> Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput>>> {
         let channel =
             SingleConsumeChnnel::<RenderCommand, Option<RenderOutput>>::shared(Some(2), None);
         thread_pool::ThreadPool::render().spawn({
             let renderer = renderer.clone();
-            let shaders = shaders.clone();
             let channel = channel.clone();
-
             move || {
-                {
-                    let mut renderer = renderer.lock().unwrap();
-                    renderer.load_shader(shaders);
-                }
-
                 channel.from_a_block_current_thread(|command| {
                     let mut renderer = renderer.lock().unwrap();
                     let output = renderer.send_command(command);

@@ -1,6 +1,7 @@
 use crate::{
-    base_render_pipeline::BaseRenderPipeline, gpu_buffer, gpu_vertex_buffer::GpuVertexBufferImp,
-    shader_library::ShaderLibrary, vertex_data_type::mesh_vertex::MeshVertex, VertexBufferType,
+    base_render_pipeline::BaseRenderPipeline, global_shaders::phong::PhongShader, gpu_buffer,
+    gpu_vertex_buffer::GpuVertexBufferImp, shader_library::ShaderLibrary,
+    vertex_data_type::mesh_vertex::MeshVertex, VertexBufferType,
 };
 use type_layout::TypeLayout;
 use wgpu::*;
@@ -28,7 +29,7 @@ impl PhongPipeline {
         let base_render_pipeline = BaseRenderPipeline::new(
             device,
             shader_library,
-            "phong.wgsl",
+            &PhongShader {},
             texture_format,
             Some(DepthStencilState {
                 depth_compare: CompareFunction::Less,

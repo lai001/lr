@@ -15,3 +15,23 @@ pub struct BakeInfo {
     pub brdf_sample_count: u32,
     pub is_read_back: bool,
 }
+
+impl Default for BakeInfo {
+    fn default() -> Self {
+        Self {
+            is_bake_environment: true,
+            is_bake_irradiance: true,
+            is_bake_brdflut: true,
+            is_bake_pre_filter: true,
+            environment_cube_map_length: 512,
+            irradiance_cube_map_length: 512,
+            irradiance_sample_count: 1024,
+            pre_filter_cube_map_length: 512,
+            pre_filter_cube_map_max_mipmap_level: 11,
+            pre_filter_sample_count: 1024,
+            brdflutmap_length: 512,
+            brdf_sample_count: 1024,
+            is_read_back: false,
+        }
+    }
+}

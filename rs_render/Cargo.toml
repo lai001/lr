@@ -19,7 +19,11 @@ egui-wgpu = { version = "0.26.0" }
 image = "0.24.5"
 # egui_winit_platform = "0.20.0"
 # egui_demo_lib = "0.21.0"
+dunce = "1.0.4"
+path-slash = "0.1.4"
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
+rs_shader_compiler = { version = "0.1.0", path = "../rs_shader_compiler" }
+rs_core_minimal = { version = "0.1.0", path = "../rs_core_minimal" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"

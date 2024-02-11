@@ -4,7 +4,7 @@ use rs_engine::{
     engine::Engine,
     frame_sync::{EOptions, FrameSync},
 };
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 use winit::event::{Event, WindowEvent};
 
 struct State {
@@ -55,6 +55,7 @@ impl ApplicationContext {
             window_height,
             scale_factor,
             Some(artifact_reader),
+            HashMap::new(),
         )
         .unwrap();
 

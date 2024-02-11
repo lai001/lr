@@ -19,10 +19,17 @@ raw-window-handle = "0.6"
 url = { version = "2.5.0", features = ["serde"] }
 wgpu = "0.19.1"
 glam = { version = "0.22.0" }
-uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+uuid = { version = "1.6.1", features = [
+    "v4",
+    "fast-rng",
+    "macro-diagnostics",
+    "serde",
+] }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
 rs_artifact = { version = "0.1.0", path = "../rs_artifact" }
 rs_render = { version = "0.1.0", path = "../rs_render" }
+rs_core_minimal = { version = "0.1.0", path = "../rs_core_minimal" }
+rs_shader_compiler = { version = "0.1.0", path = "../rs_shader_compiler" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 winit = { version = "0.29.4" }

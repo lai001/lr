@@ -1,4 +1,5 @@
 use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
+use crate::global_shaders::global_shader::GlobalShader;
 use crate::gpu_vertex_buffer::{GpuVertexBufferImp, TGpuVertexBuffer};
 use crate::shader_library::ShaderLibrary;
 use crate::VertexBufferType;
@@ -17,7 +18,7 @@ impl BaseRenderPipeline {
     pub fn new(
         device: &Device,
         shader_library: &ShaderLibrary,
-        file_name: &str,
+        global_shader: &impl GlobalShader,
         texture_format: &TextureFormat,
         depth_stencil: Option<DepthStencilState>,
         multisample: Option<MultisampleState>,
@@ -26,10 +27,9 @@ impl BaseRenderPipeline {
         vertex_buffer_type: VertexBufferType,
         hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
     ) -> BaseRenderPipeline {
-        let shader = shader_library.get_shader(file_name);
-        let reflection = shader_library.get_shader_reflection(file_name);
-
-        let tag: String = file_name.to_owned();
+        let tag = &global_shader.get_name();
+        let shader = shader_library.get_shader(tag);
+        let reflection = shader_library.get_shader_reflection(tag);
         let mut bind_group_layouts: Vec<BindGroupLayout> = Vec::new();
 
         match hooks {
@@ -135,7 +135,7 @@ impl BaseRenderPipeline {
         BaseRenderPipeline {
             render_pipeline,
             bind_group_layouts,
-            tag,
+            tag: tag.to_string(),
             slots: vertex_state_buffers.len() as u32,
         }
     }

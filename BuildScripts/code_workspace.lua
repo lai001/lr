@@ -17,6 +17,8 @@ task("code_workspace") do
             path.absolute("./rs_foundation/Cargo.toml") ,
             path.absolute("./rs_engine/Cargo.toml") ,
             path.absolute("./rs_artifact/Cargo.toml") ,
+            path.absolute("./rs_shader_compiler/Cargo.toml") ,
+            path.absolute("./rs_core_minimal/Cargo.toml") ,
         }
         local plat = (in_plat and {in_plat} or {option.get("plat")})[1]
         plat = (plat and {plat} or {"windows"})[1]

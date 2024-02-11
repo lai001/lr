@@ -33,3 +33,5 @@ rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
 rs_artifact = { version = "0.1.0", path = "../rs_artifact" }
 rs_engine = { version = "0.1.0", path = "../rs_engine" }
 rs_hotreload_plugin = { version = "0.1.0", path = "../rs_hotreload_plugin" }
+rs_shader_compiler = { version = "0.1.0", path = "../rs_shader_compiler" }
+rs_core_minimal = { version = "0.1.0", path = "../rs_core_minimal" }

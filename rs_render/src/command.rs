@@ -1,5 +1,9 @@
 use crate::{bake_info::BakeInfo, egui_render::EGUIRenderOutput};
-use std::{collections::HashSet, path::PathBuf};
+use std::{
+    collections::HashSet,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use wgpu::*;
 
 pub type BufferHandle = u64;
@@ -150,6 +154,12 @@ pub struct CreateIBLBake {
     pub bake_info: BakeInfo,
 }
 
+pub trait RenderTask {
+    fn exec(&mut self);
+}
+
+pub type TaskType = Arc<Mutex<Box<dyn FnMut(&mut crate::renderer::Renderer) + Send>>>;
+
 #[derive(Clone)]
 pub enum RenderCommand {
     CreateIBLBake(CreateIBLBake),
@@ -161,11 +171,13 @@ pub enum RenderCommand {
     DrawObject(DrawObject),
     UiOutput(EGUIRenderOutput),
     Resize(ResizeInfo),
+    Task(TaskType),
     Present,
 }
 
 #[derive(Clone, Default)]
 pub struct RenderOutput {
-    pub create_texture_handles: HashSet<u64>,
-    pub create_buffer_handles: HashSet<u64>,
+    pub create_texture_handles: HashSet<TextureHandle>,
+    pub create_buffer_handles: HashSet<BufferHandle>,
+    pub create_ibl_handles: HashSet<TextureHandle>,
 }

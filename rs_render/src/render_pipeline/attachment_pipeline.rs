@@ -1,4 +1,7 @@
-use crate::shader_library::ShaderLibrary;
+use crate::{
+    global_shaders::{attachment, global_shader::GlobalShader},
+    shader_library::ShaderLibrary,
+};
 
 pub struct AttachmentPipeline {
     pub pipeline_layout: wgpu::PipelineLayout,
@@ -11,7 +14,7 @@ impl AttachmentPipeline {
         shader_library: &ShaderLibrary,
         output_texture_format: &wgpu::TextureFormat,
     ) -> AttachmentPipeline {
-        let shader = shader_library.get_shader("attachment.wgsl");
+        let shader = shader_library.get_shader(&attachment::AttachmentShader {}.get_name());
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[],

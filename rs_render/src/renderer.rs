@@ -1,3 +1,4 @@
+use crate::acceleration_bake::AccelerationBaker;
 use crate::command::*;
 use crate::default_textures::DefaultTextures;
 use crate::depth_texture::DepthTexture;
@@ -16,7 +17,7 @@ pub struct Renderer {
     gui_renderer: EGUIRenderer,
     screen_descriptor: egui_wgpu::ScreenDescriptor,
     shader_library: ShaderLibrary,
-    create_iblbake_commands: Vec<CreateIBLBake>,
+    create_iblbake_commands: VecDeque<CreateIBLBake>,
     create_texture_commands: Vec<CreateTexture>,
     create_uitexture_commands: Vec<CreateUITexture>,
     create_buffer_commands: Vec<CreateBuffer>,
@@ -25,10 +26,12 @@ pub struct Renderer {
     draw_object_commands: Vec<DrawObject>,
     ui_output_commands: VecDeque<crate::egui_render::EGUIRenderOutput>,
     resize_commands: VecDeque<ResizeInfo>,
+    task_commands: VecDeque<TaskType>,
 
     textures: HashMap<u64, Texture>,
     buffers: HashMap<u64, Buffer>,
     ui_textures: HashMap<u64, egui::TextureId>,
+    ibl_bakes: HashMap<u64, AccelerationBaker>,
 
     phong_pipeline: PhongPipeline,
     attachment_pipeline: AttachmentPipeline,
@@ -46,6 +49,7 @@ impl Renderer {
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
+        shaders: HashMap<String, String>,
     ) -> Renderer {
         let egui_render_pass = EGUIRenderer::new(
             wgpu_context.get_device(),
@@ -57,7 +61,7 @@ impl Renderer {
             pixels_per_point: scale_factor,
         };
         let mut shader_library = ShaderLibrary::new();
-        shader_library.load_inner_shader(wgpu_context.get_device());
+        shader_library.load_shader_from(shaders, wgpu_context.get_device());
 
         let phong_pipeline = PhongPipeline::new(
             wgpu_context.get_device(),
@@ -80,7 +84,7 @@ impl Renderer {
             gui_renderer: egui_render_pass,
             screen_descriptor,
             shader_library,
-            create_iblbake_commands: Vec::new(),
+            create_iblbake_commands: VecDeque::new(),
             create_texture_commands: Vec::new(),
             create_uitexture_commands: Vec::new(),
             create_buffer_commands: Vec::new(),
@@ -98,6 +102,8 @@ impl Renderer {
             default_textures,
             texture_descriptors: HashMap::new(),
             buffer_infos: HashMap::new(),
+            task_commands: VecDeque::new(),
+            ibl_bakes: HashMap::new(),
         }
     }
 
@@ -106,6 +112,7 @@ impl Renderer {
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
+        shaders: HashMap<String, String>,
     ) -> Result<Renderer>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -134,6 +141,7 @@ impl Renderer {
             surface_width,
             surface_height,
             scale_factor,
+            shaders,
         ))
     }
 
@@ -162,6 +170,11 @@ impl Renderer {
             let device = self.wgpu_context.get_device();
             self.depth_texture =
                 DepthTexture::new(resize_command.width, resize_command.height, device);
+        }
+
+        while let Some(task_command) = self.task_commands.pop_front() {
+            let mut task = task_command.lock().unwrap();
+            task(self);
         }
 
         let mut render_output = RenderOutput::default();
@@ -253,6 +266,20 @@ impl Renderer {
         }
         self.create_uitexture_commands.clear();
 
+        while let Some(create_iblbake_command) = self.create_iblbake_commands.pop_front() {
+            let mut baker = AccelerationBaker::new(
+                device,
+                queue,
+                &create_iblbake_command.file_path,
+                create_iblbake_command.bake_info,
+            );
+            baker.bake(device, queue, &self.shader_library);
+            render_output
+                .create_ibl_handles
+                .insert(create_iblbake_command.handle);
+            self.ibl_bakes.insert(create_iblbake_command.handle, baker);
+        }
+
         let texture = match self.wgpu_context.get_current_surface_texture() {
             Ok(texture) => texture,
             Err(err) => {
@@ -310,7 +337,9 @@ impl Renderer {
 
     pub fn send_command(&mut self, command: RenderCommand) -> Option<RenderOutput> {
         match command {
-            RenderCommand::CreateIBLBake(command) => self.create_iblbake_commands.push(command),
+            RenderCommand::CreateIBLBake(command) => {
+                self.create_iblbake_commands.push_back(command)
+            }
             RenderCommand::CreateTexture(command) => self.create_texture_commands.push(command),
             RenderCommand::CreateUITexture(command) => self.create_uitexture_commands.push(command),
             RenderCommand::CreateBuffer(command) => self.create_buffer_commands.push(command),
@@ -322,6 +351,7 @@ impl Renderer {
             RenderCommand::Present => {
                 return self.present();
             }
+            RenderCommand::Task(command) => self.task_commands.push_back(command),
         }
         return None;
     }

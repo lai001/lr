@@ -18,7 +18,10 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     plugin::Plugin,
 };
-use rs_render::command::{DrawObject, PhongMaterial};
+use rs_render::{
+    bake_info::BakeInfo,
+    command::{DrawObject, PhongMaterial},
+};
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -107,12 +110,13 @@ impl EditorContext {
             None,
         );
         let artifact_reader = None;
-        let engine = rs_engine::engine::Engine::new(
+        let mut engine = rs_engine::engine::Engine::new(
             window,
             window_width,
             window_height,
             scale_factor,
             artifact_reader,
+            ProjectContext::pre_process_shaders(),
         )
         .unwrap();
 

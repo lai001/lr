@@ -8,7 +8,7 @@ use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use rs_artifact::{
     artifact::ArtifactAssetEncoder, property_value_type::EPropertyValueType,
-    static_mesh::StaticMesh, EEndianType,
+    shader_source_code::ShaderSourceCode, static_mesh::StaticMesh, EEndianType,
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
 use std::{
@@ -250,6 +250,10 @@ impl ProjectContext {
         .unwrap()
     }
 
+    pub fn build_shader_url(name: &str) -> url::Url {
+        url::Url::parse(&format!("asset://shader/{}", name)).unwrap()
+    }
+
     pub fn export(&mut self) -> Result<PathBuf> {
         let output_folder_path = self.project_folder_path.join("artifact");
         let _ = std::fs::create_dir(output_folder_path.clone());
@@ -339,6 +343,15 @@ impl ProjectContext {
         }
 
         // FIXME: Out of memory
+        for (name, code) in Self::pre_process_shaders() {
+            let shader_source_code = ShaderSourceCode {
+                name: name.clone(),
+                id: uuid::Uuid::new_v4(),
+                url: Self::build_shader_url(&name),
+                code,
+            };
+            artifact_asset_encoder.encode(&shader_source_code);
+        }
         artifact_asset_encoder.encode(&Self::level_to_level(&self.project.level.borrow()));
         for static_mesh in static_meshs.iter() {
             artifact_asset_encoder.encode(static_mesh);
@@ -401,5 +414,22 @@ impl ProjectContext {
                 );
             }
         }
+    }
+
+    pub fn pre_process_shaders() -> HashMap<String, String> {
+        let mut shaders = HashMap::new();
+        let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
+        for buildin_shader in buildin_shaders {
+            let description = buildin_shader.get_shader_description();
+            let name = buildin_shader.get_name();
+            let processed_code = rs_shader_compiler::pre_process::pre_process(
+                &description.shader_path,
+                description.include_dirs.iter(),
+                description.definitions.iter(),
+            )
+            .unwrap();
+            shaders.insert(name, processed_code);
+        }
+        shaders
     }
 }

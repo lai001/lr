@@ -10,9 +10,10 @@ use crate::{
 use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::level::ENodeType;
 use rs_artifact::resource_info::ResourceInfo;
+use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, CreateTexture, DrawObject, EMaterialType, InitTextureData,
-    PhongMaterial, RenderCommand, TextureDescriptorCreateInfo,
+    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateTexture, DrawObject, EMaterialType,
+    InitTextureData, PhongMaterial, RenderCommand, TextureDescriptorCreateInfo,
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::renderer::Renderer;
@@ -57,6 +58,7 @@ impl Engine {
         surface_height: u32,
         scale_factor: f32,
         artifact_reader: Option<ArtifactReader>,
+        mut shaders: HashMap<String, String>,
     ) -> Result<Engine>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -66,28 +68,27 @@ impl Engine {
             is_write_to_file: true,
         });
 
-        let renderer = Renderer::from_window(window, surface_width, surface_height, scale_factor);
-        let mut renderer = match renderer {
+        let mut resource_manager = ResourceManager::default();
+        resource_manager.set_artifact_reader(artifact_reader);
+        resource_manager.load_static_meshs();
+
+        for shader_source_code in resource_manager.get_all_shader_source_codes() {
+            shaders.insert(shader_source_code.name, shader_source_code.code);
+        }
+
+        let renderer =
+            Renderer::from_window(window, surface_width, surface_height, scale_factor, shaders);
+        let renderer = match renderer {
             Ok(renderer) => renderer,
             Err(err) => return Err(crate::error::Error::RendererError(err)),
         };
 
         let mut draw_objects: Vec<DrawObject> = Vec::new();
 
-        let mut resource_manager = ResourceManager::default();
-        resource_manager.set_artifact_reader(artifact_reader);
-        resource_manager.load_static_meshs();
-
-        let mut shaders: HashMap<String, String> = HashMap::new();
-        for shader_source_code in resource_manager.get_all_shader_source_codes() {
-            shaders.insert(shader_source_code.url.to_string(), shader_source_code.code);
-        }
         let mut render_thread_mode: ERenderThreadMode;
         if is_multiple_thread {
-            render_thread_mode =
-                ERenderThreadMode::Multiple(MultipleThreadRenderer::new(renderer, shaders));
+            render_thread_mode = ERenderThreadMode::Multiple(MultipleThreadRenderer::new(renderer));
         } else {
-            renderer.load_shader(shaders);
             render_thread_mode = ERenderThreadMode::Single(renderer);
         }
         let camera = Camera::default(surface_width, surface_height);
@@ -405,6 +406,21 @@ impl Engine {
         let render_command = RenderCommand::CreateTexture(create_texture);
         self.render_thread_mode.send_command(render_command);
         return Some(handle);
+    }
+
+    pub fn send_render_task(&mut self, task: rs_render::command::TaskType) {
+        let render_command = RenderCommand::Task(task);
+        self.render_thread_mode.send_command(render_command);
+    }
+
+    pub fn ibl_bake(&mut self, path: &Path, url: url::Url, bake_info: BakeInfo) {
+        let handle = self.resource_manager.next_texture(url.clone());
+        let render_command = RenderCommand::CreateIBLBake(CreateIBLBake {
+            handle: *handle,
+            file_path: path.to_path_buf(),
+            bake_info,
+        });
+        self.render_thread_mode.send_command(render_command);
     }
 }
 
