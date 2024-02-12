@@ -135,6 +135,10 @@ name = "@name@"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["standalone"]
+renderdoc = ["rs_render/renderdoc", "rs_engine/renderdoc"]
+
 [dependencies]
 egui = { version = "0.26.0" }
 log = "0.4.17"

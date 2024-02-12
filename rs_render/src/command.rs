@@ -173,6 +173,8 @@ pub enum RenderCommand {
     Resize(ResizeInfo),
     Task(TaskType),
     Present,
+    #[cfg(feature = "renderdoc")]
+    CaptureFrame,
 }
 
 #[derive(Clone, Default)]

@@ -41,6 +41,9 @@ pub struct Renderer {
 
     texture_descriptors: HashMap<u64, TextureDescriptorCreateInfo>,
     buffer_infos: HashMap<u64, BufferCreateInfo>,
+
+    #[cfg(feature = "renderdoc")]
+    render_doc_context: Option<crate::renderdoc::Context>,
 }
 
 impl Renderer {
@@ -104,6 +107,8 @@ impl Renderer {
             buffer_infos: HashMap::new(),
             task_commands: VecDeque::new(),
             ibl_bakes: HashMap::new(),
+            #[cfg(feature = "renderdoc")]
+            render_doc_context: crate::renderdoc::Context::new(),
         }
     }
 
@@ -159,6 +164,23 @@ impl Renderer {
     }
 
     pub fn present(&mut self) -> Option<RenderOutput> {
+        #[cfg(feature = "renderdoc")]
+        let mut is_capture_frame = false;
+        #[cfg(feature = "renderdoc")]
+        {
+            if let Some(render_doc_context) = &mut self.render_doc_context {
+                if render_doc_context.capture_commands.is_empty() == false {
+                    is_capture_frame = true;
+                }
+                render_doc_context.capture_commands.clear();
+            }
+            if is_capture_frame {
+                if let Some(render_doc_context) = &mut self.render_doc_context {
+                    render_doc_context.start_capture(self.wgpu_context.get_device());
+                }
+            }
+        }
+
         while let Some(resize_command) = self.resize_commands.pop_front() {
             if resize_command.width <= 0 || resize_command.height <= 0 {
                 continue;
@@ -303,6 +325,14 @@ impl Renderer {
                 .render(output, queue, device, &self.screen_descriptor, &output_view)
         }
         texture.present();
+        #[cfg(feature = "renderdoc")]
+        {
+            if is_capture_frame {
+                if let Some(render_doc_context) = &mut self.render_doc_context {
+                    render_doc_context.stop_capture(device);
+                }
+            }
+        }
         return Some(render_output);
     }
 
@@ -352,6 +382,12 @@ impl Renderer {
                 return self.present();
             }
             RenderCommand::Task(command) => self.task_commands.push_back(command),
+            #[cfg(feature = "renderdoc")]
+            RenderCommand::CaptureFrame => {
+                if let Some(render_doc_context) = &mut self.render_doc_context {
+                    render_doc_context.capture_commands.push_back(());
+                }
+            }
         }
         return None;
     }

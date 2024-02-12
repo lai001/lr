@@ -1,4 +1,7 @@
-use crate::shader_library::ShaderLibrary;
+use crate::{
+    global_shaders::global_shader::GlobalShader, reflection::EPipelineType,
+    shader_library::ShaderLibrary,
+};
 use wgpu::*;
 
 pub struct BaseComputePipeline {
@@ -11,12 +14,12 @@ impl BaseComputePipeline {
     pub fn new(
         device: &wgpu::Device,
         shader_library: &ShaderLibrary,
-        file_name: &str,
+        global_shader: &impl GlobalShader,
     ) -> BaseComputePipeline {
-        let tag: String = file_name.to_owned();
+        let tag = &global_shader.get_name();
 
-        let shader = shader_library.get_shader(file_name);
-        let reflection = shader_library.get_shader_reflection(file_name);
+        let shader = shader_library.get_shader(tag);
+        let reflection = shader_library.get_shader_reflection(tag);
 
         let bind_group_layout_entrys = reflection.get_bind_group_layout_entrys();
 
@@ -37,16 +40,20 @@ impl BaseComputePipeline {
                 .collect::<Vec<&BindGroupLayout>>(),
             push_constant_ranges: &[],
         });
+        let EPipelineType::Compute(cs) = reflection.get_pipeline_type() else {
+            panic!()
+        };
+
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(&format!("{} compute pipeline", tag)),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: reflection.get_cs_entry_point(),
+            entry_point: &cs.name,
         });
         BaseComputePipeline {
             compute_pipeline,
             bind_group_layouts,
-            tag,
+            tag: tag.clone(),
         }
     }
 
@@ -56,7 +63,7 @@ impl BaseComputePipeline {
         queue: &wgpu::Queue,
         entries: Vec<Vec<BindGroupEntry>>,
         workgroups: glam::UVec3,
-    ) {
+    ) -> SubmissionIndex {
         let mut bind_groups: Vec<BindGroup> = Vec::new();
         for (entry_vec, bind_group_layout) in entries.iter().zip(self.bind_group_layouts.iter()) {
             let bind_group = device.create_bind_group(&BindGroupDescriptor {
@@ -81,7 +88,7 @@ impl BaseComputePipeline {
             }
             compute_pass.dispatch_workgroups(workgroups.x, workgroups.y, workgroups.z);
         }
-        let _ = queue.submit(Some(encoder.finish()));
+        queue.submit(Some(encoder.finish()))
     }
 
     pub fn execute_resources(
@@ -90,7 +97,7 @@ impl BaseComputePipeline {
         queue: &wgpu::Queue,
         binding_resources: Vec<Vec<BindingResource>>,
         workgroups: glam::UVec3,
-    ) {
+    ) -> SubmissionIndex {
         let entries = binding_resources
             .iter()
             .map(|x| {
@@ -103,6 +110,6 @@ impl BaseComputePipeline {
                     .collect()
             })
             .collect();
-        self.execute_entries(device, queue, entries, workgroups);
+        self.execute_entries(device, queue, entries, workgroups)
     }
 }

@@ -3,10 +3,10 @@ use naga::*;
 use std::collections::HashMap;
 use wgpu::*;
 
-#[derive(Debug, Clone, Copy)]
-enum EPipelineType {
-    Render,
-    Compute,
+#[derive(Debug, Clone)]
+pub enum EPipelineType {
+    Render(EntryPoint, EntryPoint),
+    Compute(EntryPoint),
 }
 
 pub struct VertexBufferLayoutBuilder {
@@ -57,9 +57,7 @@ pub struct Reflection {
     interleaved_vertex_attributes: Vec<wgpu::VertexAttribute>,
     noninterleaved_vertex_attributes: Vec<Vec<wgpu::VertexAttribute>>,
     array_stride: u64,
-    vs_entry_point: String,
-    fs_entry_point: String,
-    cs_entry_point: String,
+    pipeline_type: EPipelineType,
     bind_group_layout_entrys: Vec<Vec<BindGroupLayoutEntry>>,
 }
 
@@ -68,28 +66,22 @@ impl Reflection {
         let module = front::wgsl::parse_str(&shader_code);
         match module {
             Ok(module) => {
-                let vs_entry_point = Self::extract_vertex_entry_point_name(&module);
-                let fs_entry_point = Self::extract_fragment_entry_point_name(&module);
-                let cs_entry_point = Self::extract_compute_entry_point_name(&module);
+                let render_entry_points = Self::extract_render_entry_point(&module);
+                let cs_entry_point = Self::extract_compute_entry_point(&module);
                 let pipeline_type: EPipelineType;
 
-                if !vs_entry_point.is_empty()
-                    && !fs_entry_point.is_empty()
-                    && cs_entry_point.is_empty()
-                {
-                    pipeline_type = EPipelineType::Render;
-                } else if vs_entry_point.is_empty()
-                    && fs_entry_point.is_empty()
-                    && !cs_entry_point.is_empty()
-                {
-                    pipeline_type = EPipelineType::Compute;
+                if let Some(render_entry_points) = render_entry_points {
+                    pipeline_type =
+                        EPipelineType::Render(render_entry_points.0, render_entry_points.1);
+                } else if let Some(cs_entry_point) = cs_entry_point {
+                    pipeline_type = EPipelineType::Compute(cs_entry_point);
                 } else {
                     panic!()
                 }
 
                 let (vertex_attributes, array_stride) = Self::extract_vertex_attributes(&module);
                 let bind_group_layout_entrys =
-                    Self::extract_bind_group_layout_entrys(&module, pipeline_type);
+                    Self::extract_bind_group_layout_entrys(&module, &pipeline_type);
 
                 let mut noninterleaved_vertex_attributes = Vec::<Vec<wgpu::VertexAttribute>>::new();
                 for mut vertex_attribute in vertex_attributes.to_vec() {
@@ -102,9 +94,7 @@ impl Reflection {
                     interleaved_vertex_attributes: vertex_attributes,
                     noninterleaved_vertex_attributes,
                     array_stride,
-                    vs_entry_point,
-                    fs_entry_point,
-                    cs_entry_point,
+                    pipeline_type,
                     bind_group_layout_entrys,
                 };
 
@@ -153,49 +143,38 @@ impl Reflection {
         }
     }
 
-    fn extract_vertex_entry_point_name(module: &naga::Module) -> String {
-        let mut name = String::new();
+    fn extract_render_entry_point(module: &naga::Module) -> Option<(EntryPoint, EntryPoint)> {
+        let mut vs_entry_point: Option<EntryPoint> = None;
+        let mut fs_entry_point: Option<EntryPoint> = None;
         for entry_point in module.entry_points.iter() {
             match entry_point.stage {
                 ShaderStage::Vertex => {
-                    name = entry_point.name.clone();
-                    break;
+                    vs_entry_point = Some(entry_point.clone());
                 }
-                ShaderStage::Fragment => {}
-                ShaderStage::Compute => {}
-            }
-        }
-        name
-    }
-
-    fn extract_fragment_entry_point_name(module: &naga::Module) -> String {
-        let mut name = String::new();
-        for entry_point in module.entry_points.iter() {
-            match entry_point.stage {
-                ShaderStage::Vertex => {}
                 ShaderStage::Fragment => {
-                    name = entry_point.name.clone();
-                    break;
+                    fs_entry_point = Some(entry_point.clone());
                 }
                 ShaderStage::Compute => {}
             }
         }
-        name
+        if let (Some(vs_entry_point), Some(fs_entry_point)) = (vs_entry_point, fs_entry_point) {
+            return Some((vs_entry_point, fs_entry_point));
+        } else {
+            return None;
+        }
     }
 
-    fn extract_compute_entry_point_name(module: &naga::Module) -> String {
-        let mut name = String::new();
+    fn extract_compute_entry_point(module: &naga::Module) -> Option<EntryPoint> {
         for entry_point in module.entry_points.iter() {
             match entry_point.stage {
                 ShaderStage::Vertex => {}
                 ShaderStage::Fragment => {}
                 ShaderStage::Compute => {
-                    name = entry_point.name.clone();
-                    break;
+                    return Some(entry_point.clone());
                 }
             }
         }
-        name
+        None
     }
 
     fn extract_vertex_attributes(module: &naga::Module) -> (Vec<wgpu::VertexAttribute>, u64) {
@@ -286,7 +265,7 @@ impl Reflection {
 
     fn extract_bind_group_layout_entrys(
         module: &naga::Module,
-        pipeline_type: EPipelineType,
+        pipeline_type: &EPipelineType,
     ) -> Vec<Vec<BindGroupLayoutEntry>> {
         let mut bind_group_layout_entrys_map: HashMap<u32, Vec<BindGroupLayoutEntry>> =
             HashMap::new();
@@ -302,8 +281,10 @@ impl Reflection {
                     let bind_group_layout_entry = BindGroupLayoutEntry {
                         binding: binding.clone().unwrap().binding,
                         visibility: match pipeline_type {
-                            EPipelineType::Render => ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                            EPipelineType::Compute => ShaderStages::COMPUTE,
+                            EPipelineType::Render(_, _) => {
+                                ShaderStages::VERTEX | ShaderStages::FRAGMENT
+                            }
+                            EPipelineType::Compute(_) => ShaderStages::COMPUTE,
                         },
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
@@ -340,24 +321,28 @@ impl Reflection {
                                     }
                                     _ => todo!(),
                                 },
-                                view_dimension: Self::image_dimension2texture_dimension(*dim),
+                                view_dimension: Self::image_dimension2texture_dimension(
+                                    *dim, *arrayed,
+                                ),
                                 multisampled: *multi,
                             },
                             ImageClass::Depth { multi } => todo!(),
                             ImageClass::Storage { format, access } => BindingType::StorageTexture {
                                 access: Self::storage_access2storage_texture_access(access),
                                 format: Self::storage_format2texture_format(format),
-                                view_dimension: Self::image_dimension2texture_dimension(*dim),
+                                view_dimension: Self::image_dimension2texture_dimension(
+                                    *dim, *arrayed,
+                                ),
                             },
                         };
 
                         let bind_group_layout_entry = BindGroupLayoutEntry {
                             binding: binding.clone().unwrap().binding,
                             visibility: match pipeline_type {
-                                EPipelineType::Render => {
+                                EPipelineType::Render(_, _) => {
                                     ShaderStages::VERTEX | ShaderStages::FRAGMENT
                                 }
-                                EPipelineType::Compute => ShaderStages::COMPUTE,
+                                EPipelineType::Compute(_) => ShaderStages::COMPUTE,
                             },
                             ty: binding_type,
                             count: None,
@@ -386,10 +371,10 @@ impl Reflection {
                         let bind_group_layout_entry = BindGroupLayoutEntry {
                             binding: binding.clone().unwrap().binding,
                             visibility: match pipeline_type {
-                                EPipelineType::Render => {
+                                EPipelineType::Render(_, _) => {
                                     ShaderStages::VERTEX | ShaderStages::FRAGMENT
                                 }
-                                EPipelineType::Compute => ShaderStages::COMPUTE,
+                                EPipelineType::Compute(_) => ShaderStages::COMPUTE,
                             },
                             ty: BindingType::Sampler(sampler_binding_type),
                             count: None,
@@ -429,12 +414,24 @@ impl Reflection {
         bind_group_layout_entrys
     }
 
-    fn image_dimension2texture_dimension(image_dimension: ImageDimension) -> TextureViewDimension {
-        match image_dimension {
-            ImageDimension::D1 => TextureViewDimension::D1,
-            ImageDimension::D2 => TextureViewDimension::D2,
-            ImageDimension::D3 => TextureViewDimension::D3,
-            ImageDimension::Cube => TextureViewDimension::Cube,
+    fn image_dimension2texture_dimension(
+        image_dimension: ImageDimension,
+        arrayed: bool,
+    ) -> TextureViewDimension {
+        if arrayed {
+            match image_dimension {
+                ImageDimension::D1 => TextureViewDimension::D1,
+                ImageDimension::D2 => TextureViewDimension::D2Array,
+                ImageDimension::D3 => TextureViewDimension::D3,
+                ImageDimension::Cube => TextureViewDimension::CubeArray,
+            }
+        } else {
+            match image_dimension {
+                ImageDimension::D1 => TextureViewDimension::D1,
+                ImageDimension::D2 => TextureViewDimension::D2,
+                ImageDimension::D3 => TextureViewDimension::D3,
+                ImageDimension::Cube => TextureViewDimension::Cube,
+            }
         }
     }
 
@@ -505,14 +502,6 @@ impl Reflection {
         &self.module
     }
 
-    pub fn get_vs_entry_point(&self) -> &str {
-        self.vs_entry_point.as_ref()
-    }
-
-    pub fn get_fs_entry_point(&self) -> &str {
-        self.fs_entry_point.as_ref()
-    }
-
     pub fn get_bind_group_layout_entrys(&self) -> &[Vec<BindGroupLayoutEntry>] {
         self.bind_group_layout_entrys.as_ref()
     }
@@ -524,7 +513,7 @@ impl Reflection {
             .as_ref()
     }
 
-    pub fn get_cs_entry_point(&self) -> &str {
-        self.cs_entry_point.as_ref()
+    pub fn get_pipeline_type(&self) -> &EPipelineType {
+        &self.pipeline_type
     }
 }

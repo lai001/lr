@@ -1,6 +1,7 @@
 use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
 use crate::global_shaders::global_shader::GlobalShader;
 use crate::gpu_vertex_buffer::{GpuVertexBufferImp, TGpuVertexBuffer};
+use crate::reflection::EPipelineType;
 use crate::shader_library::ShaderLibrary;
 use crate::VertexBufferType;
 use std::collections::HashMap;
@@ -112,18 +113,21 @@ impl BaseRenderPipeline {
 
         let builder = reflection.make_vertex_buffer_layout_builder(vertex_buffer_type);
         let vertex_state_buffers = builder.get_vertex_buffer_layout();
+        let EPipelineType::Render(vs, fs) = reflection.get_pipeline_type() else {
+            panic!()
+        };
 
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some(&format!("{} render pipeline", tag)),
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: &shader,
-                entry_point: reflection.get_vs_entry_point(),
+                entry_point: &vs.name,
                 buffers: &vertex_state_buffers,
             },
             fragment: Some(FragmentState {
                 module: &shader,
-                entry_point: reflection.get_fs_entry_point(),
+                entry_point: &fs.name,
                 targets: &[Some(ColorTargetState::from(texture_format.clone()))],
             }),
             primitive: primitive.unwrap_or_default(),
@@ -276,7 +280,7 @@ impl BaseRenderPipeline {
         output_view: &TextureView,
         resolve_target: Option<&TextureView>,
         depth_view: Option<&TextureView>,
-    ) {
+    ) -> SubmissionIndex {
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some(&format!("{} command encoder", self.tag)),
         });
@@ -341,7 +345,7 @@ impl BaseRenderPipeline {
                 }
             }
         }
-        queue.submit(Some(encoder.finish()));
+        queue.submit(Some(encoder.finish()))
     }
 
     pub fn draw_resources2(
@@ -357,7 +361,7 @@ impl BaseRenderPipeline {
         output_view: &TextureView,
         resolve_target: Option<&TextureView>,
         depth_view: Option<&TextureView>,
-    ) {
+    ) -> SubmissionIndex {
         let entries = binding_resources
             .iter()
             .map(|x| {
@@ -381,6 +385,6 @@ impl BaseRenderPipeline {
             output_view,
             resolve_target,
             depth_view,
-        );
+        )
     }
 }

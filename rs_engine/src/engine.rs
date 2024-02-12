@@ -2,7 +2,7 @@ use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::error::Result;
-use crate::render_thread_mode::{ERenderThreadMode, MultipleThreadRenderer};
+use crate::render_thread_mode::ERenderThreadMode;
 use crate::{
     logger::{Logger, LoggerConfiguration},
     resource_manager::ResourceManager,
@@ -17,7 +17,7 @@ use rs_render::command::{
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::renderer::Renderer;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::path::Path;
 
 struct State {
@@ -48,7 +48,6 @@ pub struct Engine {
     draw_objects: Vec<DrawObject>,
     camera: Camera,
     state: State,
-    render_outputs: VecDeque<rs_render::command::RenderOutput>,
 }
 
 impl Engine {
@@ -63,7 +62,6 @@ impl Engine {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        let is_multiple_thread = true;
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
         });
@@ -85,12 +83,7 @@ impl Engine {
 
         let mut draw_objects: Vec<DrawObject> = Vec::new();
 
-        let mut render_thread_mode: ERenderThreadMode;
-        if is_multiple_thread {
-            render_thread_mode = ERenderThreadMode::Multiple(MultipleThreadRenderer::new(renderer));
-        } else {
-            render_thread_mode = ERenderThreadMode::Single(renderer);
-        }
+        let mut render_thread_mode = ERenderThreadMode::from(renderer, true);
         let camera = Camera::default(surface_width, surface_height);
         let mut level: Option<rs_artifact::level::Level> = None;
         if let Some(url) = Self::find_first_level(&mut resource_manager) {
@@ -139,7 +132,6 @@ impl Engine {
             draw_objects,
             camera,
             state: State::default(),
-            render_outputs: VecDeque::new(),
         };
 
         Ok(engine)
@@ -171,31 +163,7 @@ impl Engine {
     }
 
     pub fn redraw(&mut self, gui_render_output: EGUIRenderOutput) {
-        loop {
-            match &self.render_thread_mode {
-                ERenderThreadMode::Single(_) => {
-                    break;
-                }
-                ERenderThreadMode::Multiple(renderer) => {
-                    let render_output = renderer.channel.from_b_try_recv();
-                    match render_output {
-                        Ok(render_output) => {
-                            if let Some(render_output) = render_output {
-                                self.render_outputs.push_back(render_output);
-                            }
-                        }
-                        Err(err) => match err {
-                            std::sync::mpsc::TryRecvError::Empty => {
-                                break;
-                            }
-                            std::sync::mpsc::TryRecvError::Disconnected => {
-                                panic!();
-                            }
-                        },
-                    }
-                }
-            }
-        }
+        self.render_thread_mode.recv_output();
         #[cfg(not(target_os = "android"))]
         for (virtual_key_code, element_state) in &self.state.virtual_key_code_states {
             DefaultCameraInputEventHandle::keyboard_input_handle(
@@ -239,26 +207,8 @@ impl Engine {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        match &mut self.render_thread_mode {
-            ERenderThreadMode::Single(renderer) => {
-                let result = renderer.set_new_window(window, surface_width, surface_height);
-                match result {
-                    Ok(_) => Ok(()),
-                    Err(err) => return Err(crate::error::Error::RendererError(err)),
-                }
-            }
-            ERenderThreadMode::Multiple(renderer) => {
-                let result = renderer.renderer.lock().unwrap().set_new_window(
-                    window,
-                    surface_width,
-                    surface_height,
-                );
-                match result {
-                    Ok(_) => Ok(()),
-                    Err(err) => return Err(crate::error::Error::RendererError(err)),
-                }
-            }
-        }
+        self.render_thread_mode
+            .set_new_window(window, surface_width, surface_height)
     }
 
     fn create_draw_object_from_static_mesh_internal(
@@ -422,16 +372,18 @@ impl Engine {
         });
         self.render_thread_mode.send_command(render_command);
     }
+
+    pub fn debug_capture_frame(&mut self) {
+        #[cfg(feature = "renderdoc")]
+        {
+            let render_command = RenderCommand::CaptureFrame;
+            self.render_thread_mode.send_command(render_command);
+        }
+    }
 }
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        match &self.render_thread_mode {
-            ERenderThreadMode::Single(_) => {}
-            ERenderThreadMode::Multiple(renderer) => {
-                renderer.channel.send_stop_signal_and_wait();
-            }
-        }
         self.logger.flush();
     }
 }

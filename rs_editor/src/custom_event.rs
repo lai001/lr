@@ -3,6 +3,7 @@ pub enum EFileDialogType {
     NewProject(String),
     OpenProject,
     ImportAsset,
+    IBL,
 }
 
 #[derive(Debug, Clone)]

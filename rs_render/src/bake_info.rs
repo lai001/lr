@@ -13,7 +13,6 @@ pub struct BakeInfo {
     pub pre_filter_sample_count: u32,
     pub brdflutmap_length: u32,
     pub brdf_sample_count: u32,
-    pub is_read_back: bool,
 }
 
 impl Default for BakeInfo {
@@ -31,7 +30,6 @@ impl Default for BakeInfo {
             pre_filter_sample_count: 1024,
             brdflutmap_length: 512,
             brdf_sample_count: 1024,
-            is_read_back: false,
         }
     }
 }

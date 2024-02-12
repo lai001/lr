@@ -24,6 +24,7 @@ pub struct ShaderDescription {
     pub definitions: Vec<Definition>,
 }
 
+#[cfg(feature = "editor")]
 pub fn pre_process<'a>(
     shader_path: &Path,
     include_dirs: impl Iterator<Item = impl AsRef<Path>>,

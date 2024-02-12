@@ -1,9 +1,9 @@
 use crate::{
     bake_info::BakeInfo,
     compute_pipeline::{
-        brdf_lut_pipeline::BrdfLutPipeline, irradiance_cube_map::IrradianceCubeMapPipeline,
-        panorama_to_cube_pipeline::PanoramaToCubePipeline,
-        pre_filter_environment_cube_map_compute_pipeline::PreFilterEnvironmentCubeMapComputePipeline,
+        brdf_lut::BrdfLutPipeline, irradiance_cube_map::IrradianceCubeMapPipeline,
+        panorama_to_cube::PanoramaToCubePipeline,
+        pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapComputePipeline,
     },
     shader_library::ShaderLibrary,
     texture_loader::TextureLoader,
@@ -98,7 +98,7 @@ impl AccelerationBaker {
         assert_eq!(cube_map_textures.is_empty(), false);
 
         let pre_filter_cube_map_lod_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(&format!("Bake pre_filter_cube_map_lod_texture")),
+            label: Some(&format!("ibl_pre_filter_cube_map_lod_texture")),
             size: wgpu::Extent3d {
                 width: cube_map_textures.get(0).unwrap().size().width,
                 height: cube_map_textures.get(0).unwrap().size().height,
@@ -211,14 +211,13 @@ impl AccelerationBaker {
         }
         // let mut cube_maps: Vec<CubeMap<image::Rgba<f32>, Vec<f32>>> = vec![];
         let mut cube_map_textures: Vec<wgpu::Texture> = vec![];
-
+        let pre_filter_environment_cube_map_compute_pipeline =
+            PreFilterEnvironmentCubeMapComputePipeline::new(device, shader_library);
         for mipmap_level in 0..max_mipmap_level {
             let length = self.bake_info.pre_filter_cube_map_length / (1 << mipmap_level);
             let sample_count = self.bake_info.pre_filter_sample_count;
             let roughness = roughness_delta * mipmap_level as f32;
 
-            let pre_filter_environment_cube_map_compute_pipeline =
-                PreFilterEnvironmentCubeMapComputePipeline::new(device, shader_library);
             let cube_map_texture = pre_filter_environment_cube_map_compute_pipeline.execute(
                 device,
                 queue,
@@ -244,8 +243,12 @@ impl AccelerationBaker {
         self.irradiance_cube_map_texture.clone()
     }
 
-    pub fn get_pre_filter_cube_map_textures(&self) -> Arc<Option<wgpu::Texture>> {
+    pub fn get_pre_filter_cube_map_lod_texture(&self) -> Arc<Option<wgpu::Texture>> {
         self.pre_filter_cube_map_lod_texture.clone()
+    }
+
+    pub fn get_pre_filter_cube_map_textures(&self) -> Arc<Option<Vec<wgpu::Texture>>> {
+        self.pre_filter_cube_map_textures.clone()
     }
 
     pub fn get_brdflut_texture_view(&self) -> wgpu::TextureView {
@@ -303,5 +306,9 @@ impl AccelerationBaker {
                 panic!()
             }
         }
+    }
+
+    pub fn get_bake_info(&self) -> BakeInfo {
+        self.bake_info
     }
 }

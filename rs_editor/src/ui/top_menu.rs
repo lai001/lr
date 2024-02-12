@@ -10,6 +10,11 @@ pub enum EWindowType {
 }
 
 #[derive(Debug)]
+pub enum EToolType {
+    IBL,
+}
+
+#[derive(Debug)]
 pub enum EClickEventType {
     NewProject(String),
     OpenProject,
@@ -19,6 +24,7 @@ pub enum EClickEventType {
     OpenVisualStudioCode,
     Build(BuildConfig),
     OpenWindow(EWindowType),
+    Tool(EToolType),
 }
 
 pub struct TopMenu {
@@ -102,6 +108,12 @@ impl TopMenu {
                     }
                     if ui.add(Button::new("Level")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Level));
+                        ui.close_menu();
+                    }
+                });
+                ui.menu_button("Tool", |ui| {
+                    if ui.add(Button::new("IBL")).clicked() {
+                        click = Some(EClickEventType::Tool(EToolType::IBL));
                         ui.close_menu();
                     }
                 });

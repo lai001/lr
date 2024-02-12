@@ -3,6 +3,12 @@ name = "rs_render"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["standalone"]
+renderdoc = ["dep:renderdoc"]
+editor = ["rs_shader_compiler/editor"]
+standalone = ["rs_shader_compiler/standalone"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 wgpu = "0.19.1"
@@ -27,3 +33,6 @@ rs_core_minimal = { version = "0.1.0", path = "../rs_core_minimal" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+renderdoc = { version = "0.11.0", optional = true }

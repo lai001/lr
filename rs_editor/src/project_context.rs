@@ -343,6 +343,7 @@ impl ProjectContext {
         }
 
         // FIXME: Out of memory
+        #[cfg(feature = "editor")]
         for (name, code) in Self::pre_process_shaders() {
             let shader_source_code = ShaderSourceCode {
                 name: name.clone(),
@@ -416,6 +417,7 @@ impl ProjectContext {
         }
     }
 
+    #[cfg(feature = "editor")]
     pub fn pre_process_shaders() -> HashMap<String, String> {
         let mut shaders = HashMap::new();
         let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();

@@ -3,33 +3,48 @@ local rs_project_name = rs_project_name
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
 task("code_workspace") do
-    on_run(function(in_plat, in_target, in_mode)
+    on_run(function(in_plat, in_target, in_mode, in_launch)
         import("core.project.config")
         import("core.base.option")
         import("core.base.json")
         config.load()
+
         local is_enable_dotnet = get_config("enable_dotnet")
+        is_enable_dotnet = (is_enable_dotnet and {is_enable_dotnet} or {false})[1]
+
         local is_enable_quickjs = get_config("enable_quickjs")
-        local features = {}
-        local extraArgs = {}
-        local linkedProjects = { 
-            path.absolute("./rs_render/Cargo.toml") ,
-            path.absolute("./rs_foundation/Cargo.toml") ,
-            path.absolute("./rs_engine/Cargo.toml") ,
-            path.absolute("./rs_artifact/Cargo.toml") ,
-            path.absolute("./rs_shader_compiler/Cargo.toml") ,
-            path.absolute("./rs_core_minimal/Cargo.toml") ,
-        }
+        is_enable_quickjs = (is_enable_quickjs and {is_enable_quickjs} or {false})[1]
+
         local plat = (in_plat and {in_plat} or {option.get("plat")})[1]
         plat = (plat and {plat} or {"windows"})[1]
-        
+
+        local target = (in_target and {in_target} or {option.get("target")})[1]
+        target = (target and {target} or {})[1]
+   
+        local mode = (in_mode and {in_mode} or {option.get("mode")})[1]
+        mode = (mode and {mode} or {"debug"})[1]
+
+        local launch_type = (in_launch and {in_launch} or {option.get("launch")})[1]
+        launch_type = (launch_type and {launch_type} or {"editor"})[1]
+
+        local is_enable_renderdoc = option.get("renderdoc")
+        is_enable_renderdoc = (is_enable_renderdoc and {is_enable_renderdoc} or {false})[1]
+
+        local features = {}
+        local extraArgs = {}
+        if mode == "release" then
+            table.join2(extraArgs, "--release")
+        end
+        local linkedProjects = {}
+
         if plat == "android" then
             table.join2(linkedProjects, path.absolute("./rs_android/Cargo.toml"))
         elseif plat == "windows" then
-            table.join2(linkedProjects, path.absolute("./rs_computer_graphics/Cargo.toml"))
-            table.join2(linkedProjects, path.absolute("./rs_editor/Cargo.toml"))
-            table.join2(linkedProjects, path.absolute("./rs_hotreload_plugin/Cargo.toml"))
-            table.join2(linkedProjects, path.absolute("./rs_desktop_standalone/Cargo.toml"))
+            if launch_type == "editor" then
+                table.join2(linkedProjects, path.absolute("./rs_editor/Cargo.toml"))
+            elseif launch_type == "standalone" then
+                table.join2(linkedProjects, path.absolute("./rs_desktop_standalone/Cargo.toml"))
+            end
         end
         local associations = {}
         local extraEnv = {
@@ -37,6 +52,14 @@ task("code_workspace") do
             ["RUSSIMP_PACKAGE_DIR"] = russimp_prebuild_dir
         }
 
+        if launch_type == "editor" then
+            table.join2(features, launch_type)
+        elseif launch_type == "standalone" then
+            table.join2(features, launch_type)
+        end
+        if is_enable_renderdoc then
+            table.join2(features, "renderdoc")
+        end
         if is_enable_quickjs then
             table.join2(features, "rs_quickjs")
             table.join2(linkedProjects, path.absolute("./rs_quickjs/Cargo.toml"))
@@ -46,15 +69,13 @@ task("code_workspace") do
             table.join2(features, "rs_dotnet")
             table.join2(linkedProjects, path.absolute("./rs_dotnet/Cargo.toml"))
         end
-        local target = (in_target and {in_target} or {option.get("target")})[1]
-        target = (target and {target} or {})[1]
-   
-        local mode = (in_mode and {in_mode} or {option.get("mode")})[1]
-        mode = (mode and {mode} or {"debug"})[1]
-        if mode == "release" then
-            table.join2(extraArgs, "--release")
-        end
 
+        if #features == 0 then
+            features = nil
+        end
+        if #extraArgs == 0 then
+            extraArgs = nil
+        end
         local code_workspace = {
             ["folders"] = { {
                 ["path"] = path.absolute("./")
@@ -68,10 +89,10 @@ task("code_workspace") do
                 ["rust-analyzer.cargo.extraEnv"] = extraEnv,
                 ["rust-analyzer.server.extraEnv"] = extraEnv,
                 ["rust-analyzer.check.extraEnv"] = extraEnv,
-                ["rust-analyzer.runnableEnv"] = extraEnv
+                -- ["rust-analyzer.runnableEnv"] = extraEnv
             }
         }
-        local file_name = format("%s_%s.code-workspace", rs_project_name, plat)
+        local file_name = format("%s_%s_%s.code-workspace", launch_type, plat, target)
         local save_path = path.join(path.absolute("./"), file_name)
         print(save_path)
         json.savefile(save_path, code_workspace)
@@ -92,7 +113,11 @@ task("code_workspace") do
                 " - android" },
             { "m", "mode", "kv", "debug", "Set build configuration.",
                 " - debug",
-                " - release" }                
+                " - release" },
+            { "l", "launch", "kv", "editor", "Set launch type.",
+                " - editor",
+                " - standalone" },
+            { nil, "renderdoc", "k", nil, "Enable renderdoc feature." }
         }
     }
 end

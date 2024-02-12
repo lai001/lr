@@ -39,8 +39,11 @@ use winit::{
 const FBX_EXTENSION: &str = "fbx";
 const PNG_EXTENSION: &str = "png";
 const JPG_EXTENSION: &str = "jpg";
+const EXR_EXTENSION: &str = "exr";
+const HDR_EXTENSION: &str = "hdr";
 const MODEL_EXTENSION: [&str; 1] = [FBX_EXTENSION];
 const IMAGE_EXTENSION: [&str; 2] = [PNG_EXTENSION, JPG_EXTENSION];
+const IBL_IMAGE_EXTENSION: [&str; 2] = [EXR_EXTENSION, HDR_EXTENSION];
 const SUPPORT_ASSET_FILE_EXTENSIONS: [&str; 3] = [FBX_EXTENSION, PNG_EXTENSION, JPG_EXTENSION];
 
 pub struct EditorContext {
@@ -170,7 +173,7 @@ impl EditorContext {
                 let _ = Some(self.egui_winit_state.on_window_event(window, event));
                 match event {
                     WindowEvent::CloseRequested => {
-                        self.quit_app();
+                        event_loop_window_target.exit();
                     }
                     WindowEvent::Resized(size) => {
                         log::trace!("Window resized: {:?}", size);
@@ -181,7 +184,13 @@ impl EditorContext {
                         event,
                         is_synthetic,
                     } => {
-                        self.process_keyboard_input(window, device_id, event, *is_synthetic);
+                        self.process_keyboard_input(
+                            window,
+                            device_id,
+                            event,
+                            *is_synthetic,
+                            event_loop_window_target,
+                        );
                     }
                     WindowEvent::DroppedFile(file_path) => {
                         self.process_import_asset(file_path.to_owned());
@@ -238,15 +247,9 @@ impl EditorContext {
                 }
             }
             Event::NewEvents(_) => {}
-            Event::LoopExiting => {
-                self.quit_app();
-            }
+            Event::LoopExiting => {}
             _ => {}
         }
-    }
-
-    fn quit_app(&mut self) {
-        std::process::exit(0);
     }
 
     fn try_load_plugin(&mut self) {
@@ -303,6 +306,7 @@ impl EditorContext {
         device_id: &winit::event::DeviceId,
         event: &winit::event::KeyEvent,
         is_synthetic: bool,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
             return;
@@ -330,7 +334,7 @@ impl EditorContext {
             &[KeyCode::AltLeft, KeyCode::F4],
             true,
         ) {
-            self.quit_app();
+            event_loop_window_target.exit();
         }
     }
 
@@ -455,6 +459,16 @@ impl EditorContext {
                     let dialog = rfd::FileDialog::new().add_filter("Asset", &filter);
                     if let Some(file_path) = dialog.pick_file() {
                         self.process_import_asset(file_path);
+                    }
+                }
+                EFileDialogType::IBL => {
+                    let filter = IBL_IMAGE_EXTENSION;
+                    let dialog = rfd::FileDialog::new().add_filter("Image", &filter);
+                    if let Some(file_path) = dialog.pick_file() {
+                        let url =
+                            url::Url::parse(&format!("ibl://{}", uuid::Uuid::new_v4().to_string()))
+                                .unwrap();
+                        self.engine.ibl_bake(&file_path, url, BakeInfo::default());
                     }
                 }
             },
@@ -636,6 +650,11 @@ impl EditorContext {
                         self.data_source.is_level_view_open = true;
                     }
                 },
+                top_menu::EClickEventType::Tool(_) => {
+                    let _ = self
+                        .event_loop_proxy
+                        .send_event(ECustomEventType::OpenFileDialog(EFileDialogType::IBL));
+                }
             }
         }
         if let Some(click_aseet) = click_event.click_aseet {

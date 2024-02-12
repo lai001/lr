@@ -19,3 +19,9 @@ impl GlobalShader for BrdfLutShader {
         "brdf_lut.wgsl".to_string()
     }
 }
+
+impl BrdfLutShader {
+    pub fn get_format() -> wgpu::TextureFormat {
+        wgpu::TextureFormat::Rg16Float
+    }
+}
