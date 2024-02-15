@@ -1,0 +1,92 @@
+{
+    "name": "shader-compiler",
+    "displayName": "shader_compiler",
+    "description": "",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.86.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onLanguage:wgsl"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "extension.shader_compiler.preview",
+                "title": "Shader Preview"
+            }
+        ],
+        "languages": [
+            {
+                "id": "wgsl",
+                "extensions": [
+                    ".wgsl"
+                ]
+            }
+        ],
+        "menus": {
+            "editor/context": [
+                {
+                    "when": "resourceLangId == wgsl",
+                    "command": "extension.shader_compiler.preview",
+                    "group": "shader_compiler"
+                }
+            ]
+        },
+        "configuration": [
+            {
+                "id": "shader_compiler_configuration",
+                "title": "Shader Compiler Configuration",
+                "order": 2,
+                "properties": {
+                    "shaderCompiler.clangPath": {
+                        "scope": "resource",
+                        "type": "string",
+                        "description": "clang path",
+                        "editPresentation": "singlelineText"
+                    },
+                    "shaderCompiler.shaderCompileCommands": {
+                        "scope": "resource",
+                        "type": "string",
+                        "description": "Shader Compile Commands",
+                        "editPresentation": "singlelineText"
+                    },
+                    "shaderCompiler.shaderCompilerPath": {
+                        "scope": "resource",
+                        "type": "string",
+                        "description": "Shader Compiler Path",
+                        "editPresentation": "singlelineText"
+                    }
+                }
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "test": "vscode-test"
+    },
+    "devDependencies": {
+        "@types/mocha": "^10.0.6",
+        "@types/node": "18.x",
+        "@types/vscode": "^1.86.0",
+        "@typescript-eslint/eslint-plugin": "^6.19.1",
+        "@typescript-eslint/parser": "^6.19.1",
+        "@vscode/test-cli": "^0.0.4",
+        "@vscode/test-electron": "^2.3.9",
+        "eslint": "^8.56.0",
+        "typescript": "^5.3.3"
+    },
+    "dependencies": {
+        "vscode-languageclient": "^9.0.1",
+        "vscode-languageserver": "^9.0.1",
+        "vscode-languageserver-textdocument": "^1.0.11"
+    }
+}

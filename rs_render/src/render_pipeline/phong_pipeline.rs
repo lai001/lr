@@ -1,8 +1,9 @@
 use crate::{
     base_render_pipeline::BaseRenderPipeline, global_shaders::phong::PhongShader, gpu_buffer,
-    gpu_vertex_buffer::GpuVertexBufferImp, shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::MeshVertex, VertexBufferType,
+    gpu_vertex_buffer::GpuVertexBufferImp, sampler_cache::SamplerCache,
+    shader_library::ShaderLibrary, vertex_data_type::mesh_vertex::MeshVertex, VertexBufferType,
 };
+use std::sync::Arc;
 use type_layout::TypeLayout;
 use wgpu::*;
 
@@ -16,7 +17,7 @@ pub struct Constants {
 
 pub struct PhongPipeline {
     base_render_pipeline: BaseRenderPipeline,
-    sampler: Sampler,
+    sampler: Arc<Sampler>,
 }
 
 impl PhongPipeline {
@@ -25,12 +26,13 @@ impl PhongPipeline {
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
         is_noninterleaved: bool,
+        sampler_cache: &mut SamplerCache,
     ) -> PhongPipeline {
         let base_render_pipeline = BaseRenderPipeline::new(
             device,
             shader_library,
             &PhongShader {},
-            texture_format,
+            &[Some(texture_format.clone().into())],
             Some(DepthStencilState {
                 depth_compare: CompareFunction::Less,
                 format: TextureFormat::Depth32Float,
@@ -53,7 +55,8 @@ impl PhongPipeline {
             },
             None,
         );
-        let sampler = device.create_sampler(&SamplerDescriptor::default());
+
+        let sampler = sampler_cache.create_sampler(device, &SamplerDescriptor::default());
 
         PhongPipeline {
             base_render_pipeline,

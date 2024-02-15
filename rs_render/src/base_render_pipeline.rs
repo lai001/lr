@@ -20,7 +20,7 @@ impl BaseRenderPipeline {
         device: &Device,
         shader_library: &ShaderLibrary,
         global_shader: &impl GlobalShader,
-        texture_format: &TextureFormat,
+        targets: &[Option<ColorTargetState>],
         depth_stencil: Option<DepthStencilState>,
         multisample: Option<MultisampleState>,
         multiview: Option<NonZeroU32>,
@@ -128,7 +128,7 @@ impl BaseRenderPipeline {
             fragment: Some(FragmentState {
                 module: &shader,
                 entry_point: &fs.name,
-                targets: &[Some(ColorTargetState::from(texture_format.clone()))],
+                targets,
             }),
             primitive: primitive.unwrap_or_default(),
             depth_stencil,

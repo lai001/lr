@@ -650,11 +650,47 @@ impl EditorContext {
                         self.data_source.is_level_view_open = true;
                     }
                 },
-                top_menu::EClickEventType::Tool(_) => {
-                    let _ = self
-                        .event_loop_proxy
-                        .send_event(ECustomEventType::OpenFileDialog(EFileDialogType::IBL));
-                }
+                top_menu::EClickEventType::Tool(tool_type) => match tool_type {
+                    top_menu::EToolType::IBL => {
+                        let _ = self
+                            .event_loop_proxy
+                            .send_event(ECustomEventType::OpenFileDialog(EFileDialogType::IBL));
+                    }
+                    top_menu::EToolType::DebugShader => {
+                        let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
+                        let output_path = rs_core_minimal::file_manager::get_engine_root_dir()
+                            .join("rs_editor/target/shaders");
+                        if !output_path.exists() {
+                            std::fs::create_dir(output_path.clone()).unwrap();
+                        }
+
+                        let mut compile_commands = vec![];
+                        for buildin_shader in buildin_shaders {
+                            let description = buildin_shader.get_shader_description();
+                            let name = buildin_shader.get_name();
+                            let processed_code = rs_shader_compiler::pre_process::pre_process(
+                                &description.shader_path,
+                                description.include_dirs.iter(),
+                                description.definitions.iter(),
+                            )
+                            .unwrap();
+                            let filepath = output_path.join(name);
+                            let _ = std::fs::write(filepath, processed_code);
+
+                            let compile_command = buildin_shader.as_ref().to_compile_command();
+                            compile_commands.push(compile_command);
+                        }
+                        let output_path =
+                            rs_core_minimal::file_manager::get_engine_root_dir().join(".vscode");
+                        if !output_path.exists() {
+                            std::fs::create_dir(output_path.clone()).unwrap();
+                        }
+                        let _ = std::fs::write(
+                            output_path.join("shader_compile_commands.json"),
+                            serde_json::to_string(&compile_commands).unwrap(),
+                        );
+                    }
+                },
             }
         }
         if let Some(click_aseet) = click_event.click_aseet {

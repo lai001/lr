@@ -20,6 +20,7 @@ pub mod render_pipeline;
 #[cfg(feature = "renderdoc")]
 pub mod renderdoc;
 pub mod renderer;
+pub mod sampler_cache;
 pub mod shader_library;
 pub mod texture_loader;
 pub mod texture_readback;

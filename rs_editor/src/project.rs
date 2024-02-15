@@ -140,7 +140,7 @@ default = ["standalone"]
 renderdoc = ["rs_render/renderdoc", "rs_engine/renderdoc"]
 
 [dependencies]
-egui = { version = "0.26.0" }
+egui = { version = "0.26.1" }
 log = "0.4.17"
 glam = { version = "0.22.0" }
 uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }

@@ -254,8 +254,12 @@ impl ProjectContext {
         url::Url::parse(&format!("asset://shader/{}", name)).unwrap()
     }
 
+    pub fn get_build_dir(&self) -> PathBuf {
+        self.project_folder_path.join("build")
+    }
+
     pub fn export(&mut self) -> Result<PathBuf> {
-        let output_folder_path = self.project_folder_path.join("artifact");
+        let output_folder_path = self.get_build_dir();
         let _ = std::fs::create_dir(output_folder_path.clone());
         // let output_filename = self.project.project_name.clone() + ".rs";
         let output_filename = "main.rs";

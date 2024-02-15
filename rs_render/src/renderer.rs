@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::phong_pipeline::PhongPipeline;
+use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
 use std::collections::{HashMap, VecDeque};
@@ -65,12 +66,14 @@ impl Renderer {
         };
         let mut shader_library = ShaderLibrary::new();
         shader_library.load_shader_from(shaders, wgpu_context.get_device());
+        let mut sampler_cache = SamplerCache::new();
 
         let phong_pipeline = PhongPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
             &wgpu_context.get_current_swapchain_format(),
             false,
+            &mut sampler_cache,
         );
         let depth_texture =
             DepthTexture::new(surface_width, surface_height, wgpu_context.get_device());

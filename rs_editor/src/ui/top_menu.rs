@@ -12,6 +12,7 @@ pub enum EWindowType {
 #[derive(Debug)]
 pub enum EToolType {
     IBL,
+    DebugShader,
 }
 
 #[derive(Debug)]
@@ -114,6 +115,10 @@ impl TopMenu {
                 ui.menu_button("Tool", |ui| {
                     if ui.add(Button::new("IBL")).clicked() {
                         click = Some(EClickEventType::Tool(EToolType::IBL));
+                        ui.close_menu();
+                    }
+                    if ui.add(Button::new("Debug Shader")).clicked() {
+                        click = Some(EClickEventType::Tool(EToolType::DebugShader));
                         ui.close_menu();
                     }
                 });

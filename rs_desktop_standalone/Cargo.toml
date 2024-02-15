@@ -7,12 +7,13 @@ edition = "2021"
 [features]
 default = ["standalone"]
 renderdoc = ["rs_render/renderdoc", "rs_engine/renderdoc"]
+standalone = ["rs_render/standalone", "rs_engine/standalone"]
 
 [dependencies]
 log = "0.4.17"
 winit = { version = "0.29.4" }
-egui = { version = "0.26.0" }
-egui-winit = { version = "0.26.0" }
+egui = { version = "0.26.1" }
+egui-winit = { version = "0.26.1" }
 rs_render = { version = "0.1.0", path = "../rs_render" }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
 rs_artifact = { version = "0.1.0", path = "../rs_artifact" }
