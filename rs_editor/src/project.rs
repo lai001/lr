@@ -10,6 +10,9 @@ use std::{
 
 pub const PROJECT_FILE_EXTENSION: &str = "rsproject";
 pub const ASSET_FOLDER_NAME: &str = "asset";
+pub const BUILD_FOLDER_NAME: &str = "build";
+pub const SHADER_FOLDER_NAME: &str = "shader";
+pub const SRC_FOLDER_NAME: &str = "src";
 pub const VERSION_STR: &str = "0.0.1";
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -86,9 +89,10 @@ impl Project {
     ) -> std::io::Result<()> {
         let project_folder = project_parent_folder.join(project_name);
         std::fs::create_dir(project_folder.clone())?;
-        std::fs::create_dir(project_folder.join("src"))?;
-        std::fs::create_dir(project_folder.join("asset"))?;
-        std::fs::create_dir(project_folder.join("shader"))?;
+        std::fs::create_dir(project_folder.join(SRC_FOLDER_NAME))?;
+        std::fs::create_dir(project_folder.join(ASSET_FOLDER_NAME))?;
+        std::fs::create_dir(project_folder.join(SHADER_FOLDER_NAME))?;
+        std::fs::create_dir(project_folder.join(BUILD_FOLDER_NAME))?;
         Ok(())
     }
 
@@ -116,7 +120,7 @@ impl Project {
 
     fn create_lib_file(project_parent_folder: &Path, project_name: &str) -> bool {
         let project_folder = project_parent_folder.join(project_name);
-        let lib_file_path = project_folder.join("src").join("lib.rs");
+        let lib_file_path = project_folder.join(SRC_FOLDER_NAME).join("lib.rs");
         let content = fill_lib_template(project_name);
         let Ok(mut file) = std::fs::File::create(lib_file_path) else {
             return false;

@@ -1,9 +1,9 @@
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
-    error::Result,
     model_loader::{MeshCluster, ModelLoader},
     project::{Project, ASSET_FOLDER_NAME},
 };
+use anyhow::Context;
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use rs_artifact::{
@@ -34,30 +34,18 @@ pub struct ProjectContext {
 }
 
 impl ProjectContext {
-    pub fn open(project_file_path: &Path) -> Result<ProjectContext> {
-        let project_folder_path = match project_file_path.parent() {
-            Some(project_folder_path) => project_folder_path,
-            None => {
-                return Err(crate::error::Error::OpenProjectFailed(Some(
+    pub fn open(project_file_path: &Path) -> anyhow::Result<ProjectContext> {
+        let project_folder_path =
+            project_file_path
+                .parent()
+                .ok_or(crate::error::Error::OpenProjectFailed(Some(
                     "Can not find parent folder.".to_string(),
-                )));
-            }
-        };
-        let file = match std::fs::File::open(project_file_path) {
-            Ok(file) => file,
-            Err(err) => {
-                return Err(crate::error::Error::IO(err, None));
-            }
-        };
+                )))?;
+        let file = std::fs::File::open(project_file_path)
+            .context(format!("Can not open file: {:?}", project_file_path))?;
         let reader = std::io::BufReader::new(file);
-        let project: Project = match serde_json::de::from_reader(reader) {
-            Ok(project) => project,
-            Err(err) => {
-                return Err(crate::error::Error::OpenProjectFailed(Some(
-                    err.to_string(),
-                )));
-            }
-        };
+        let project: Project = serde_json::de::from_reader(reader)
+            .context("Failed to deserialize JSON data to a project data structure.")?;
         #[cfg(debug_assertions)]
         let lib_folder = project_folder_path.join("target").join("debug");
         #[cfg(not(debug_assertions))]
@@ -170,13 +158,11 @@ impl ProjectContext {
         self.project_folder_path.clone()
     }
 
-    pub fn get_default_build_folder_path(&self) -> PathBuf {
-        let output_folder_path = self.project_folder_path.join("build");
-        output_folder_path
-    }
-
-    pub fn create_build_folder_if_not_exist(&self, build_config: &BuildConfig) -> PathBuf {
-        let path = self.get_default_build_folder_path();
+    pub fn create_build_folder_if_not_exist(
+        &self,
+        build_config: &BuildConfig,
+    ) -> anyhow::Result<PathBuf> {
+        let path = self.try_create_build_dir()?;
         let platform: String;
         let build_type: String;
         let arch: String;
@@ -199,8 +185,8 @@ impl ProjectContext {
             }
         }
         let path = path.join(platform).join(build_type).join(arch);
-        let _ = std::fs::create_dir_all(path.clone());
-        path
+        std::fs::create_dir_all(path.clone())?;
+        Ok(path)
     }
 
     fn node_to_artifact_node(node: &crate::level::Node) -> rs_artifact::level::ENodeType {
@@ -258,8 +244,24 @@ impl ProjectContext {
         self.project_folder_path.join("build")
     }
 
-    pub fn export(&mut self) -> Result<PathBuf> {
-        let output_folder_path = self.get_build_dir();
+    pub fn try_create_build_dir(&self) -> anyhow::Result<PathBuf> {
+        let path = self.get_build_dir();
+        let _ = std::fs::create_dir_all(path.clone())?;
+        Ok(path)
+    }
+
+    pub fn get_virtual_texture_cache_dir(&self) -> PathBuf {
+        self.project_folder_path.join("build/cache/virtual_texture")
+    }
+
+    pub fn try_create_virtual_texture_cache_dir(&self) -> anyhow::Result<PathBuf> {
+        let path = self.get_virtual_texture_cache_dir();
+        let _ = std::fs::create_dir_all(path.clone())?;
+        Ok(path)
+    }
+
+    pub fn export(&mut self) -> anyhow::Result<PathBuf> {
+        let output_folder_path = self.try_create_build_dir()?;
         let _ = std::fs::create_dir(output_folder_path.clone());
         // let output_filename = self.project.project_name.clone() + ".rs";
         let output_filename = "main.rs";
@@ -310,40 +312,22 @@ impl ProjectContext {
             let file_stem = image_file_path.file_stem().unwrap();
             let name = file_stem.to_str().unwrap().to_string();
             let url = rs_engine::build_asset_url(image_file_path.to_str().unwrap()).unwrap();
-            match std::fs::read(absolute_image_file_path.clone()) {
-                Ok(buffer) => {
-                    if let Ok(format) = image::guess_format(&buffer) {
-                        let image_data = image::load_from_memory(&buffer);
-                        match image_data {
-                            Ok(_) => {
-                                let image = rs_artifact::image::Image {
-                                    name,
-                                    url,
-                                    image_format:
-                                        rs_artifact::image::ImageFormat::from_external_format(
-                                            format,
-                                        ),
-                                    data: buffer,
-                                };
-                                images.push(image);
-                            }
-                            Err(err) => {
-                                return Err(crate::error::Error::ExportFailed(Some(
-                                    err.to_string(),
-                                )));
-                            }
-                        }
-                    } else {
-                        return Err(crate::error::Error::ExportFailed(None));
-                    }
-                }
-                Err(err) => {
-                    return Err(crate::error::Error::IO(
-                        err,
-                        Some(absolute_image_file_path.to_str().unwrap().to_string()),
-                    ));
-                }
-            }
+            let buffer = std::fs::read(absolute_image_file_path.clone()).context(format!(
+                "Failed to read from {:?}",
+                absolute_image_file_path
+            ))?;
+            let _ = image::load_from_memory(&buffer).context(format!(
+                "{:?} is not a valid image file.",
+                absolute_image_file_path
+            ))?;
+            let format = image::guess_format(&buffer)?;
+            let image = rs_artifact::image::Image {
+                name,
+                url,
+                image_format: rs_artifact::image::ImageFormat::from_external_format(format),
+                data: buffer,
+            };
+            images.push(image);
         }
 
         // FIXME: Out of memory
@@ -368,7 +352,7 @@ impl ProjectContext {
         if result {
             Ok(output_folder_path.join(output_filename))
         } else {
-            Err(crate::error::Error::ExportFailed(None))
+            Err(crate::error::Error::ExportFailed(None).into())
         }
     }
 

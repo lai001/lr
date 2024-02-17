@@ -65,6 +65,53 @@ impl ImageFormat {
     }
 }
 
+#[derive(Copy, PartialEq, Eq, Debug, Clone, Hash, Serialize, Deserialize)]
+pub enum ColorType {
+    L8,
+    La8,
+    Rgb8,
+    Rgba8,
+    L16,
+    La16,
+    Rgb16,
+    Rgba16,
+    Rgb32F,
+    Rgba32F,
+}
+
+impl ColorType {
+    pub fn from_external_format(color_type: image::ColorType) -> ColorType {
+        match color_type {
+            image::ColorType::L8 => ColorType::L8,
+            image::ColorType::La8 => ColorType::La8,
+            image::ColorType::Rgb8 => ColorType::Rgb8,
+            image::ColorType::Rgba8 => ColorType::Rgba8,
+            image::ColorType::L16 => ColorType::L16,
+            image::ColorType::La16 => ColorType::La16,
+            image::ColorType::Rgb16 => ColorType::Rgb16,
+            image::ColorType::Rgba16 => ColorType::Rgba16,
+            image::ColorType::Rgb32F => ColorType::Rgb32F,
+            image::ColorType::Rgba32F => ColorType::Rgba32F,
+            _ => todo!(),
+        }
+    }
+
+    pub fn to_external_format(&self) -> image::ColorType {
+        match self {
+            ColorType::L8 => image::ColorType::L8,
+            ColorType::La8 => image::ColorType::La8,
+            ColorType::Rgb8 => image::ColorType::Rgb8,
+            ColorType::Rgba8 => image::ColorType::Rgba8,
+            ColorType::L16 => image::ColorType::L16,
+            ColorType::La16 => image::ColorType::La16,
+            ColorType::Rgb16 => image::ColorType::Rgb16,
+            ColorType::Rgba16 => image::ColorType::Rgba16,
+            ColorType::Rgb32F => image::ColorType::Rgb32F,
+            ColorType::Rgba32F => image::ColorType::Rgba32F,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Image {
     pub name: String,

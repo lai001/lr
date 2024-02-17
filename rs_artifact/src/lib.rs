@@ -12,6 +12,7 @@ pub mod resource_type;
 pub mod shader_source_code;
 pub mod static_mesh;
 pub mod type_expected;
+pub mod virtual_texture;
 
 #[cfg(target_os = "android")]
 pub mod java_input_stream;

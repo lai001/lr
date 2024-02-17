@@ -5,6 +5,8 @@ pub enum EFileType {
     Fbx,
     Jpeg,
     Png,
+    Exr,
+    Hdr,
 }
 
 impl EFileType {
@@ -26,6 +28,8 @@ impl EFileType {
             "jpeg" => Some(EFileType::Jpeg),
             "jpg" => Some(EFileType::Jpeg),
             "png" => Some(EFileType::Png),
+            "exr" => Some(EFileType::Exr),
+            "hdr" => Some(EFileType::Hdr),
             _ => None,
         }
     }

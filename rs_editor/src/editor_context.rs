@@ -44,7 +44,13 @@ const HDR_EXTENSION: &str = "hdr";
 const MODEL_EXTENSION: [&str; 1] = [FBX_EXTENSION];
 const IMAGE_EXTENSION: [&str; 2] = [PNG_EXTENSION, JPG_EXTENSION];
 const IBL_IMAGE_EXTENSION: [&str; 2] = [EXR_EXTENSION, HDR_EXTENSION];
-const SUPPORT_ASSET_FILE_EXTENSIONS: [&str; 3] = [FBX_EXTENSION, PNG_EXTENSION, JPG_EXTENSION];
+const SUPPORT_ASSET_FILE_EXTENSIONS: [&str; 5] = [
+    FBX_EXTENSION,
+    PNG_EXTENSION,
+    JPG_EXTENSION,
+    EXR_EXTENSION,
+    HDR_EXTENSION,
+];
 
 pub struct EditorContext {
     event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
@@ -63,8 +69,9 @@ pub struct EditorContext {
 
 impl EditorContext {
     fn load_font() -> egui::FontDefinitions {
-        let font_path =
-            std::path::Path::new("./Font/SimplifiedChineseHW/SourceHanSansHWSC-Regular.otf");
+        let font_path = rs_core_minimal::file_manager::get_engine_resource(
+            "Remote/Font/SourceHanSansHWSC/OTF/SimplifiedChineseHW/SourceHanSansHWSC-Regular.otf",
+        );
         let font_data = match std::fs::read(font_path) {
             Ok(font_data) => font_data,
             Err(_) => {
@@ -286,7 +293,9 @@ impl EditorContext {
                     folder.folders.push(sub_folder);
                 } else {
                     if let Some(extension) = entry.path().extension() {
-                        if SUPPORT_ASSET_FILE_EXTENSIONS.contains(&extension.to_str().unwrap()) {
+                        let extension = extension.to_ascii_lowercase();
+                        let extension = extension.to_str().unwrap();
+                        if SUPPORT_ASSET_FILE_EXTENSIONS.contains(&extension) {
                             let asset_file = AssetFile {
                                 name: entry.file_name().to_str().unwrap().to_string(),
                                 path: entry.path().to_path_buf(),
@@ -614,7 +623,9 @@ impl EditorContext {
                         if let Ok(artifact_file_path) = project_context.export() {
                             let folder_path =
                                 project_context.create_build_folder_if_not_exist(&build_config);
-                            if let Ok(current_dir) = std::env::current_dir() {
+                            if let (Ok(folder_path), Ok(current_dir)) =
+                                (folder_path, std::env::current_dir())
+                            {
                                 let target =
                                     current_dir.join("../../../rs_desktop_standalone/target");
                                 let exe: PathBuf;
@@ -704,8 +715,7 @@ impl EditorContext {
                         EFileType::Fbx => {
                             self.process_import_model(asset_file.path.clone());
                         }
-                        EFileType::Jpeg => {}
-                        EFileType::Png => {}
+                        EFileType::Jpeg | EFileType::Png | EFileType::Exr | EFileType::Hdr => {}
                     }
                 }
                 asset_view::EClickItemType::Back => todo!(),
@@ -737,11 +747,8 @@ impl EditorContext {
                                 .join(&asset_file.name)
                                 .unwrap()
                                 .clone();
-                            let texture_file = TextureFile {
-                                name: asset_file.name,
-                                url,
-                                image_reference: Some(image_reference),
-                            };
+                            let mut texture_file = TextureFile::new(asset_file.name, url);
+                            texture_file.image_reference = Some(image_reference);
                             log::trace!("Create texture: {:?}", &texture_file.url);
                             project_context
                                 .project

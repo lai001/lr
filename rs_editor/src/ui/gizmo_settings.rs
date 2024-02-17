@@ -22,6 +22,7 @@ pub fn draw(
 
     egui::Window::new("Gizmo Settings")
         .resizable(false)
+        .default_open(false)
         .show(context, |ui| {
             egui::ComboBox::from_label("Mode")
                 .selected_text(format!("{gizmo_mode:?}"))

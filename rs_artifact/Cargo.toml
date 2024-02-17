@@ -18,6 +18,7 @@ image = "0.24.5"
 url = { version = "2.5.0", features = ["serde"]}
 uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
+rs_core_minimal = { version = "0.1.0", path = "../rs_core_minimal" }
 
 [dev-dependencies]
 serde_json = "1.0"

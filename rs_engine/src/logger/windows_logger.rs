@@ -80,7 +80,16 @@ impl Logger {
                         }
                         Err(_) => {}
                     }
-                    writeln!(buf, "{}", content)
+                    writeln!(
+                        buf,
+                        "{} [{}] [{}] {}:{} {}",
+                        buf.timestamp_millis(),
+                        level_style.value(level),
+                        thread_name,
+                        record.file().unwrap_or("Unknown"),
+                        record.line().unwrap_or(0),
+                        record.args()
+                    )
                 }
             })
             .init();

@@ -83,6 +83,13 @@ pub fn cast_to_type_buffer<'a, U>(buffer: &'a [u8]) -> &'a [U] {
     }
 }
 
+pub fn cast_to_type_vec<U>(mut buffer: Vec<u8>) -> Vec<U> {
+    unsafe {
+        let len = buffer.len() / std::mem::size_of::<U>();
+        std::vec::Vec::from_raw_parts(buffer.as_mut_ptr() as *mut U, len, len)
+    }
+}
+
 pub fn alignment(n: isize, align: isize) -> isize {
     return ((n) + (align) - 1) & !((align) - 1);
 }

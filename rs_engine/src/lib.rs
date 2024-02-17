@@ -7,6 +7,7 @@ pub mod file_type;
 pub mod frame_sync;
 pub mod handle;
 pub mod logger;
+pub mod mipmap_generator;
 pub mod plugin;
 pub mod plugin_context;
 pub mod primitive_data;

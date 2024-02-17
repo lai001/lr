@@ -58,3 +58,7 @@ jniLibs
 *.dll
 *.so
 assets
+
+vscode_extensions/**/node_modules
+vscode_extensions/**/package-lock.json
+vscode_extensions/**/out

@@ -26,10 +26,10 @@ pub fn draw(
         .resizable(true)
         .default_size([350.0, 150.0])
         .show(context, |ui| {
+            ui.set_max_height(250.0);
+            ui.set_max_width(500.0);
             if let Some(asset_folder) = &asset_folder {
                 ui.vertical(|ui| {
-                    ui.set_max_height(250.0);
-                    ui.set_max_width(500.0);
                     ui.horizontal(|ui| {
                         if ui
                             .button(RichText::new("Back").color(Color32::WHITE))
@@ -40,14 +40,19 @@ pub fn draw(
                         ui.label(asset_folder.path.to_str().unwrap());
                     });
                     ui.separator();
-                    ui.horizontal_wrapped(|ui| {
+                    egui::ScrollArea::both().show(ui, |ui| {
                         click_asset = draw_content(ui, asset_folder, highlight_file);
                     });
-                    ui.allocate_space(ui.available_size());
                 });
             }
+            ui.allocate_space(ui.available_size());
         });
     click_asset.or(click_back)
+}
+
+enum EAssetItem<'a> {
+    AssetFolder(&'a AssetFolder),
+    AssetFile(&'a AssetFile),
 }
 
 fn draw_content(
@@ -55,66 +60,103 @@ fn draw_content(
     asset_folder: &AssetFolder,
     highlight_file: Option<&AssetFile>,
 ) -> Option<EClickItemType> {
-    let mut click_item: Option<EClickItemType> = None;
-    let mut highlight_item: Option<EClickItemType> = None;
+    let mut total_items: Vec<EAssetItem> = vec![];
     for folder in &asset_folder.folders {
-        ui.push_id(folder.name.clone(), |ui| {
-            let response = ui
-                .vertical(|ui| {
-                    ui.set_max_height(50.0);
-                    ui.set_max_width(50.0);
-                    ui.image(egui::include_image!("../../../Resource/Editor/folder.svg"));
-                    ui.label(folder.name.clone());
-                })
-                .response;
-            let response = response.interact(egui::Sense::click());
-            if response.double_clicked() {
-                click_item = Some(EClickItemType::Folder(folder.clone()));
-            }
-        });
+        total_items.push(EAssetItem::AssetFolder(&folder));
     }
     for file in &asset_folder.files {
-        ui.push_id(file.name.clone(), |ui| {
-            ui.vertical(|ui| {
-                ui.set_max_height(50.0);
-                ui.set_max_width(50.0);
-                if let Some(highlight_file) = highlight_file {
-                    if highlight_file.path == file.path {
-                        ui.painter()
-                            .rect_filled(ui.max_rect(), 0.0, Color32::LIGHT_BLUE);
-                    }
-                }
-                match file.get_file_type() {
-                    EFileType::Fbx => {
-                        ui.image(egui::include_image!("../../../Resource/Editor/model.svg"));
-                    }
-                    EFileType::Jpeg | EFileType::Png => {
-                        let url = format!("file://{}", file.path.to_str().unwrap());
-                        ui.image(url);
-                    }
-                }
-                let response = ui.button(file.name.clone());
-                if response.clicked() {
-                    highlight_item = Some(EClickItemType::SingleClickFile(file.clone()));
-                }
-                if response.double_clicked() {
-                    click_item = Some(EClickItemType::File(file.clone()));
-                }
-                match file.get_file_type() {
-                    EFileType::Fbx => {}
-                    EFileType::Jpeg | EFileType::Png => {
-                        response.context_menu(|ui| {
-                            highlight_item = Some(EClickItemType::SingleClickFile(file.clone()));
-                            if ui.button("Create texture").clicked() {
-                                click_item = Some(EClickItemType::CreateTexture(file.clone()));
-                                ui.close_menu();
+        total_items.push(EAssetItem::AssetFile(&file));
+    }
+    let mut iter = total_items.chunks(10);
+    let mut click_item: Option<EClickItemType> = None;
+    let mut highlight_item: Option<EClickItemType> = None;
+
+    while let Some(row) = iter.next() {
+        ui.horizontal_wrapped(|ui| {
+            for item in row {
+                match item {
+                    EAssetItem::AssetFolder(folder) => {
+                        let folder = *folder;
+                        ui.push_id(folder.name.clone(), |ui| {
+                            let response = ui
+                                .vertical(|ui| {
+                                    ui.set_max_height(50.0);
+                                    ui.set_max_width(50.0);
+                                    ui.image(egui::include_image!(
+                                        "../../../Resource/Editor/folder.svg"
+                                    ));
+                                    ui.label(folder.name.clone());
+                                })
+                                .response;
+                            let response = response.interact(egui::Sense::click());
+                            if response.double_clicked() {
+                                click_item = Some(EClickItemType::Folder(folder.clone()));
                             }
                         });
                     }
+                    EAssetItem::AssetFile(file) => {
+                        let file = *file;
+                        ui.push_id(file.name.clone(), |ui| {
+                            ui.vertical(|ui| {
+                                ui.set_max_height(50.0);
+                                ui.set_max_width(50.0);
+                                if let Some(highlight_file) = highlight_file {
+                                    if highlight_file.path == file.path {
+                                        ui.painter().rect_filled(
+                                            ui.max_rect(),
+                                            0.0,
+                                            Color32::LIGHT_BLUE,
+                                        );
+                                    }
+                                }
+                                match file.get_file_type() {
+                                    EFileType::Fbx => {
+                                        ui.image(egui::include_image!(
+                                            "../../../Resource/Editor/model.svg"
+                                        ));
+                                    }
+                                    EFileType::Jpeg
+                                    | EFileType::Png
+                                    | EFileType::Exr
+                                    | EFileType::Hdr => {
+                                        let url = format!("file://{}", file.path.to_str().unwrap());
+                                        ui.image(url);
+                                    }
+                                }
+                                let response = ui.button(file.name.clone());
+                                if response.clicked() {
+                                    highlight_item =
+                                        Some(EClickItemType::SingleClickFile(file.clone()));
+                                }
+                                if response.double_clicked() {
+                                    click_item = Some(EClickItemType::File(file.clone()));
+                                }
+                                match file.get_file_type() {
+                                    EFileType::Fbx => {}
+                                    EFileType::Jpeg
+                                    | EFileType::Png
+                                    | EFileType::Exr
+                                    | EFileType::Hdr => {
+                                        response.context_menu(|ui| {
+                                            highlight_item =
+                                                Some(EClickItemType::SingleClickFile(file.clone()));
+                                            if ui.button("Create texture").clicked() {
+                                                click_item = Some(EClickItemType::CreateTexture(
+                                                    file.clone(),
+                                                ));
+                                                ui.close_menu();
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+                        });
+                    }
                 }
-            });
+            }
         });
     }
+
     let item = click_item.or(highlight_item);
     item
 }

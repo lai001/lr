@@ -47,37 +47,31 @@ pub fn draw(
         .default_size([350.0, 150.0])
         .show(context, |ui| {
             if let Some(textures_folder) = textures_folder {
-                let response = ui
-                    .vertical(|ui| {
-                        ui.set_max_height(250.0);
-                        ui.set_max_width(500.0);
-                        ui.horizontal(|ui| {
-                            if ui
-                                .button(RichText::new("Back").color(Color32::WHITE))
-                                .clicked()
-                            {
-                                click_back = Some(EClickItemType::Back);
-                            }
-                            ui.label(textures_folder.url.to_string());
-                        });
-                        ui.separator();
-                        ui.horizontal_wrapped(|ui| {
-                            click_texture = draw_content(
-                                ui,
-                                asset_folder_path,
-                                textures_folder,
-                                highlight_file,
-                            );
-                        });
-                        ui.allocate_space(ui.available_size());
-                    })
-                    .response;
-                response.context_menu(|ui| {
-                    if ui.button("Create texture folder").clicked() {
-                        click_texture_folder =
-                            Some(EClickItemType::CreateTextureFolder(textures_folder.clone()));
-                        ui.close_menu();
-                    }
+                ui.vertical(|ui| {
+                    ui.set_max_height(250.0);
+                    ui.set_max_width(500.0);
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button(RichText::new("Back").color(Color32::WHITE))
+                            .clicked()
+                        {
+                            click_back = Some(EClickItemType::Back);
+                        }
+                        if ui
+                            .button(RichText::new("Create Texture Folder").color(Color32::WHITE))
+                            .clicked()
+                        {
+                            click_back =
+                                Some(EClickItemType::CreateTextureFolder(textures_folder.clone()));
+                        }
+                        ui.label(textures_folder.url.to_string());
+                    });
+                    ui.separator();
+                    ui.horizontal_wrapped(|ui| {
+                        click_texture =
+                            draw_content(ui, asset_folder_path, textures_folder, highlight_file);
+                    });
+                    ui.allocate_space(ui.available_size());
                 });
             }
         });
