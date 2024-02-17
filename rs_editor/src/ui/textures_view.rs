@@ -1,21 +1,22 @@
+use crate::texture::{TextureFile, TextureFolder};
 use egui::{Color32, Context, RichText, Ui, Window};
-use std::path::Path;
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 #[derive(Debug)]
 pub enum EClickItemType {
-    Folder(crate::texture::TextureFolder),
-    File(crate::texture::TextureFile),
-    SingleClickFile(crate::texture::TextureFile),
-    CreateTexture(crate::texture::TextureFile),
-    CreateTextureFolder(crate::texture::TextureFolder),
+    Folder(TextureFolder),
+    File(Rc<RefCell<TextureFile>>),
+    SingleClickFile(Rc<RefCell<TextureFile>>),
+    CreateTexture(TextureFile),
+    CreateTextureFolder(TextureFolder),
     Back,
 }
 
 pub struct DataSource {
     pub is_textures_view_open: bool,
-    pub texture_folder: Option<crate::texture::TextureFolder>,
-    pub current_texture_folder: Option<crate::texture::TextureFolder>,
-    pub highlight_texture_file: Option<crate::texture::TextureFile>,
+    pub texture_folder: Option<TextureFolder>,
+    pub current_texture_folder: Option<TextureFolder>,
+    pub highlight_texture_file: Option<Rc<RefCell<TextureFile>>>,
 }
 
 impl DataSource {
@@ -33,8 +34,8 @@ pub fn draw(
     context: &Context,
     open: &mut bool,
     asset_folder_path: &Path,
-    textures_folder: Option<&crate::texture::TextureFolder>,
-    highlight_file: Option<&crate::texture::TextureFile>,
+    textures_folder: Option<&TextureFolder>,
+    highlight_file: Option<Rc<RefCell<TextureFile>>>,
 ) -> Option<EClickItemType> {
     let mut click_back: Option<EClickItemType> = None;
     let mut click_texture: Option<EClickItemType> = None;
@@ -81,8 +82,8 @@ pub fn draw(
 fn draw_content(
     ui: &mut Ui,
     asset_folder_path: &Path,
-    textures_folder: &crate::texture::TextureFolder,
-    highlight_file: Option<&crate::texture::TextureFile>,
+    textures_folder: &TextureFolder,
+    highlight_file: Option<Rc<RefCell<TextureFile>>>,
 ) -> Option<EClickItemType> {
     let mut click_item: Option<EClickItemType> = None;
     for folder in &textures_folder.texture_folders {
@@ -102,24 +103,26 @@ fn draw_content(
         });
     }
     for file in &textures_folder.texture_files {
-        ui.push_id(file.name.clone(), |ui| {
+        let id = file.borrow().name.clone();
+        ui.push_id(id, |ui| {
+            let highlight_file = highlight_file.clone();
             ui.vertical(|ui| {
                 ui.set_max_height(50.0);
                 ui.set_max_width(50.0);
                 if let Some(highlight_file) = highlight_file {
-                    if highlight_file.url == file.url {
+                    if highlight_file.borrow().url == file.borrow().url {
                         ui.painter()
                             .rect_filled(ui.max_rect(), 0.0, Color32::LIGHT_BLUE);
                     }
                 }
-                if let Some(image_reference) = file.image_reference.as_ref() {
+                if let Some(image_reference) = file.borrow().image_reference.as_ref() {
                     let url = format!(
                         "file://{}",
                         asset_folder_path.join(image_reference).to_str().unwrap()
                     );
                     ui.image(url);
                 }
-                let response = ui.button(file.name.clone());
+                let response = ui.button(file.borrow().name.clone());
                 if response.clicked() {
                     click_item = Some(EClickItemType::SingleClickFile(file.clone()));
                 }

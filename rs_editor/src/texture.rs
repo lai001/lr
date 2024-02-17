@@ -4,7 +4,11 @@ use md5::Digest;
 use rs_artifact::{virtual_texture::image::TileIndex, EEndianType};
 use rs_engine::mipmap_generator::MipmapGenerator;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TextureFile {
@@ -12,7 +16,7 @@ pub struct TextureFile {
     pub url: url::Url,
     pub image_reference: Option<PathBuf>,
     pub is_virtual_texture: bool,
-    pub virtual_image_reference: Option<PathBuf>,
+    pub virtual_image_reference: Option<String>,
 }
 
 impl TextureFile {
@@ -26,8 +30,9 @@ impl TextureFile {
         }
     }
 
-    pub fn is_virtual_image_cache_vaild(
+    pub fn is_virtual_image_cache_vaild<P: AsRef<Path>>(
         &self,
+        virtual_cache_dir: P,
         endian_type: Option<EEndianType>,
     ) -> anyhow::Result<()> {
         if !self.is_virtual_texture {
@@ -37,8 +42,8 @@ impl TextureFile {
             .virtual_image_reference
             .clone()
             .ok_or(anyhow!("Property virtual_image_reference is not set."))?;
-
-        if !virtual_image_reference.exists() || !virtual_image_reference.is_file() {
+        let abs_path = virtual_cache_dir.as_ref().join(virtual_image_reference);
+        if !abs_path.exists() || !abs_path.is_file() {
             return Err(anyhow!(
                 "{:?} is not exists or not a file.",
                 virtual_image_reference
@@ -70,9 +75,9 @@ impl TextureFile {
             tile_size,
         );
 
-        if create_result.is_ok() {
-            self.virtual_image_reference = Some(output.as_ref().to_path_buf());
-        }
+        // if create_result.is_ok() {
+        //     self.virtual_image_reference = Some(output.as_ref().to_path_buf());
+        // }
         create_result
     }
 
@@ -97,7 +102,7 @@ impl TextureFile {
 pub struct TextureFolder {
     pub name: String,
     pub url: url::Url,
-    pub texture_files: Vec<TextureFile>,
+    pub texture_files: Vec<Rc<RefCell<TextureFile>>>,
     pub texture_folders: Vec<TextureFolder>,
 }
 

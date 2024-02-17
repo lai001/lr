@@ -22,7 +22,7 @@ pub struct ClickEvent {
     pub mesh_item: Option<ClickMeshItem>,
     pub click_aseet: Option<asset_view::EClickItemType>,
     pub menu_event: Option<top_menu::EClickEventType>,
-    pub property_event: HashMap<String, EValueModifierType>,
+    pub property_event: Option<crate::ui::property_view::EClickEventType>, //HashMap<String, EValueModifierType>,
     pub texture_view_event: Option<textures_view::EClickItemType>,
     pub gizmo_result: Option<GizmoResult>,
 }
@@ -98,23 +98,14 @@ impl EditorUI {
                 data_source
                     .textures_view_data_source
                     .highlight_texture_file
-                    .as_ref(),
+                    .clone(),
             );
         }
-        if let Some(selected_node) = &mut data_source.property_view_data_source.selected_node {
-            let mut selected_node = selected_node.as_ref().borrow_mut();
-            click.property_event = property_view::draw(
-                context,
-                &mut data_source.property_view_data_source.is_open,
-                Some(&mut selected_node),
-            );
-        } else {
-            property_view::draw(
-                context,
-                &mut data_source.property_view_data_source.is_open,
-                None,
-            );
-        }
+        click.property_event = property_view::draw(
+            context,
+            &mut data_source.property_view_data_source.is_open,
+            &mut data_source.property_view_data_source.selected_object,
+        );
         if let Some(selected_node) = &data_source.property_view_data_source.selected_node {
             let node = selected_node.as_ref().borrow_mut();
             if let Some(model_matrix) = node.get_model_matrix() {

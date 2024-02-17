@@ -1,5 +1,6 @@
 use crate::{error::Result, level::Level};
 use path_slash::PathBufExt;
+use rs_artifact::EEndianType;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
@@ -16,9 +17,16 @@ pub const SRC_FOLDER_NAME: &str = "src";
 pub const VERSION_STR: &str = "0.0.1";
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct VirtualTextureSetting {
+    pub tile_size: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Project {
     pub version_str: String,
     pub project_name: String,
+    pub virtual_texture_setting: VirtualTextureSetting,
+    pub endian_type: EEndianType,
     pub level: Rc<RefCell<Level>>,
     pub texture_folder: crate::texture::TextureFolder,
 }
@@ -68,6 +76,8 @@ impl Project {
             project_name: project_name.to_string(),
             level: Rc::new(RefCell::new(Level::empty_level())),
             texture_folder: Self::root_texture_folder(),
+            endian_type: EEndianType::Little,
+            virtual_texture_setting: VirtualTextureSetting { tile_size: 256 },
         };
 
         let Ok(json_str) = serde_json::ser::to_string_pretty(&empty_project) else {

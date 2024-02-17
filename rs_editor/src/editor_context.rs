@@ -9,7 +9,11 @@ use crate::{
     project_context::{EFolderUpdateType, ProjectContext},
     property,
     texture::TextureFile,
-    ui::{asset_view, level_view, property_view, textures_view, top_menu},
+    ui::{
+        asset_view, level_view,
+        property_view::{self, ESelectedObject},
+        texture_property_view, textures_view, top_menu,
+    },
 };
 use rs_artifact::property_value_type::EPropertyValueType;
 use rs_engine::{camera::Camera, file_type::EFileType, plugin_context::PluginContext};
@@ -406,6 +410,7 @@ impl EditorContext {
             .current_texture_folder = Some(project_context.project.texture_folder.clone());
         self.data_source.level = Some(project_context.project.level.clone());
         for texture_file in &project_context.project.texture_folder.texture_files {
+            let texture_file = texture_file.borrow();
             if let Some(image_reference) = &texture_file.image_reference {
                 let abs_path = project_context
                     .get_asset_folder_path()
@@ -754,7 +759,7 @@ impl EditorContext {
                                 .project
                                 .texture_folder
                                 .texture_files
-                                .push(texture_file);
+                                .push(Rc::new(RefCell::new(texture_file)));
                             self.data_source.textures_view_data_source.texture_folder =
                                 Some(project_context.project.texture_folder.clone());
                             self.data_source
@@ -804,59 +809,114 @@ impl EditorContext {
                 level_view::EClickEventType::Node(node) => {
                     self.data_source.property_view_data_source.is_open = true;
                     self.data_source.property_view_data_source.selected_node = Some(node.clone());
+                    self.data_source.property_view_data_source.selected_object =
+                        Some(ESelectedObject::Node(node.clone()));
                 }
             }
         }
-        {
-            for (property_name, modifier) in click_event.property_event {
-                match modifier {
-                    property_view::EValueModifierType::ValueType(_) => {}
-                    property_view::EValueModifierType::Assign => {
-                        if property_name == property::name::TEXTURE {
-                            if let Some(selected_node) = self
-                                .data_source
-                                .property_view_data_source
-                                .selected_node
-                                .clone()
-                            {
-                                if let Some(highlight_texture_file) = &self
-                                    .data_source
-                                    .textures_view_data_source
-                                    .highlight_texture_file
-                                {
-                                    let url = &highlight_texture_file.url;
+        if let Some(property_event) = click_event.property_event {
+            match property_event {
+                property_view::EClickEventType::Node(property_event) => {
+                    for (property_name, modifier) in property_event {
+                        match modifier {
+                            property_view::EValueModifierType::ValueType(_) => {}
+                            property_view::EValueModifierType::Assign => {
+                                (|| {
+                                    if property_name != property::name::TEXTURE {
+                                        return;
+                                    }
+                                    let Some(selected_node) = self
+                                        .data_source
+                                        .property_view_data_source
+                                        .selected_node
+                                        .clone()
+                                    else {
+                                        return;
+                                    };
+                                    let Some(highlight_texture_file) = &self
+                                        .data_source
+                                        .textures_view_data_source
+                                        .highlight_texture_file
+                                    else {
+                                        return;
+                                    };
+                                    let url = &highlight_texture_file.borrow().url;
                                     let mut selected_node = selected_node.borrow_mut();
                                     let value = selected_node
                                         .values
                                         .get_mut(property::name::TEXTURE)
                                         .unwrap();
                                     *value = EPropertyValueType::Texture(Some(url.clone()));
-                                    if let Some(texture_handle) = self
+                                    let Some(texture_handle) = self
                                         .engine
                                         .get_mut_resource_manager()
                                         .get_texture_by_url(url)
-                                    {
-                                        if let Some(draw_object) =
-                                            self.draw_objects.get_mut(&selected_node.id)
-                                        {
-                                            match &mut draw_object.material_type {
-                                                rs_render::command::EMaterialType::Phong(
-                                                    material,
-                                                ) => {
-                                                    material.diffuse_texture =
-                                                        Some(*texture_handle);
-                                                    material.specular_texture =
-                                                        Some(*texture_handle);
-                                                }
-                                                rs_render::command::EMaterialType::PBR(_) => {}
-                                            }
+                                    else {
+                                        return;
+                                    };
+                                    let Some(draw_object) =
+                                        self.draw_objects.get_mut(&selected_node.id)
+                                    else {
+                                        return;
+                                    };
+
+                                    match &mut draw_object.material_type {
+                                        rs_render::command::EMaterialType::Phong(material) => {
+                                            material.diffuse_texture = Some(*texture_handle);
+                                            material.specular_texture = Some(*texture_handle);
                                         }
+                                        rs_render::command::EMaterialType::PBR(_) => {}
                                     }
-                                }
+                                })();
                             }
                         }
                     }
                 }
+                property_view::EClickEventType::TextureFile(event) => match event {
+                    texture_property_view::EClickEventType::IsVirtualTexture(
+                        is_virtual_texture,
+                    ) => {
+                        (|| {
+                            if !is_virtual_texture {
+                                return;
+                            }
+                            let Some(selected_object) =
+                                &self.data_source.property_view_data_source.selected_object
+                            else {
+                                return;
+                            };
+                            let ESelectedObject::TextureFile(texture_file) = selected_object else {
+                                return;
+                            };
+                            let Some(project_context) = &self.project_context else {
+                                return;
+                            };
+                            let Ok(virtual_texture_cache_dir) =
+                                project_context.try_create_virtual_texture_cache_dir()
+                            else {
+                                return;
+                            };
+                            let asset_folder = &project_context.get_asset_folder_path();
+                            let Ok(virtual_cache_name) = texture_file
+                                .borrow()
+                                .get_pref_virtual_cache_name(asset_folder)
+                            else {
+                                return;
+                            };
+                            let result = texture_file.borrow_mut().create_virtual_texture_cache(
+                                asset_folder,
+                                &virtual_texture_cache_dir.join(virtual_cache_name.clone()),
+                                Some(rs_artifact::EEndianType::Little),
+                                256,
+                            );
+                            if result.is_ok() {
+                                log::trace!("virtual_cache_name: {}", virtual_cache_name);
+                                texture_file.borrow_mut().virtual_image_reference =
+                                    Some(virtual_cache_name);
+                            }
+                        })();
+                    }
+                },
             }
         }
         if let Some(texture_view_event) = &click_event.texture_view_event {
@@ -864,6 +924,8 @@ impl EditorContext {
                 textures_view::EClickItemType::Folder(_) => {}
                 textures_view::EClickItemType::File(_) => {}
                 textures_view::EClickItemType::SingleClickFile(file) => {
+                    self.data_source.property_view_data_source.selected_object =
+                        Some(ESelectedObject::TextureFile(file.clone()));
                     self.data_source
                         .textures_view_data_source
                         .highlight_texture_file = Some(file.clone());

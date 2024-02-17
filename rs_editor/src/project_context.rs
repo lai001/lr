@@ -12,9 +12,11 @@ use rs_artifact::{
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     io::Write,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 pub enum EFolderUpdateType {
@@ -303,7 +305,7 @@ impl ProjectContext {
             }
         }
 
-        let mut texture_files: Vec<&crate::texture::TextureFile> = Vec::new();
+        let mut texture_files: Vec<Rc<RefCell<crate::texture::TextureFile>>> = Vec::new();
         Self::collect_texture_files(&self.project.texture_folder, &mut texture_files);
         let image_files = Self::collect_image_files(&texture_files);
         for image_file_path in image_files {
@@ -356,10 +358,10 @@ impl ProjectContext {
         }
     }
 
-    fn collect_image_files(files: &[&crate::texture::TextureFile]) -> HashSet<PathBuf> {
+    fn collect_image_files(files: &[Rc<RefCell<crate::texture::TextureFile>>]) -> HashSet<PathBuf> {
         let mut image_paths = HashSet::new();
         for file in files {
-            if let Some(image_reference) = &file.image_reference {
+            if let Some(image_reference) = &file.borrow().image_reference {
                 let value = image_reference;
                 image_paths.insert(value.clone());
             }
@@ -369,10 +371,10 @@ impl ProjectContext {
 
     fn collect_texture_files<'a>(
         texture_folder: &'a crate::texture::TextureFolder,
-        files: &mut Vec<&'a crate::texture::TextureFile>,
+        files: &mut Vec<Rc<RefCell<crate::texture::TextureFile>>>,
     ) {
         for texture_file in &texture_folder.texture_files {
-            files.push(texture_file);
+            files.push(texture_file.clone());
         }
         for sub_folder in &texture_folder.texture_folders {
             Self::collect_texture_files(sub_folder, files);
