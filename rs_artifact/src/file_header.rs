@@ -24,34 +24,28 @@ impl FileHeader {
         T: serde::ser::Serialize,
     {
         let endian_type = endian_type.unwrap_or(EEndianType::Native);
-        match bincode::serialize(header) {
-            Ok(mut serialize_data) => {
-                let header_length: HeaderLengthDataType = serialize_data.len().try_into().unwrap();
-                let mut header_length_data: Vec<u8> = vec![0; HEADER_LENGTH_SIZE];
-                match endian_type {
-                    EEndianType::Big => {
-                        header_length_data.copy_from_slice(&header_length.to_be_bytes());
-                    }
-                    EEndianType::Little => {
-                        header_length_data.copy_from_slice(&header_length.to_le_bytes());
-                    }
-                    EEndianType::Native => {
-                        header_length_data.copy_from_slice(&header_length.to_ne_bytes());
-                    }
-                }
-                let mut data: Vec<u8> = Vec::new();
-                data.append(&mut magic_numbers.to_vec());
-                data.append(&mut header_length_data);
-                data.append(&mut serialize_data);
-                return Ok(data);
+        let mut serialize_data = bincode::serialize(header).map_err(|err| {
+            let msg = format!("Fail to serialize.");
+            crate::error::Error::Bincode(err, Some(msg))
+        })?;
+        let header_length = serialize_data.len() as HeaderLengthDataType;
+        let mut header_length_data: Vec<u8> = vec![0; HEADER_LENGTH_SIZE];
+        match endian_type {
+            EEndianType::Big => {
+                header_length_data.copy_from_slice(&header_length.to_be_bytes());
             }
-            Err(err) => {
-                return Err(crate::error::Error::Bincode(
-                    err,
-                    Some(format!("{}, {}, Fail to serialize.", file!(), line!())),
-                ));
+            EEndianType::Little => {
+                header_length_data.copy_from_slice(&header_length.to_le_bytes());
+            }
+            EEndianType::Native => {
+                header_length_data.copy_from_slice(&header_length.to_ne_bytes());
             }
         }
+        let mut data: Vec<u8> = Vec::new();
+        data.append(&mut magic_numbers.to_vec());
+        data.append(&mut header_length_data);
+        data.append(&mut serialize_data);
+        Ok(data)
     }
 
     pub fn get_header<R, T>(reader: &mut R, header_length: HeaderLengthDataType) -> Result<T>
@@ -59,24 +53,12 @@ impl FileHeader {
         R: std::io::Seek + std::io::Read,
         T: serde::de::DeserializeOwned,
     {
-        let data = match Self::get_header_encoded_data(reader, header_length) {
-            Ok(data) => data,
-            Err(err) => {
-                return Err(err);
-            }
-        };
-
-        match bincode::deserialize(&data) {
-            Ok(file_header) => {
-                return Ok(file_header);
-            }
-            Err(err) => {
-                return Err(crate::error::Error::Bincode(
-                    err,
-                    Some(format!("{}, {}, Fail to deserialize.", file!(), line!())),
-                ));
-            }
-        };
+        let data = Self::get_header_encoded_data(reader, header_length)?;
+        let file_header = bincode::deserialize(&data).map_err(|err| {
+            let msg = format!("Fail to deserialize.");
+            crate::error::Error::Bincode(err, Some(msg))
+        })?;
+        Ok(file_header)
     }
 
     pub fn get_header2<R, T>(reader: &mut R, endian_type: Option<EEndianType>) -> Result<T>
@@ -84,29 +66,13 @@ impl FileHeader {
         R: std::io::Seek + std::io::Read,
         T: serde::de::DeserializeOwned,
     {
-        let header_length = match Self::get_header_encoded_data_length(reader, endian_type) {
-            Ok(header_length) => header_length,
-            Err(err) => return Err(err),
-        };
-
-        let data = match Self::get_header_encoded_data(reader, header_length) {
-            Ok(data) => data,
-            Err(err) => {
-                return Err(err);
-            }
-        };
-
-        match bincode::deserialize(&data) {
-            Ok(file_header) => {
-                return Ok(file_header);
-            }
-            Err(err) => {
-                return Err(crate::error::Error::Bincode(
-                    err,
-                    Some(format!("{}, {}, Fail to deserialize.", file!(), line!())),
-                ));
-            }
-        };
+        let header_length = Self::get_header_encoded_data_length(reader, endian_type)?;
+        let data = Self::get_header_encoded_data(reader, header_length)?;
+        let file_header = bincode::deserialize(&data).map_err(|err| {
+            let msg = format!("Fail to deserialize.");
+            crate::error::Error::Bincode(err, Some(msg))
+        })?;
+        Ok(file_header)
     }
 
     pub fn get_header_encoded_data<R>(
@@ -116,44 +82,17 @@ impl FileHeader {
     where
         R: std::io::Seek + std::io::Read,
     {
-        let current_position = match reader.stream_position() {
-            Ok(current_position) => current_position,
-            Err(err) => {
-                return Err(crate::error::Error::IO(
-                    err,
-                    Some(format!(
-                        "{}, {}, Can not get stream position.",
-                        file!(),
-                        line!()
-                    )),
-                ));
-            }
-        };
-
-        if let Err(err) = reader.seek(std::io::SeekFrom::Start(HEADER_OFFSET as u64)) {
-            return Err(crate::error::Error::IO(
-                err,
-                Some(String::from("Failed to seek `HEADER_OFFSET`.")),
-            ));
-        }
+        let _ = reader
+            .seek(std::io::SeekFrom::Start(HEADER_OFFSET as u64))
+            .map_err(|err| {
+                crate::error::Error::IO(err, Some(String::from("Failed to seek `HEADER_OFFSET`.")))
+            })?;
         let mut data: Vec<u8> = vec![0; header_length as usize];
-
-        let result = reader.read_exact(&mut data);
-        reader
-            .seek(std::io::SeekFrom::Start(current_position))
-            .expect("Seek back successfully.");
-
-        match result {
-            Ok(_) => {
-                return Ok(data);
-            }
-            Err(err) => {
-                return Err(crate::error::Error::IO(
-                    err,
-                    Some(String::from("Fail to read the exact number of bytes.")),
-                ));
-            }
-        }
+        let _ = reader.read_exact(&mut data).map_err(|err| {
+            let msg = String::from("Fail to read the exact number of bytes.");
+            crate::error::Error::IO(err, Some(msg))
+        })?;
+        Ok(data)
     }
 
     pub fn get_header_encoded_data_length<R>(
@@ -164,53 +103,36 @@ impl FileHeader {
         R: std::io::Seek + std::io::Read,
     {
         let endian_type = endian_type.unwrap_or(EEndianType::Native);
-        let current_position = match reader.stream_position() {
-            Ok(current_position) => current_position,
-            Err(err) => {
-                return Err(crate::error::Error::IO(
-                    err,
-                    Some(format!(
-                        "{}, {}, Can not get stream position.",
-                        file!(),
-                        line!()
-                    )),
-                ));
-            }
-        };
-
-        if let Err(err) = reader.seek(std::io::SeekFrom::Start(HEADER_LENGTH_OFFSET as u64)) {
-            return Err(crate::error::Error::IO(
-                err,
-                Some(String::from("Failed to seek `HEADER_LENGTH_OFFSET`.")),
-            ));
-        }
+        let _ = reader
+            .seek(std::io::SeekFrom::Start(HEADER_LENGTH_OFFSET as u64))
+            .map_err(|err| {
+                let msg = String::from("Failed to seek `HEADER_LENGTH_OFFSET`.");
+                crate::error::Error::IO(err, Some(msg))
+            })?;
 
         let mut data: Vec<u8> = vec![0; HEADER_LENGTH_SIZE];
-
-        if let Err(err) = reader.read_exact(&mut data) {
-            return Err(crate::error::Error::IO(err, None));
-        }
         reader
-            .seek(std::io::SeekFrom::Start(current_position))
-            .expect("Seek back successfully.");
+            .read_exact(&mut data)
+            .map_err(|err| crate::error::Error::IO(err, None))?;
+
         match endian_type {
             EEndianType::Big => {
                 let bytes =
                     <[u8; HEADER_LENGTH_SIZE]>::try_from(data).expect("Convert successfully.");
                 let length = HeaderLengthDataType::from_be_bytes(bytes);
-                return Ok(length);
+                Ok(length)
             }
             EEndianType::Little => {
                 let bytes =
                     <[u8; HEADER_LENGTH_SIZE]>::try_from(data).expect("Convert successfully.");
                 let length = HeaderLengthDataType::from_le_bytes(bytes);
-                return Ok(length);
+                Ok(length)
             }
             EEndianType::Native => {
                 let bytes =
                     <[u8; HEADER_LENGTH_SIZE]>::try_from(data).expect("Convert successfully.");
                 let length = HeaderLengthDataType::from_ne_bytes(bytes);
-                return Ok(length);
+                Ok(length)
             }
         }
     }
@@ -219,46 +141,23 @@ impl FileHeader {
     where
         R: std::io::Seek + std::io::Read,
     {
-        let current_position = match reader.stream_position() {
-            Ok(current_position) => current_position,
-            Err(err) => {
-                return Err(crate::error::Error::IO(
-                    err,
-                    Some(format!(
-                        "{}, {}, Can not get stream position.",
-                        file!(),
-                        line!()
-                    )),
-                ));
-            }
-        };
-
-        if let Err(err) = reader.seek(std::io::SeekFrom::Start(IDENTIFICATION_OFFSET as u64)) {
-            return Err(crate::error::Error::IO(
-                err,
-                Some(String::from("Failed to seek `IDENTIFICATION_OFFSET`.")),
-            ));
-        }
+        reader
+            .seek(std::io::SeekFrom::Start(IDENTIFICATION_OFFSET as u64))
+            .map_err(|err| {
+                let msg = String::from("Failed to seek `IDENTIFICATION_OFFSET`.");
+                crate::error::Error::IO(err, Some(msg))
+            })?;
 
         let mut data: Vec<u8> = vec![0; magic_numbers.len()];
-        let result = reader.read_exact(&mut data);
-        reader
-            .seek(std::io::SeekFrom::Start(current_position))
-            .expect("Seek back successfully.");
-        match result {
-            Ok(_) => {
-                if data == magic_numbers {
-                    return Ok(());
-                } else {
-                    return Err(crate::error::Error::CheckIdentificationFail);
-                }
-            }
-            Err(err) => {
-                return Err(crate::error::Error::IO(
-                    err,
-                    Some(String::from("Failed to read `IDENTIFICATION` data.")),
-                ));
-            }
+
+        reader.read_exact(&mut data).map_err(|err| {
+            let msg = String::from("Failed to read `IDENTIFICATION` data.");
+            crate::error::Error::IO(err, Some(msg))
+        })?;
+        if data == magic_numbers {
+            Ok(())
+        } else {
+            Err(crate::error::Error::CheckIdentificationFail)
         }
     }
 }

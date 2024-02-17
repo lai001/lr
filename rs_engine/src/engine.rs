@@ -56,7 +56,7 @@ impl Engine {
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
-        artifact_reader: Option<ArtifactReader>,
+        mut artifact_reader: Option<ArtifactReader>,
         mut shaders: HashMap<String, String>,
     ) -> Result<Engine>
     where
@@ -65,7 +65,9 @@ impl Engine {
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
         });
-
+        if let Some(artifact_reader) = &mut artifact_reader {
+            artifact_reader.check_assets().expect("Valid");
+        }
         let mut resource_manager = ResourceManager::default();
         resource_manager.set_artifact_reader(artifact_reader);
         resource_manager.load_static_meshs();
@@ -75,54 +77,56 @@ impl Engine {
         }
 
         let renderer =
-            Renderer::from_window(window, surface_width, surface_height, scale_factor, shaders);
-        let renderer = match renderer {
-            Ok(renderer) => renderer,
-            Err(err) => return Err(crate::error::Error::RendererError(err)),
-        };
+            Renderer::from_window(window, surface_width, surface_height, scale_factor, shaders)
+                .map_err(|err| crate::error::Error::RendererError(err))?;
 
         let mut draw_objects: Vec<DrawObject> = Vec::new();
 
         let mut render_thread_mode = ERenderThreadMode::from(renderer, true);
         let camera = Camera::default(surface_width, surface_height);
         let mut level: Option<rs_artifact::level::Level> = None;
-        if let Some(url) = Self::find_first_level(&mut resource_manager) {
-            if let Ok(_level) = resource_manager.get_level(&url) {
-                for node in &_level.nodes {
-                    match node {
-                        ENodeType::Node3D(node3d) => {
-                            if let Some(mesh_url) = &node3d.mesh_url {
-                                if let Ok(static_mesh) = resource_manager.get_static_mesh(mesh_url)
-                                {
-                                    let constants =
-                                        rs_render::render_pipeline::phong_pipeline::Constants {
-                                            model: glam::Mat4::IDENTITY,
-                                            view: camera.get_view_matrix(),
-                                            projection: camera.get_projection_matrix(),
-                                        };
-                                    let material = PhongMaterial {
-                                        constants,
-                                        diffuse_texture: None,
-                                        specular_texture: None,
-                                    };
 
-                                    let draw_object =
-                                        Self::create_draw_object_from_static_mesh_internal(
-                                            &mut render_thread_mode,
-                                            &mut resource_manager,
-                                            &static_mesh.vertexes,
-                                            &static_mesh.indexes,
-                                            EMaterialType::Phong(material),
-                                        );
-                                    draw_objects.push(draw_object);
-                                }
-                            }
-                        }
+        (|| {
+            let Some(url) = Self::find_first_level(&mut resource_manager) else {
+                return;
+            };
+            let Ok(_level) = resource_manager.get_level(&url) else {
+                return;
+            };
+            for node in &_level.nodes {
+                match node {
+                    ENodeType::Node3D(node3d) => {
+                        let Some(mesh_url) = &node3d.mesh_url else {
+                            continue;
+                        };
+                        let Ok(static_mesh) = resource_manager.get_static_mesh(mesh_url) else {
+                            continue;
+                        };
+
+                        let constants = rs_render::render_pipeline::phong_pipeline::Constants {
+                            model: glam::Mat4::IDENTITY,
+                            view: camera.get_view_matrix(),
+                            projection: camera.get_projection_matrix(),
+                        };
+                        let material = PhongMaterial {
+                            constants,
+                            diffuse_texture: None,
+                            specular_texture: None,
+                        };
+
+                        let draw_object = Self::create_draw_object_from_static_mesh_internal(
+                            &mut render_thread_mode,
+                            &mut resource_manager,
+                            &static_mesh.vertexes,
+                            &static_mesh.indexes,
+                            EMaterialType::Phong(material),
+                        );
+                        draw_objects.push(draw_object);
                     }
                 }
-                level = Some(_level);
             }
-        }
+            level = Some(_level);
+        })();
 
         let engine = Engine {
             render_thread_mode,
@@ -142,17 +146,19 @@ impl Engine {
             return None;
         };
         for (k, v) in resource_map {
-            if k.scheme() == "asset" {
-                if let Some(host) = k.host() {
-                    match host {
-                        url::Host::Domain(host) => {
-                            if host == "level" {
-                                return Some(v.url);
-                            }
-                        }
-                        _ => {}
+            if k.scheme() != "asset" {
+                continue;
+            }
+            let Some(host) = k.host() else {
+                continue;
+            };
+            match host {
+                url::Host::Domain(host) => {
+                    if host == "level" {
+                        return Some(v.url);
                     }
                 }
+                _ => {}
             }
         }
         return None;

@@ -1,7 +1,7 @@
-use std::str::FromStr;
-
+use crate::error::Result;
 use crate::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Deserialize, Serialize)]
 pub enum ImageFormat {
@@ -137,21 +137,25 @@ impl Image {
         reader.decode()
     }
 
-    pub fn from_file(name: &str, id: uuid::Uuid, path: &str) -> Option<Image> {
-        if let Ok(file) = std::fs::File::open(path) {
-            let buf_reader = std::io::BufReader::new(file);
-            let data = buf_reader.buffer().to_vec();
-            let image_reader = image::io::Reader::new(buf_reader);
-            let image_reader = image_reader.with_guessed_format().unwrap();
-            if let Some(format) = image_reader.format() {
-                return Some(Image {
-                    name: name.to_string(),
-                    image_format: ImageFormat::from_external_format(format),
-                    data,
-                    url: url::Url::from_str("").unwrap(),
-                });
-            }
-        }
-        return None;
+    pub fn from_file(name: &str, path: &str) -> Result<Image> {
+        let file = std::fs::File::open(path).map_err(|err| {
+            crate::error::Error::IO(err, Some(format!("Can not open file {}", path)))
+        })?;
+        let buf_reader = std::io::BufReader::new(file);
+        let data = buf_reader.buffer().to_vec();
+        let image_reader = image::io::Reader::new(buf_reader);
+        let image_reader = image_reader
+            .with_guessed_format()
+            .map_err(|err| crate::error::Error::IO(err, Some(format!("Unknow format"))))?;
+        let format = image_reader
+            .format()
+            .ok_or(crate::error::Error::File(Some("Unknow format".to_string())))?;
+        let image = Image {
+            name: name.to_string(),
+            image_format: ImageFormat::from_external_format(format),
+            data,
+            url: url::Url::from_str("").unwrap(),
+        };
+        Ok(image)
     }
 }

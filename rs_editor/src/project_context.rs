@@ -350,12 +350,8 @@ impl ProjectContext {
         for image in images.iter() {
             artifact_asset_encoder.encode(image);
         }
-        let result = artifact_asset_encoder.finish();
-        if result {
-            Ok(output_folder_path.join(output_filename))
-        } else {
-            Err(crate::error::Error::ExportFailed(None).into())
-        }
+        let _ = artifact_asset_encoder.finish()?;
+        Ok(output_folder_path.join(output_filename))
     }
 
     fn collect_image_files(files: &[Rc<RefCell<crate::texture::TextureFile>>]) -> HashSet<PathBuf> {

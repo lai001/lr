@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::level::Level;
 use crate::{
     asset::{self, Asset},
     file_header::{
@@ -37,26 +38,34 @@ pub fn encode_artifact_tasks_disk<R>(
     endian_type: Option<EEndianType>,
     tasks: &mut [ResourceEncodeTask<R>],
     target_path: &Path,
-) -> bool
+) -> Result<()>
 where
     R: Seek + Read,
 {
-    let Some(parent) = target_path.parent() else {
-        return false;
-    };
-    let Ok(_) = std::fs::create_dir_all(parent) else {
-        return false;
-    };
-    let Ok(file) = std::fs::File::create(target_path) else {
-        return false;
-    };
+    let parent = target_path
+        .parent()
+        .ok_or(crate::error::Error::NotFound(Some(format!(
+            "No parent folder of {:?}",
+            target_path
+        ))))?;
+    let _ = std::fs::create_dir_all(parent).map_err(|err| {
+        crate::error::Error::IO(err, Some(format!("Can not create folder {:?}", parent)))
+    })?;
+    let file = std::fs::File::create(target_path).map_err(|err| {
+        crate::error::Error::IO(err, Some(format!("Can not create file {:?}", target_path)))
+    })?;
     let mut buf_writer = BufWriter::new(file);
-
     let mut infos: Vec<ResourceInfo> = vec![];
     let mut offset: u64 = 0;
     for task in tasks.iter_mut() {
-        let length = task.reader.seek(SeekFrom::End(0)).unwrap();
-        let _ = task.reader.seek(SeekFrom::Start(0)).unwrap();
+        let length = task
+            .reader
+            .seek(SeekFrom::End(0))
+            .map_err(|err| crate::error::Error::IO(err, Some(format!("Seek fail"))))?;
+        let _ = task
+            .reader
+            .seek(SeekFrom::Start(0))
+            .map_err(|err| crate::error::Error::IO(err, Some(format!("Seek fail"))))?;
         let info = ResourceInfo {
             url: task.url.clone(),
             resource_type: task.resource_type,
@@ -66,46 +75,43 @@ where
         offset += length;
         infos.push(info);
     }
-
     let mut fileheader = ArtifactFileHeader {
         resource_map: HashMap::new(),
     };
-
     for info in infos {
         fileheader
             .resource_map
             .insert(info.url.clone(), info.clone());
     }
-
     let header_encoded_data =
-        FileHeader::write_header(ARTIFACT_FILE_MAGIC_NUMBERS, &fileheader, endian_type).unwrap();
-
-    buf_writer.write(&header_encoded_data).unwrap();
-
+        FileHeader::write_header(ARTIFACT_FILE_MAGIC_NUMBERS, &fileheader, endian_type)?;
+    buf_writer.write(&header_encoded_data).map_err(|err| {
+        crate::error::Error::IO(err, Some(format!("Failed to write header data.")))
+    })?;
     for task in tasks.iter_mut() {
-        std::io::copy(&mut task.reader, &mut buf_writer).unwrap();
+        std::io::copy(&mut task.reader, &mut buf_writer)
+            .map_err(|err| crate::error::Error::IO(err, Some(format!("Failed to copy data."))))?;
     }
-
-    return true;
+    Ok(())
 }
 
 pub fn encode_artifact_assets_disk<T>(
     assets: &[T],
     endian_type: Option<EEndianType>,
     target_path: &Path,
-) -> bool
+) -> Result<()>
 where
     T: Asset,
 {
     let mut tasks: Vec<ResourceEncodeTask<Cursor<Vec<u8>>>> = Vec::new();
     for asset in assets {
         let asset_encoded_data =
-            asset::encode_asset(asset.get_resource_type(), endian_type, asset).unwrap();
+            asset::encode_asset(asset.get_resource_type(), endian_type, asset)?;
         let reader = Cursor::new(asset_encoded_data);
         let task = asset.build_resource_encode_task(reader);
         tasks.push(task);
     }
-    return encode_artifact_tasks_disk(endian_type, &mut tasks, target_path);
+    encode_artifact_tasks_disk(endian_type, &mut tasks, target_path)
 }
 
 pub struct ArtifactAssetEncoder {
@@ -134,8 +140,8 @@ impl ArtifactAssetEncoder {
         self.tasks.push(task);
     }
 
-    pub fn finish(&mut self) -> bool {
-        return encode_artifact_tasks_disk(self.endian_type, &mut self.tasks, &self.target_path);
+    pub fn finish(&mut self) -> Result<()> {
+        encode_artifact_tasks_disk(self.endian_type, &mut self.tasks, &self.target_path)
     }
 }
 
@@ -192,52 +198,32 @@ impl ArtifactReader {
 
     #[cfg(not(target_os = "android"))]
     pub fn new(path: &Path, endian_type: Option<EEndianType>) -> Result<ArtifactReader> {
-        let file = match std::fs::File::open(path) {
-            Ok(file) => file,
-            Err(err) => {
-                return Err(crate::error::Error::IO(
-                    err,
-                    Some(format!(
-                        "Can not open file {}",
-                        path.to_string_lossy().to_string()
-                    )),
-                ));
-            }
-        };
-        let mut buf_reader = std::io::BufReader::new(file);
+        let file = std::fs::File::open(path).map_err(|err| {
+            let msg = format!("Can not open file {}", path.to_string_lossy().to_string());
+            crate::error::Error::IO(err, Some(msg))
+        })?;
 
-        if let Err(err) = FileHeader::check_identification(
+        let mut buf_reader = std::io::BufReader::new(file);
+        let _ = FileHeader::check_identification(
             &mut buf_reader,
             file_header::ARTIFACT_FILE_MAGIC_NUMBERS,
-        ) {
-            return Err(err);
-        }
+        )?;
 
         let header_encoded_data_length =
-            match FileHeader::get_header_encoded_data_length(&mut buf_reader, endian_type) {
-                Ok(header_encoded_data_length) => header_encoded_data_length,
-                Err(err) => {
-                    return Err(err);
-                }
-            };
+            FileHeader::get_header_encoded_data_length(&mut buf_reader, endian_type)?;
 
         let artifact_file_header: ArtifactFileHeader =
-            match FileHeader::get_header2(&mut buf_reader, endian_type) {
-                Ok(artifact_file_header) => artifact_file_header,
-                Err(err) => {
-                    return Err(err);
-                }
-            };
+            FileHeader::get_header2(&mut buf_reader, endian_type)?;
 
-        let payload_offset: u64 =
+        let payload_offset =
             (IDENTIFICATION_SIZE + HEADER_LENGTH_SIZE) as u64 + header_encoded_data_length;
 
-        return Ok(ArtifactReader {
+        Ok(ArtifactReader {
             artifact_file_header,
             buf_reader,
             payload_offset,
             endian_type,
-        });
+        })
     }
 
     pub fn get_artifact_file_header(&self) -> &ArtifactFileHeader {
@@ -252,112 +238,99 @@ impl ArtifactReader {
     where
         T: Asset,
     {
-        let Some(resource_info) = self.artifact_file_header.resource_map.get(url) else {
-            return Err(crate::error::Error::NotFound(Some(format!(
-                "Resource does not contain {}.",
-                url
-            ))));
-        };
+        let resource_info = self.artifact_file_header.resource_map.get(url).ok_or(
+            crate::error::Error::NotFound(Some(format!("Resource does not contain {}.", url))),
+        )?;
         if Some(resource_info.resource_type) != expected_resource_type {
             return Err(crate::error::Error::ResourceTypeNotMatch);
         }
         let offset = resource_info.offset;
         let length = resource_info.length;
-
-        let current_position = match self.buf_reader.stream_position() {
-            Ok(current_position) => current_position,
-            Err(err) => {
-                return Err(crate::error::Error::IO(
-                    err,
-                    Some(String::from("Can not get stream position.")),
-                ));
-            }
-        };
-
-        if let Err(err) = self
+        let _ = self
             .buf_reader
             .seek(SeekFrom::Start(self.payload_offset + offset))
-        {
-            return Err(crate::error::Error::IO(
-                err,
-                Some(format!("Failed to seek {}", offset)),
-            ));
-        }
-
+            .map_err(|err| {
+                crate::error::Error::IO(err, Some(format!("Failed to seek {}", offset)))
+            })?;
         let mut buf: Vec<u8> = vec![0; length as usize];
-
-        if let Err(err) = self.buf_reader.read_exact(&mut buf) {
-            self.buf_reader
-                .seek(std::io::SeekFrom::Start(current_position))
-                .expect("Seek back successfully.");
-            return Err(crate::error::Error::IO(
-                err,
-                Some(format!("Failed to read the exact number of bytes.")),
-            ));
-        }
-        self.buf_reader
-            .seek(std::io::SeekFrom::Start(current_position))
-            .expect("Seek back successfully.");
+        let _ = self.buf_reader.read_exact(&mut buf).map_err(|err| {
+            let msg = format!("Failed to read the exact number of bytes.");
+            crate::error::Error::IO(err, Some(msg))
+        })?;
         asset::decode_asset::<T>(&buf, self.endian_type, Some(resource_info.resource_type))
     }
 
-    pub fn check_assets(&mut self) -> bool {
+    pub fn check_assets(&mut self) -> Result<()> {
         for (_, resource_info) in &self.artifact_file_header.resource_map {
             let offset = resource_info.offset;
             let length = resource_info.length;
-            if let Ok(_) = self
+            let _ = self
                 .buf_reader
                 .seek(SeekFrom::Start(self.payload_offset + offset))
-            {
-                let mut buf: Vec<u8> = vec![0; length as usize];
-                if let Ok(_) = self.buf_reader.read_exact(&mut buf) {
-                    match resource_info.resource_type {
-                        EResourceType::Image => {
-                            match asset::decode_asset::<Image>(
-                                &buf,
-                                self.endian_type,
-                                Some(resource_info.resource_type),
-                            ) {
-                                Ok(asset) => {
-                                    log::trace!("{}, {:?}", asset.url, resource_info.resource_type);
-                                }
-                                Err(err) => return false,
-                            }
-                        }
-                        EResourceType::StaticMesh => {
-                            match asset::decode_asset::<StaticMesh>(
-                                &buf,
-                                self.endian_type,
-                                Some(resource_info.resource_type),
-                            ) {
-                                Ok(asset) => {
-                                    log::trace!("{}, {:?}", asset.url, resource_info.resource_type);
-                                }
-                                Err(err) => return false,
-                            }
-                        }
-                        EResourceType::ShaderSourceCode => {
-                            match asset::decode_asset::<ShaderSourceCode>(
-                                &buf,
-                                self.endian_type,
-                                Some(resource_info.resource_type),
-                            ) {
-                                Ok(asset) => {
-                                    log::trace!("{}, {:?}", asset.url, resource_info.resource_type);
-                                }
-                                Err(err) => return false,
-                            }
-                        }
-                        _ => {}
-                    }
-                } else {
-                    return false;
+                .map_err(|err| {
+                    crate::error::Error::IO(
+                        err,
+                        Some(format!("Failed to seek {}", self.payload_offset + offset)),
+                    )
+                })?;
+            let mut buf: Vec<u8> = vec![0; length as usize];
+            let _ = self.buf_reader.read_exact(&mut buf).map_err(|err| {
+                let msg = format!("Failed to read the exact number of bytes.");
+                crate::error::Error::IO(err, Some(msg))
+            })?;
+            match resource_info.resource_type {
+                EResourceType::Image => {
+                    let asset = asset::decode_asset::<Image>(
+                        &buf,
+                        self.endian_type,
+                        Some(resource_info.resource_type),
+                    )?;
+                    log::trace!(
+                        "url: {}, type: {:?}",
+                        asset.url,
+                        resource_info.resource_type
+                    );
                 }
-            } else {
-                return false;
+                EResourceType::StaticMesh => {
+                    let asset = asset::decode_asset::<StaticMesh>(
+                        &buf,
+                        self.endian_type,
+                        Some(resource_info.resource_type),
+                    )?;
+                    log::trace!(
+                        "url: {}, type: {:?}",
+                        asset.url,
+                        resource_info.resource_type
+                    );
+                }
+                EResourceType::ShaderSourceCode => {
+                    let asset = asset::decode_asset::<ShaderSourceCode>(
+                        &buf,
+                        self.endian_type,
+                        Some(resource_info.resource_type),
+                    )?;
+                    log::trace!(
+                        "url: {}, type: {:?}",
+                        asset.url,
+                        resource_info.resource_type
+                    );
+                }
+                EResourceType::Level => {
+                    let asset = asset::decode_asset::<Level>(
+                        &buf,
+                        self.endian_type,
+                        Some(resource_info.resource_type),
+                    )?;
+                    log::trace!(
+                        "url: {}, type: {:?}",
+                        asset.url,
+                        resource_info.resource_type
+                    );
+                }
+                _ => {}
             }
         }
-        return true;
+        Ok(())
     }
 }
 
