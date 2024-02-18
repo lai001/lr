@@ -10,7 +10,7 @@ use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
 use crate::virtual_texture_pass::VirtualTexturePass;
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
-use rs_core_minimal::settings::RenderSettings;
+use rs_core_minimal::settings::{self, RenderSettings};
 use std::collections::{HashMap, VecDeque};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
@@ -156,21 +156,23 @@ impl Renderer {
             window,
             surface_width,
             surface_height,
-            Some(wgpu::PowerPreference::HighPerformance),
+            Some(match settings.power_preference {
+                settings::PowerPreference::None => PowerPreference::None,
+                settings::PowerPreference::LowPower => PowerPreference::LowPower,
+                settings::PowerPreference::HighPerformance => PowerPreference::HighPerformance,
+            }),
             Some(wgpu::InstanceDescriptor {
-                #[cfg(target_os = "windows")]
-                backends: wgpu::Backends::DX12,
-                #[cfg(not(target_os = "windows"))]
-                backends: wgpu::Backends::PRIMARY,
                 dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
                 flags: wgpu::InstanceFlags::default(),
                 gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
+                backends: match settings.backends {
+                    settings::Backends::Primary => Backends::PRIMARY,
+                    settings::Backends::Vulkan => Backends::VULKAN,
+                    settings::Backends::GL => Backends::GL,
+                    settings::Backends::DX12 => Backends::DX12,
+                },
             }),
-        );
-        let wgpu_context = match wgpu_context {
-            Ok(wgpu_context) => wgpu_context,
-            Err(err) => return Err(err),
-        };
+        )?;
         Ok(Self::from_context(
             wgpu_context,
             surface_width,

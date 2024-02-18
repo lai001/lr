@@ -1,10 +1,10 @@
 use crate::{bake_info::BakeInfo, egui_render::EGUIRenderOutput};
+use rs_core_minimal::settings::RenderSettings;
 use std::{
     collections::HashSet,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use rs_core_minimal::settings::RenderSettings;
 use wgpu::*;
 
 pub type BufferHandle = u64;

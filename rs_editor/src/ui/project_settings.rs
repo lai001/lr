@@ -1,5 +1,5 @@
 use egui::{Context, Ui, Window};
-use rs_core_minimal::settings::Settings;
+use rs_core_minimal::settings::{Backends, PowerPreference, Settings};
 use std::{cell::RefCell, rc::Rc};
 
 pub fn draw(context: &Context, open: &mut bool, project_settings: Rc<RefCell<Settings>>) {
@@ -31,7 +31,41 @@ fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) {
                     .speed(1)
                     .clamp_range(1..=10)
                     .prefix("Feed Back Texture Div:  "),
-                )
+                );
+
+                let backends = &mut render_setting.backends;
+                egui::ComboBox::from_label("Select Backends")
+                    .selected_text(format!("{:?}", backends))
+                    .show_ui(ui, |ui| {
+                        ui.style_mut().wrap = Some(false);
+                        ui.set_min_width(60.0);
+                        ui.selectable_value(backends, Backends::DX12, "DX12");
+                        ui.selectable_value(backends, Backends::GL, "GL");
+                        ui.selectable_value(backends, Backends::Vulkan, "Vulkan");
+                        ui.selectable_value(backends, Backends::Primary, "Primary");
+                    });
+
+                egui::ComboBox::from_label("Select Power Preference")
+                    .selected_text(format!("{:?}", render_setting.power_preference))
+                    .show_ui(ui, |ui| {
+                        ui.style_mut().wrap = Some(false);
+                        ui.set_min_width(60.0);
+                        ui.selectable_value(
+                            &mut render_setting.power_preference,
+                            PowerPreference::None,
+                            "None",
+                        );
+                        ui.selectable_value(
+                            &mut render_setting.power_preference,
+                            PowerPreference::HighPerformance,
+                            "HighPerformance",
+                        );
+                        ui.selectable_value(
+                            &mut render_setting.power_preference,
+                            PowerPreference::LowPower,
+                            "LowPower",
+                        );
+                    });
             });
         });
     });

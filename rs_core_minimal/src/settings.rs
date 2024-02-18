@@ -12,8 +12,25 @@ pub struct VirtualTextureSetting {
     pub feedback_bias: f32,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum PowerPreference {
+    None,
+    LowPower,
+    HighPerformance,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum Backends {
+    Primary,
+    Vulkan,
+    GL,
+    DX12,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RenderSettings {
+    pub power_preference: PowerPreference,
+    pub backends: Backends,
     pub virtual_texture_setting: VirtualTextureSetting,
 }
 
@@ -36,6 +53,11 @@ impl Default for Settings {
                     feedback_bias: 0.0,
                     is_enable: true,
                 },
+                power_preference: PowerPreference::HighPerformance,
+                #[cfg(target_os = "windows")]
+                backends: Backends::DX12,
+                #[cfg(not(target_os = "windows"))]
+                backends: Backends::Primary,
             },
         }
     }
