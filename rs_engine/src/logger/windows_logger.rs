@@ -17,20 +17,17 @@ impl Logger {
     pub fn new(cfg: LoggerConfiguration) -> Logger {
         let mut buf_writer: Option<BufWriter<File>> = None;
         if cfg.is_write_to_file {
-            match std::fs::create_dir_all("./log") {
-                Ok(_) => {
-                    let file = std::fs::File::create(format!(
-                        "./log/{}.log",
-                        chrono::Local::now().format("%Y_%m_%d-%H_%M_%S")
-                    ));
-                    match file {
-                        Ok(file) => {
-                            buf_writer = Some(std::io::BufWriter::new(file));
-                        }
-                        Err(err) => {
-                            println!("{err}");
-                        }
-                    }
+            let writer = (|| {
+                let _ = std::fs::create_dir_all("./log")?;
+                let file = std::fs::File::create(format!(
+                    "./log/{}.log",
+                    chrono::Local::now().format("%Y_%m_%d-%H_%M_%S")
+                ))?;
+                std::io::Result::Ok(std::io::BufWriter::new(file))
+            })();
+            match writer {
+                Ok(writer) => {
+                    buf_writer = Some(writer);
                 }
                 Err(err) => {
                     println!("{err}");
@@ -57,8 +54,7 @@ impl Logger {
                     let level = record.level();
                     let level_style = buf.default_level_style(level);
                     let current_thread = std::thread::current();
-                    let thread_name =
-                        format!("Thread: {}", current_thread.name().unwrap_or("Unknown"));
+                    let thread_name = format!("{}", current_thread.name().unwrap_or("Unknown"));
                     let content = format!(
                         "{} [{}] [{}] {}:{} {}",
                         buf.timestamp_millis(),

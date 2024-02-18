@@ -8,7 +8,9 @@ use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::phong_pipeline::PhongPipeline;
 use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
+use crate::virtual_texture_pass::VirtualTexturePass;
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
+use rs_core_minimal::settings::RenderSettings;
 use std::collections::{HashMap, VecDeque};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
@@ -45,6 +47,10 @@ pub struct Renderer {
 
     #[cfg(feature = "renderdoc")]
     render_doc_context: Option<crate::renderdoc::Context>,
+
+    virtual_texture_pass: Option<VirtualTexturePass>,
+
+    settings: RenderSettings,
 }
 
 impl Renderer {
@@ -54,6 +60,7 @@ impl Renderer {
         surface_height: u32,
         scale_factor: f32,
         shaders: HashMap<String, String>,
+        settings: RenderSettings,
     ) -> Renderer {
         let egui_render_pass = EGUIRenderer::new(
             wgpu_context.get_device(),
@@ -75,8 +82,12 @@ impl Renderer {
             false,
             &mut sampler_cache,
         );
-        let depth_texture =
-            DepthTexture::new(surface_width, surface_height, wgpu_context.get_device());
+        let depth_texture = DepthTexture::new(
+            surface_width,
+            surface_height,
+            wgpu_context.get_device(),
+            Some("Base.DepthTexture"),
+        );
         let default_textures =
             DefaultTextures::new(wgpu_context.get_device(), wgpu_context.get_queue());
         let attachment_pipeline = AttachmentPipeline::new(
@@ -84,6 +95,19 @@ impl Renderer {
             &shader_library,
             &wgpu_context.get_current_swapchain_format(),
         );
+
+        let virtual_texture_pass: Option<VirtualTexturePass>;
+        if settings.virtual_texture_setting.is_enable {
+            virtual_texture_pass = Some(VirtualTexturePass::new(
+                wgpu_context.get_device(),
+                &shader_library,
+                false,
+                glam::uvec2(surface_width, surface_height),
+                settings.virtual_texture_setting.clone(),
+            ));
+        } else {
+            virtual_texture_pass = None;
+        }
 
         Renderer {
             wgpu_context,
@@ -111,7 +135,9 @@ impl Renderer {
             task_commands: VecDeque::new(),
             ibl_bakes: HashMap::new(),
             #[cfg(feature = "renderdoc")]
-            render_doc_context: crate::renderdoc::Context::new(),
+            render_doc_context: crate::renderdoc::Context::new().ok(),
+            virtual_texture_pass,
+            settings,
         }
     }
 
@@ -121,6 +147,7 @@ impl Renderer {
         surface_height: u32,
         scale_factor: f32,
         shaders: HashMap<String, String>,
+        settings: RenderSettings,
     ) -> Result<Renderer>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -150,6 +177,7 @@ impl Renderer {
             surface_height,
             scale_factor,
             shaders,
+            settings,
         ))
     }
 
@@ -188,13 +216,7 @@ impl Renderer {
             if resize_command.width <= 0 || resize_command.height <= 0 {
                 continue;
             }
-            self.screen_descriptor.size_in_pixels[0] = resize_command.width;
-            self.screen_descriptor.size_in_pixels[1] = resize_command.height;
-            self.wgpu_context
-                .window_resized(resize_command.width, resize_command.height);
-            let device = self.wgpu_context.get_device();
-            self.depth_texture =
-                DepthTexture::new(resize_command.width, resize_command.height, device);
+            self.surface_size_will_change(glam::uvec2(resize_command.width, resize_command.height));
         }
 
         while let Some(task_command) = self.task_commands.pop_front() {
@@ -203,9 +225,10 @@ impl Renderer {
         }
 
         let mut render_output = RenderOutput::default();
-        let device = self.wgpu_context.get_device();
-        let queue = self.wgpu_context.get_queue();
+
         for create_texture_command in &self.create_texture_commands {
+            let device = self.wgpu_context.get_device();
+            let queue = self.wgpu_context.get_queue();
             let texture =
                 device.create_texture(&create_texture_command.texture_descriptor_create_info.get());
             if let Some(init_data) = &create_texture_command.init_data {
@@ -229,6 +252,7 @@ impl Renderer {
         self.create_texture_commands.clear();
 
         for create_buffer_command in &self.create_buffer_commands {
+            let device = self.wgpu_context.get_device();
             let descriptor = BufferInitDescriptor {
                 label: create_buffer_command.buffer_create_info.label.as_deref(),
                 contents: &create_buffer_command.buffer_create_info.contents,
@@ -244,6 +268,7 @@ impl Renderer {
         self.create_buffer_commands.clear();
 
         for update_buffer_command in &self.update_buffer_commands {
+            let device = self.wgpu_context.get_device();
             if let Some(buffer) = self.buffers.get(&update_buffer_command.handle) {
                 let (sender, receiver) = std::sync::mpsc::channel();
                 buffer.slice(..).map_async(wgpu::MapMode::Write, {
@@ -264,6 +289,7 @@ impl Renderer {
         self.update_buffer_commands.clear();
 
         for update_texture_command in &self.update_texture_commands {
+            let queue = self.wgpu_context.get_queue();
             if let Some(texture) = self.textures.get(&update_texture_command.handle) {
                 queue.write_texture(
                     texture.as_image_copy(),
@@ -276,6 +302,7 @@ impl Renderer {
         self.update_texture_commands.clear();
 
         for create_uitexture_command in &self.create_uitexture_commands {
+            let device = self.wgpu_context.get_device();
             if let Some(texture) = self
                 .textures
                 .get(&create_uitexture_command.referencing_texture_handle)
@@ -292,6 +319,8 @@ impl Renderer {
         self.create_uitexture_commands.clear();
 
         while let Some(create_iblbake_command) = self.create_iblbake_commands.pop_front() {
+            let device = self.wgpu_context.get_device();
+            let queue = self.wgpu_context.get_queue();
             let mut baker = AccelerationBaker::new(
                 device,
                 queue,
@@ -324,6 +353,8 @@ impl Renderer {
         self.draw_object_commands.clear();
 
         while let Some(output) = self.ui_output_commands.pop_front() {
+            let device = self.wgpu_context.get_device();
+            let queue = self.wgpu_context.get_queue();
             self.gui_renderer
                 .render(output, queue, device, &self.screen_descriptor, &output_view)
         }
@@ -331,6 +362,7 @@ impl Renderer {
         #[cfg(feature = "renderdoc")]
         {
             if is_capture_frame {
+                let device = self.wgpu_context.get_device();
                 if let Some(render_doc_context) = &mut self.render_doc_context {
                     render_doc_context.stop_capture(device);
                 }
@@ -345,19 +377,14 @@ impl Renderer {
             self.wgpu_context.get_queue(),
             surface_texture_view,
             depth_texture_view,
-            Operations {
-                load: LoadOp::Clear(Color::TRANSPARENT),
-                store: StoreOp::Store,
-            },
-            Some(Operations {
-                load: LoadOp::Clear(1.0),
-                store: StoreOp::Store,
-            }),
-            Some(Operations {
-                load: LoadOp::Clear(0),
-                store: StoreOp::Store,
-            }),
         );
+
+        if let Some(pass) = &self.virtual_texture_pass {
+            pass.begin_new_frame(
+                self.wgpu_context.get_device(),
+                self.wgpu_context.get_queue(),
+            );
+        }
     }
 
     pub fn load_shader<K>(&mut self, shaders: HashMap<K, String>)
@@ -391,11 +418,14 @@ impl Renderer {
                     render_doc_context.capture_commands.push_back(());
                 }
             }
+            RenderCommand::Settings(settings) => {
+                self.set_settings(settings);
+            }
         }
         return None;
     }
 
-    fn draw_objects(&self, surface_texture_view: &wgpu::TextureView) {
+    fn draw_objects(&mut self, surface_texture_view: &wgpu::TextureView) {
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
         for draw_object_command in &self.draw_object_commands {
@@ -443,6 +473,18 @@ impl Renderer {
                         index_buffer,
                         index_count: draw_object_command.index_count,
                     };
+
+                    if let Some(pass) = &mut self.virtual_texture_pass {
+                        pass.render(
+                            device,
+                            queue,
+                            &[mesh_buffer.clone()],
+                            material.constants.model.clone(),
+                            material.constants.view.clone(),
+                            material.constants.projection.clone(),
+                        );
+                    }
+
                     let diffuse_texture_view =
                         diffuse_texture.create_view(&TextureViewDescriptor::default());
                     let specular_texture_view =
@@ -460,6 +502,37 @@ impl Renderer {
                 }
                 EMaterialType::PBR(_) => todo!(),
             }
+        }
+    }
+
+    fn set_settings(&mut self, settings: RenderSettings) {
+        if settings.virtual_texture_setting.is_enable {
+            let surface_width = self.wgpu_context.get_surface_config().width;
+            let surface_height = self.wgpu_context.get_surface_config().height;
+            self.virtual_texture_pass = Some(VirtualTexturePass::new(
+                self.wgpu_context.get_device(),
+                &self.shader_library,
+                false,
+                glam::uvec2(surface_width, surface_height),
+                settings.virtual_texture_setting.clone(),
+            ));
+        } else {
+            self.virtual_texture_pass = None;
+        }
+        self.settings = settings;
+    }
+
+    fn surface_size_will_change(&mut self, new_size: glam::UVec2) {
+        let width = new_size.x;
+        let height = new_size.y;
+        self.screen_descriptor.size_in_pixels[0] = width;
+        self.screen_descriptor.size_in_pixels[1] = height;
+        self.wgpu_context.window_resized(width, height);
+        let device = self.wgpu_context.get_device();
+        self.depth_texture = DepthTexture::new(width, height, device, Some("Base.DepthTexture"));
+
+        if let Some(virtual_texture_pass) = &mut self.virtual_texture_pass {
+            virtual_texture_pass.change_surface_size(device, new_size);
         }
     }
 }

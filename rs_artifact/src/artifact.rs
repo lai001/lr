@@ -12,6 +12,7 @@ use crate::{
     static_mesh::StaticMesh,
     EEndianType,
 };
+use rs_core_minimal::settings::Settings;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{
@@ -20,8 +21,9 @@ use std::{
     path::Path,
 };
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ArtifactFileHeader {
+    pub settings: Settings,
     pub resource_map: std::collections::HashMap<url::Url, ResourceInfo>,
 }
 
@@ -36,6 +38,7 @@ where
 
 pub fn encode_artifact_tasks_disk<R>(
     endian_type: Option<EEndianType>,
+    settings: Settings,
     tasks: &mut [ResourceEncodeTask<R>],
     target_path: &Path,
 ) -> Result<()>
@@ -77,6 +80,7 @@ where
     }
     let mut fileheader = ArtifactFileHeader {
         resource_map: HashMap::new(),
+        settings,
     };
     for info in infos {
         fileheader
@@ -96,6 +100,7 @@ where
 }
 
 pub fn encode_artifact_assets_disk<T>(
+    settings: Settings,
     assets: &[T],
     endian_type: Option<EEndianType>,
     target_path: &Path,
@@ -111,18 +116,20 @@ where
         let task = asset.build_resource_encode_task(reader);
         tasks.push(task);
     }
-    encode_artifact_tasks_disk(endian_type, &mut tasks, target_path)
+    encode_artifact_tasks_disk(endian_type, settings, &mut tasks, target_path)
 }
 
 pub struct ArtifactAssetEncoder {
+    settings: Settings,
     tasks: Vec<ResourceEncodeTask<Cursor<Vec<u8>>>>,
     endian_type: Option<EEndianType>,
     target_path: PathBuf,
 }
 
 impl ArtifactAssetEncoder {
-    pub fn new(endian_type: Option<EEndianType>, target_path: &Path) -> Self {
+    pub fn new(endian_type: Option<EEndianType>, settings: Settings, target_path: &Path) -> Self {
         Self {
+            settings,
             tasks: vec![],
             endian_type,
             target_path: target_path.to_path_buf(),
@@ -141,7 +148,12 @@ impl ArtifactAssetEncoder {
     }
 
     pub fn finish(&mut self) -> Result<()> {
-        encode_artifact_tasks_disk(self.endian_type, &mut self.tasks, &self.target_path)
+        encode_artifact_tasks_disk(
+            self.endian_type,
+            self.settings.clone(),
+            &mut self.tasks,
+            &self.target_path,
+        )
     }
 }
 

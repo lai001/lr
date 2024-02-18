@@ -1,12 +1,10 @@
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
 use crate::ui::gizmo_view::GizmoView;
-use crate::ui::property_view::EValueModifierType;
 use crate::ui::top_menu::TopMenu;
 use crate::ui::{asset_view, gizmo_settings, level_view, property_view, textures_view, top_menu};
 use egui::*;
 use egui_gizmo::GizmoResult;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
 
@@ -125,6 +123,13 @@ impl EditorUI {
             &mut self.gizmo_view.gizmo_orientation,
             &mut self.gizmo_view.custom_highlight_color,
         );
+        if let Some(project_settings) = data_source.project_settings.clone() {
+            crate::ui::project_settings::draw(
+                context,
+                &mut data_source.project_settings_open,
+                project_settings,
+            );
+        }
         click
     }
 

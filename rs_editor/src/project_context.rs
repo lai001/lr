@@ -273,6 +273,7 @@ impl ProjectContext {
         let mut images: Vec<rs_artifact::image::Image> = Vec::new();
         let mut artifact_asset_encoder = ArtifactAssetEncoder::new(
             Some(EEndianType::Little),
+            self.project.settings.borrow().clone(),
             &output_folder_path.join(output_filename),
         );
         for node in &self.project.level.borrow().nodes {

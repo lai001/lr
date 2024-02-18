@@ -11,6 +11,7 @@ pub mod default_textures;
 pub mod depth_texture;
 pub mod egui_render;
 pub mod error;
+pub mod frame_buffer;
 pub mod global_shaders;
 pub mod gpu_buffer;
 pub mod gpu_vertex_buffer;
@@ -25,6 +26,7 @@ pub mod shader_library;
 pub mod texture_loader;
 pub mod texture_readback;
 pub mod vertex_data_type;
+pub mod virtual_texture_pass;
 pub mod wgpu_context;
 
 #[derive(Debug)]
@@ -40,4 +42,8 @@ pub(crate) fn get_cargo_manifest_dir() -> std::path::PathBuf {
 
 pub(crate) fn get_buildin_shader_dir() -> std::path::PathBuf {
     get_cargo_manifest_dir().join("shaders")
+}
+
+pub(crate) fn get_old_buildin_shader_dir() -> std::path::PathBuf {
+    get_cargo_manifest_dir().join("../rs_computer_graphics/src/shader")
 }

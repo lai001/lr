@@ -17,26 +17,17 @@ impl Logger {
     pub fn new(cfg: LoggerConfiguration) -> Logger {
         let mut buf_writer: Option<BufWriter<File>> = None;
         if cfg.is_write_to_file {
-            match std::fs::create_dir_all("/data/local/tmp/rs") {
-                Ok(_) => {
-                    let file = std::fs::File::create(format!(
-                        "/data/local/tmp/rs/{}.log",
-                        chrono::Local::now().format("%Y_%m_%d-%H_%M_%S")
-                    ));
-                    match file {
-                        Ok(file) => {
-                            buf_writer = Some(std::io::BufWriter::new(file));
-                        }
-                        Err(err) => unsafe {
-                            let msg = err.to_string();
-                            ndk_sys::__android_log_print(
-                                ndk_sys::android_LogPriority::ANDROID_LOG_WARN.0
-                                    as std::os::raw::c_int,
-                                TAG.as_ptr() as *const ::std::os::raw::c_char,
-                                msg.as_ptr() as *const ::std::os::raw::c_char,
-                            );
-                        },
-                    }
+            let writer = (|| {
+                let _ = std::fs::create_dir_all("/data/local/tmp/rs")?;
+                let file = std::fs::File::create(format!(
+                    "/data/local/tmp/rs/{}.log",
+                    chrono::Local::now().format("%Y_%m_%d-%H_%M_%S")
+                ))?;
+                std::io::Result::Ok(std::io::BufWriter::new(file))
+            })();
+            match writer {
+                Ok(writer) => {
+                    buf_writer = Some(writer);
                 }
                 Err(err) => unsafe {
                     let msg = err.to_string();
@@ -59,8 +50,7 @@ impl Logger {
                         return Err(std::fmt::Error {});
                     }
                     let current_thread = std::thread::current();
-                    let thread_name =
-                        format!("Thread: {}", current_thread.name().unwrap_or("Unknown"));
+                    let thread_name = format!("{}", current_thread.name().unwrap_or("Unknown"));
                     let content = format!(
                         "[{}] {}:{} {}",
                         thread_name,

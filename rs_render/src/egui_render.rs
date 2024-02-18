@@ -1,5 +1,4 @@
 pub struct EGUIRenderer {
-    // context: egui::Context,
     egui_wgpu_renderer: egui_wgpu::Renderer,
 }
 
@@ -12,24 +11,17 @@ pub struct EGUIRenderOutput {
 impl EGUIRenderer {
     pub fn new(
         device: &wgpu::Device,
-        // context: egui::Context,
         output_format: wgpu::TextureFormat,
         msaa_samples: u32,
     ) -> EGUIRenderer {
         let egui_wgpu_renderer =
             egui_wgpu::Renderer::new(device, output_format, None, msaa_samples);
 
-        EGUIRenderer {
-            // context,
-            egui_wgpu_renderer,
-        }
+        EGUIRenderer { egui_wgpu_renderer }
     }
 
     pub fn render(
         &mut self,
-        // full_output: egui::FullOutput,
-        // textures_delta: egui::TexturesDelta,
-        // clipped_primitives: Vec<egui::ClippedPrimitive>,
         gui_render_output: EGUIRenderOutput,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
@@ -40,12 +32,6 @@ impl EGUIRenderer {
             textures_delta,
             clipped_primitives,
         } = gui_render_output;
-
-        // let clipped_primitives = self
-        //     .context
-        //     .tessellate(shapes, pixels_per_point);
-        // let textures_delta: egui::epaint::textures::TexturesDelta = full_output.textures_delta;
-
         for (id, image_delta) in &textures_delta.set {
             self.egui_wgpu_renderer
                 .update_texture(&device, &queue, *id, image_delta);

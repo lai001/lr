@@ -6,8 +6,8 @@ edition = "2021"
 [features]
 default = ["standalone"]
 renderdoc = ["dep:renderdoc"]
-editor = ["rs_shader_compiler/editor"]
-standalone = ["rs_shader_compiler/standalone"]
+editor = ["rs_shader_compiler/editor", "rs_core_minimal/editor"]
+standalone = ["rs_shader_compiler/standalone", "rs_core_minimal/standalone"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]

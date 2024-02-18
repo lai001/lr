@@ -42,19 +42,17 @@ impl HotReload {
     pub fn is_need_reload(&self) -> bool {
         let library_reload = self.library_reload.lock().unwrap();
         for events in self.receiver.try_iter() {
-            match events {
-                Ok(events) => {
-                    let file_path = library_reload.get_original_lib_file_path();
-                    for event in events {
-                        if file_path == event.path {
-                            return true;
-                        }
-                    }
+            let Ok(events) = events else {
+                continue;
+            };
+            let file_path = library_reload.get_original_lib_file_path();
+            for event in events {
+                if file_path == event.path {
+                    return true;
                 }
-                Err(_) => {}
             }
         }
-        return false;
+        false
     }
 
     pub fn reload(&mut self) -> bool {

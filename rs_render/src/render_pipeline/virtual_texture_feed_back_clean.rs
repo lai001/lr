@@ -1,23 +1,24 @@
 use crate::{
-    base_render_pipeline::BaseRenderPipeline, global_shaders::attachment::AttachmentShader,
+    base_render_pipeline::BaseRenderPipeline,
+    global_shaders::virtual_texture_clean::VirtualTextureCleanShader,
     gpu_vertex_buffer::GpuVertexBufferImp, shader_library::ShaderLibrary,
 };
 use wgpu::*;
 
-pub struct AttachmentPipeline {
+pub struct VirtualTextureFeedBackClearPipeline {
     base_render_pipeline: BaseRenderPipeline,
 }
 
-impl AttachmentPipeline {
+impl VirtualTextureFeedBackClearPipeline {
     pub fn new(
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
-    ) -> AttachmentPipeline {
+    ) -> VirtualTextureFeedBackClearPipeline {
         let base_render_pipeline = BaseRenderPipeline::new(
             device,
             shader_library,
-            &AttachmentShader {},
+            &VirtualTextureCleanShader {},
             &[Some(texture_format.clone().into())],
             Some(DepthStencilState {
                 depth_compare: CompareFunction::Never,
@@ -36,7 +37,7 @@ impl AttachmentPipeline {
             None,
         );
 
-        AttachmentPipeline {
+        VirtualTextureFeedBackClearPipeline {
             base_render_pipeline,
         }
     }

@@ -12,21 +12,16 @@ pub enum ECaptureOptionValue {
 }
 
 impl Context {
-    pub fn new() -> Option<Self> {
+    pub fn new() -> crate::error::Result<Self> {
         let rd: Result<RenderDoc<V110>, Error> = RenderDoc::new();
-        match rd {
-            Ok(rd) => {
-                log::trace!("RenderDoc api version {:?}", rd.get_api_version());
-                Some(Self {
-                    capture_commands: VecDeque::new(),
-                    inner: rd,
-                })
-            }
-            Err(err) => {
-                log::warn!("{}. {}", err, "Expect launched by RenderDoc");
-                return None;
-            }
-        }
+        let rd = rd.map_err(|err| {
+            crate::error::Error::RenderDoc(err, Some("Expect launched by RenderDoc".to_string()))
+        })?;
+        log::trace!("RenderDoc api version {:?}", rd.get_api_version());
+        Ok(Self {
+            capture_commands: VecDeque::new(),
+            inner: rd,
+        })
     }
 
     pub fn set_capture_option(

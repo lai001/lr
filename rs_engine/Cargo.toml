@@ -7,8 +7,16 @@ edition = "2021"
 [features]
 default = ["standalone"]
 renderdoc = ["rs_render/renderdoc"]
-editor = ["rs_shader_compiler/editor", "rs_render/editor"]
-standalone = ["rs_shader_compiler/standalone", "rs_render/standalone"]
+editor = [
+    "rs_shader_compiler/editor",
+    "rs_render/editor",
+    "rs_core_minimal/editor",
+]
+standalone = [
+    "rs_shader_compiler/standalone",
+    "rs_render/standalone",
+    "rs_core_minimal/standalone",
+]
 
 [dependencies]
 chrono = "0.4"

@@ -1,9 +1,9 @@
 use crate::{
-    base_render_pipeline::BaseRenderPipeline, global_shaders::phong::PhongShader, gpu_buffer,
-    gpu_vertex_buffer::GpuVertexBufferImp, sampler_cache::SamplerCache,
-    shader_library::ShaderLibrary, vertex_data_type::mesh_vertex::MeshVertex, VertexBufferType,
+    base_render_pipeline::BaseRenderPipeline,
+    global_shaders::virtual_texture_feed_back::VirtualTextureFeedBackShader, gpu_buffer,
+    gpu_vertex_buffer::GpuVertexBufferImp, shader_library::ShaderLibrary,
+    vertex_data_type::mesh_vertex::MeshVertex, VertexBufferType,
 };
-use std::sync::Arc;
 use type_layout::TypeLayout;
 use wgpu::*;
 
@@ -13,25 +13,31 @@ pub struct Constants {
     pub model: glam::Mat4,
     pub view: glam::Mat4,
     pub projection: glam::Mat4,
+    pub physical_texture_size: u32,
+    pub virtual_texture_size: u32,
+    pub tile_size: u32,
+    pub feed_back_texture_width: u32,
+    pub feed_back_texture_height: u32,
+    pub mipmap_level_bias: f32,
+    pub mipmap_level_scale: f32,
+    pub feedback_bias: f32,
 }
 
-pub struct PhongPipeline {
+pub struct VirtualTextureFeedBackPipeline {
     base_render_pipeline: BaseRenderPipeline,
-    sampler: Arc<Sampler>,
 }
 
-impl PhongPipeline {
+impl VirtualTextureFeedBackPipeline {
     pub fn new(
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
         is_noninterleaved: bool,
-        sampler_cache: &mut SamplerCache,
-    ) -> PhongPipeline {
+    ) -> VirtualTextureFeedBackPipeline {
         let base_render_pipeline = BaseRenderPipeline::new(
             device,
             shader_library,
-            &PhongShader {},
+            &VirtualTextureFeedBackShader {},
             &[Some(texture_format.clone().into())],
             Some(DepthStencilState {
                 depth_compare: CompareFunction::Less,
@@ -43,9 +49,7 @@ impl PhongPipeline {
             None,
             None,
             Some(PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
                 cull_mode: None,
-                polygon_mode: PolygonMode::Fill,
                 ..Default::default()
             }),
             if is_noninterleaved {
@@ -56,11 +60,8 @@ impl PhongPipeline {
             None,
         );
 
-        let sampler = sampler_cache.create_sampler(device, &SamplerDescriptor::default());
-
-        PhongPipeline {
+        VirtualTextureFeedBackPipeline {
             base_render_pipeline,
-            sampler,
         }
     }
 
@@ -72,22 +73,13 @@ impl PhongPipeline {
         depth_view: &TextureView,
         constants: &Constants,
         mesh_buffers: &[GpuVertexBufferImp],
-        diffuse_texture_view: &TextureView,
-        specular_texture_view: &TextureView,
     ) {
         let uniform_buf = gpu_buffer::uniform::from(device, constants, None);
 
         self.base_render_pipeline.draw_resources2(
             device,
             queue,
-            vec![
-                vec![uniform_buf.as_entire_binding()],
-                vec![
-                    BindingResource::TextureView(&diffuse_texture_view),
-                    BindingResource::TextureView(&specular_texture_view),
-                ],
-                vec![BindingResource::Sampler(&self.sampler)],
-            ],
+            vec![vec![uniform_buf.as_entire_binding()]],
             mesh_buffers,
             None,
             None,

@@ -428,6 +428,9 @@ impl EditorContext {
                 nodes.iter(),
             );
         }
+        self.engine
+            .set_settings(project_context.project.settings.borrow().clone());
+        self.data_source.project_settings = Some(project_context.project.settings.clone());
         self.project_context = Some(project_context);
         self.try_load_plugin();
     }
@@ -707,6 +710,11 @@ impl EditorContext {
                         );
                     }
                 },
+                top_menu::EClickEventType::OpenProjectSettings => {
+                    if self.project_context.is_some() {
+                        self.data_source.project_settings_open = true;
+                    }
+                }
             }
         }
         if let Some(click_aseet) = click_event.click_aseet {

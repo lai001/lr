@@ -29,42 +29,20 @@ impl LibraryReload {
         &self,
         symbol_name: &str,
     ) -> Result<libloading::Symbol<Signature>> {
-        match self.libraries.last() {
-            Some(ref x) => unsafe {
-                let symbol = match x.get(symbol_name.as_bytes()) {
-                    Ok(symbol) => symbol,
-                    Err(err) => {
-                        return Err(crate::error::Error::Libloading(err, None));
-                    }
-                };
-                Ok(symbol)
-            },
-            None => {
-                return Err(crate::error::Error::IO(
-                    std::io::ErrorKind::NotFound.into(),
-                    None,
-                ));
-            }
-        }
+        let library = self.libraries.last().ok_or(crate::error::Error::IO(
+            std::io::ErrorKind::NotFound.into(),
+            None,
+        ))?;
+        let symbol = unsafe { library.get(symbol_name.as_bytes()) }
+            .map_err(|err| crate::error::Error::Libloading(err, None))?;
+        Ok(symbol)
     }
 
     pub(crate) fn reload(&mut self) -> Result<()> {
         let new_index = self.index + 1;
-
-        let target_file_path = match Self::copy_library(self.index, &self.folder, &self.lib_name) {
-            Ok(target_file_path) => target_file_path,
-            Err(err) => {
-                return Err(err);
-            }
-        };
-
-        let library = match Self::load_library(&target_file_path) {
-            Ok(library) => library,
-            Err(err) => {
-                return Err(crate::error::Error::Libloading(err, None));
-            }
-        };
-
+        let target_file_path = Self::copy_library(self.index, &self.folder, &self.lib_name)?;
+        let library = Self::load_library(&target_file_path)
+            .map_err(|err| crate::error::Error::Libloading(err, None))?;
         self.libraries.push(library);
         self.index = new_index;
         Ok(())
@@ -92,9 +70,9 @@ impl LibraryReload {
         let prefix = Self::get_lib_name_prexif();
         let extension = Self::get_lib_name_extension();
         if let Some(index) = index {
-            return format!("{}{}_{}.{}", prefix, lib_name, index, extension);
+            format!("{}{}_{}.{}", prefix, lib_name, index, extension)
         } else {
-            return format!("{}{}.{}", prefix, lib_name, extension);
+            format!("{}{}.{}", prefix, lib_name, extension)
         }
     }
 
@@ -108,16 +86,11 @@ impl LibraryReload {
         let original_file_path = std::path::Path::new(folder).join(original_filename);
         let target_filename = Self::get_full_lib_filename(lib_name, Some(index));
         let target_file_path = std::path::Path::new(folder).join(target_filename);
-        match std::fs::copy(original_file_path.clone(), target_file_path.clone()) {
-            Ok(_) => Ok(target_file_path.to_string_lossy().to_string()),
-            Err(err) => Err(crate::error::Error::IO(
-                err,
-                Some(format!(
-                    "Can not copy {:?} to {:?}",
-                    original_file_path, target_file_path
-                )),
-            )),
-        }
+        std::fs::copy(original_file_path.clone(), target_file_path.clone()).map_err(|err| {
+            let msg = format!("Can not copy {original_file_path:?} to {target_file_path:?}");
+            crate::error::Error::IO(err, Some(msg))
+        })?;
+        Ok(target_file_path.to_string_lossy().to_string())
     }
 
     fn sear_max_number(folder: &str, lib_name: &str) -> i32 {
@@ -161,25 +134,26 @@ impl LibraryReload {
 
     pub fn clean_cache(&self) {
         for entry in WalkDir::new(self.folder.clone()).max_depth(1) {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                let extension = path
-                    .extension()
-                    .unwrap_or(Default::default())
-                    .to_string_lossy()
-                    .to_string();
-                let file_stem = path
-                    .file_stem()
-                    .unwrap_or(Default::default())
-                    .to_string_lossy()
-                    .to_string();
-                if extension == Self::get_lib_name_extension()
-                    && file_stem.starts_with(
-                        &(Self::get_lib_name_prexif().to_string() + &self.lib_name + "_"),
-                    )
-                {
-                    let _ = std::fs::remove_file(path);
-                }
+            let Ok(entry) = entry else {
+                continue;
+            };
+
+            let path = entry.path();
+            let extension = path
+                .extension()
+                .unwrap_or(Default::default())
+                .to_string_lossy()
+                .to_string();
+            let file_stem = path
+                .file_stem()
+                .unwrap_or(Default::default())
+                .to_string_lossy()
+                .to_string();
+            if extension == Self::get_lib_name_extension()
+                && file_stem
+                    .starts_with(&(Self::get_lib_name_prexif().to_string() + &self.lib_name + "_"))
+            {
+                let _ = std::fs::remove_file(path);
             }
         }
     }

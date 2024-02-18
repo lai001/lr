@@ -2,12 +2,12 @@ use super::global_shader::GlobalShader;
 use crate::get_old_buildin_shader_dir;
 use rs_shader_compiler::pre_process::ShaderDescription;
 
-pub struct BrdfLutShader {}
+pub struct VirtualTextureCleanShader {}
 
-impl GlobalShader for BrdfLutShader {
+impl GlobalShader for VirtualTextureCleanShader {
     fn get_shader_description(&self) -> ShaderDescription {
         let shader_description = ShaderDescription {
-            shader_path: get_old_buildin_shader_dir().join("brdf_lut.wgsl"),
+            shader_path: get_old_buildin_shader_dir().join("virtual_texture_clean.wgsl"),
             include_dirs: vec![],
             definitions: vec![],
         };
@@ -15,12 +15,6 @@ impl GlobalShader for BrdfLutShader {
     }
 
     fn get_name(&self) -> String {
-        "brdf_lut.wgsl".to_string()
-    }
-}
-
-impl BrdfLutShader {
-    pub fn get_format() -> wgpu::TextureFormat {
-        wgpu::TextureFormat::Rg16Float
+        "virtual_texture_clean.wgsl".to_string()
     }
 }

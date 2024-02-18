@@ -19,6 +19,7 @@ pub enum EToolType {
 pub enum EClickEventType {
     NewProject(String),
     OpenProject,
+    OpenProjectSettings,
     ImportAsset,
     SaveProject,
     Export,
@@ -50,6 +51,10 @@ impl TopMenu {
                     });
                     if ui.add(Button::new("Open Project")).clicked() {
                         click = Some(EClickEventType::OpenProject);
+                        ui.close_menu();
+                    }
+                    if ui.add(Button::new("Open Project Settings")).clicked() {
+                        click = Some(EClickEventType::OpenProjectSettings);
                         ui.close_menu();
                     }
                     if ui.add(Button::new("Import Asset")).clicked() {

@@ -62,46 +62,41 @@ pub struct Reflection {
 }
 
 impl Reflection {
-    pub fn new(shader_code: &str) -> Result<Reflection, front::wgsl::ParseError> {
-        let module = front::wgsl::parse_str(&shader_code);
-        match module {
-            Ok(module) => {
-                let render_entry_points = Self::extract_render_entry_point(&module);
-                let cs_entry_point = Self::extract_compute_entry_point(&module);
-                let pipeline_type: EPipelineType;
+    pub fn new(shader_code: &str) -> crate::error::Result<Reflection> {
+        let module = front::wgsl::parse_str(&shader_code)
+            .map_err(|err| crate::error::Error::ShaderReflection(err, None))?;
+        let render_entry_points = Self::extract_render_entry_point(&module);
+        let cs_entry_point = Self::extract_compute_entry_point(&module);
+        let pipeline_type: EPipelineType;
 
-                if let Some(render_entry_points) = render_entry_points {
-                    pipeline_type =
-                        EPipelineType::Render(render_entry_points.0, render_entry_points.1);
-                } else if let Some(cs_entry_point) = cs_entry_point {
-                    pipeline_type = EPipelineType::Compute(cs_entry_point);
-                } else {
-                    panic!()
-                }
-
-                let (vertex_attributes, array_stride) = Self::extract_vertex_attributes(&module);
-                let bind_group_layout_entrys =
-                    Self::extract_bind_group_layout_entrys(&module, &pipeline_type);
-
-                let mut noninterleaved_vertex_attributes = Vec::<Vec<wgpu::VertexAttribute>>::new();
-                for mut vertex_attribute in vertex_attributes.to_vec() {
-                    vertex_attribute.offset = 0;
-                    noninterleaved_vertex_attributes.push(vec![vertex_attribute]);
-                }
-
-                let reflection = Reflection {
-                    module,
-                    interleaved_vertex_attributes: vertex_attributes,
-                    noninterleaved_vertex_attributes,
-                    array_stride,
-                    pipeline_type,
-                    bind_group_layout_entrys,
-                };
-
-                Ok(reflection)
-            }
-            Err(err) => Err(err),
+        if let Some(render_entry_points) = render_entry_points {
+            pipeline_type = EPipelineType::Render(render_entry_points.0, render_entry_points.1);
+        } else if let Some(cs_entry_point) = cs_entry_point {
+            pipeline_type = EPipelineType::Compute(cs_entry_point);
+        } else {
+            return Err(crate::error::Error::ShaderNotSupported(None));
         }
+
+        let (vertex_attributes, array_stride) = Self::extract_vertex_attributes(&module);
+        let bind_group_layout_entrys =
+            Self::extract_bind_group_layout_entrys(&module, &pipeline_type);
+
+        let mut noninterleaved_vertex_attributes = Vec::<Vec<wgpu::VertexAttribute>>::new();
+        for mut vertex_attribute in vertex_attributes.to_vec() {
+            vertex_attribute.offset = 0;
+            noninterleaved_vertex_attributes.push(vec![vertex_attribute]);
+        }
+
+        let reflection = Reflection {
+            module,
+            interleaved_vertex_attributes: vertex_attributes,
+            noninterleaved_vertex_attributes,
+            array_stride,
+            pipeline_type,
+            bind_group_layout_entrys,
+        };
+
+        Ok(reflection)
     }
 
     pub fn make_vertex_buffer_layout_builder(

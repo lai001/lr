@@ -10,16 +10,16 @@ pub struct WGPUContext {
 }
 
 impl WGPUContext {
-    fn new_surface<W>(
-        instance: &wgpu::Instance,
-        window: &W,
-    ) -> std::result::Result<wgpu::Surface<'static>, wgpu::CreateSurfaceError>
+    fn new_surface<W>(instance: &wgpu::Instance, window: &W) -> Result<wgpu::Surface<'static>>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         unsafe {
-            let surface_target = wgpu::SurfaceTargetUnsafe::from_window(window).unwrap();
-            instance.create_surface_unsafe(surface_target)
+            let surface_target = wgpu::SurfaceTargetUnsafe::from_window(window)
+                .map_err(|err| crate::error::Error::WindowError(err))?;
+            instance
+                .create_surface_unsafe(surface_target)
+                .map_err(|err| crate::error::Error::CreateSurfaceError(err))
         }
     }
 
@@ -62,26 +62,17 @@ impl WGPUContext {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        // let instance = wgpu::Instance::default();
         let instance = wgpu::Instance::new(instance_desc.unwrap_or_default());
-        let surface = match Self::new_surface(&instance, window) {
-            Ok(surface) => surface,
-            Err(err) => {
-                return Err(crate::error::Error::CreateSurfaceError(err));
-            }
-        };
+        let surface = Self::new_surface(&instance, window)?;
 
-        let Some(adapter) =
-            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            }))
-        else {
-            return Err(crate::error::Error::RequestAdapterFailed);
-        };
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+        }))
+        .ok_or(crate::error::Error::RequestAdapterFailed)?;
 
-        let (device, queue) = match pollster::block_on(adapter.request_device(
+        let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 required_features: {
                     let mut features = wgpu::Features::default();
@@ -94,12 +85,8 @@ impl WGPUContext {
                 label: None,
             },
             None,
-        )) {
-            Ok(request_device) => request_device,
-            Err(err) => {
-                return Err(crate::error::Error::RequestDeviceError(err));
-            }
-        };
+        ))
+        .map_err(|err| crate::error::Error::RequestDeviceError(err))?;
 
         let surface_config =
             Self::surface_configure(&surface, surface_width, surface_height, &adapter, &device);
@@ -139,12 +126,7 @@ impl WGPUContext {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        let surface = match Self::new_surface(&self.instance, window) {
-            Ok(surface) => surface,
-            Err(err) => {
-                return Err(crate::error::Error::CreateSurfaceError(err));
-            }
-        };
+        let surface = Self::new_surface(&self.instance, window)?;
         if self.adapter.is_surface_supported(&surface) {
             let surface_config = Self::surface_configure(
                 &surface,
@@ -156,15 +138,18 @@ impl WGPUContext {
             surface.configure(&self.device, &surface_config);
             Ok(())
         } else {
-            return Err(crate::error::Error::SurfaceNotSupported);
+            Err(crate::error::Error::SurfaceNotSupported)
         }
     }
 
-    pub fn window_resized(&mut self, width: u32, height: u32) {
+    pub fn window_resized(&mut self, width: u32, height: u32) -> bool {
         if width > 0 && height > 0 {
             self.surface_config.width = width;
             self.surface_config.height = height;
             self.surface.configure(&self.device, &self.surface_config);
+            true
+        } else {
+            false
         }
     }
 

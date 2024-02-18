@@ -6,6 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 # [dependencies]
+[features]
+default = ["standalone"]
+standalone = ["rs_render/standalone", "rs_engine/standalone"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 log = "0.4.17"

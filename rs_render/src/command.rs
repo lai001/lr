@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+use rs_core_minimal::settings::RenderSettings;
 use wgpu::*;
 
 pub type BufferHandle = u64;
@@ -172,6 +173,7 @@ pub enum RenderCommand {
     UiOutput(EGUIRenderOutput),
     Resize(ResizeInfo),
     Task(TaskType),
+    Settings(RenderSettings),
     Present,
     #[cfg(feature = "renderdoc")]
     CaptureFrame,

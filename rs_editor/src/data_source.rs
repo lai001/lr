@@ -1,4 +1,5 @@
 use crate::ui::{property_view, textures_view};
+use rs_core_minimal::settings::Settings;
 use rs_engine::file_type::EFileType;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
@@ -57,6 +58,8 @@ pub struct DataSource {
     pub camera_projection_matrix: glam::Mat4,
     pub textures_view_data_source: textures_view::DataSource,
     pub property_view_data_source: property_view::DataSource,
+    pub project_settings: Option<Rc<RefCell<Settings>>>,
+    pub project_settings_open: bool,
 }
 
 impl DataSource {
@@ -84,6 +87,8 @@ impl DataSource {
             property_view_data_source: property_view::DataSource::new(),
             camera_view_matrix: glam::Mat4::IDENTITY,
             camera_projection_matrix: glam::Mat4::IDENTITY,
+            project_settings: None,
+            project_settings_open: false,
         }
     }
 

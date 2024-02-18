@@ -20,7 +20,9 @@ impl BaseComputePipeline {
 
         let shader = shader_library.get_shader(tag);
         let reflection = shader_library.get_shader_reflection(tag);
-
+        let EPipelineType::Compute(cs) = reflection.get_pipeline_type() else {
+            panic!()
+        };
         let bind_group_layout_entrys = reflection.get_bind_group_layout_entrys();
 
         let mut bind_group_layouts: Vec<BindGroupLayout> = Vec::new();
@@ -40,9 +42,6 @@ impl BaseComputePipeline {
                 .collect::<Vec<&BindGroupLayout>>(),
             push_constant_ranges: &[],
         });
-        let EPipelineType::Compute(cs) = reflection.get_pipeline_type() else {
-            panic!()
-        };
 
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(&format!("{} compute pipeline", tag)),

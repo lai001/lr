@@ -5,14 +5,19 @@ pub struct DepthTexture {
 }
 
 impl DepthTexture {
-    pub fn new(width: u32, height: u32, device: &wgpu::Device) -> DepthTexture {
+    pub fn new(
+        width: u32,
+        height: u32,
+        device: &wgpu::Device,
+        label: Option<&str>,
+    ) -> DepthTexture {
         let depth_texture_extent = wgpu::Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
+            label,
             size: depth_texture_extent,
             mip_level_count: 1,
             sample_count: 1,

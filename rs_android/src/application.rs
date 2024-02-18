@@ -51,6 +51,7 @@ impl Application {
             height,
             scale_factor,
             Some(artifact_reader),
+            std::collections::HashMap::new(),
         ) {
             Ok(engine) => engine,
             Err(err) => {

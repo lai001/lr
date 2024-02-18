@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["editor"]
+standalone = []
+editor = []
 
 [dependencies]
 dunce = "1.0.4"
 path-slash = "0.1.4"
+serde = { version = "1.0.193", features = ["derive"] }

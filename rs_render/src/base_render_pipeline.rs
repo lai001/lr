@@ -1,7 +1,7 @@
 use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
 use crate::global_shaders::global_shader::GlobalShader;
 use crate::gpu_vertex_buffer::{GpuVertexBufferImp, TGpuVertexBuffer};
-use crate::reflection::EPipelineType;
+use crate::reflection::{EPipelineType, VertexBufferLayoutBuilder};
 use crate::shader_library::ShaderLibrary;
 use crate::VertexBufferType;
 use std::collections::HashMap;
@@ -25,12 +25,16 @@ impl BaseRenderPipeline {
         multisample: Option<MultisampleState>,
         multiview: Option<NonZeroU32>,
         primitive: Option<PrimitiveState>,
-        vertex_buffer_type: VertexBufferType,
+        vertex_buffer_type: Option<VertexBufferType>,
         hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
     ) -> BaseRenderPipeline {
         let tag = &global_shader.get_name();
         let shader = shader_library.get_shader(tag);
         let reflection = shader_library.get_shader_reflection(tag);
+        let EPipelineType::Render(vs, fs) = reflection.get_pipeline_type() else {
+            panic!()
+        };
+
         let mut bind_group_layouts: Vec<BindGroupLayout> = Vec::new();
 
         match hooks {
@@ -110,12 +114,14 @@ impl BaseRenderPipeline {
                 .collect::<Vec<&BindGroupLayout>>(),
             push_constant_ranges: &[],
         });
-
-        let builder = reflection.make_vertex_buffer_layout_builder(vertex_buffer_type);
-        let vertex_state_buffers = builder.get_vertex_buffer_layout();
-        let EPipelineType::Render(vs, fs) = reflection.get_pipeline_type() else {
-            panic!()
-        };
+        let mut vertex_buffer_layouts: Vec<VertexBufferLayout> = vec![];
+        let mut builder: Option<VertexBufferLayoutBuilder> = None;
+        if let Some(vertex_buffer_type) = vertex_buffer_type {
+            builder = Some(reflection.make_vertex_buffer_layout_builder(vertex_buffer_type));
+        }
+        if let Some(builder) = &builder {
+            vertex_buffer_layouts = builder.get_vertex_buffer_layout();
+        }
 
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some(&format!("{} render pipeline", tag)),
@@ -123,7 +129,7 @@ impl BaseRenderPipeline {
             vertex: VertexState {
                 module: &shader,
                 entry_point: &vs.name,
-                buffers: &vertex_state_buffers,
+                buffers: &vertex_buffer_layouts,
             },
             fragment: Some(FragmentState {
                 module: &shader,
@@ -140,7 +146,7 @@ impl BaseRenderPipeline {
             render_pipeline,
             bind_group_layouts,
             tag: tag.to_string(),
-            slots: vertex_state_buffers.len() as u32,
+            slots: vertex_buffer_layouts.len() as u32,
         }
     }
 

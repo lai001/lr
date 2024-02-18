@@ -10,6 +10,7 @@ use crate::{
 use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::level::ENodeType;
 use rs_artifact::resource_info::ResourceInfo;
+use rs_core_minimal::settings::Settings;
 use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
     BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateTexture, DrawObject, EMaterialType,
@@ -48,6 +49,7 @@ pub struct Engine {
     draw_objects: Vec<DrawObject>,
     camera: Camera,
     state: State,
+    settings: Settings,
 }
 
 impl Engine {
@@ -65,8 +67,12 @@ impl Engine {
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
         });
+        let settings: Settings;
         if let Some(artifact_reader) = &mut artifact_reader {
+            settings = artifact_reader.get_artifact_file_header().settings.clone();
             artifact_reader.check_assets().expect("Valid");
+        } else {
+            settings = Settings::default();
         }
         let mut resource_manager = ResourceManager::default();
         resource_manager.set_artifact_reader(artifact_reader);
@@ -76,9 +82,15 @@ impl Engine {
             shaders.insert(shader_source_code.name, shader_source_code.code);
         }
 
-        let renderer =
-            Renderer::from_window(window, surface_width, surface_height, scale_factor, shaders)
-                .map_err(|err| crate::error::Error::RendererError(err))?;
+        let renderer = Renderer::from_window(
+            window,
+            surface_width,
+            surface_height,
+            scale_factor,
+            shaders,
+            settings.render_setting.clone(),
+        )
+        .map_err(|err| crate::error::Error::RendererError(err))?;
 
         let mut draw_objects: Vec<DrawObject> = Vec::new();
 
@@ -136,6 +148,7 @@ impl Engine {
             draw_objects,
             camera,
             state: State::default(),
+            settings,
         };
 
         Ok(engine)
@@ -330,16 +343,12 @@ impl Engine {
         &mut self,
         path: &Path,
         url: url::Url,
-    ) -> Option<crate::handle::TextureHandle> {
-        let image = match image::open(path) {
-            Ok(dynamic_image) => match dynamic_image {
-                image::DynamicImage::ImageRgba8(image) => image,
-                x => x.to_rgba8(),
-            },
-            Err(err) => {
-                log::warn!("{}", err);
-                return None;
-            }
+    ) -> Result<crate::handle::TextureHandle> {
+        let dynamic_image =
+            image::open(path).map_err(|err| crate::error::Error::ImageError(err, None))?;
+        let image = match dynamic_image {
+            image::DynamicImage::ImageRgba8(image) => image,
+            x => x.to_rgba8(),
         };
         let handle = self.resource_manager.next_texture(url.clone());
         let create_texture = CreateTexture {
@@ -361,7 +370,7 @@ impl Engine {
         };
         let render_command = RenderCommand::CreateTexture(create_texture);
         self.render_thread_mode.send_command(render_command);
-        return Some(handle);
+        Ok(handle)
     }
 
     pub fn send_render_task(&mut self, task: rs_render::command::TaskType) {
@@ -385,6 +394,12 @@ impl Engine {
             let render_command = RenderCommand::CaptureFrame;
             self.render_thread_mode.send_command(render_command);
         }
+    }
+
+    pub fn set_settings(&mut self, settings: Settings) {
+        let render_command = RenderCommand::Settings(settings.render_setting.clone());
+        self.render_thread_mode.send_command(render_command);
+        self.settings = settings;
     }
 }
 
