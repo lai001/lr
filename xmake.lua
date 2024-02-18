@@ -8,7 +8,7 @@ quickjs_dir = deps_dir .. "quickjs"
 metis_dir = path.absolute(deps_dir .. "METIS")
 gklib_dir = deps_dir .. "GKlib"
 ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
-russimp_prebuild_dir = path.absolute(deps_dir .. "russimp-2.0.1-x86_64-pc-windows-msvc-static")
+russimp_prebuild_dir = path.absolute(deps_dir)
 
 includes("BuildScripts/gen_config.lua")
 includes("BuildScripts/build_android_target.lua")

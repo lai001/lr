@@ -90,14 +90,14 @@ do
             git.checkout("master", { repodir = gklib_dir })
         end
 
-        local russimp_file = deps_dir .. "russimp-2.0.1-x86_64-pc-windows-msvc-static.tar.gz"
+        local russimp_file = deps_dir .. "russimp-2.0.2-x86_64-pc-windows-msvc-static.tar.gz"
         if os.exists(russimp_file) == false then
-            local link = "https://github.com/jkvargas/russimp-sys/releases/download/v2.0.1/russimp-2.0.1-x86_64-pc-windows-msvc-static.tar.gz"
+            local link = "https://github.com/jkvargas/russimp-sys/releases/download/v2.0.2/russimp-2.0.2-x86_64-pc-windows-msvc-static.tar.gz"
             http.download(link, russimp_file)
         end
-        if os.exists(russimp_prebuild_dir) == false and os.exists(russimp_file) then
-            archive.extract(russimp_file, russimp_prebuild_dir)
-        end
+        -- if os.exists(russimp_prebuild_dir) == false and os.exists(russimp_file) then
+        --     archive.extract(russimp_file, russimp_prebuild_dir)
+        -- end
         
     end)
     set_menu {

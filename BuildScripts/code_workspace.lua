@@ -89,7 +89,7 @@ task("code_workspace") do
                 ["rust-analyzer.cargo.extraEnv"] = extraEnv,
                 ["rust-analyzer.server.extraEnv"] = extraEnv,
                 ["rust-analyzer.check.extraEnv"] = extraEnv,
-                -- ["rust-analyzer.runnableEnv"] = extraEnv
+                ["rust-analyzer.runnables.extraEnv"] = extraEnv
             }
         }
         local file_name = format("%s_%s_%s.code-workspace", launch_type, plat, target)
