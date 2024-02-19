@@ -279,8 +279,8 @@ impl EditorContext {
             project_context.reload();
             let lib = project_context.hot_reload.get_library_reload();
             let lib = lib.lock().unwrap();
-            if let Ok(func) = lib.load_symbol::<rs_engine::plugin::signature::From>(
-                rs_engine::plugin::symbol_name::FROM,
+            if let Ok(func) = lib.load_symbol::<rs_engine::plugin::signature::CreatePlugin>(
+                rs_engine::plugin::symbol_name::CREATE_PLUGIN,
             ) {
                 let plugin = func(Arc::clone(&self.plugin_context));
                 self.plugins.push(plugin);

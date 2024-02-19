@@ -127,7 +127,8 @@ impl Project {
     fn create_lib_file(project_parent_folder: &Path, project_name: &str) -> bool {
         let project_folder = project_parent_folder.join(project_name);
         let lib_file_path = project_folder.join(SRC_FOLDER_NAME).join("lib.rs");
-        let content = fill_lib_template(project_name);
+        let content =
+            fill_lib_template(project_name, rs_engine::plugin::symbol_name::CREATE_PLUGIN);
         let Ok(mut file) = std::fs::File::create(lib_file_path) else {
             return false;
         };
@@ -174,16 +175,17 @@ impl Plugin for MyPlugin {
 }
 
 #[no_mangle]
-pub fn from(plugin_context: Arc<Mutex<PluginContext>>) -> Box<dyn Plugin> {
+pub fn @symbol_name@(plugin_context: Arc<Mutex<PluginContext>>) -> Box<dyn Plugin> {
     let plugin = MyPlugin { plugin_context };
     Box::new(plugin)
 }    
     "#;
 }
 
-fn fill_lib_template(name: &str) -> String {
+fn fill_lib_template(name: &str, symbol_name: &str) -> String {
     let mut template = get_lib_template().to_string();
     template = template.replace("@name@", name);
+    template = template.replace("@symbol_name@", symbol_name);
     template
 }
 
