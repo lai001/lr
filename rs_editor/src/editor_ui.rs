@@ -26,7 +26,6 @@ pub struct ClickEvent {
 }
 
 pub struct EditorUI {
-    context: Context,
     image_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
     svg_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
     asset_folder_path: Option<PathBuf>,
@@ -35,12 +34,12 @@ pub struct EditorUI {
 }
 
 impl EditorUI {
-    pub fn new(context: Context) -> Self {
+    pub fn new(context: &Context) -> Self {
         let image_loader_id = "egui_extras::loaders::image_loader::ImageCrateLoader";
         let svg_loader_id = "egui_extras::loaders::svg_loader::SvgLoader";
         let mut image_loader = None;
         let mut svg_loader = None;
-        egui_extras::install_image_loaders(&context);
+        egui_extras::install_image_loaders(context);
         for item in context.loaders().image.lock().iter() {
             if item.id() == image_loader_id {
                 image_loader = Some(item.clone());
@@ -50,7 +49,6 @@ impl EditorUI {
             }
         }
         Self {
-            context,
             image_loader,
             svg_loader,
             asset_folder_path: None,

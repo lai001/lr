@@ -145,17 +145,9 @@ name = "@name@"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-default = ["standalone"]
-renderdoc = ["rs_render/renderdoc", "rs_engine/renderdoc"]
-
 [dependencies]
 egui = { version = "0.26.1" }
-log = "0.4.17"
-glam = { version = "0.22.0" }
-uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
-rs_engine = { version = "0.1.0", path = "@engine_path@/rs_engine" }
-rs_render = { version = "0.1.0", path = "@engine_path@/rs_render" }
+rs_engine = { path = "@engine_path@/rs_engine" }
 
 [lib]
 crate-type = ["cdylib"]
@@ -173,20 +165,19 @@ pub struct MyPlugin {
 
 impl Plugin for MyPlugin {
     fn tick(&mut self) {
-        let plugin_context = self.plugin_context.clone();
-        let context = &plugin_context.lock().unwrap().context;
-        egui::Window::new("Plugin").show(context, |ui| {
+        let plugin_contex = self.plugin_context.lock().unwrap();
+        let context = plugin_contex.context.clone();
+        egui::Window::new("Plugin").show(&context, |ui| {
             ui.label(format!("Time: {:?}", std::time::Instant::now()));
         });
     }
-
-    fn unload(&mut self) {}
 }
 
 #[no_mangle]
 pub fn from(plugin_context: Arc<Mutex<PluginContext>>) -> Box<dyn Plugin> {
-    Box::new(MyPlugin { plugin_context })
-}
+    let plugin = MyPlugin { plugin_context };
+    Box::new(plugin)
+}    
     "#;
 }
 

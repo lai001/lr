@@ -157,6 +157,10 @@ impl LibraryReload {
             }
         }
     }
+
+    pub fn clear(&mut self) {
+        self.libraries.clear();
+    }
 }
 
 #[cfg(test)]

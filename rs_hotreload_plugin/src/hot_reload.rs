@@ -15,8 +15,6 @@ impl HotReload {
     pub fn new(watch_folder_path: &Path, lib_folder: &Path, lib_name: &str) -> HotReload {
         let mut library_reload = LibraryReload::new(&lib_folder, lib_name);
         library_reload.clean_cache();
-        let first_load_result = library_reload.reload();
-        log::trace!("{:?}", first_load_result);
         let library_reload = Arc::new(Mutex::new(library_reload));
         let (sender, receiver) = std::sync::mpsc::channel();
         log::trace!("Watch {:?}", watch_folder_path);

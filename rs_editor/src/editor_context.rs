@@ -59,7 +59,7 @@ const SUPPORT_ASSET_FILE_EXTENSIONS: [&str; 5] = [
 pub struct EditorContext {
     event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     engine: rs_engine::engine::Engine,
-    egui_winit_state: egui_winit::State,
+    egui_winit_state: Option<egui_winit::State>,
     data_source: DataSource,
     project_context: Option<ProjectContext>,
     draw_objects: HashMap<uuid::Uuid, DrawObject>,
@@ -124,7 +124,7 @@ impl EditorContext {
             None,
         );
         let artifact_reader = None;
-        let mut engine = rs_engine::engine::Engine::new(
+        let engine = rs_engine::engine::Engine::new(
             window,
             window_width,
             window_height,
@@ -136,7 +136,7 @@ impl EditorContext {
 
         let data_source = DataSource::new();
         let camera = Camera::default(window_width, window_height);
-        let editor_ui = EditorUI::new(egui_winit_state.egui_ctx().clone());
+        let editor_ui = EditorUI::new(egui_winit_state.egui_ctx());
 
         let plugin_context = Arc::new(Mutex::new(PluginContext::new(
             egui_winit_state.egui_ctx().clone(),
@@ -146,7 +146,7 @@ impl EditorContext {
         Self {
             event_loop_proxy,
             engine,
-            egui_winit_state,
+            egui_winit_state: Some(egui_winit_state),
             data_source,
             project_context: None,
             draw_objects: HashMap::new(),
@@ -181,9 +181,20 @@ impl EditorContext {
                 self.process_custom_event(event, window);
             }
             Event::WindowEvent { event, .. } => {
-                let _ = Some(self.egui_winit_state.on_window_event(window, event));
+                if let Some(egui_winit_state) = &mut self.egui_winit_state {
+                    let _ = Some(egui_winit_state.on_window_event(window, event));
+                }
                 match event {
                     WindowEvent::CloseRequested => {
+                        if let Some(egui_winit_state) = &mut self.egui_winit_state {
+                            self.plugins.clear();
+                            egui_winit_state.egui_ctx().memory_mut(|writer| {
+                                writer.data.clear();
+                            });
+                            if let Some(ctx) = &mut self.project_context {
+                                ctx.hot_reload.get_library_reload().lock().unwrap().clear();
+                            }
+                        }
                         event_loop_window_target.exit();
                     }
                     WindowEvent::Resized(size) => {
@@ -415,7 +426,8 @@ impl EditorContext {
                 let abs_path = project_context
                     .get_asset_folder_path()
                     .join(image_reference);
-                self.engine
+                let _ = self
+                    .engine
                     .create_texture_from_path(&abs_path, texture_file.url.clone());
             }
         }
@@ -556,34 +568,47 @@ impl EditorContext {
         for (id, draw_object) in self.draw_objects.clone() {
             self.engine.draw(draw_object);
         }
-        let new_input = self.egui_winit_state.take_egui_input(window);
-        self.egui_winit_state.egui_ctx().begin_frame(new_input);
-        self.process_ui();
+        self.process_ui(window);
+
         if let Some(plugin) = self.plugins.last_mut() {
             plugin.tick();
         }
 
-        let full_output = self.egui_winit_state.egui_ctx().end_frame();
+        let gui_render_output = (|| {
+            let Some(egui_winit_state) = &mut self.egui_winit_state else {
+                return None;
+            };
+            let full_output = egui_winit_state.egui_ctx().end_frame();
 
-        self.egui_winit_state
-            .handle_platform_output(window, full_output.platform_output.clone());
+            egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
 
-        let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
-            textures_delta: full_output.textures_delta,
-            clipped_primitives: self
-                .egui_winit_state
-                .egui_ctx()
-                .tessellate(full_output.shapes, full_output.pixels_per_point),
-        };
-        self.engine.redraw(gui_render_output);
+            let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+                textures_delta: full_output.textures_delta,
+                clipped_primitives: egui_winit_state
+                    .egui_ctx()
+                    .tessellate(full_output.shapes, full_output.pixels_per_point),
+            };
+            Some(gui_render_output)
+        })();
+
+        if let Some(gui_render_output) = gui_render_output {
+            self.engine.redraw(gui_render_output);
+        }
+
         self.engine.present();
-        self.egui_winit_state.egui_ctx().clear_animations();
     }
 
-    fn process_ui(&mut self) {
+    fn process_ui(&mut self, window: &mut winit::window::Window) {
+        let Some(egui_winit_state) = &mut self.egui_winit_state else {
+            return;
+        };
+        let new_input = egui_winit_state.take_egui_input(window);
+        egui_winit_state.egui_ctx().begin_frame(new_input);
+        egui_winit_state.egui_ctx().clear_animations();
+
         let click_event = self
             .editor_ui
-            .build(self.egui_winit_state.egui_ctx(), &mut self.data_source);
+            .build(egui_winit_state.egui_ctx(), &mut self.data_source);
 
         if let Some(menu_event) = click_event.menu_event {
             match menu_event {

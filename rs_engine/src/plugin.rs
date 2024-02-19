@@ -1,9 +1,5 @@
-use rs_render::command::DrawObject;
-use std::collections::HashMap;
-
 pub trait Plugin {
     fn tick(&mut self);
-    fn unload(&mut self);
 }
 
 pub mod symbol_name {
