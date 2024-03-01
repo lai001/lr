@@ -6,9 +6,11 @@ use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::phong_pipeline::PhongPipeline;
+use crate::render_pipeline::shading::{self, ShadingPipeline};
 use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
 use crate::virtual_texture_pass::VirtualTexturePass;
+use crate::virtual_texture_source::VirtualTextureSource;
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
 use rs_core_minimal::settings::{self, RenderSettings};
 use std::collections::{HashMap, VecDeque};
@@ -36,7 +38,8 @@ pub struct Renderer {
     ui_textures: HashMap<u64, egui::TextureId>,
     ibl_bakes: HashMap<u64, AccelerationBaker>,
 
-    phong_pipeline: PhongPipeline,
+    // phong_pipeline: PhongPipeline,
+    shading_pipeline: ShadingPipeline,
     attachment_pipeline: AttachmentPipeline,
 
     depth_texture: DepthTexture,
@@ -82,6 +85,13 @@ impl Renderer {
             false,
             &mut sampler_cache,
         );
+        let shading_pipeline = ShadingPipeline::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &wgpu_context.get_current_swapchain_format(),
+            false,
+            &mut sampler_cache,
+        );
         let depth_texture = DepthTexture::new(
             surface_width,
             surface_height,
@@ -98,13 +108,14 @@ impl Renderer {
 
         let virtual_texture_pass: Option<VirtualTexturePass>;
         if settings.virtual_texture_setting.is_enable {
-            virtual_texture_pass = Some(VirtualTexturePass::new(
+            virtual_texture_pass = VirtualTexturePass::new(
                 wgpu_context.get_device(),
                 &shader_library,
                 false,
                 glam::uvec2(surface_width, surface_height),
                 settings.virtual_texture_setting.clone(),
-            ));
+            )
+            .ok();
         } else {
             virtual_texture_pass = None;
         }
@@ -126,7 +137,7 @@ impl Renderer {
             textures: HashMap::new(),
             buffers: HashMap::new(),
             ui_textures: HashMap::new(),
-            phong_pipeline,
+            shading_pipeline,
             attachment_pipeline,
             depth_texture,
             default_textures,
@@ -351,7 +362,9 @@ impl Renderer {
             .create_view(&wgpu::TextureViewDescriptor::default());
         let depth_texture_view = &self.depth_texture.get_view();
         self.clear_buffer(&output_view, depth_texture_view);
+        self.vt_pass();
         self.draw_objects(&output_view);
+
         self.draw_object_commands.clear();
 
         while let Some(output) = self.ui_output_commands.pop_front() {
@@ -423,8 +436,76 @@ impl Renderer {
             RenderCommand::Settings(settings) => {
                 self.set_settings(settings);
             }
+            RenderCommand::CreateVirtualTextureSource(command) => {
+                if let Some(virtual_texture_pass) = &mut self.virtual_texture_pass {
+                    virtual_texture_pass
+                        .virtual_texture_sources
+                        .insert(command.handle, VirtualTextureSource::new(command.source));
+                }
+            }
         }
         return None;
+    }
+
+    fn vt_pass(&mut self) {
+        let Some(virtual_texture_pass) = &mut self.virtual_texture_pass else {
+            return;
+        };
+
+        let device = self.wgpu_context.get_device();
+        let queue = self.wgpu_context.get_queue();
+        for draw_object_command in &self.draw_object_commands {
+            match &draw_object_command.material_type {
+                EMaterialType::Phong(material) => {
+                    let mut vertex_buffers = Vec::<&Buffer>::new();
+                    let mut index_buffer: Option<&wgpu::Buffer> = None;
+
+                    for vertex_buffer in &draw_object_command.vertex_buffers {
+                        if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
+                            vertex_buffers.push(vertex_buffer);
+                        }
+                    }
+                    if vertex_buffers.is_empty() {
+                        continue;
+                    }
+                    if let Some(handle) = draw_object_command.index_buffer {
+                        if let Some(buffer) = self.buffers.get(&handle) {
+                            index_buffer = Some(buffer);
+                        }
+                    }
+                    let mesh_buffer = GpuVertexBufferImp {
+                        vertex_buffers: &vertex_buffers,
+                        vertex_count: draw_object_command.vertex_count,
+                        index_buffer,
+                        index_count: draw_object_command.index_count,
+                    };
+                    virtual_texture_pass.render(
+                        device,
+                        queue,
+                        &[mesh_buffer.clone()],
+                        material.constants.model.clone(),
+                        material.constants.view.clone(),
+                        material.constants.projection.clone(),
+                        draw_object_command.id,
+                    );
+                }
+                EMaterialType::PBR(_) => todo!(),
+            }
+        }
+        let result = virtual_texture_pass.parse_feed_back(
+            self.wgpu_context.get_device(),
+            self.wgpu_context.get_queue(),
+        );
+        let Ok(result) = result else {
+            return;
+        };
+
+        let indirect_map = virtual_texture_pass.upload_physical_texture(
+            self.wgpu_context.get_device(),
+            self.wgpu_context.get_queue(),
+            &result,
+        );
+        virtual_texture_pass.update_indirec_table(self.wgpu_context.get_queue(), indirect_map);
     }
 
     fn draw_objects(&mut self, surface_texture_view: &wgpu::TextureView) {
@@ -436,11 +517,18 @@ impl Renderer {
                     let diffuse_texture: &Texture;
                     let specular_texture: &Texture;
                     let binding = self.default_textures.get_white_texture();
-                    if let Some(diffuse_texture_handle) = material.diffuse_texture {
-                        diffuse_texture = self
-                            .textures
-                            .get(&diffuse_texture_handle)
-                            .unwrap_or(&binding);
+                    if let Some(diffuse_texture_type) = &material.diffuse_texture {
+                        match diffuse_texture_type {
+                            ETextureType::Base(diffuse_texture_handle) => {
+                                diffuse_texture = self
+                                    .textures
+                                    .get(&diffuse_texture_handle)
+                                    .unwrap_or(&binding);
+                            }
+                            ETextureType::Virtual(_) => {
+                                diffuse_texture = &binding;
+                            }
+                        }
                     } else {
                         diffuse_texture = &binding;
                     }
@@ -476,30 +564,69 @@ impl Renderer {
                         index_count: draw_object_command.index_count,
                     };
 
-                    if let Some(pass) = &mut self.virtual_texture_pass {
-                        pass.render(
-                            device,
-                            queue,
-                            &[mesh_buffer.clone()],
-                            material.constants.model.clone(),
-                            material.constants.view.clone(),
-                            material.constants.projection.clone(),
-                        );
-                    }
-
                     let diffuse_texture_view =
                         diffuse_texture.create_view(&TextureViewDescriptor::default());
                     let specular_texture_view =
                         specular_texture.create_view(&TextureViewDescriptor::default());
-                    self.phong_pipeline.draw(
+
+                    let mut constants = shading::Constants {
+                        model: material.constants.model,
+                        view: material.constants.view,
+                        projection: material.constants.projection,
+                        is_enable_virtual_texture: 0,
+                        physical_texture_size: glam::Vec2::splat(
+                            self.settings.virtual_texture_setting.physical_texture_size as f32,
+                        ),
+                        tile_size: self.settings.virtual_texture_setting.tile_size as f32,
+                        diffuse_texture_size: Default::default(),
+                        diffuse_texture_max_lod: Default::default(),
+                        is_virtual_diffuse_texture: Default::default(),
+                        specular_texture_size: Default::default(),
+                        specular_texture_max_lod: Default::default(),
+                        is_virtual_specular_texture: Default::default(),
+                    };
+
+                    if let Some(virtual_texture_pass) = &self.virtual_texture_pass {
+                        if let Some(ETextureType::Virtual(diffuse_texture_handle)) =
+                            &material.diffuse_texture
+                        {
+                            let source = virtual_texture_pass
+                                .virtual_texture_sources
+                                .get(diffuse_texture_handle);
+                            if let Some(source) = source {
+                                let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                                    source.get_size().min_element(),
+                                );
+                                let max_lod = max_mips
+                                    - self.settings.virtual_texture_setting.tile_size.ilog2()
+                                    - 1;
+                                constants.diffuse_texture_max_lod = max_lod;
+                                constants.diffuse_texture_size = source.get_size().as_vec2();
+                                constants.is_virtual_diffuse_texture = 1;
+                            }
+                        }
+                        constants.is_enable_virtual_texture = 1;
+                    }
+
+                    let physical_texture_view = match &self.virtual_texture_pass {
+                        Some(pass) => pass.get_physical_texture_view(),
+                        None => self.default_textures.get_black_texture_view(),
+                    };
+                    let indirect_table_view = match &self.virtual_texture_pass {
+                        Some(pass) => pass.get_indirect_table_view(),
+                        None => self.default_textures.get_black_u32_texture_view(),
+                    };
+                    self.shading_pipeline.draw(
                         device,
                         queue,
                         surface_texture_view,
                         &self.depth_texture.get_view(),
-                        &material.constants,
+                        &constants,
                         &[mesh_buffer],
                         &diffuse_texture_view,
                         &specular_texture_view,
+                        &physical_texture_view,
+                        &indirect_table_view,
                     );
                 }
                 EMaterialType::PBR(_) => todo!(),
@@ -511,13 +638,14 @@ impl Renderer {
         if settings.virtual_texture_setting.is_enable {
             let surface_width = self.wgpu_context.get_surface_config().width;
             let surface_height = self.wgpu_context.get_surface_config().height;
-            self.virtual_texture_pass = Some(VirtualTexturePass::new(
+            self.virtual_texture_pass = VirtualTexturePass::new(
                 self.wgpu_context.get_device(),
                 &self.shader_library,
                 false,
                 glam::uvec2(surface_width, surface_height),
                 settings.virtual_texture_setting.clone(),
-            ));
+            )
+            .ok();
         } else {
             self.virtual_texture_pass = None;
         }

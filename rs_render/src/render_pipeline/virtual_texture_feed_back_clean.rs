@@ -1,7 +1,8 @@
 use crate::{
-    base_render_pipeline::BaseRenderPipeline,
+    base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     global_shaders::virtual_texture_clean::VirtualTextureCleanShader,
-    gpu_vertex_buffer::GpuVertexBufferImp, shader_library::ShaderLibrary,
+    gpu_vertex_buffer::GpuVertexBufferImp,
+    shader_library::ShaderLibrary,
 };
 use wgpu::*;
 
@@ -21,7 +22,7 @@ impl VirtualTextureFeedBackClearPipeline {
             &VirtualTextureCleanShader {},
             &[Some(texture_format.clone().into())],
             Some(DepthStencilState {
-                depth_compare: CompareFunction::Never,
+                depth_compare: CompareFunction::Always,
                 format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 stencil: StencilState::default(),
@@ -55,14 +56,18 @@ impl VirtualTextureFeedBackClearPipeline {
             vec![],
             &vec![GpuVertexBufferImp {
                 vertex_buffers: &vec![],
-                vertex_count: 0,
+                vertex_count: 6,
                 index_buffer: None,
                 index_count: None,
             }],
-            Some(Operations {
-                load: LoadOp::Clear(Color::TRANSPARENT),
-                store: StoreOp::Store,
-            }),
+            &[ColorAttachment {
+                color_ops: Some(Operations {
+                    load: LoadOp::Clear(Color::TRANSPARENT),
+                    store: StoreOp::Store,
+                }),
+                view: output_view,
+                resolve_target: None,
+            }],
             Some(Operations {
                 load: LoadOp::Clear(1.0),
                 store: StoreOp::Store,
@@ -71,8 +76,6 @@ impl VirtualTextureFeedBackClearPipeline {
                 load: LoadOp::Clear(0),
                 store: StoreOp::Store,
             }),
-            output_view,
-            None,
             Some(depth_view),
         );
     }

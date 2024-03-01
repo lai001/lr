@@ -6,3 +6,9 @@ pub enum EEndianType {
     Little,
     Native,
 }
+
+impl Default for EEndianType {
+    fn default() -> Self {
+        Self::Little
+    }
+}

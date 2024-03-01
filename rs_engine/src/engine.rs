@@ -13,13 +13,15 @@ use rs_artifact::resource_info::ResourceInfo;
 use rs_core_minimal::settings::Settings;
 use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateTexture, DrawObject, EMaterialType,
-    InitTextureData, PhongMaterial, RenderCommand, TextureDescriptorCreateInfo,
+    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateTexture, CreateVirtualTexture, DrawObject,
+    EMaterialType, InitTextureData, PhongMaterial, RenderCommand, TextureDescriptorCreateInfo,
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::renderer::Renderer;
+use rs_render::virtual_texture_source::TVirtualTextureSource;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 struct State {
     is_cursor_visible: bool,
@@ -47,6 +49,7 @@ pub struct Engine {
     logger: Logger,
     level: Option<rs_artifact::level::Level>,
     draw_objects: Vec<DrawObject>,
+    draw_object_id: u32,
     camera: Camera,
     state: State,
     settings: Settings,
@@ -97,7 +100,7 @@ impl Engine {
         let mut render_thread_mode = ERenderThreadMode::from(renderer, true);
         let camera = Camera::default(surface_width, surface_height);
         let mut level: Option<rs_artifact::level::Level> = None;
-
+        let mut draw_object_id: u32 = 0;
         (|| {
             let Some(url) = Self::find_first_level(&mut resource_manager) else {
                 return;
@@ -132,7 +135,9 @@ impl Engine {
                             &static_mesh.vertexes,
                             &static_mesh.indexes,
                             EMaterialType::Phong(material),
+                            draw_object_id,
                         );
+                        draw_object_id += 1;
                         draw_objects.push(draw_object);
                     }
                 }
@@ -149,13 +154,14 @@ impl Engine {
             camera,
             state: State::default(),
             settings,
+            draw_object_id,
         };
 
         Ok(engine)
     }
 
     fn find_first_level(resource_manager: &mut ResourceManager) -> Option<url::Url> {
-        let Some(resource_map) = resource_manager.get_resource_map() else {
+        let Ok(resource_map) = resource_manager.get_resource_map() else {
             return None;
         };
         for (k, v) in resource_map {
@@ -177,7 +183,7 @@ impl Engine {
         return None;
     }
 
-    pub fn get_resource_map(&self) -> Option<HashMap<url::Url, ResourceInfo>> {
+    pub fn get_resource_map(&self) -> Result<HashMap<url::Url, ResourceInfo>> {
         self.resource_manager.get_resource_map()
     }
 
@@ -236,6 +242,7 @@ impl Engine {
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
         indexes: &[u32],
         material_type: EMaterialType,
+        id: u32,
     ) -> DrawObject {
         let index_buffer_handle = resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -269,6 +276,7 @@ impl Engine {
             index_buffer: Some(*index_buffer_handle),
             index_count: Some(indexes.len() as u32),
             material_type,
+            id,
         };
         draw_object
     }
@@ -279,13 +287,16 @@ impl Engine {
         indexes: &[u32],
         material_type: EMaterialType,
     ) -> DrawObject {
-        Self::create_draw_object_from_static_mesh_internal(
+        let draw_object = Self::create_draw_object_from_static_mesh_internal(
             &mut self.render_thread_mode,
             &mut self.resource_manager,
             vertexes,
             indexes,
             material_type,
-        )
+            self.draw_object_id,
+        );
+        self.draw_object_id += 1;
+        draw_object
     }
 
     pub fn draw(&mut self, draw_object: DrawObject) {
@@ -354,7 +365,7 @@ impl Engine {
         let create_texture = CreateTexture {
             handle: *handle,
             texture_descriptor_create_info: TextureDescriptorCreateInfo::d2(
-                Some(String::from(format!("{:?}", url))),
+                Some(String::from(format!("{:?}", url.as_str()))),
                 image.width(),
                 image.height(),
                 None,
@@ -371,6 +382,20 @@ impl Engine {
         let render_command = RenderCommand::CreateTexture(create_texture);
         self.render_thread_mode.send_command(render_command);
         Ok(handle)
+    }
+
+    pub fn create_virtual_texture_source(
+        &mut self,
+        url: url::Url,
+        source: Box<dyn TVirtualTextureSource>,
+    ) {
+        let handle = self.resource_manager.next_virtual_texture(url.clone());
+        let command = CreateVirtualTexture {
+            handle: *handle,
+            source: Arc::new(Mutex::new(source)),
+        };
+        let render_command = RenderCommand::CreateVirtualTextureSource(command);
+        self.render_thread_mode.send_command(render_command);
     }
 
     pub fn send_render_task(&mut self, task: rs_render::command::TaskType) {

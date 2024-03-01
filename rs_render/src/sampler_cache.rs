@@ -39,6 +39,6 @@ impl SamplerCache {
             let sampler = device.create_sampler(desc);
             self.cache.insert(key, Arc::new(sampler));
         }
-        return self.cache.get(&key).unwrap().clone();
+        self.cache.get(&key).unwrap().clone()
     }
 }

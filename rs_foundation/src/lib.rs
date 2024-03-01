@@ -63,29 +63,42 @@ pub fn get_object_address<T>(object: &T) -> String {
 }
 
 pub fn cast_to_raw_buffer<'a, T>(vec: &[T]) -> &'a [u8] {
+    let type_szie = std::mem::size_of::<T>();
     let buffer = vec.as_ptr() as *const u8;
-    let size = std::mem::size_of::<T>() * vec.len();
+    let size = type_szie * vec.len();
     let buffer = unsafe { std::slice::from_raw_parts(buffer, size) };
     buffer
 }
 
 pub fn cast_to_raw_type_buffer<'a, U>(buffer: *const u8, len: usize) -> &'a [U] {
     unsafe {
-        let len = len / std::mem::size_of::<U>();
-        std::slice::from_raw_parts(buffer as *const U, len)
+        let type_szie = std::mem::size_of::<U>();
+        let new_len = len / type_szie;
+        if new_len * type_szie != len {
+            panic!();
+        }
+        std::slice::from_raw_parts(buffer as *const U, new_len)
     }
 }
 
 pub fn cast_to_type_buffer<'a, U>(buffer: &'a [u8]) -> &'a [U] {
     unsafe {
-        let len = buffer.len() / std::mem::size_of::<U>();
+        let type_szie = std::mem::size_of::<U>();
+        let len = buffer.len() / type_szie;
+        if len * type_szie != buffer.len() {
+            panic!();
+        }
         std::slice::from_raw_parts(buffer.as_ptr() as *const U, len)
     }
 }
 
 pub fn cast_to_type_vec<U>(mut buffer: Vec<u8>) -> Vec<U> {
     unsafe {
-        let len = buffer.len() / std::mem::size_of::<U>();
+        let type_szie = std::mem::size_of::<U>();
+        let len = buffer.len() / type_szie;
+        if len * type_szie != buffer.len() {
+            panic!();
+        }
         std::vec::Vec::from_raw_parts(buffer.as_mut_ptr() as *mut U, len, len)
     }
 }

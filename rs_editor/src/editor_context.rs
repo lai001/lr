@@ -15,8 +15,12 @@ use crate::{
         texture_property_view, textures_view, top_menu,
     },
 };
+use anyhow::anyhow;
 use rs_artifact::property_value_type::EPropertyValueType;
-use rs_engine::{camera::Camera, file_type::EFileType, plugin_context::PluginContext};
+use rs_engine::{
+    camera::Camera, file_type::EFileType, plugin_context::PluginContext,
+    static_virtual_texture_source::StaticVirtualTextureSource,
+};
 use rs_engine::{
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
     frame_sync::{EOptions, FrameSync},
@@ -24,7 +28,7 @@ use rs_engine::{
 };
 use rs_render::{
     bake_info::BakeInfo,
-    command::{DrawObject, PhongMaterial},
+    command::{DrawObject, ETextureType, PhongMaterial},
 };
 use std::{
     cell::RefCell,
@@ -36,7 +40,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use winit::{
-    event::{ElementState, Event, WindowEvent},
+    event::{ElementState, Event, MouseScrollDelta, WindowEvent},
     keyboard::KeyCode,
 };
 
@@ -201,6 +205,14 @@ impl EditorContext {
                         log::trace!("Window resized: {:?}", size);
                         self.engine.resize(size.width, size.height);
                     }
+                    WindowEvent::MouseWheel { delta, .. } => match delta {
+                        MouseScrollDelta::LineDelta(_, up) => {
+                            self.data_source.camera_movement_speed += up * 0.005;
+                            self.data_source.camera_movement_speed =
+                                self.data_source.camera_movement_speed.max(0.0);
+                        }
+                        MouseScrollDelta::PixelDelta(_) => todo!(),
+                    },
                     WindowEvent::KeyboardInput {
                         device_id,
                         event,
@@ -298,27 +310,30 @@ impl EditorContext {
         };
 
         for entry in walkdir::WalkDir::new(path).max_depth(1) {
-            if let Ok(entry) = entry {
-                if entry.path() == path {
+            let Ok(entry) = entry else {
+                continue;
+            };
+            if entry.path() == path {
+                continue;
+            }
+            if entry.path().is_dir() {
+                let path = entry.path();
+                let sub_folder = Self::build_asset_folder(path);
+                folder.folders.push(sub_folder);
+            } else {
+                let Some(extension) = entry.path().extension() else {
+                    continue;
+                };
+                let extension = extension.to_ascii_lowercase();
+                let extension = extension.to_str().unwrap();
+                if !SUPPORT_ASSET_FILE_EXTENSIONS.contains(&extension) {
                     continue;
                 }
-                if entry.path().is_dir() {
-                    let path = entry.path();
-                    let sub_folder = Self::build_asset_folder(path);
-                    folder.folders.push(sub_folder);
-                } else {
-                    if let Some(extension) = entry.path().extension() {
-                        let extension = extension.to_ascii_lowercase();
-                        let extension = extension.to_str().unwrap();
-                        if SUPPORT_ASSET_FILE_EXTENSIONS.contains(&extension) {
-                            let asset_file = AssetFile {
-                                name: entry.file_name().to_str().unwrap().to_string(),
-                                path: entry.path().to_path_buf(),
-                            };
-                            folder.files.push(asset_file);
-                        }
-                    }
-                }
+                let asset_file = AssetFile {
+                    name: entry.file_name().to_str().unwrap().to_string(),
+                    path: entry.path().to_path_buf(),
+                };
+                folder.files.push(asset_file);
             }
         }
         folder
@@ -327,9 +342,9 @@ impl EditorContext {
     fn process_keyboard_input(
         &mut self,
         window: &mut winit::window::Window,
-        device_id: &winit::event::DeviceId,
+        _: &winit::event::DeviceId,
         event: &winit::event::KeyEvent,
-        is_synthetic: bool,
+        _: bool,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
@@ -384,9 +399,9 @@ impl EditorContext {
                     virtual_key_code_states.remove(key);
                 }
             }
-            return true;
+            true
         } else {
-            return false;
+            false
         }
     }
 
@@ -395,17 +410,15 @@ impl EditorContext {
             return false;
         }
         let reg = regex::Regex::new("^[a-zA-Z]*$").unwrap();
-        return reg.is_match(name);
+        reg.is_match(name)
     }
 
-    fn open_project(&mut self, file_path: &Path, window: &mut winit::window::Window) {
-        let mut project_context = match ProjectContext::open(&file_path) {
-            Ok(project_context) => project_context,
-            Err(err) => {
-                log::warn!("{:?}", err);
-                return;
-            }
-        };
+    fn open_project(
+        &mut self,
+        file_path: &Path,
+        window: &mut winit::window::Window,
+    ) -> anyhow::Result<()> {
+        let project_context = ProjectContext::open(&file_path)?;
         window.set_title(&format!("Editor({})", project_context.project.project_name));
         let asset_folder_path = project_context.get_asset_folder_path();
         let asset_folder = Self::build_asset_folder(&asset_folder_path);
@@ -422,29 +435,50 @@ impl EditorContext {
         self.data_source.level = Some(project_context.project.level.clone());
         for texture_file in &project_context.project.texture_folder.texture_files {
             let texture_file = texture_file.borrow();
-            if let Some(image_reference) = &texture_file.image_reference {
-                let abs_path = project_context
-                    .get_asset_folder_path()
-                    .join(image_reference);
-                let _ = self
-                    .engine
-                    .create_texture_from_path(&abs_path, texture_file.url.clone());
-            }
+            let Some(image_reference) = &texture_file.image_reference else {
+                continue;
+            };
+            let abs_path = project_context
+                .get_asset_folder_path()
+                .join(image_reference);
+            let _ = self
+                .engine
+                .create_texture_from_path(&abs_path, texture_file.url.clone());
+        }
+        self.engine
+            .set_settings(project_context.project.settings.borrow().clone());
+        self.data_source.project_settings = Some(project_context.project.settings.clone());
+
+        for texture_file in &project_context.project.texture_folder.texture_files {
+            let texture_file = texture_file.borrow();
+            let url = texture_file.url.clone();
+            let Some(virtual_image_reference) = &texture_file.virtual_image_reference else {
+                continue;
+            };
+            let path = project_context
+                .get_virtual_texture_cache_dir()
+                .join(virtual_image_reference);
+            let Ok(source) = StaticVirtualTextureSource::from_file(path, None) else {
+                continue;
+            };
+            self.engine
+                .create_virtual_texture_source(url, Box::new(source));
+            log::trace!("Create virtual texture source: {}", virtual_image_reference);
         }
         {
             let nodes = &project_context.project.level.borrow_mut().nodes;
+            let texture_files = project_context.project.texture_folder.texture_files.clone();
             self.draw_objects = Self::collect_draw_objects(
                 &mut self.engine,
                 &project_context.get_asset_folder_path(),
                 &self.camera,
                 nodes.iter(),
+                texture_files,
             );
         }
-        self.engine
-            .set_settings(project_context.project.settings.borrow().clone());
-        self.data_source.project_settings = Some(project_context.project.settings.clone());
         self.project_context = Some(project_context);
         self.try_load_plugin();
+        Ok(())
     }
 
     fn process_custom_event(
@@ -455,24 +489,19 @@ impl EditorContext {
         match event {
             ECustomEventType::OpenFileDialog(dialog_type) => match dialog_type {
                 EFileDialogType::NewProject(name) => {
-                    if Self::is_project_name_valid(&name) == false {
-                        return;
-                    }
-                    let dialog = rfd::FileDialog::new();
-                    let Some(folder) = dialog.pick_folder() else {
-                        return;
-                    };
-
-                    log::trace!("Selected folder: {:?}", folder);
-                    let project_file_path = match Project::create_empty_project(&folder, name) {
-                        Ok(project_file_path) => project_file_path,
-                        Err(err) => {
-                            log::warn!("{:?}", err);
-                            return;
+                    let result = (|| {
+                        if !Self::is_project_name_valid(&name) {
+                            return Err(anyhow!("Not a valid project name"));
                         }
-                    };
-                    self.open_project(&project_file_path, window);
-                    self.data_source.is_new_project_window_open = false;
+                        let dialog = rfd::FileDialog::new();
+                        let folder = dialog.pick_folder().ok_or(anyhow!("Fail to pick folder"))?;
+                        log::trace!("Selected folder: {:?}", folder);
+                        let project_file_path = Project::create_empty_project(&folder, name)?;
+                        self.open_project(&project_file_path, window)?;
+                        self.data_source.is_new_project_window_open = false;
+                        Ok(())
+                    })();
+                    log::trace!("{:?}", result);
                 }
                 EFileDialogType::OpenProject => {
                     let dialog = rfd::FileDialog::new().add_filter("Project", &["rsproject"]);
@@ -480,25 +509,28 @@ impl EditorContext {
                         return;
                     };
                     log::trace!("Selected file: {:?}", file_path);
-                    self.open_project(&file_path, window);
+                    let result = self.open_project(&file_path, window);
+                    log::trace!("{:?}", result);
                 }
                 EFileDialogType::ImportAsset => {
                     let mut filter = MODEL_EXTENSION.to_vec();
                     filter.append(&mut IMAGE_EXTENSION.to_vec());
                     let dialog = rfd::FileDialog::new().add_filter("Asset", &filter);
-                    if let Some(file_path) = dialog.pick_file() {
-                        self.process_import_asset(file_path);
-                    }
+                    let Some(file_path) = dialog.pick_file() else {
+                        return;
+                    };
+                    self.process_import_asset(file_path);
                 }
                 EFileDialogType::IBL => {
                     let filter = IBL_IMAGE_EXTENSION;
                     let dialog = rfd::FileDialog::new().add_filter("Image", &filter);
-                    if let Some(file_path) = dialog.pick_file() {
-                        let url =
-                            url::Url::parse(&format!("ibl://{}", uuid::Uuid::new_v4().to_string()))
-                                .unwrap();
-                        self.engine.ibl_bake(&file_path, url, BakeInfo::default());
-                    }
+                    let Some(file_path) = dialog.pick_file() else {
+                        return;
+                    };
+                    let url =
+                        url::Url::parse(&format!("ibl://{}", uuid::Uuid::new_v4().to_string()))
+                            .unwrap();
+                    self.engine.ibl_bake(&file_path, url, BakeInfo::default());
                 }
             },
         }
@@ -565,7 +597,7 @@ impl EditorContext {
     }
 
     fn process_redraw_request(&mut self, window: &mut winit::window::Window) {
-        for (id, draw_object) in self.draw_objects.clone() {
+        for (_, draw_object) in self.draw_objects.clone() {
             self.engine.draw(draw_object);
         }
         self.process_ui(window);
@@ -636,7 +668,7 @@ impl EditorContext {
                 top_menu::EClickEventType::SaveProject => {
                     if let Some(project_context) = self.project_context.as_ref() {
                         let save_status = project_context.save();
-                        log::trace!("Save: {}", save_status);
+                        log::trace!("Save project: {:?}", save_status);
                     }
                 }
                 top_menu::EClickEventType::Export => {
@@ -652,31 +684,33 @@ impl EditorContext {
                     }
                 }
                 top_menu::EClickEventType::Build(build_config) => {
-                    if let Some(project_context) = &mut self.project_context {
-                        if let Ok(artifact_file_path) = project_context.export() {
-                            let folder_path =
-                                project_context.create_build_folder_if_not_exist(&build_config);
-                            if let (Ok(folder_path), Ok(current_dir)) =
-                                (folder_path, std::env::current_dir())
-                            {
-                                let target =
-                                    current_dir.join("../../../rs_desktop_standalone/target");
-                                let exe: PathBuf;
-                                match build_config.build_type {
-                                    EBuildType::Debug => {
-                                        exe = target.join("debug/rs_desktop_standalone.exe");
-                                    }
-                                    EBuildType::Release => {
-                                        exe = target.join("release/rs_desktop_standalone.exe");
-                                    }
-                                }
-                                let to = folder_path.join("rs_desktop_standalone.exe");
-                                let _ = Self::copy_file_and_log(exe, to);
-                                let to = folder_path.join(artifact_file_path.file_name().unwrap());
-                                let _ = Self::copy_file_and_log(artifact_file_path, to);
+                    let result = (|project_context: Option<&mut ProjectContext>| {
+                        let project_context =
+                            project_context.ok_or(anyhow!("project_context is null"))?;
+                        let artifact_file_path = project_context.export()?;
+                        let folder_path =
+                            project_context.create_build_folder_if_not_exist(&build_config)?;
+                        let current_dir = std::env::current_dir()?;
+                        let target = current_dir.join("../../../rs_desktop_standalone/target");
+                        let exe: PathBuf;
+                        match build_config.build_type {
+                            EBuildType::Debug => {
+                                exe = target.join("debug/rs_desktop_standalone.exe");
+                            }
+                            EBuildType::Release => {
+                                exe = target.join("release/rs_desktop_standalone.exe");
                             }
                         }
-                    }
+                        let to = folder_path.join("rs_desktop_standalone.exe");
+                        Self::copy_file_and_log(exe, to)?;
+                        let file_name = artifact_file_path
+                            .file_name()
+                            .ok_or(anyhow!("No file name"))?;
+                        let to = folder_path.join(file_name);
+                        Self::copy_file_and_log(artifact_file_path, to)?;
+                        Ok::<(), anyhow::Error>(())
+                    })(self.project_context.as_mut());
+                    log::trace!("{:?}", result);
                 }
                 top_menu::EClickEventType::OpenWindow(window_type) => match window_type {
                     top_menu::EWindowType::Asset => {
@@ -895,7 +929,8 @@ impl EditorContext {
 
                                     match &mut draw_object.material_type {
                                         rs_render::command::EMaterialType::Phong(material) => {
-                                            material.diffuse_texture = Some(*texture_handle);
+                                            material.diffuse_texture =
+                                                Some(ETextureType::Base(*texture_handle));
                                             material.specular_texture = Some(*texture_handle);
                                         }
                                         rs_render::command::EMaterialType::PBR(_) => {}
@@ -1071,6 +1106,7 @@ impl EditorContext {
         asset_folder_path: &Path,
         camera: &Camera,
         nodes: std::slice::Iter<'_, Rc<RefCell<crate::level::Node>>>,
+        texture_files: Vec<Rc<RefCell<TextureFile>>>,
     ) -> HashMap<uuid::Uuid, DrawObject> {
         let mut draw_objects: HashMap<uuid::Uuid, DrawObject> = HashMap::new();
         for node in nodes {
@@ -1086,21 +1122,46 @@ impl EditorContext {
             ) else {
                 continue;
             };
-            if let Some(texture_value) = node.borrow_mut().values.get_mut(property::name::TEXTURE) {
-                if let EPropertyValueType::Texture(Some(texture_url)) = texture_value {
-                    if let Some(texture_handle) = engine
-                        .get_mut_resource_manager()
-                        .get_texture_by_url(texture_url)
-                    {
-                        match &mut draw_object.material_type {
-                            rs_render::command::EMaterialType::Phong(material) => {
-                                material.diffuse_texture = Some(*texture_handle);
-                                material.specular_texture = Some(*texture_handle);
-                            }
-                            rs_render::command::EMaterialType::PBR(_) => {}
+            let mut node = node.borrow_mut();
+            let Some(texture_value) = node.values.get_mut(property::name::TEXTURE) else {
+                continue;
+            };
+            let EPropertyValueType::Texture(Some(texture_url)) = texture_value else {
+                continue;
+            };
+            let Some(texture_file) = texture_files.iter().find(|x| {
+                let file = x.borrow();
+                file.url == *texture_url
+            }) else {
+                continue;
+            };
+            let texture_file = texture_file.borrow();
+            // let Some(texture_handle) = engine
+            //     .get_mut_resource_manager()
+            //     .get_texture_by_url(texture_url)
+            // else {
+            //     continue;
+            // };
+            match &mut draw_object.material_type {
+                rs_render::command::EMaterialType::Phong(material) => {
+                    if texture_file.is_virtual_texture {
+                        if let Some(texture_handle) = engine
+                            .get_mut_resource_manager()
+                            .get_virtual_texture_by_url(texture_url)
+                        {
+                            material.diffuse_texture = Some(ETextureType::Virtual(*texture_handle));
+                        }
+                    } else {
+                        if let Some(texture_handle) = engine
+                            .get_mut_resource_manager()
+                            .get_texture_by_url(texture_url)
+                        {
+                            material.diffuse_texture = Some(ETextureType::Base(*texture_handle));
                         }
                     }
+                    // material.specular_texture = Some(*texture_handle);
                 }
+                rs_render::command::EMaterialType::PBR(_) => {}
             }
             draw_objects.insert(id, draw_object);
         }

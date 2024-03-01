@@ -174,88 +174,237 @@ impl Reflection {
 
     fn extract_vertex_attributes(module: &naga::Module) -> (Vec<wgpu::VertexAttribute>, u64) {
         let mut attributes = Vec::new();
-        for entry_point in module.entry_points.iter() {
-            match entry_point.stage {
-                naga::ShaderStage::Vertex => {
-                    let mut offset: u64 = 0;
-                    for arg in entry_point.function.arguments.iter() {
-                        let arg_type = module.types.get_handle(arg.ty).unwrap();
-                        // let arg_size = arg_type.inner.size(&module.constants);
+        let Some(entry_point) = module
+            .entry_points
+            .iter()
+            .find(|x| x.stage == naga::ShaderStage::Vertex)
+        else {
+            return (vec![], 0);
+        };
 
-                        match &arg_type.inner {
-                            naga::TypeInner::Scalar(scaler) => {
-                                let mut attribute = wgpu::VertexAttribute {
-                                    format: wgpu::VertexFormat::Float32,
-                                    offset,
-                                    shader_location: 0,
-                                };
-                                match arg.binding.clone().unwrap() {
-                                    naga::Binding::BuiltIn(built_in) => match built_in {
-                                        BuiltIn::VertexIndex => {
-                                            log::trace!("{:?}", "Skip VertexIndex");
-                                        }
-                                        _ => {
-                                            todo!()
-                                        }
-                                    },
-                                    naga::Binding::Location { location, .. } => {
-                                        attribute.shader_location = location;
-                                    }
-                                }
-                                match scaler.kind {
-                                    naga::ScalarKind::Sint => {
-                                        attribute.format = wgpu::VertexFormat::Sint32;
-                                    }
-                                    naga::ScalarKind::Uint => {
-                                        attribute.format = wgpu::VertexFormat::Uint32;
-                                    }
-                                    naga::ScalarKind::Float => {
-                                        attribute.format = wgpu::VertexFormat::Float32;
-                                    }
-                                    _ => todo!(),
-                                }
-                                offset += attribute.format.size();
-                                attributes.push(attribute);
+        let mut offset: u64 = 0;
+        for arg in entry_point.function.arguments.iter() {
+            let arg_type = module.types.get_handle(arg.ty).unwrap();
+            // let arg_size = arg_type.inner.size(&module.constants);
+
+            match &arg_type.inner {
+                naga::TypeInner::Scalar(scaler) => {
+                    let mut attribute = wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32,
+                        offset,
+                        shader_location: 0,
+                    };
+                    match arg.binding.clone().unwrap() {
+                        naga::Binding::BuiltIn(built_in) => match built_in {
+                            BuiltIn::VertexIndex => {
+                                log::trace!("{:?}", "Skip VertexIndex");
                             }
-                            naga::TypeInner::Vector { size, scalar } => {
-                                let mut attribute = wgpu::VertexAttribute {
-                                    format: wgpu::VertexFormat::Float32,
-                                    offset,
-                                    shader_location: 0,
-                                };
-                                match arg.binding.clone().unwrap() {
-                                    naga::Binding::BuiltIn(_) => todo!(),
-                                    naga::Binding::Location { location, .. } => {
-                                        attribute.shader_location = location;
-                                    }
-                                }
-                                match scalar.kind {
-                                    naga::ScalarKind::Float => match size {
-                                        naga::VectorSize::Bi => {
-                                            attribute.format = wgpu::VertexFormat::Float32x2;
-                                        }
-                                        naga::VectorSize::Tri => {
-                                            attribute.format = wgpu::VertexFormat::Float32x3;
-                                        }
-                                        naga::VectorSize::Quad => {
-                                            attribute.format = wgpu::VertexFormat::Float32x4;
-                                        }
-                                    },
-                                    _ => todo!(),
-                                }
-                                offset += attribute.format.size();
-                                attributes.push(attribute);
+                            _ => {
+                                todo!()
                             }
-                            _ => {}
+                        },
+                        naga::Binding::Location { location, .. } => {
+                            attribute.shader_location = location;
                         }
                     }
+                    match scaler.kind {
+                        naga::ScalarKind::Sint => {
+                            attribute.format = wgpu::VertexFormat::Sint32;
+                        }
+                        naga::ScalarKind::Uint => {
+                            attribute.format = wgpu::VertexFormat::Uint32;
+                        }
+                        naga::ScalarKind::Float => {
+                            attribute.format = wgpu::VertexFormat::Float32;
+                        }
+                        _ => todo!(),
+                    }
+                    offset += attribute.format.size();
+                    attributes.push(attribute);
                 }
-                naga::ShaderStage::Fragment => {}
-                naga::ShaderStage::Compute => {}
+                naga::TypeInner::Vector { size, scalar } => {
+                    let mut attribute = wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32,
+                        offset,
+                        shader_location: 0,
+                    };
+                    match arg.binding.clone().unwrap() {
+                        naga::Binding::BuiltIn(_) => todo!(),
+                        naga::Binding::Location { location, .. } => {
+                            attribute.shader_location = location;
+                        }
+                    }
+                    match scalar.kind {
+                        naga::ScalarKind::Float => match size {
+                            naga::VectorSize::Bi => {
+                                attribute.format = wgpu::VertexFormat::Float32x2;
+                            }
+                            naga::VectorSize::Tri => {
+                                attribute.format = wgpu::VertexFormat::Float32x3;
+                            }
+                            naga::VectorSize::Quad => {
+                                attribute.format = wgpu::VertexFormat::Float32x4;
+                            }
+                        },
+                        _ => todo!(),
+                    }
+                    offset += attribute.format.size();
+                    attributes.push(attribute);
+                }
+                naga::TypeInner::Struct { members, .. } => {
+                    for member in members {
+                        let Some(binding) = &member.binding else {
+                            continue;
+                        };
+                        let naga::Binding::Location { location, .. } = binding else {
+                            continue;
+                        };
+                        let Ok(arg_type) = module.types.get_handle(member.ty) else {
+                            continue;
+                        };
+
+                        let TypeInner::Vector { size, scalar } = arg_type.inner else {
+                            continue;
+                        };
+                        let mut attribute = wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32,
+                            offset,
+                            shader_location: *location,
+                        };
+                        match scalar.kind {
+                            naga::ScalarKind::Float => match size {
+                                naga::VectorSize::Bi => {
+                                    attribute.format = wgpu::VertexFormat::Float32x2;
+                                }
+                                naga::VectorSize::Tri => {
+                                    attribute.format = wgpu::VertexFormat::Float32x3;
+                                }
+                                naga::VectorSize::Quad => {
+                                    attribute.format = wgpu::VertexFormat::Float32x4;
+                                }
+                            },
+                            _ => todo!(),
+                        }
+                        offset += attribute.format.size();
+                        attributes.push(attribute);
+                    }
+                }
+                _ => {}
             }
         }
+
         let array_stride: u64 = attributes.iter().fold(0, |acc, &x| acc + x.format.size());
         (attributes, array_stride)
+    }
+
+    fn create_bind_group_layout_entry(
+        binding: u32,
+        space: AddressSpace,
+        arg_type: &Type,
+        pipeline_type: &EPipelineType,
+    ) -> Option<BindGroupLayoutEntry> {
+        match space {
+            AddressSpace::Storage { access } => {
+                let bind_group_layout_entry = BindGroupLayoutEntry {
+                    binding,
+                    visibility: match pipeline_type {
+                        EPipelineType::Render(_, _) => {
+                            ShaderStages::VERTEX | ShaderStages::FRAGMENT
+                        }
+                        EPipelineType::Compute(_) => ShaderStages::COMPUTE,
+                    },
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage {
+                            read_only: !access.contains(StorageAccess::STORE),
+                        },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                };
+                return Some(bind_group_layout_entry);
+            }
+            AddressSpace::Uniform => {
+                let bind_group_layout_entry = BindGroupLayoutEntry {
+                    binding,
+                    visibility: match pipeline_type {
+                        EPipelineType::Render(_, _) => {
+                            ShaderStages::VERTEX | ShaderStages::FRAGMENT
+                        }
+                        EPipelineType::Compute(_) => ShaderStages::COMPUTE,
+                    },
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                };
+                return Some(bind_group_layout_entry);
+            }
+            AddressSpace::Handle => match &arg_type.inner {
+                TypeInner::Image {
+                    dim,
+                    arrayed,
+                    class,
+                } => {
+                    let binding_type: BindingType = match class {
+                        ImageClass::Sampled { kind, multi } => BindingType::Texture {
+                            sample_type: match kind {
+                                ScalarKind::Sint => TextureSampleType::Sint,
+                                ScalarKind::Uint => TextureSampleType::Uint,
+                                ScalarKind::Float => TextureSampleType::Float { filterable: true },
+                                _ => todo!(),
+                            },
+                            view_dimension: Self::image_dimension2texture_dimension(*dim, *arrayed),
+                            multisampled: *multi,
+                        },
+                        ImageClass::Depth { multi } => todo!(),
+                        ImageClass::Storage { format, access } => BindingType::StorageTexture {
+                            access: Self::storage_access2storage_texture_access(access),
+                            format: Self::storage_format2texture_format(format),
+                            view_dimension: Self::image_dimension2texture_dimension(*dim, *arrayed),
+                        },
+                    };
+
+                    let bind_group_layout_entry = BindGroupLayoutEntry {
+                        binding,
+                        visibility: match pipeline_type {
+                            EPipelineType::Render(_, _) => {
+                                ShaderStages::VERTEX | ShaderStages::FRAGMENT
+                            }
+                            EPipelineType::Compute(_) => ShaderStages::COMPUTE,
+                        },
+                        ty: binding_type,
+                        count: None,
+                    };
+                    return Some(bind_group_layout_entry);
+                }
+                TypeInner::Sampler { comparison } => {
+                    let sampler_binding_type: SamplerBindingType;
+                    if *comparison {
+                        sampler_binding_type = SamplerBindingType::Comparison;
+                    } else {
+                        sampler_binding_type = SamplerBindingType::Filtering;
+                    }
+                    let bind_group_layout_entry = BindGroupLayoutEntry {
+                        binding,
+                        visibility: match pipeline_type {
+                            EPipelineType::Render(_, _) => {
+                                ShaderStages::VERTEX | ShaderStages::FRAGMENT
+                            }
+                            EPipelineType::Compute(_) => ShaderStages::COMPUTE,
+                        },
+                        ty: BindingType::Sampler(sampler_binding_type),
+                        count: None,
+                    };
+                    return Some(bind_group_layout_entry);
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        None
     }
 
     fn extract_bind_group_layout_entrys(
@@ -270,127 +419,24 @@ impl Reflection {
             let arg_type = module.types.get_handle(global_variable.ty).unwrap();
             let space = global_variable.space;
             let binding = &global_variable.binding;
+            let group = binding.clone().unwrap().group;
+            let Some(bind_group_layout_entry) = Self::create_bind_group_layout_entry(
+                binding.clone().unwrap().binding,
+                space,
+                arg_type,
+                pipeline_type,
+            ) else {
+                continue;
+            };
 
-            match space {
-                AddressSpace::Uniform => {
-                    let bind_group_layout_entry = BindGroupLayoutEntry {
-                        binding: binding.clone().unwrap().binding,
-                        visibility: match pipeline_type {
-                            EPipelineType::Render(_, _) => {
-                                ShaderStages::VERTEX | ShaderStages::FRAGMENT
-                            }
-                            EPipelineType::Compute(_) => ShaderStages::COMPUTE,
-                        },
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    };
-                    match bind_group_layout_entrys_map.get_mut(&binding.clone().unwrap().group) {
-                        Some(value) => {
-                            value.push(bind_group_layout_entry);
-                        }
-                        None => {
-                            let mut new_vec = Vec::new();
-                            new_vec.push(bind_group_layout_entry);
-                            bind_group_layout_entrys_map
-                                .insert(binding.clone().unwrap().group, new_vec);
-                        }
-                    }
-                }
-                AddressSpace::Handle => match &arg_type.inner {
-                    TypeInner::Image {
-                        dim,
-                        arrayed,
-                        class,
-                    } => {
-                        let binding_type: BindingType = match class {
-                            ImageClass::Sampled { kind, multi } => BindingType::Texture {
-                                sample_type: match kind {
-                                    ScalarKind::Sint => TextureSampleType::Sint,
-                                    ScalarKind::Uint => TextureSampleType::Uint,
-                                    ScalarKind::Float => {
-                                        TextureSampleType::Float { filterable: true }
-                                    }
-                                    _ => todo!(),
-                                },
-                                view_dimension: Self::image_dimension2texture_dimension(
-                                    *dim, *arrayed,
-                                ),
-                                multisampled: *multi,
-                            },
-                            ImageClass::Depth { multi } => todo!(),
-                            ImageClass::Storage { format, access } => BindingType::StorageTexture {
-                                access: Self::storage_access2storage_texture_access(access),
-                                format: Self::storage_format2texture_format(format),
-                                view_dimension: Self::image_dimension2texture_dimension(
-                                    *dim, *arrayed,
-                                ),
-                            },
-                        };
-
-                        let bind_group_layout_entry = BindGroupLayoutEntry {
-                            binding: binding.clone().unwrap().binding,
-                            visibility: match pipeline_type {
-                                EPipelineType::Render(_, _) => {
-                                    ShaderStages::VERTEX | ShaderStages::FRAGMENT
-                                }
-                                EPipelineType::Compute(_) => ShaderStages::COMPUTE,
-                            },
-                            ty: binding_type,
-                            count: None,
-                        };
-
-                        match bind_group_layout_entrys_map.get_mut(&binding.clone().unwrap().group)
-                        {
-                            Some(value) => {
-                                value.push(bind_group_layout_entry);
-                            }
-                            None => {
-                                let mut new_vec = Vec::new();
-                                new_vec.push(bind_group_layout_entry);
-                                bind_group_layout_entrys_map
-                                    .insert(binding.clone().unwrap().group, new_vec);
-                            }
-                        }
-                    }
-                    TypeInner::Sampler { comparison } => {
-                        let sampler_binding_type: SamplerBindingType;
-                        if *comparison {
-                            sampler_binding_type = SamplerBindingType::Comparison;
-                        } else {
-                            sampler_binding_type = SamplerBindingType::Filtering;
-                        }
-                        let bind_group_layout_entry = BindGroupLayoutEntry {
-                            binding: binding.clone().unwrap().binding,
-                            visibility: match pipeline_type {
-                                EPipelineType::Render(_, _) => {
-                                    ShaderStages::VERTEX | ShaderStages::FRAGMENT
-                                }
-                                EPipelineType::Compute(_) => ShaderStages::COMPUTE,
-                            },
-                            ty: BindingType::Sampler(sampler_binding_type),
-                            count: None,
-                        };
-                        match bind_group_layout_entrys_map.get_mut(&binding.clone().unwrap().group)
-                        {
-                            Some(value) => {
-                                value.push(bind_group_layout_entry);
-                            }
-                            None => {
-                                let mut new_vec = Vec::new();
-                                new_vec.push(bind_group_layout_entry);
-                                bind_group_layout_entrys_map
-                                    .insert(binding.clone().unwrap().group, new_vec);
-                            }
-                        }
-                    }
-                    _ => {}
-                },
-                _ => {}
+            if !bind_group_layout_entrys_map.contains_key(&group) {
+                bind_group_layout_entrys_map.insert(group, Vec::new());
             }
+            let Some(bind_group_layout_entrys) = bind_group_layout_entrys_map.get_mut(&group)
+            else {
+                continue;
+            };
+            bind_group_layout_entrys.push(bind_group_layout_entry);
         }
 
         let mut keys = bind_group_layout_entrys_map

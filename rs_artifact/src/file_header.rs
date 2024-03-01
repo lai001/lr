@@ -157,7 +157,10 @@ impl FileHeader {
         if data == magic_numbers {
             Ok(())
         } else {
-            Err(crate::error::Error::CheckIdentificationFail)
+            Err(crate::error::Error::CheckIdentificationFail(Some(format!(
+                "{:?} is not match {:?}",
+                data, magic_numbers
+            ))))
         }
     }
 }
@@ -168,6 +171,7 @@ mod test {
     use crate::{
         artifact::ArtifactFileHeader, resource_info::ResourceInfo, resource_type::EResourceType,
     };
+    use rs_core_minimal::settings::Settings;
     use std::collections::HashMap;
 
     #[test]
@@ -186,6 +190,7 @@ mod test {
         };
         let fileheader = ArtifactFileHeader {
             resource_map: HashMap::from([(resource.url.clone(), resource)]),
+            settings: Settings::default(),
         };
         let data = FileHeader::write_header(
             ARTIFACT_FILE_MAGIC_NUMBERS,

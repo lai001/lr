@@ -32,7 +32,8 @@ pub struct ImageInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImageFileHeader {
-    tile_map: HashMap<TileIndex, ImageInfo>,
+    lod_sizes: Vec<glam::UVec2>,
+    lod_images: Vec<HashMap<glam::UVec2, ImageInfo>>,
 }
 
 #[derive(Debug)]
@@ -49,37 +50,50 @@ impl<R> Image<R>
 where
     R: Seek + Read,
 {
-    pub fn get_dynamic_image(&mut self, tile_index: TileIndex) -> Option<image::DynamicImage> {
-        match self.file_header.tile_map.get(&tile_index) {
-            Some(image_info) => {
-                let size = (image_info.span.end - image_info.span.start) as usize;
-                let _ = match self.reader.seek(std::io::SeekFrom::Start(
-                    self.body_offset + image_info.span.start,
-                )) {
-                    Ok(new_position) => new_position,
-                    Err(_) => {
-                        return None;
-                    }
-                };
-                let mut buffer = Vec::new();
-                buffer.resize(size, 0);
-                match self.reader.read(&mut buffer) {
-                    Ok(read) => {
-                        if read != size {
-                            None
-                        } else {
-                            new_dynamic_image(
-                                buffer,
-                                image_info.color_type.to_external_format(),
-                                image_info.width,
-                                image_info.height,
-                            )
-                        }
-                    }
-                    Err(_) => None,
-                }
-            }
-            None => None,
+    pub fn get_size(&self) -> glam::UVec2 {
+        self.file_header.lod_sizes.get(0).copied().unwrap()
+    }
+
+    pub fn get_dynamic_image(&mut self, tile_index: &TileIndex) -> Result<image::DynamicImage> {
+        let lod = tile_index.mipmap_level;
+        let tile_index = glam::uvec2(tile_index.x, tile_index.y);
+        let image_infos =
+            self.file_header
+                .lod_images
+                .get(lod as usize)
+                .ok_or(crate::error::Error::NotFound(Some(format!(
+                    "{:?}",
+                    tile_index
+                ))))?;
+        let image_info = image_infos
+            .get(&tile_index)
+            .ok_or(crate::error::Error::NotFound(Some(format!("{:?}", lod))))?;
+        let size = (image_info.span.end - image_info.span.start) as usize;
+        self.reader
+            .seek(std::io::SeekFrom::Start(
+                self.body_offset + image_info.span.start,
+            ))
+            .map_err(|err| crate::error::Error::IO(err, None))?;
+        let mut buffer = Vec::new();
+        buffer.resize(size, 0);
+        let read = self
+            .reader
+            .read(&mut buffer)
+            .map_err(|err| crate::error::Error::IO(err, None))?;
+        if read != size {
+            Err(crate::error::Error::IO(
+                std::io::ErrorKind::Other.into(),
+                None,
+            ))
+        } else {
+            let image = new_dynamic_image(
+                buffer,
+                image_info.color_type.to_external_format(),
+                image_info.width,
+                image_info.height,
+            )
+            .ok_or(crate::error::Error::DataConvertFail)?;
+            Ok(image)
         }
     }
 
@@ -87,29 +101,14 @@ where
     where
         R: Seek + Read,
     {
-        let is_vail =
-            crate::file_header::FileHeader::check_identification(&mut reader, FILE_MAGIC_NUMBERS);
-        if is_vail.is_err() {
-            return Err(crate::error::Error::CheckIdentificationFail);
-        }
+        crate::file_header::FileHeader::check_identification(&mut reader, FILE_MAGIC_NUMBERS)?;
 
-        let header_bytes_length =
-            match crate::file_header::FileHeader::get_header_encoded_data_length(
-                &mut reader,
-                endian_type,
-            ) {
-                Ok(header_bytes_length) => header_bytes_length,
-                Err(err) => {
-                    return Err(err);
-                }
-            };
+        let header_bytes_length = crate::file_header::FileHeader::get_header_encoded_data_length(
+            &mut reader,
+            endian_type,
+        )?;
         let file_header: ImageFileHeader =
-            match crate::file_header::FileHeader::get_header2(&mut reader, endian_type) {
-                Ok(heaedr) => heaedr,
-                Err(err) => {
-                    return Err(err);
-                }
-            };
+            crate::file_header::FileHeader::get_header2(&mut reader, endian_type)?;
         let body_offset: u64 = HEADER_OFFSET as u64 + header_bytes_length;
 
         let image = Image {
@@ -121,8 +120,8 @@ where
         Ok(image)
     }
 
-    pub fn get_tile_map(&self) -> &HashMap<TileIndex, ImageInfo> {
-        &self.file_header.tile_map
+    pub fn get_tile_map(&self) -> &[HashMap<glam::UVec2, ImageInfo>] {
+        &self.file_header.lod_images
     }
 }
 
@@ -143,56 +142,51 @@ pub fn decode_from_path<P: AsRef<Path>>(
 pub fn encode_to_writer<W>(
     writer: &mut W,
     endian_type: Option<EEndianType>,
-    tiles: Vec<(TileIndex, &image::DynamicImage)>,
+    lod_sizes: Vec<glam::UVec2>,
+    lod_tiles: Vec<HashMap<glam::UVec2, image::DynamicImage>>,
 ) -> Result<()>
 where
     W: Write,
 {
     let mut file_header = ImageFileHeader {
-        tile_map: HashMap::new(),
+        lod_sizes,
+        lod_images: vec![],
     };
     let mut start: u64 = 0;
-    for (tile_index, dynamic_image) in tiles.iter() {
-        let tile_data = dynamic_image.as_bytes();
-        let span = Span {
-            start,
-            end: start + (tile_data.len() as u64),
-        };
-        let info = ImageInfo {
-            span,
-            width: dynamic_image.width(),
-            height: dynamic_image.height(),
-            color_type: crate::image::ColorType::from_external_format(dynamic_image.color()),
-        };
-        file_header.tile_map.insert(tile_index.clone(), info);
-        start = span.end;
+    let mut body: Vec<u8> = vec![];
+
+    for tiles in lod_tiles {
+        let mut infos: HashMap<glam::UVec2, ImageInfo> = HashMap::new();
+        for (index, tile) in tiles {
+            let data = tile.as_bytes();
+            let span = Span {
+                start,
+                end: start + (data.len() as u64),
+            };
+            body.extend_from_slice(data);
+            let info = ImageInfo {
+                span,
+                width: tile.width(),
+                height: tile.height(),
+                color_type: crate::image::ColorType::from_external_format(tile.color()),
+            };
+            start = span.end;
+            infos.insert(index, info);
+        }
+        file_header.lod_images.push(infos);
     }
 
-    let header_data = match crate::file_header::FileHeader::write_header(
+    let header_data = crate::file_header::FileHeader::write_header(
         FILE_MAGIC_NUMBERS,
         &file_header,
         endian_type,
-    ) {
-        Ok(header_data) => header_data,
-        Err(err) => {
-            return Err(err);
-        }
-    };
-    let _ = match writer.write(&header_data) {
-        Ok(write_size) => write_size,
-        Err(err) => {
-            return Err(crate::error::Error::IO(err, None));
-        }
-    };
-
-    for (_, tile_data) in tiles {
-        match writer.write(tile_data.as_bytes()) {
-            Ok(_) => {}
-            Err(err) => {
-                return Err(crate::error::Error::IO(err, None));
-            }
-        }
-    }
+    )?;
+    writer
+        .write(&header_data)
+        .map_err(|err| crate::error::Error::IO(err, None))?;
+    writer
+        .write(&body)
+        .map_err(|err| crate::error::Error::IO(err, None))?;
 
     Ok(())
 }
@@ -200,15 +194,16 @@ where
 pub fn encode_to_file<P: AsRef<Path>>(
     path: P,
     endian_type: Option<EEndianType>,
-    tiles: Vec<(TileIndex, &image::DynamicImage)>,
+    lod_sizes: Vec<glam::UVec2>,
+    lod_tiles: Vec<HashMap<glam::UVec2, image::DynamicImage>>,
 ) -> Result<()> {
-    let mut writer = match OpenOptions::new().write(true).create(true).open(path) {
-        Ok(writer) => writer,
-        Err(err) => {
-            return Err(crate::error::Error::IO(err, None));
-        }
-    };
-    encode_to_writer(&mut writer, endian_type, tiles)
+    let mut writer = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(path)
+        .map_err(|err| crate::error::Error::IO(err, None))?;
+
+    encode_to_writer(&mut writer, endian_type, lod_sizes, lod_tiles)
 }
 
 fn new_dynamic_image(

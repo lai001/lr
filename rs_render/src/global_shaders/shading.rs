@@ -2,12 +2,12 @@ use super::global_shader::GlobalShader;
 use crate::get_buildin_shader_dir;
 use rs_shader_compiler::pre_process::ShaderDescription;
 
-pub struct VirtualTextureCleanShader {}
+pub struct ShadingShader {}
 
-impl GlobalShader for VirtualTextureCleanShader {
+impl GlobalShader for ShadingShader {
     fn get_shader_description(&self) -> ShaderDescription {
         let shader_description = ShaderDescription {
-            shader_path: get_buildin_shader_dir().join("virtual_texture_clean.wgsl"),
+            shader_path: get_buildin_shader_dir().join("phong_static_shading.wgsl"),
             include_dirs: vec![],
             definitions: vec![],
         };
@@ -15,6 +15,6 @@ impl GlobalShader for VirtualTextureCleanShader {
     }
 
     fn get_name(&self) -> String {
-        "virtual_texture_clean.wgsl".to_string()
+        "phong_static_shading.wgsl".to_string()
     }
 }

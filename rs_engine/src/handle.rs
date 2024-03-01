@@ -3,6 +3,7 @@ use std::{ops::Deref, sync::Arc};
 
 pub struct HandleManager {
     texture_idgenerator: IDGenerator,
+    virtual_texture_idgenerator: IDGenerator,
     buffer_idgenerator: IDGenerator,
     gui_texture_idgenerator: IDGenerator,
 }
@@ -11,6 +12,7 @@ impl HandleManager {
     pub fn new() -> HandleManager {
         HandleManager {
             texture_idgenerator: IDGenerator::new(),
+            virtual_texture_idgenerator: IDGenerator::new(),
             buffer_idgenerator: IDGenerator::new(),
             gui_texture_idgenerator: IDGenerator::new(),
         }
@@ -18,6 +20,13 @@ impl HandleManager {
 
     pub fn next_texture(&mut self) -> TextureHandle {
         let new_id = self.texture_idgenerator.get_next_id();
+        TextureHandle {
+            inner: Arc::new(new_id),
+        }
+    }
+
+    pub fn next_virtual_texture(&mut self) -> TextureHandle {
+        let new_id = self.virtual_texture_idgenerator.get_next_id();
         TextureHandle {
             inner: Arc::new(new_id),
         }

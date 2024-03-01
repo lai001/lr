@@ -8,7 +8,7 @@ use crate::{
     shader_library::ShaderLibrary,
     texture_loader::TextureLoader,
 };
-use rs_core_minimal::misc::calculate_mipmap_level;
+use rs_core_minimal::misc::calculate_max_mips;
 use std::{path::Path, sync::Arc};
 
 pub struct AccelerationBaker {
@@ -33,7 +33,7 @@ impl AccelerationBaker {
         assert!(bake_info.irradiance_cube_map_length > 0);
         assert!(bake_info.pre_filter_cube_map_length > 4);
         assert!(bake_info.pre_filter_cube_map_max_mipmap_level > 0);
-        let max_mipmap_level = calculate_mipmap_level(bake_info.pre_filter_cube_map_length)
+        let max_mipmap_level = calculate_max_mips(bake_info.pre_filter_cube_map_length)
             .min(bake_info.pre_filter_cube_map_max_mipmap_level);
         assert!(max_mipmap_level > 0);
 
@@ -200,7 +200,7 @@ impl AccelerationBaker {
         queue: &wgpu::Queue,
         shader_library: &ShaderLibrary,
     ) -> Vec<wgpu::Texture> {
-        let max_mipmap_level = calculate_mipmap_level(self.bake_info.pre_filter_cube_map_length)
+        let max_mipmap_level = calculate_max_mips(self.bake_info.pre_filter_cube_map_length)
             .min(self.bake_info.pre_filter_cube_map_max_mipmap_level);
         assert!(max_mipmap_level > 0);
         let roughness_delta: f32;

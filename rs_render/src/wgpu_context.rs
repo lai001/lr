@@ -74,15 +74,9 @@ impl WGPUContext {
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
-                required_features: {
-                    let mut features = wgpu::Features::default();
-                    features.insert(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
-                    features.insert(wgpu::Features::CLEAR_TEXTURE);
-                    features.insert(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS);
-                    features
-                },
-                required_limits: wgpu::Limits::default(),
-                label: None,
+                required_features: adapter.features(),
+                required_limits: adapter.limits(),
+                label: Some("Engine"),
             },
             None,
         ))

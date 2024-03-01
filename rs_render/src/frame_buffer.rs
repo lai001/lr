@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::depth_texture::DepthTexture;
 use wgpu::TextureFormat;
 
@@ -14,14 +16,14 @@ impl FrameBuffer {
         depth_texture: Option<DepthTexture>,
         label: Option<&str>,
     ) -> FrameBuffer {
-        let available_texture_formats = std::collections::HashMap::from([
-            (wgpu::TextureFormat::Rgba8Unorm, true),
-            (wgpu::TextureFormat::Rgba8UnormSrgb, true),
-            (wgpu::TextureFormat::Bgra8Unorm, true),
-            (wgpu::TextureFormat::Bgra8UnormSrgb, true),
-            (wgpu::TextureFormat::Rgba32Uint, true),
+        let available_texture_formats = HashSet::from([
+            wgpu::TextureFormat::Rgba8Unorm,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            wgpu::TextureFormat::Bgra8Unorm,
+            wgpu::TextureFormat::Bgra8UnormSrgb,
+            wgpu::TextureFormat::Rgba32Uint,
         ]);
-        assert!(available_texture_formats.contains_key(&color_format));
+        assert!(available_texture_formats.contains(&color_format));
         let texture_extent = wgpu::Extent3d {
             width: size.x,
             height: size.y,
@@ -56,5 +58,9 @@ impl FrameBuffer {
     pub fn get_color_texture_view(&self) -> wgpu::TextureView {
         self.color_texture
             .create_view(&wgpu::TextureViewDescriptor::default())
+    }
+
+    pub fn get_color_texture(&self) -> &wgpu::Texture {
+        &self.color_texture
     }
 }

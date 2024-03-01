@@ -5,6 +5,7 @@ pub struct DefaultTextures {
     black: Arc<Texture>,
     white: Arc<Texture>,
     normal_texture: Arc<Texture>,
+    black_u32: Arc<Texture>,
 }
 
 impl DefaultTextures {
@@ -39,10 +40,29 @@ impl DefaultTextures {
             Some("DefaultTextures.Normal"),
         ));
 
+        let black_u32 = Arc::new(device.create_texture(&TextureDescriptor {
+            label: Some("DefaultTextures.Black"),
+            size: Extent3d {
+                width: 4,
+                height: 4,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rg32Uint,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::STORAGE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::COPY_DST,
+            view_formats: &[],
+        }));
+
         DefaultTextures {
             black,
             white,
             normal_texture,
+            black_u32,
         }
     }
 
@@ -128,16 +148,20 @@ impl DefaultTextures {
     }
 
     pub fn get_black_texture_view(&self) -> TextureView {
-        return self.black.create_view(&TextureViewDescriptor::default());
+        self.black.create_view(&TextureViewDescriptor::default())
     }
 
     pub fn get_white_texture_view(&self) -> TextureView {
-        return self.white.create_view(&TextureViewDescriptor::default());
+        self.white.create_view(&TextureViewDescriptor::default())
     }
 
     pub fn get_normal_texture_view(&self) -> TextureView {
-        return self
-            .normal_texture
-            .create_view(&TextureViewDescriptor::default());
+        self.normal_texture
+            .create_view(&TextureViewDescriptor::default())
+    }
+
+    pub fn get_black_u32_texture_view(&self) -> TextureView {
+        self.black_u32
+            .create_view(&TextureViewDescriptor::default())
     }
 }

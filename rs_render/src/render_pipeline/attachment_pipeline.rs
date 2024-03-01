@@ -1,6 +1,8 @@
 use crate::{
-    base_render_pipeline::BaseRenderPipeline, global_shaders::attachment::AttachmentShader,
-    gpu_vertex_buffer::GpuVertexBufferImp, shader_library::ShaderLibrary,
+    base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
+    global_shaders::attachment::AttachmentShader,
+    gpu_vertex_buffer::GpuVertexBufferImp,
+    shader_library::ShaderLibrary,
 };
 use wgpu::*;
 
@@ -58,10 +60,14 @@ impl AttachmentPipeline {
                 index_buffer: None,
                 index_count: None,
             }],
-            Some(Operations {
-                load: LoadOp::Clear(Color::TRANSPARENT),
-                store: StoreOp::Store,
-            }),
+            &[ColorAttachment {
+                color_ops: Some(Operations {
+                    load: LoadOp::Clear(Color::TRANSPARENT),
+                    store: StoreOp::Store,
+                }),
+                view: output_view,
+                resolve_target: None,
+            }],
             Some(Operations {
                 load: LoadOp::Clear(1.0),
                 store: StoreOp::Store,
@@ -70,8 +76,6 @@ impl AttachmentPipeline {
                 load: LoadOp::Clear(0),
                 store: StoreOp::Store,
             }),
-            output_view,
-            None,
             Some(depth_view),
         );
     }

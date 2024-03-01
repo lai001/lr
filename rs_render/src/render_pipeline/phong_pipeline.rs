@@ -1,7 +1,12 @@
 use crate::{
-    base_render_pipeline::BaseRenderPipeline, global_shaders::phong::PhongShader, gpu_buffer,
-    gpu_vertex_buffer::GpuVertexBufferImp, sampler_cache::SamplerCache,
-    shader_library::ShaderLibrary, vertex_data_type::mesh_vertex::MeshVertex, VertexBufferType,
+    base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
+    global_shaders::phong::PhongShader,
+    gpu_buffer,
+    gpu_vertex_buffer::GpuVertexBufferImp,
+    sampler_cache::SamplerCache,
+    shader_library::ShaderLibrary,
+    vertex_data_type::mesh_vertex::MeshVertex,
+    VertexBufferType,
 };
 use std::sync::Arc;
 use type_layout::TypeLayout;
@@ -89,10 +94,12 @@ impl PhongPipeline {
                 vec![BindingResource::Sampler(&self.sampler)],
             ],
             mesh_buffers,
+            &[ColorAttachment {
+                color_ops: None,
+                view: output_view,
+                resolve_target: None,
+            }],
             None,
-            None,
-            None,
-            output_view,
             None,
             Some(depth_view),
         );

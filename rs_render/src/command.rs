@@ -1,4 +1,7 @@
-use crate::{bake_info::BakeInfo, egui_render::EGUIRenderOutput};
+use crate::{
+    bake_info::BakeInfo, egui_render::EGUIRenderOutput,
+    virtual_texture_source::TVirtualTextureSource,
+};
 use rs_core_minimal::settings::RenderSettings;
 use std::{
     collections::HashSet,
@@ -101,9 +104,15 @@ pub struct PBRMaterial {
 }
 
 #[derive(Clone)]
+pub enum ETextureType {
+    Base(TextureHandle),
+    Virtual(TextureHandle),
+}
+
+#[derive(Clone)]
 pub struct PhongMaterial {
     pub constants: crate::render_pipeline::phong_pipeline::Constants,
-    pub diffuse_texture: Option<TextureHandle>,
+    pub diffuse_texture: Option<ETextureType>,
     pub specular_texture: Option<TextureHandle>,
 }
 
@@ -115,6 +124,7 @@ pub enum EMaterialType {
 
 #[derive(Clone)]
 pub struct DrawObject {
+    pub id: u32,
     pub vertex_buffers: Vec<BufferHandle>,
     pub vertex_count: u32,
     pub index_buffer: Option<BufferHandle>,
@@ -140,6 +150,12 @@ pub struct CreateTexture {
     pub handle: TextureHandle,
     pub texture_descriptor_create_info: TextureDescriptorCreateInfo,
     pub init_data: Option<InitTextureData>,
+}
+
+#[derive(Clone)]
+pub struct CreateVirtualTexture {
+    pub handle: TextureHandle,
+    pub source: Arc<Mutex<Box<dyn TVirtualTextureSource>>>,
 }
 
 #[derive(Clone)]
@@ -172,6 +188,7 @@ pub enum RenderCommand {
     DrawObject(DrawObject),
     UiOutput(EGUIRenderOutput),
     Resize(ResizeInfo),
+    CreateVirtualTextureSource(CreateVirtualTexture),
     Task(TaskType),
     Settings(RenderSettings),
     Present,

@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::library_reload::LibraryReload;
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{new_debouncer, DebouncedEvent, Debouncer};
@@ -12,25 +13,28 @@ pub struct HotReload {
 }
 
 impl HotReload {
-    pub fn new(watch_folder_path: &Path, lib_folder: &Path, lib_name: &str) -> HotReload {
+    pub fn new(watch_folder_path: &Path, lib_folder: &Path, lib_name: &str) -> Result<HotReload> {
         let mut library_reload = LibraryReload::new(&lib_folder, lib_name);
         library_reload.clean_cache();
         let library_reload = Arc::new(Mutex::new(library_reload));
         let (sender, receiver) = std::sync::mpsc::channel();
         log::trace!("Watch {:?}", watch_folder_path);
-        let mut debouncer =
-            new_debouncer(std::time::Duration::from_millis(200), None, sender).unwrap();
+        let mut debouncer = new_debouncer(std::time::Duration::from_millis(200), None, sender)
+            .map_err(|err| crate::error::Error::Debouncer(err))?;
 
-        let _ = debouncer.watcher().watch(
-            &Path::new(watch_folder_path),
-            notify::RecursiveMode::Recursive,
-        );
+        debouncer
+            .watcher()
+            .watch(
+                &Path::new(watch_folder_path),
+                notify::RecursiveMode::Recursive,
+            )
+            .map_err(|err| crate::error::Error::Debouncer(err))?;
         let reload = HotReload {
             library_reload,
             receiver,
             debouncer,
         };
-        reload
+        Ok(reload)
     }
 
     pub fn get_library_reload(&self) -> Arc<Mutex<LibraryReload>> {
@@ -53,12 +57,9 @@ impl HotReload {
         false
     }
 
-    pub fn reload(&mut self) -> bool {
+    pub fn reload(&mut self) -> Result<()> {
         let mut library_reload = self.library_reload.lock().unwrap();
-        match library_reload.reload() {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        library_reload.reload()
     }
 }
 

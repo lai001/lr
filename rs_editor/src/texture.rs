@@ -1,11 +1,15 @@
 use anyhow::{anyhow, Context, Result};
 use image::GenericImage;
 use md5::Digest;
-use rs_artifact::{virtual_texture::image::TileIndex, EEndianType};
+use rs_artifact::{
+    virtual_texture::image::{decode_from_path, TileIndex},
+    EEndianType,
+};
 use rs_engine::mipmap_generator::MipmapGenerator;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
+    collections::HashMap,
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -96,6 +100,33 @@ impl TextureFile {
             .fold("".to_string(), |acc, x| format!("{acc}{:x?}", x));
         Ok(result)
     }
+
+    #[cfg(debug_assertions)]
+    fn decode_virtual_texture_to_dir<P: AsRef<Path>>(
+        path: P,
+        out_dir: P,
+        endian_type: Option<EEndianType>,
+    ) {
+        let mut image_file = decode_from_path(path, endian_type).unwrap();
+        let tile_map = image_file.get_tile_map().to_vec();
+        for (level, image_infos) in tile_map.iter().enumerate() {
+            for (index, _) in image_infos.iter() {
+                let image = image_file
+                    .get_dynamic_image(&TileIndex {
+                        x: index.x,
+                        y: index.y,
+                        mipmap_level: level as u32,
+                    })
+                    .unwrap();
+                let out_dir = out_dir.as_ref();
+                let _ = std::fs::create_dir(out_dir);
+                let _ = image.save_with_format(
+                    out_dir.join(format!("{}_{}_{}.png", level, index.x, index.y)),
+                    image::ImageFormat::Png,
+                );
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -123,43 +154,43 @@ pub fn create_virtual_texture_cache_file<P: AsRef<Path>>(
     endian_type: Option<rs_artifact::EEndianType>,
     tile_size: u32,
 ) -> anyhow::Result<()> {
-    let mut image = image::open(file_path.as_ref())
+    assert!(tile_size.is_power_of_two());
+    let image = image::open(file_path.as_ref())
         .context(format!("Can not open file {:?}", file_path.as_ref()))?;
 
-    if image.width() % tile_size != 0 || image.height() % tile_size != 0 {
+    if image.width() % tile_size != 0
+        || image.height() % tile_size != 0
+        || image.width().min(image.height()) < tile_size
+    {
         return Err(anyhow!("Size is not correct."));
     }
-    let mut tiles: Vec<(TileIndex, image::DynamicImage)> = Vec::new();
-    for x in 0..(image.width() / tile_size) {
-        for y in 0..(image.height() / tile_size) {
-            let sub_image = image.sub_image(x, y, tile_size, tile_size).to_image();
-            let sub_image = image::DynamicImage::ImageRgba8(sub_image);
-            let mut mipmap_images =
-                MipmapGenerator::generate_from_image_cpu(&sub_image, None, None);
-            mipmap_images.insert(0, sub_image);
-            let mut level: u32 = 0;
-            loop {
-                if mipmap_images.is_empty() {
-                    break;
-                }
-                let image = mipmap_images.remove(0);
-                let tile_index = rs_artifact::virtual_texture::image::TileIndex {
-                    x,
-                    y,
-                    mipmap_level: level,
-                };
-                tiles.push((tile_index, image));
-                level += 1;
+    let mut tiles: Vec<HashMap<glam::UVec2, image::DynamicImage>> = Vec::new();
+
+    let mut lod_images = MipmapGenerator::generate_from_image_cpu(image, None, None);
+    let mut lod_sizes: Vec<glam::UVec2> = Vec::new();
+
+    for image in lod_images.iter_mut() {
+        lod_sizes.push(glam::uvec2(image.width(), image.height()));
+        let mut images: HashMap<glam::UVec2, image::DynamicImage> = HashMap::new();
+        for x in 0..image.width() / tile_size {
+            for y in 0..image.height() / tile_size {
+                let sub_image = image::DynamicImage::ImageRgba8(
+                    image
+                        .sub_image(x * tile_size, y * tile_size, tile_size, tile_size)
+                        .to_image(),
+                );
+                images.insert(glam::uvec2(x, y), sub_image);
             }
         }
+        if !images.is_empty() {
+            tiles.push(images);
+        }
     }
-    let tiles = tiles
-        .iter()
-        .map(|x| (x.0, &x.1))
-        .collect::<std::vec::Vec<(TileIndex, &image::DynamicImage)>>();
+
     Ok(rs_artifact::virtual_texture::image::encode_to_file(
         output,
         endian_type,
+        lod_sizes,
         tiles,
     )?)
 }

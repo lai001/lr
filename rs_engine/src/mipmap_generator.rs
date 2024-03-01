@@ -1,7 +1,7 @@
-use std::path::Path;
-
+use crate::error::Result;
 use image::{imageops, DynamicImage};
 use rs_render::buffer_dimensions::BufferDimensions;
+use std::path::Path;
 use wgpu::*;
 
 pub struct MipmapGenerator {}
@@ -11,57 +11,47 @@ impl MipmapGenerator {
         file_path: P,
         in_max_level: Option<u32>,
         filter: Option<imageops::FilterType>,
-    ) -> Vec<DynamicImage> {
-        let mut images = vec![];
-        match image::open(file_path) {
-            Ok(dynamic_image) => {
-                images.append(&mut Self::generate_from_image_cpu(
-                    &dynamic_image,
-                    in_max_level,
-                    filter,
-                ));
-                images.insert(0, dynamic_image);
-            }
-            Err(error) => {
-                log::warn!("{error}");
-            }
-        }
-        return images;
+    ) -> Result<Vec<DynamicImage>> {
+        let dynamic_image =
+            image::open(file_path).map_err(|err| crate::error::Error::ImageError(err, None))?;
+
+        Ok(Self::generate_from_image_cpu(
+            dynamic_image,
+            in_max_level,
+            filter,
+        ))
     }
 
     pub fn generate_from_image_cpu(
-        dynamic_image: &DynamicImage,
+        dynamic_image: DynamicImage,
         in_max_level: Option<u32>,
         filter: Option<imageops::FilterType>,
     ) -> Vec<DynamicImage> {
-        let mut images = vec![];
+        let max_level = rs_core_minimal::misc::calculate_max_mips(
+            dynamic_image.width().min(dynamic_image.height()),
+        )
+        .min(in_max_level.unwrap_or(u32::MAX));
         let texture_extent = wgpu::Extent3d {
             width: dynamic_image.width(),
             height: dynamic_image.height(),
             depth_or_array_layers: 1,
         };
-
-        let max_level: u32;
-        match in_max_level {
-            Some(in_max_level) => {
-                max_level =
-                    in_max_level.min(dynamic_image.width().min(dynamic_image.height()).ilog2() + 1)
-            }
-            None => {
-                max_level = dynamic_image.width().min(dynamic_image.height()).ilog2() + 1;
-            }
-        }
+        let mut images = vec![dynamic_image];
 
         for i in 1..max_level {
+            let Some(last_image) = images.last() else {
+                panic!()
+            };
+
             let level_size = texture_extent.mip_level_size(i, TextureDimension::D2);
-            let mipmap_image = dynamic_image.resize(
+            let mipmap_image = last_image.resize(
                 level_size.width,
                 level_size.height,
                 filter.unwrap_or(imageops::FilterType::Nearest),
             );
             images.push(mipmap_image);
         }
-        return images;
+        images
     }
 
     pub fn generate(

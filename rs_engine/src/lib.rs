@@ -14,6 +14,7 @@ pub mod primitive_data;
 pub mod render_thread_mode;
 pub mod resource_manager;
 pub mod rotator;
+pub mod static_virtual_texture_source;
 pub mod sync;
 pub mod thread_pool;
 

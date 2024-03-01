@@ -1,4 +1,5 @@
 use crate::enviroment::Enviroment;
+use crate::error::Result;
 use crate::motion_event;
 use rs_artifact::artifact::{ArtifactFileHeader, ArtifactReader};
 use rs_artifact::java_input_stream::JavaInputStream;
@@ -20,7 +21,7 @@ impl Application {
     pub fn from_native_window(
         native_window: crate::native_window::NativeWindow,
         artifact_input_stream: JavaInputStream,
-    ) -> Option<Application> {
+    ) -> Result<Application> {
         let scale_factor = 1.0f32;
 
         let raw_input = egui::RawInput {
@@ -33,33 +34,22 @@ impl Application {
             )),
             ..Default::default()
         };
-        let artifact_reader =
-            match ArtifactReader::new(artifact_input_stream, Some(EEndianType::Little)) {
-                Ok(artifact_reader) => artifact_reader,
-                Err(err) => {
-                    log::warn!("{err:?}");
-                    return None;
-                }
-            };
+        let artifact_reader = ArtifactReader::new(artifact_input_stream, Some(EEndianType::Little))
+            .map_err(|err| crate::error::Error::Artifact(err))?;
 
         let width = native_window.get_width();
         let height = native_window.get_height();
         let gui_context = egui::Context::default();
-        let engine = match rs_engine::engine::Engine::new(
+        let engine = rs_engine::engine::Engine::new(
             &native_window,
             width,
             height,
             scale_factor,
             Some(artifact_reader),
             std::collections::HashMap::new(),
-        ) {
-            Ok(engine) => engine,
-            Err(err) => {
-                log::warn!("{err:?}");
-                return None;
-            }
-        };
-        Some(Application {
+        )
+        .map_err(|err| crate::error::Error::Engine(err))?;
+        Ok(Application {
             native_window,
             raw_input,
             scale_factor,
@@ -102,19 +92,16 @@ impl Application {
         status_bar_height
     }
 
-    pub fn set_new_window(&mut self, native_window: &crate::native_window::NativeWindow) -> bool {
+    pub fn set_new_window(
+        &mut self,
+        native_window: &crate::native_window::NativeWindow,
+    ) -> Result<()> {
         let surface_width = native_window.get_width();
         let surface_height = native_window.get_height();
-        let result = self
-            .engine
-            .set_new_window(native_window, surface_width, surface_height);
-        match result {
-            Ok(_) => true,
-            Err(err) => {
-                log::warn!("{err:?}");
-                false
-            }
-        }
+        self.engine
+            .set_new_window(native_window, surface_width, surface_height)
+            .map_err(|err| crate::error::Error::Engine(err))?;
+        Ok(())
     }
 }
 
@@ -130,32 +117,27 @@ pub fn Application_fromSurface(
     let logger = rs_engine::logger::Logger::new(rs_engine::logger::LoggerConfiguration {
         is_write_to_file: false,
     });
-    let native_window = crate::native_window::NativeWindow::new(&mut env, surface);
-    if let (Some(native_window), Some(mut artifact_input_stream)) = (
-        native_window,
-        JavaInputStream::new(env, artifact_input_stream),
-    ) {
-        if let Err(err) = FileHeader::check_identification(
-            &mut artifact_input_stream,
-            ARTIFACT_FILE_MAGIC_NUMBERS,
-        ) {
-            log::warn!("{err:?}");
-            return std::ptr::null_mut();
-        }
+    let result: crate::error::Result<*mut Application> = (|| {
+        let native_window = crate::native_window::NativeWindow::new(&mut env, surface)
+            .ok_or(crate::error::Error::NativeWindowNull)?;
+        let mut artifact_input_stream = JavaInputStream::new(env, artifact_input_stream)
+            .ok_or(crate::error::Error::JavaInputStreamNull)?;
+        FileHeader::check_identification(&mut artifact_input_stream, ARTIFACT_FILE_MAGIC_NUMBERS)
+            .map_err(|err| crate::error::Error::CheckIdentificationFail(err))?;
+
         let header: ArtifactFileHeader =
-            match FileHeader::get_header2(&mut artifact_input_stream, Some(EEndianType::Little)) {
-                Ok(header) => header,
-                Err(err) => {
-                    log::warn!("{err:?}");
-                    return std::ptr::null_mut();
-                }
-            };
-        let application = Application::from_native_window(native_window, artifact_input_stream);
-        if let Some(application) = application {
-            return Box::into_raw(Box::new(application));
+            FileHeader::get_header2(&mut artifact_input_stream, Some(EEndianType::Little))
+                .map_err(|err| crate::error::Error::Artifact(err))?;
+        let application = Application::from_native_window(native_window, artifact_input_stream)?;
+        Ok(Box::into_raw(Box::new(application)))
+    })();
+    match result {
+        Ok(application) => application,
+        Err(err) => {
+            log::warn!("{}", err);
+            std::ptr::null_mut()
         }
     }
-    return std::ptr::null_mut();
 }
 
 #[no_mangle]

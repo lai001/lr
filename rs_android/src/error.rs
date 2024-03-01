@@ -1,12 +1,11 @@
 #[derive(Debug)]
 pub enum Error {
-    File(Option<String>),
     IO(std::io::Error, Option<String>),
-    CheckIdentificationFail(Option<String>),
-    DataConvertFail,
-    Bincode(bincode::Error, Option<String>),
-    ResourceTypeNotMatch,
-    NotFound(Option<String>),
+    Artifact(rs_artifact::error::Error),
+    Engine(rs_engine::error::Error),
+    NativeWindowNull,
+    JavaInputStreamNull,
+    CheckIdentificationFail(rs_artifact::error::Error),
 }
 
 impl std::fmt::Display for Error {

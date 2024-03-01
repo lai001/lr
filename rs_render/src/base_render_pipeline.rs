@@ -8,6 +8,12 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use wgpu::*;
 
+pub struct ColorAttachment<'a> {
+    pub color_ops: Option<Operations<Color>>,
+    pub view: &'a TextureView,
+    pub resolve_target: Option<&'a TextureView>,
+}
+
 pub struct BaseRenderPipeline {
     pub render_pipeline: RenderPipeline,
     bind_group_layouts: Vec<BindGroupLayout>,
@@ -156,11 +162,9 @@ impl BaseRenderPipeline {
         queue: &Queue,
         binding_resources: Vec<Vec<BindingResource>>,
         mesh_buffers: &[T],
-        color_ops: Option<Operations<Color>>,
+        color_attachments: &[ColorAttachment],
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
-        output_view: &TextureView,
-        resolve_target: Option<&TextureView>,
         depth_view: Option<&TextureView>,
     ) where
         T: TGpuVertexBuffer,
@@ -182,11 +186,9 @@ impl BaseRenderPipeline {
             queue,
             entries,
             mesh_buffers,
-            color_ops,
+            color_attachments,
             depth_ops,
             stencil_ops,
-            output_view,
-            resolve_target,
             depth_view,
         );
     }
@@ -197,11 +199,9 @@ impl BaseRenderPipeline {
         queue: &Queue,
         entries: Vec<Vec<BindGroupEntry>>,
         mesh_buffers: &[T],
-        color_ops: Option<Operations<Color>>,
+        color_attachments: &[ColorAttachment],
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
-        output_view: &TextureView,
-        resolve_target: Option<&TextureView>,
         depth_view: Option<&TextureView>,
     ) where
         T: TGpuVertexBuffer,
@@ -236,16 +236,22 @@ impl BaseRenderPipeline {
                 bind_groups.push(bind_group);
             }
 
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some(&format!("{} render pass", self.tag)),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    resolve_target,
-                    ops: color_ops.unwrap_or(Operations {
+            let mut render_pass_color_attachments: Vec<Option<RenderPassColorAttachment>> =
+                Vec::new();
+            for x in color_attachments {
+                render_pass_color_attachments.push(Some(RenderPassColorAttachment {
+                    ops: x.color_ops.unwrap_or(Operations {
                         load: LoadOp::Load,
                         store: StoreOp::Store,
                     }),
-                    view: output_view,
-                })],
+                    view: x.view,
+                    resolve_target: x.resolve_target,
+                }));
+            }
+
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some(&format!("{} render pass", self.tag)),
+                color_attachments: &render_pass_color_attachments,
                 depth_stencil_attachment,
                 timestamp_writes: None,
                 occlusion_query_set: None,
@@ -280,11 +286,9 @@ impl BaseRenderPipeline {
         queue: &Queue,
         entries: Vec<Vec<BindGroupEntry>>,
         mesh_buffers: &[GpuVertexBufferImp],
-        color_ops: Option<Operations<Color>>,
+        color_attachments: &[ColorAttachment],
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
-        output_view: &TextureView,
-        resolve_target: Option<&TextureView>,
         depth_view: Option<&TextureView>,
     ) -> SubmissionIndex {
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
@@ -317,16 +321,21 @@ impl BaseRenderPipeline {
                 bind_groups.push(bind_group);
             }
 
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some(&format!("{} render pass", self.tag)),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    resolve_target,
-                    ops: color_ops.unwrap_or(Operations {
+            let mut render_pass_color_attachments: Vec<Option<RenderPassColorAttachment>> =
+                Vec::new();
+            for x in color_attachments {
+                render_pass_color_attachments.push(Some(RenderPassColorAttachment {
+                    ops: x.color_ops.unwrap_or(Operations {
                         load: LoadOp::Load,
                         store: StoreOp::Store,
                     }),
-                    view: output_view,
-                })],
+                    view: x.view,
+                    resolve_target: x.resolve_target,
+                }));
+            }
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some(&format!("{} render pass", self.tag)),
+                color_attachments: &render_pass_color_attachments,
                 depth_stencil_attachment,
                 timestamp_writes: None,
                 occlusion_query_set: None,
@@ -359,13 +368,10 @@ impl BaseRenderPipeline {
         device: &Device,
         queue: &Queue,
         binding_resources: Vec<Vec<BindingResource>>,
-
         mesh_buffers: &[GpuVertexBufferImp],
-        color_ops: Option<Operations<Color>>,
+        color_attachments: &[ColorAttachment],
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
-        output_view: &TextureView,
-        resolve_target: Option<&TextureView>,
         depth_view: Option<&TextureView>,
     ) -> SubmissionIndex {
         let entries = binding_resources
@@ -385,11 +391,9 @@ impl BaseRenderPipeline {
             queue,
             entries,
             mesh_buffers,
-            color_ops,
+            color_attachments,
             depth_ops,
             stencil_ops,
-            output_view,
-            resolve_target,
             depth_view,
         )
     }

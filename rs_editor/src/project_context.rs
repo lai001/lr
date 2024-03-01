@@ -3,7 +3,7 @@ use crate::{
     model_loader::{MeshCluster, ModelLoader},
     project::{Project, ASSET_FOLDER_NAME},
 };
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use rs_artifact::{
@@ -52,7 +52,7 @@ impl ProjectContext {
         let lib_folder = project_folder_path.join("target").join("debug");
         #[cfg(not(debug_assertions))]
         let lib_folder = project_folder_path.join("target").join("release");
-        let hot_reload = HotReload::new(&project_folder_path, &lib_folder, &project.project_name);
+        let hot_reload = HotReload::new(&project_folder_path, &lib_folder, &project.project_name)?;
         let mut context = ProjectContext {
             project,
             project_file_path: project_file_path.to_path_buf(),
@@ -62,11 +62,11 @@ impl ProjectContext {
             folder_receiver: None,
             folder_debouncer: None,
         };
-        context.watch_project_folder();
+        context.watch_project_folder()?;
         Ok(context)
     }
 
-    fn watch_project_folder(&mut self) {
+    fn watch_project_folder(&mut self) -> anyhow::Result<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
 
         let mut debouncer = notify_debouncer_mini::new_debouncer(
@@ -74,16 +74,17 @@ impl ProjectContext {
             None,
             sender,
         )
-        .unwrap();
+        .map_err(|err| anyhow!("{:?}", err))?;
         let watch_folder_path = self.get_project_folder_path();
 
-        let _ = debouncer.watcher().watch(
+        debouncer.watcher().watch(
             &std::path::Path::new(&watch_folder_path),
             notify::RecursiveMode::Recursive,
-        );
+        )?;
         self.folder_receiver = Some(receiver);
         self.folder_debouncer = Some(debouncer);
         log::trace!("Watch project folder. {:?}", watch_folder_path);
+        Ok(())
     }
 
     pub fn check_folder_notification(&mut self) -> Option<EFolderUpdateType> {
@@ -96,64 +97,46 @@ impl ProjectContext {
             if is_need_update {
                 break;
             }
-            match events {
-                Ok(events) => {
-                    for event in events {
-                        if event.path.starts_with(asset_folder_path.clone()) {
-                            is_need_update = true;
-                            break;
-                        }
-                    }
+            let Ok(events) = events else {
+                continue;
+            };
+            for event in events {
+                if event.path.starts_with(asset_folder_path.clone()) {
+                    is_need_update = true;
+                    break;
                 }
-                Err(errors) => {}
             }
         }
 
         if is_need_update {
             return Some(EFolderUpdateType::Asset);
         }
-        return None;
+        None
     }
 
     pub fn is_need_reload_plugin(&self) -> bool {
-        let result = self.hot_reload.is_need_reload();
-        return result;
+        self.hot_reload.is_need_reload()
     }
 
-    pub fn reload(&mut self) -> bool {
-        let result = self.hot_reload.reload();
-        return result;
+    pub fn reload(&mut self) -> anyhow::Result<()> {
+        Ok(self.hot_reload.reload()?)
     }
 
     pub fn get_asset_folder_path(&self) -> PathBuf {
-        return self.project_folder_path.join(ASSET_FOLDER_NAME);
+        self.project_folder_path.join(ASSET_FOLDER_NAME)
     }
 
-    pub fn copy_file_to_asset_folder(&self, path: &Path) -> bool {
-        let to = self.get_asset_folder_path().join(path.file_name().unwrap());
-        match std::fs::copy(path, to.clone()) {
-            Ok(_) => true,
-            Err(err) => {
-                log::warn!("{} {:?}", err, to);
-                return false;
-            }
-        }
+    pub fn copy_file_to_asset_folder(&self, path: &Path) -> anyhow::Result<()> {
+        let file_name = path.file_name().ok_or(anyhow!("No file name"))?;
+        let to = self.get_asset_folder_path().join(file_name);
+        let _ = std::fs::copy(path, to.clone())?;
+        Ok(())
     }
 
-    pub fn save(&self) -> bool {
-        let json_str = match serde_json::ser::to_string_pretty(&self.project) {
-            Ok(json_str) => json_str,
-            Err(_) => {
-                return false;
-            }
-        };
-        let Ok(mut file) = std::fs::File::create(self.project_file_path.clone()) else {
-            return false;
-        };
-        match file.write_fmt(format_args!("{}", json_str)) {
-            Ok(_) => return true,
-            Err(_) => return false,
-        }
+    pub fn save(&self) -> anyhow::Result<()> {
+        let json_str = serde_json::ser::to_string_pretty(&self.project)?;
+        let mut file = std::fs::File::create(self.project_file_path.clone())?;
+        Ok(file.write_fmt(format_args!("{}", json_str))?)
     }
 
     pub fn get_project_folder_path(&self) -> PathBuf {
@@ -221,12 +204,12 @@ impl ProjectContext {
         for x in level.nodes.iter() {
             nodes.push(Self::node_to_artifact_node(&x.borrow()));
         }
-        return rs_artifact::level::Level {
+        rs_artifact::level::Level {
             name: level.name.clone(),
             id: uuid::Uuid::new_v4(),
             url: url::Url::parse(&format!("asset://level/{}", level.name)).unwrap(),
             nodes,
-        };
+        }
     }
 
     pub fn build_static_mesh_url(file_path: &Path, mesh_name: &str) -> url::Url {
@@ -312,9 +295,12 @@ impl ProjectContext {
         for image_file_path in image_files {
             let absolute_image_file_path =
                 self.get_asset_folder_path().join(image_file_path.clone());
-            let file_stem = image_file_path.file_stem().unwrap();
-            let name = file_stem.to_str().unwrap().to_string();
-            let url = rs_engine::build_asset_url(image_file_path.to_str().unwrap()).unwrap();
+            let file_stem = image_file_path.file_stem().ok_or(anyhow!("No file stem"))?;
+            let name = file_stem.to_str().ok_or(anyhow!("Fail to convert str"))?;
+            let image_file_path = image_file_path
+                .to_str()
+                .ok_or(anyhow!("Fail to convert str"))?;
+            let url = rs_engine::build_asset_url(image_file_path)?;
             let buffer = std::fs::read(absolute_image_file_path.clone()).context(format!(
                 "Failed to read from {:?}",
                 absolute_image_file_path
@@ -325,7 +311,7 @@ impl ProjectContext {
             ))?;
             let format = image::guess_format(&buffer)?;
             let image = rs_artifact::image::Image {
-                name,
+                name: name.to_string(),
                 url,
                 image_format: rs_artifact::image::ImageFormat::from_external_format(format),
                 data: buffer,
@@ -411,12 +397,13 @@ impl ProjectContext {
         for buildin_shader in buildin_shaders {
             let description = buildin_shader.get_shader_description();
             let name = buildin_shader.get_name();
-            let processed_code = rs_shader_compiler::pre_process::pre_process(
+            let Ok(processed_code) = rs_shader_compiler::pre_process::pre_process(
                 &description.shader_path,
                 description.include_dirs.iter(),
                 description.definitions.iter(),
-            )
-            .unwrap();
+            ) else {
+                continue;
+            };
             shaders.insert(name, processed_code);
         }
         shaders

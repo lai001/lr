@@ -3,6 +3,7 @@ pub enum Error {
     IO(std::io::Error, Option<String>),
     Libloading(libloading::Error, Option<String>),
     Symbol(Option<String>),
+    Debouncer(notify::Error),
 }
 
 impl std::fmt::Display for Error {

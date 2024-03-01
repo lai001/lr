@@ -27,6 +27,7 @@ pub mod texture_loader;
 pub mod texture_readback;
 pub mod vertex_data_type;
 pub mod virtual_texture_pass;
+pub mod virtual_texture_source;
 pub mod wgpu_context;
 
 #[derive(Debug)]

@@ -1,4 +1,5 @@
 use crate::{error::Result, level::Level};
+use anyhow::anyhow;
 use path_slash::PathBufExt;
 use rs_artifact::EEndianType;
 use rs_core_minimal::settings::Settings;
@@ -31,19 +32,11 @@ impl Project {
     pub fn create_empty_project(
         project_parent_folder: &Path,
         project_name: &str,
-    ) -> Result<PathBuf> {
-        if let Err(err) = Self::create_empty_project_folders(project_parent_folder, project_name) {
-            return Err(crate::error::Error::IO(err, None));
-        }
-        if Self::create_empty_project_file_to_disk(&project_parent_folder, project_name) == false {
-            return Err(crate::error::Error::CreateProjectFailed);
-        }
-        if Self::create_cargo_toml_file(project_parent_folder, project_name) == false {
-            return Err(crate::error::Error::CreateProjectFailed);
-        }
-        if Self::create_lib_file(project_parent_folder, project_name) == false {
-            return Err(crate::error::Error::CreateProjectFailed);
-        }
+    ) -> anyhow::Result<PathBuf> {
+        Self::create_empty_project_folders(project_parent_folder, project_name)?;
+        Self::create_empty_project_file_to_disk(&project_parent_folder, project_name)?;
+        Self::create_cargo_toml_file(project_parent_folder, project_name)?;
+        Self::create_lib_file(project_parent_folder, project_name)?;
         let project_folder = project_parent_folder.join(project_name);
         let project_file_path =
             project_folder.join(format!("{}.{}", project_name, PROJECT_FILE_EXTENSION));
@@ -59,12 +52,15 @@ impl Project {
         }
     }
 
-    fn create_empty_project_file_to_disk(project_parent_folder: &Path, project_name: &str) -> bool {
+    fn create_empty_project_file_to_disk(
+        project_parent_folder: &Path,
+        project_name: &str,
+    ) -> anyhow::Result<()> {
         let project_folder = project_parent_folder.join(project_name);
         let project_file_path =
             project_folder.join(format!("{}.{}", project_name, PROJECT_FILE_EXTENSION));
         if project_file_path.exists() {
-            return false;
+            return Err(anyhow!("{:?} is exists", project_file_path));
         }
 
         let empty_project = Project {
@@ -75,18 +71,9 @@ impl Project {
             endian_type: EEndianType::Little,
             settings: Rc::new(RefCell::new(Settings::default())),
         };
-
-        let Ok(json_str) = serde_json::ser::to_string_pretty(&empty_project) else {
-            return false;
-        };
-
-        let Ok(mut file) = std::fs::File::create(project_file_path) else {
-            return false;
-        };
-        match file.write_fmt(format_args!("{}", json_str)) {
-            Ok(_) => return true,
-            Err(_) => return false,
-        }
+        let json_str = serde_json::ser::to_string_pretty(&empty_project)?;
+        let mut file = std::fs::File::create(project_file_path)?;
+        Ok(file.write_fmt(format_args!("{}", json_str))?)
     }
 
     fn create_empty_project_folders(
@@ -102,40 +89,31 @@ impl Project {
         Ok(())
     }
 
-    fn create_cargo_toml_file(project_parent_folder: &Path, project_name: &str) -> bool {
-        let Ok(current_dir) = std::env::current_dir() else {
-            return false;
-        };
-        let Ok(engien_dir) = current_dir.join("../../../").canonicalize() else {
-            return false;
-        };
-        let Ok(engien_dir) = dunce::canonicalize(&engien_dir) else {
-            return false;
-        };
+    fn create_cargo_toml_file(
+        project_parent_folder: &Path,
+        project_name: &str,
+    ) -> anyhow::Result<()> {
+        let current_dir = std::env::current_dir()?;
+        let engien_dir = current_dir.join("../../../").canonicalize()?;
+        let engien_dir = dunce::canonicalize(&engien_dir)?;
         let project_folder = project_parent_folder.join(project_name);
         let toml_file_path = project_folder.join("Cargo.toml");
-        let content = fill_cargo_toml_template(project_name, &engien_dir.to_slash().unwrap());
-        let Ok(mut file) = std::fs::File::create(toml_file_path) else {
-            return false;
-        };
-        match file.write_fmt(format_args!("{}", content)) {
-            Ok(_) => return true,
-            Err(_) => return false,
-        }
+        let engine_path = engien_dir.to_slash().ok_or(anyhow!(
+            "Fail to convert {:?} to slash style path",
+            engien_dir
+        ))?;
+        let content = fill_cargo_toml_template(project_name, &engine_path);
+        let mut file = std::fs::File::create(toml_file_path)?;
+        Ok(file.write_fmt(format_args!("{}", content))?)
     }
 
-    fn create_lib_file(project_parent_folder: &Path, project_name: &str) -> bool {
+    fn create_lib_file(project_parent_folder: &Path, project_name: &str) -> anyhow::Result<()> {
         let project_folder = project_parent_folder.join(project_name);
         let lib_file_path = project_folder.join(SRC_FOLDER_NAME).join("lib.rs");
         let content =
             fill_lib_template(project_name, rs_engine::plugin::symbol_name::CREATE_PLUGIN);
-        let Ok(mut file) = std::fs::File::create(lib_file_path) else {
-            return false;
-        };
-        match file.write_fmt(format_args!("{}", content)) {
-            Ok(_) => return true,
-            Err(_) => return false,
-        }
+        let mut file = std::fs::File::create(lib_file_path)?;
+        Ok(file.write_fmt(format_args!("{}", content))?)
     }
 }
 

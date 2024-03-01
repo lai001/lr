@@ -44,15 +44,19 @@ impl TimeTrace {
     }
 
     pub fn get_duration_seconds(&self) -> f32 {
-        let inner = self.inner.lock().unwrap();
-
+        let mut inner = self.inner.lock().unwrap();
+        if inner.end.is_none() {
+            inner.end = Some(std::time::Instant::now());
+        }
         let duration = inner.end.unwrap() - inner.start;
         duration.as_secs_f32()
     }
 
     pub fn get_duration_millis(&self) -> u128 {
-        let inner = self.inner.lock().unwrap();
-
+        let mut inner = self.inner.lock().unwrap();
+        if inner.end.is_none() {
+            inner.end = Some(std::time::Instant::now());
+        }
         let duration = inner.end.unwrap() - inner.start;
         duration.as_millis()
     }
