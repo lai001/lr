@@ -1,12 +1,21 @@
 use std::path::Path;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 pub enum EFileType {
     Fbx,
+    Glb,
     Jpeg,
+    Jpg,
     Png,
     Exr,
     Hdr,
+    Blend,
+}
+
+impl ToString for EFileType {
+    fn to_string(&self) -> String {
+        self.to_str().to_string()
+    }
 }
 
 impl EFileType {
@@ -26,11 +35,26 @@ impl EFileType {
         match str.to_lowercase().as_str() {
             "fbx" => Some(EFileType::Fbx),
             "jpeg" => Some(EFileType::Jpeg),
-            "jpg" => Some(EFileType::Jpeg),
+            "jpg" => Some(EFileType::Jpg),
             "png" => Some(EFileType::Png),
             "exr" => Some(EFileType::Exr),
             "hdr" => Some(EFileType::Hdr),
+            "glb" => Some(EFileType::Glb),
+            "blend" => Some(EFileType::Blend),
             _ => None,
+        }
+    }
+
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            EFileType::Fbx => "fbx",
+            EFileType::Glb => "glb",
+            EFileType::Jpeg => "jpeg",
+            EFileType::Png => "png",
+            EFileType::Exr => "exr",
+            EFileType::Hdr => "hdr",
+            EFileType::Jpg => "jpg",
+            EFileType::Blend => "blend",
         }
     }
 }

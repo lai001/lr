@@ -123,20 +123,16 @@ impl ModelLoader {
     pub fn load_from_file(
         file_path: &Path,
         additional_paths: &[&Path],
-    ) -> Option<Vec<MeshCluster>> {
+    ) -> anyhow::Result<Vec<MeshCluster>> {
         let resource_manager = ResourceManager::default();
-        let load_result = russimp::scene::Scene::from_file(
+        let scene = russimp::scene::Scene::from_file(
             &file_path.to_str().unwrap(),
             vec![
                 russimp::scene::PostProcess::Triangulate,
                 russimp::scene::PostProcess::CalculateTangentSpace,
             ],
-        );
-        if let Err(error) = load_result {
-            log::warn!("{}", error);
-            return None;
-        }
-        let scene = load_result.unwrap();
+        )?;
+
         let mut mesh_clusters: Vec<MeshCluster> = Vec::new();
         let textures = Self::collect_textures(file_path, &scene.materials, additional_paths);
         {
@@ -183,6 +179,6 @@ impl ModelLoader {
             }
             mesh_clusters.push(cluster);
         }
-        Some(mesh_clusters)
+        Ok(mesh_clusters)
     }
 }

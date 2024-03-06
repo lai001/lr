@@ -268,11 +268,9 @@ impl ProjectContext {
         for (file_path, mesh_names) in referenced_meshs.iter() {
             let mut mesh_clusters_map: HashMap<&String, &MeshCluster> = HashMap::new();
             let mesh_clusters =
-                ModelLoader::load_from_file(&self.get_asset_folder_path().join(file_path), &[]);
-            if let Some(mesh_clusters) = &mesh_clusters {
-                for mesh_cluster in mesh_clusters {
-                    mesh_clusters_map.insert(&mesh_cluster.name, mesh_cluster);
-                }
+                ModelLoader::load_from_file(&self.get_asset_folder_path().join(file_path), &[])?;
+            for mesh_cluster in &mesh_clusters {
+                mesh_clusters_map.insert(&mesh_cluster.name, mesh_cluster);
             }
 
             for mesh_name in mesh_names {

@@ -20,7 +20,6 @@ pub enum EClickEventType {
     NewProject(String),
     OpenProject,
     OpenProjectSettings,
-    ImportAsset,
     SaveProject,
     Export,
     OpenVisualStudioCode,
@@ -55,11 +54,6 @@ impl TopMenu {
                     }
                     if ui.add(Button::new("Open Project Settings")).clicked() {
                         click = Some(EClickEventType::OpenProjectSettings);
-                        ui.close_menu();
-                    }
-                    if ui.add(Button::new("Import Asset")).clicked() {
-                        click = Some(EClickEventType::ImportAsset);
-
                         ui.close_menu();
                     }
                     if ui.add(Button::new("Save Project")).clicked() {

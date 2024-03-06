@@ -15,7 +15,8 @@ use crate::{
         texture_property_view, textures_view, top_menu,
     },
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
+use lazy_static::lazy_static;
 use rs_artifact::property_value_type::EPropertyValueType;
 use rs_engine::{
     camera::Camera, file_type::EFileType, plugin_context::PluginContext,
@@ -32,7 +33,7 @@ use rs_render::{
 };
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Debug,
     path::{Path, PathBuf},
     process::Command,
@@ -44,21 +45,30 @@ use winit::{
     keyboard::KeyCode,
 };
 
-const FBX_EXTENSION: &str = "fbx";
-const PNG_EXTENSION: &str = "png";
-const JPG_EXTENSION: &str = "jpg";
-const EXR_EXTENSION: &str = "exr";
-const HDR_EXTENSION: &str = "hdr";
-const MODEL_EXTENSION: [&str; 1] = [FBX_EXTENSION];
-const IMAGE_EXTENSION: [&str; 2] = [PNG_EXTENSION, JPG_EXTENSION];
-const IBL_IMAGE_EXTENSION: [&str; 2] = [EXR_EXTENSION, HDR_EXTENSION];
-const SUPPORT_ASSET_FILE_EXTENSIONS: [&str; 5] = [
-    FBX_EXTENSION,
-    PNG_EXTENSION,
-    JPG_EXTENSION,
-    EXR_EXTENSION,
-    HDR_EXTENSION,
-];
+lazy_static! {
+    static ref SUPPORT_ASSET_IMAGE_FILE_TYPES: HashSet<EFileType> = {
+        let mut m = HashSet::new();
+        m.insert(EFileType::Jpeg);
+        m.insert(EFileType::Jpg);
+        m.insert(EFileType::Png);
+        m.insert(EFileType::Exr);
+        m.insert(EFileType::Hdr);
+        m
+    };
+    static ref SUPPORT_ASSET_MODEL_FILE_TYPES: HashSet<EFileType> = {
+        let mut m = HashSet::new();
+        m.insert(EFileType::Fbx);
+        m.insert(EFileType::Glb);
+        m.insert(EFileType::Blend);
+        m
+    };
+    static ref SUPPORT_ASSET_FILE_TYPES: HashSet<EFileType> = {
+        let mut m = HashSet::new();
+        m.extend(SUPPORT_ASSET_IMAGE_FILE_TYPES.iter());
+        m.extend(SUPPORT_ASSET_MODEL_FILE_TYPES.iter());
+        m
+    };
+}
 
 pub struct EditorContext {
     event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
@@ -203,6 +213,7 @@ impl EditorContext {
                     }
                     WindowEvent::Resized(size) => {
                         log::trace!("Window resized: {:?}", size);
+                        self.camera.set_window_size(size.width, size.height);
                         self.engine.resize(size.width, size.height);
                     }
                     WindowEvent::MouseWheel { delta, .. } => match delta {
@@ -227,7 +238,14 @@ impl EditorContext {
                         );
                     }
                     WindowEvent::DroppedFile(file_path) => {
-                        self.process_import_asset(file_path.to_owned());
+                        if let Some(project_context) = &self.project_context {
+                            let target = project_context.get_asset_folder_path();
+                            let result = std::fs::copy(
+                                file_path,
+                                target.join(file_path.file_name().unwrap()),
+                            );
+                            log::trace!("{:?}", result);
+                        }
                     }
                     WindowEvent::RedrawRequested => {
                         let is_minimized = window.is_minimized().unwrap_or(false);
@@ -326,7 +344,10 @@ impl EditorContext {
                 };
                 let extension = extension.to_ascii_lowercase();
                 let extension = extension.to_str().unwrap();
-                if !SUPPORT_ASSET_FILE_EXTENSIONS.contains(&extension) {
+                let Some(file_type) = EFileType::from_str(extension) else {
+                    continue;
+                };
+                if !SUPPORT_ASSET_FILE_TYPES.contains(&file_type) {
                     continue;
                 }
                 let asset_file = AssetFile {
@@ -512,17 +533,9 @@ impl EditorContext {
                     let result = self.open_project(&file_path, window);
                     log::trace!("{:?}", result);
                 }
-                EFileDialogType::ImportAsset => {
-                    let mut filter = MODEL_EXTENSION.to_vec();
-                    filter.append(&mut IMAGE_EXTENSION.to_vec());
-                    let dialog = rfd::FileDialog::new().add_filter("Asset", &filter);
-                    let Some(file_path) = dialog.pick_file() else {
-                        return;
-                    };
-                    self.process_import_asset(file_path);
-                }
+
                 EFileDialogType::IBL => {
-                    let filter = IBL_IMAGE_EXTENSION;
+                    let filter = [EFileType::Exr, EFileType::Hdr];
                     let dialog = rfd::FileDialog::new().add_filter("Image", &filter);
                     let Some(file_path) = dialog.pick_file() else {
                         return;
@@ -533,27 +546,6 @@ impl EditorContext {
                     self.engine.ibl_bake(&file_path, url, BakeInfo::default());
                 }
             },
-        }
-    }
-
-    fn process_import_asset(&mut self, file_path: PathBuf) {
-        log::trace!("Selected file: {:?}", file_path);
-        let Some(extension) = file_path.extension() else {
-            return;
-        };
-        let extension = extension.to_str().unwrap();
-
-        if MODEL_EXTENSION.contains(&extension) {
-            self.process_import_model(file_path.clone());
-        } else if IMAGE_EXTENSION.contains(&extension) {
-            self.process_import_image(file_path.clone());
-        }
-    }
-
-    fn process_import_image(&mut self, file_path: PathBuf) {
-        let image = image::open(file_path);
-        if let Ok(image) = image {
-            log::trace!("Width: {}, Height: {}", image.width(), image.height());
         }
     }
 
@@ -568,32 +560,28 @@ impl EditorContext {
         });
     }
 
-    fn process_import_model(&mut self, file_path: PathBuf) {
-        let extension = file_path.extension().unwrap().to_str().unwrap();
-        match extension {
-            FBX_EXTENSION => {
-                debug_assert!(file_path.is_absolute());
-                log::trace!("Open model file: {:?}", file_path);
-                let Some(mesh_clusters) = ModelLoader::load_from_file(&file_path, &[]) else {
-                    return;
-                };
-                self.data_source.is_model_hierarchy_open = true;
-                let mut items: Vec<Rc<MeshItem>> = vec![];
-                for mesh_cluster in mesh_clusters {
-                    let item = MeshItem {
-                        name: mesh_cluster.name,
-                        childs: vec![],
-                    };
-                    items.push(Rc::new(item));
-                }
-                let model_view_data = ModelViewData {
-                    mesh_items: items,
-                    file_path,
-                };
-                self.data_source.model_view_data = Some(model_view_data);
-            }
-            _ => {}
+    fn process_import_model(&mut self, file_path: PathBuf) -> anyhow::Result<()> {
+        let file_type = EFileType::from_path(&file_path)
+            .context(format!("Invalid file type. {:?}", file_path))?;
+        if !SUPPORT_ASSET_MODEL_FILE_TYPES.contains(&file_type) {
+            return Err(anyhow!("Not support file type. {:?}", file_type));
         }
+        let mesh_clusters = ModelLoader::load_from_file(&file_path, &[])?;
+        self.data_source.is_model_hierarchy_open = true;
+        let mut items: Vec<Rc<MeshItem>> = vec![];
+        for mesh_cluster in mesh_clusters {
+            let item = MeshItem {
+                name: mesh_cluster.name,
+                childs: vec![],
+            };
+            items.push(Rc::new(item));
+        }
+        let model_view_data = ModelViewData {
+            mesh_items: items,
+            file_path,
+        };
+        self.data_source.model_view_data = Some(model_view_data);
+        Ok(())
     }
 
     fn process_redraw_request(&mut self, window: &mut winit::window::Window) {
@@ -656,13 +644,6 @@ impl EditorContext {
                         .event_loop_proxy
                         .send_event(ECustomEventType::OpenFileDialog(
                             EFileDialogType::OpenProject,
-                        ));
-                }
-                top_menu::EClickEventType::ImportAsset => {
-                    let _ = self
-                        .event_loop_proxy
-                        .send_event(ECustomEventType::OpenFileDialog(
-                            EFileDialogType::ImportAsset,
                         ));
                 }
                 top_menu::EClickEventType::SaveProject => {
@@ -783,12 +764,8 @@ impl EditorContext {
                 }
                 asset_view::EClickItemType::File(asset_file) => {
                     self.data_source.highlight_asset_file = Some(asset_file.clone());
-                    match asset_file.get_file_type() {
-                        EFileType::Fbx => {
-                            self.process_import_model(asset_file.path.clone());
-                        }
-                        EFileType::Jpeg | EFileType::Png | EFileType::Exr | EFileType::Hdr => {}
-                    }
+                    let result = self.process_import_model(asset_file.path.clone());
+                    log::trace!("{:?}", result);
                 }
                 asset_view::EClickItemType::Back => todo!(),
                 asset_view::EClickItemType::SingleClickFile(asset_file) => {
@@ -854,7 +831,7 @@ impl EditorContext {
                     values: crate::level::default_node3d_properties(),
                     id: uuid::Uuid::new_v4(),
                 };
-                if let Some(draw_object) = Self::node_to_draw_object(
+                if let Ok(draw_object) = Self::node_to_draw_object(
                     &mut self.engine,
                     &project_context.get_asset_folder_path(),
                     &self.camera,
@@ -1066,39 +1043,38 @@ impl EditorContext {
         asset_folder_path: &Path,
         camera: &Camera,
         node: &crate::level::Node,
-    ) -> Option<DrawObject> {
-        if let Some(mesh_reference) = &node.mesh_reference {
-            let constants = rs_render::render_pipeline::phong_pipeline::Constants {
-                model: glam::Mat4::IDENTITY,
-                view: camera.get_view_matrix(),
-                projection: camera.get_projection_matrix(),
-            };
-            let material = PhongMaterial {
-                constants,
-                diffuse_texture: None,
-                specular_texture: None,
-            };
+    ) -> anyhow::Result<DrawObject> {
+        let mesh_reference = node
+            .mesh_reference
+            .as_ref()
+            .ok_or(anyhow!("No mesh reference"))?;
+        let constants = rs_render::render_pipeline::phong_pipeline::Constants {
+            model: glam::Mat4::IDENTITY,
+            view: camera.get_view_matrix(),
+            projection: camera.get_projection_matrix(),
+        };
+        let material = PhongMaterial {
+            constants,
+            diffuse_texture: None,
+            specular_texture: None,
+        };
 
-            let mesh_clusters = ModelLoader::load_from_file(
-                &asset_folder_path.join(mesh_reference.file_path.clone()),
-                &[],
-            );
-            if let Some(mesh_clusters) = mesh_clusters {
-                let mesh_cluster = mesh_clusters
-                    .iter()
-                    .filter(|x| x.name == mesh_reference.referenced_mesh_name)
-                    .next()
-                    .unwrap();
+        let mesh_clusters = ModelLoader::load_from_file(
+            &asset_folder_path.join(mesh_reference.file_path.clone()),
+            &[],
+        )?;
+        let mesh_cluster = mesh_clusters
+            .iter()
+            .filter(|x| x.name == mesh_reference.referenced_mesh_name)
+            .next()
+            .ok_or(anyhow!("{} not found", mesh_reference.referenced_mesh_name))?;
 
-                let draw_object = engine.create_draw_object_from_static_mesh(
-                    &mesh_cluster.vertex_buffer,
-                    &mesh_cluster.index_buffer,
-                    rs_render::command::EMaterialType::Phong(material),
-                );
-                return Some(draw_object);
-            }
-        }
-        return None;
+        let draw_object = engine.create_draw_object_from_static_mesh(
+            &mesh_cluster.vertex_buffer,
+            &mesh_cluster.index_buffer,
+            rs_render::command::EMaterialType::Phong(material),
+        );
+        Ok(draw_object)
     }
 
     fn collect_draw_objects(
@@ -1114,7 +1090,7 @@ impl EditorContext {
             {
                 id = node.borrow().id;
             }
-            let Some(mut draw_object) = Self::node_to_draw_object(
+            let Ok(mut draw_object) = Self::node_to_draw_object(
                 engine,
                 asset_folder_path,
                 camera,

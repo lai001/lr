@@ -116,33 +116,34 @@ impl STResourceManager {
         url: &url::Url,
         expected_resource_type: Option<EResourceType>,
     ) -> Result<T> {
-        if let Some(reader) = self.artifact_reader.as_mut() {
-            let level = reader.get_resource::<T>(url, expected_resource_type);
-            match level {
-                Ok(level) => Ok(level),
-                Err(err) => return Err(crate::error::Error::Artifact(err, None)),
-            }
-        } else {
-            return Err(crate::error::Error::ArtifactReaderNotSet);
-        }
+        let reader = self
+            .artifact_reader
+            .as_mut()
+            .ok_or(crate::error::Error::ArtifactReaderNotSet)?;
+        let level = reader
+            .get_resource::<T>(url, expected_resource_type)
+            .map_err(|err| crate::error::Error::Artifact(err, None))?;
+        Ok(level)
     }
 
     fn get_all_shader_source_codes(&mut self) -> Vec<ShaderSourceCode> {
         let mut codes: Vec<ShaderSourceCode> = vec![];
-        if let Some(reader) = self.artifact_reader.as_mut() {
-            for (url, resource_info) in reader.get_artifact_file_header().resource_map.clone() {
-                if resource_info.resource_type == EResourceType::ShaderSourceCode {
-                    let shader = reader
-                        .get_resource::<rs_artifact::shader_source_code::ShaderSourceCode>(
-                            &url,
-                            Some(EResourceType::ShaderSourceCode),
-                        )
-                        .expect("Never");
-                    codes.push(shader);
-                }
+        let Some(reader) = self.artifact_reader.as_mut() else {
+            return codes;
+        };
+        for (url, resource_info) in reader.get_artifact_file_header().resource_map.clone() {
+            if resource_info.resource_type != EResourceType::ShaderSourceCode {
+                continue;
             }
+            let shader = reader
+                .get_resource::<rs_artifact::shader_source_code::ShaderSourceCode>(
+                    &url,
+                    Some(EResourceType::ShaderSourceCode),
+                )
+                .expect("Never");
+            codes.push(shader);
         }
-        return codes;
+        codes
     }
 
     fn set_artifact_reader(&mut self, reader: Option<ArtifactReader>) {
@@ -194,18 +195,18 @@ impl STResourceManager {
             });
         }
         while count > 0 {
-            match receiver.recv() {
-                Ok(result) => {
-                    match result.image {
-                        Ok(image) => self.cache_image(&result.key, Arc::new(image)),
-                        Err(error) => log::warn!("{error}"),
-                    }
-                    count -= 1;
-                }
-                Err(error) => {
-                    log::warn!("{}", error);
-                }
-            }
+            let result = (|| {
+                let result = receiver
+                    .recv()
+                    .map_err(|err| crate::error::Error::RecvError(err))?;
+                let image = result
+                    .image
+                    .map_err(|err| crate::error::Error::ImageError(err, None))?;
+                self.cache_image(&result.key, Arc::new(image));
+                Ok::<(), crate::error::Error>(())
+            })();
+            log::trace!("{:?}", result);
+            count -= 1;
         }
     }
 

@@ -110,12 +110,13 @@ fn draw_content(
                                     }
                                 }
                                 match file.get_file_type() {
-                                    EFileType::Fbx => {
+                                    EFileType::Fbx | EFileType::Glb | EFileType::Blend => {
                                         ui.image(egui::include_image!(
                                             "../../../Resource/Editor/model.svg"
                                         ));
                                     }
                                     EFileType::Jpeg
+                                    | EFileType::Jpg
                                     | EFileType::Png
                                     | EFileType::Exr
                                     | EFileType::Hdr => {
@@ -132,8 +133,9 @@ fn draw_content(
                                     click_item = Some(EClickItemType::File(file.clone()));
                                 }
                                 match file.get_file_type() {
-                                    EFileType::Fbx => {}
+                                    EFileType::Fbx | EFileType::Glb | EFileType::Blend => {}
                                     EFileType::Jpeg
+                                    | EFileType::Jpg
                                     | EFileType::Png
                                     | EFileType::Exr
                                     | EFileType::Hdr => {

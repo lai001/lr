@@ -190,6 +190,14 @@ impl VirtualTexturePass {
             self.feed_back_texture_format,
             self.feed_back_size,
         );
+        self.output_feeb_back = create_read_buffer(
+            device,
+            self.feeb_back_frame_buffer.get_color_texture(),
+            None,
+            None,
+            Some("output_feeb_back"),
+        )
+        .unwrap();
     }
 
     fn clear_physical_texture(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
