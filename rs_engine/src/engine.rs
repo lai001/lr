@@ -403,12 +403,19 @@ impl Engine {
         self.render_thread_mode.send_command(render_command);
     }
 
-    pub fn ibl_bake(&mut self, path: &Path, url: url::Url, bake_info: BakeInfo) {
+    pub fn ibl_bake<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        url: url::Url,
+        bake_info: BakeInfo,
+        save_dir: Option<P>,
+    ) {
         let handle = self.resource_manager.next_texture(url.clone());
         let render_command = RenderCommand::CreateIBLBake(CreateIBLBake {
             handle: *handle,
-            file_path: path.to_path_buf(),
+            file_path: path.as_ref().to_path_buf(),
             bake_info,
+            save_dir: save_dir.map_or(None, |x| Some(x.as_ref().to_path_buf())),
         });
         self.render_thread_mode.send_command(render_command);
     }

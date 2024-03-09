@@ -9,8 +9,15 @@ pub enum Error {
     ShaderNotSupported(Option<String>),
     WindowError(raw_window_handle::HandleError),
     SurfaceError(wgpu::CreateSurfaceError),
+    ImageError(image::error::ImageError),
     #[cfg(feature = "renderdoc")]
     RenderDoc(renderdoc::Error, Option<String>),
+    ImageDdsSurface(image_dds::error::SurfaceError),
+    ImageDdsCreateImage(image_dds::error::CreateImageError),
+    ImageDdsCreateDds(image_dds::CreateDdsError),
+    DdsFile(ddsfile::Error),
+    IO(std::io::Error, Option<String>),
+    Other(Option<String>),
 }
 
 impl std::fmt::Display for Error {

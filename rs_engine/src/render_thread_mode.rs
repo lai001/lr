@@ -96,27 +96,16 @@ impl ERenderThreadMode {
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         match self {
-            ERenderThreadMode::Single(renderer) => {
-                let result =
-                    renderer
-                        .renderer
-                        .set_new_window(window, surface_width, surface_height);
-                match result {
-                    Ok(_) => Ok(()),
-                    Err(err) => return Err(crate::error::Error::RendererError(err)),
-                }
-            }
-            ERenderThreadMode::Multiple(renderer) => {
-                let result = renderer.renderer.lock().unwrap().set_new_window(
-                    window,
-                    surface_width,
-                    surface_height,
-                );
-                match result {
-                    Ok(_) => Ok(()),
-                    Err(err) => return Err(crate::error::Error::RendererError(err)),
-                }
-            }
+            ERenderThreadMode::Single(renderer) => Ok(renderer
+                .renderer
+                .set_new_window(window, surface_width, surface_height)
+                .map_err(|err| crate::error::Error::RendererError(err))?),
+            ERenderThreadMode::Multiple(renderer) => Ok(renderer
+                .renderer
+                .lock()
+                .unwrap()
+                .set_new_window(window, surface_width, surface_height)
+                .map_err(|err| crate::error::Error::RendererError(err))?),
         }
     }
 

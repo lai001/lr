@@ -1,4 +1,7 @@
-use crate::build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType};
+use crate::{
+    build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
+    data_source::DataSource,
+};
 use egui::{menu, Button, Context, TopBottomPanel};
 
 #[derive(Debug)]
@@ -33,7 +36,11 @@ pub struct TopMenu {
 }
 
 impl TopMenu {
-    pub fn draw(&mut self, context: &Context) -> Option<EClickEventType> {
+    pub fn draw(
+        &mut self,
+        context: &Context,
+        datasource: &mut DataSource,
+    ) -> Option<EClickEventType> {
         let mut click: Option<EClickEventType> = None;
         TopBottomPanel::top("menu_bar").show(context, |ui| {
             menu::bar(ui, |ui| {
@@ -112,10 +119,57 @@ impl TopMenu {
                     }
                 });
                 ui.menu_button("Tool", |ui| {
-                    if ui.add(Button::new("IBL")).clicked() {
-                        click = Some(EClickEventType::Tool(EToolType::IBL));
-                        ui.close_menu();
-                    }
+                    ui.menu_button("IBL", |ui| {
+                        let ibl_bake_info = &mut datasource.ibl_bake_info;
+                        ui.add(
+                            egui::DragValue::new(&mut ibl_bake_info.brdf_sample_count)
+                                .speed(1)
+                                .prefix("BRDF Sample Count: ")
+                                .clamp_range(1..=8192),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut ibl_bake_info.irradiance_sample_count)
+                                .speed(1)
+                                .prefix("Irradiance Sample Count: ")
+                                .clamp_range(1..=8192),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut ibl_bake_info.pre_filter_sample_count)
+                                .speed(1)
+                                .prefix("Prefilter Sample Count: ")
+                                .clamp_range(1..=8192),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut ibl_bake_info.brdflutmap_length)
+                                .speed(1)
+                                .prefix("BRDF Length: ")
+                                .clamp_range(64..=2048),
+                        );
+                        ui.add(
+                            egui::DragValue::new(
+                                &mut ibl_bake_info.pre_filter_cube_map_max_mipmap_level,
+                            )
+                            .speed(1)
+                            .prefix("Prefilter Max Mipmap: ")
+                            .clamp_range(1..=64),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut ibl_bake_info.irradiance_cube_map_length)
+                                .speed(1)
+                                .prefix("Irradiance Length: ")
+                                .clamp_range(4..=8192),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut ibl_bake_info.pre_filter_cube_map_length)
+                                .speed(1)
+                                .prefix("Prefilter Cube Map Length: ")
+                                .clamp_range(4..=8192),
+                        );
+                        if ui.add(Button::new("Bake")).clicked() {
+                            click = Some(EClickEventType::Tool(EToolType::IBL));
+                            ui.close_menu();
+                        }
+                    });
                     if ui.add(Button::new("Debug Shader")).clicked() {
                         click = Some(EClickEventType::Tool(EToolType::DebugShader));
                         ui.close_menu();

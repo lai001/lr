@@ -60,7 +60,7 @@ impl PreFilterEnvironmentCubeMapComputePipeline {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rg11b10Float,
+            format: PreFilterEnvironmentCubeMapShader::get_format(),
             usage: wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::TEXTURE_BINDING,

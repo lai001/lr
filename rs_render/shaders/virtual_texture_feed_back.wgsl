@@ -24,7 +24,7 @@ fn mipmap_level(uv: vec2<f32>, texture_size: vec2<f32>) -> f32 {
 
 @group(0) @binding(0) var<uniform> constants: VSConstants;
 
-@vertex 
+@vertex
 fn vs_main(
     @location(0) vertex_color: vec4<f32>,
     @location(1) position: vec3<f32>,
@@ -41,7 +41,7 @@ fn vs_main(
     return result;
 }
 
-@fragment 
+@fragment
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<u32> {
     let physical_texture_size = vec2<f32>(f32(constants.physical_texture_size / constants.scene_factor));
     let x: u32 = u32(f32(U32_MAX) * vertex.tex_coord.x);

@@ -65,7 +65,7 @@ impl EditorUI {
 
     pub fn build(&mut self, context: &Context, data_source: &mut DataSource) -> ClickEvent {
         let mut click = ClickEvent::default();
-        click.menu_event = self.top_menu.draw(context);
+        click.menu_event = self.top_menu.draw(context, data_source);
 
         Self::model_hierarchy_window(context, data_source, &mut click);
         if let Some(level) = &data_source.level {

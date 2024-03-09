@@ -26,7 +26,7 @@ impl Default for BakeInfo {
             irradiance_cube_map_length: 512,
             irradiance_sample_count: 1024,
             pre_filter_cube_map_length: 512,
-            pre_filter_cube_map_max_mipmap_level: 11,
+            pre_filter_cube_map_max_mipmap_level: u32::MAX,
             pre_filter_sample_count: 1024,
             brdflutmap_length: 512,
             brdf_sample_count: 1024,

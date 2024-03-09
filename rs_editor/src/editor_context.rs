@@ -304,19 +304,19 @@ impl EditorContext {
         }
     }
 
-    fn try_load_plugin(&mut self) {
+    fn try_load_plugin(&mut self) -> anyhow::Result<()> {
         if let Some(project_context) = self.project_context.as_mut() {
-            project_context.reload();
+            project_context.reload()?;
             let lib = project_context.hot_reload.get_library_reload();
             let lib = lib.lock().unwrap();
-            if let Ok(func) = lib.load_symbol::<rs_engine::plugin::signature::CreatePlugin>(
+            let func = lib.load_symbol::<rs_engine::plugin::signature::CreatePlugin>(
                 rs_engine::plugin::symbol_name::CREATE_PLUGIN,
-            ) {
-                let plugin = func(Arc::clone(&self.plugin_context));
-                self.plugins.push(plugin);
-                log::trace!("Load plugin.");
-            }
+            )?;
+            let plugin = func(Arc::clone(&self.plugin_context));
+            self.plugins.push(plugin);
+            log::trace!("Load plugin.");
         }
+        Ok(())
     }
 
     fn build_asset_folder(path: &std::path::Path) -> AssetFolder {
@@ -543,7 +543,16 @@ impl EditorContext {
                     let url =
                         url::Url::parse(&format!("ibl://{}", uuid::Uuid::new_v4().to_string()))
                             .unwrap();
-                    self.engine.ibl_bake(&file_path, url, BakeInfo::default());
+                    let save_dir = std::env::current_dir().unwrap().join("bake");
+                    if !save_dir.exists() {
+                        let _ = std::fs::create_dir(save_dir.clone());
+                    }
+                    self.engine.ibl_bake(
+                        &file_path,
+                        url,
+                        self.data_source.ibl_bake_info.clone(),
+                        Some(&save_dir),
+                    );
                 }
             },
         }

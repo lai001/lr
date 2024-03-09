@@ -46,7 +46,7 @@ impl PanoramaToCubePipeline {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: TextureFormat::Rg11b10Float,
+            format: PanoramaToCubeShader::get_format(),
             usage: wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::TEXTURE_BINDING,

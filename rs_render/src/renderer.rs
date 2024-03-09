@@ -1,5 +1,5 @@
 use crate::acceleration_bake::AccelerationBaker;
-use crate::command::*;
+use crate::cube_map::CubeMap;
 use crate::default_textures::DefaultTextures;
 use crate::depth_texture::DepthTexture;
 use crate::error::Result;
@@ -11,9 +11,13 @@ use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
 use crate::virtual_texture_pass::VirtualTexturePass;
 use crate::virtual_texture_source::VirtualTextureSource;
+use crate::{command::*, ibl_readback};
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
+use image::{GenericImage, GenericImageView};
 use rs_core_minimal::settings::{self, RenderSettings};
 use std::collections::{HashMap, VecDeque};
+use std::ops::Deref;
+use std::path::Path;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
 
@@ -334,6 +338,7 @@ impl Renderer {
         while let Some(create_iblbake_command) = self.create_iblbake_commands.pop_front() {
             let device = self.wgpu_context.get_device();
             let queue = self.wgpu_context.get_queue();
+
             let mut baker = AccelerationBaker::new(
                 device,
                 queue,
@@ -341,6 +346,171 @@ impl Renderer {
                 create_iblbake_command.bake_info,
             );
             baker.bake(device, queue, &self.shader_library);
+            let merge_cube_map = |x: &CubeMap<image::Rgba<f32>, Vec<f32>>| {
+                let size = x.negative_x.width();
+                let mut merge_image = image::Rgba32FImage::new(size, size * 6);
+                let negative_x = x.negative_x.view(0, 0, size, size);
+                let positive_x = x.positive_x.view(0, 0, size, size);
+                let negative_y = x.negative_y.view(0, 0, size, size);
+                let positive_y = x.positive_y.view(0, 0, size, size);
+                let negative_z = x.negative_z.view(0, 0, size, size);
+                let positive_z = x.positive_z.view(0, 0, size, size);
+                for (index, image) in [
+                    negative_x, positive_x, negative_y, positive_y, negative_z, positive_z,
+                ]
+                .iter()
+                .enumerate()
+                {
+                    merge_image
+                        .copy_from(image.deref(), 0, size * index as u32)
+                        .map_err(|err| crate::error::Error::ImageError(err))?;
+                }
+                crate::error::Result::Ok(merge_image)
+            };
+            let save_face = |data: Vec<f32>, mipmaps: u32, save_dir: &Path, name: &str| {
+                let surface = image_dds::SurfaceRgba32Float {
+                    width: baker.get_bake_info().pre_filter_cube_map_length,
+                    height: baker.get_bake_info().pre_filter_cube_map_length,
+                    depth: 1,
+                    layers: 1,
+                    mipmaps,
+                    data,
+                }
+                .encode(
+                    image_dds::ImageFormat::BC6hRgbUfloat,
+                    image_dds::Quality::Slow,
+                    image_dds::Mipmaps::FromSurface,
+                )
+                .map_err(|err| crate::error::Error::ImageDdsSurface(err))?;
+                let dds = surface
+                    .to_dds()
+                    .map_err(|err| crate::error::Error::ImageDdsCreateDds(err))?;
+                let path = save_dir.join(format!("pre_filter_{}.dds", name));
+                let file = std::fs::File::create(&path)
+                    .map_err(|err| crate::error::Error::IO(err, None))?;
+                let mut writer = std::io::BufWriter::new(file);
+                dds.write(&mut writer)
+                    .map_err(|err| crate::error::Error::DdsFile(err))?;
+                crate::error::Result::Ok(())
+            };
+            let result = (|| {
+                let save_dir = create_iblbake_command
+                    .save_dir
+                    .ok_or(crate::error::Error::Other(None))?;
+                if !save_dir.exists() {
+                    return Err(crate::error::Error::Other(None));
+                }
+                let brdflut_image =
+                    ibl_readback::IBLReadBack::read_brdflut_texture(&baker, device, queue)?;
+                let image = brdflut_image
+                    .as_rgba32f()
+                    .ok_or(crate::error::Error::Other(None))?;
+
+                let surface = image_dds::SurfaceRgba32Float::from_image_layers(&image, 1)
+                    .encode(
+                        image_dds::ImageFormat::BC6hRgbUfloat,
+                        image_dds::Quality::Slow,
+                        image_dds::Mipmaps::Disabled,
+                    )
+                    .map_err(|err| crate::error::Error::ImageDdsSurface(err))?;
+
+                let dds = surface
+                    .to_dds()
+                    .map_err(|err| crate::error::Error::ImageDdsCreateDds(err))?;
+                let path = save_dir.join("brdf.dds");
+                let file = std::fs::File::create(&path)
+                    .map_err(|err| crate::error::Error::IO(err, None))?;
+                let mut writer = std::io::BufWriter::new(file);
+                dds.write(&mut writer)
+                    .map_err(|err| crate::error::Error::DdsFile(err))?;
+
+                let irradiance_image = ibl_readback::IBLReadBack::read_irradiance_cube_map_texture(
+                    &baker, device, queue,
+                )?;
+                let dds_image = merge_cube_map(&irradiance_image)?;
+
+                let surface = image_dds::SurfaceRgba32Float::from_image_layers(&dds_image, 6)
+                    .encode(
+                        image_dds::ImageFormat::BC6hRgbUfloat,
+                        image_dds::Quality::Slow,
+                        image_dds::Mipmaps::Disabled,
+                    )
+                    .map_err(|err| crate::error::Error::ImageDdsSurface(err))?;
+                let dds = surface
+                    .to_dds()
+                    .map_err(|err| crate::error::Error::ImageDdsCreateDds(err))?;
+                let path = save_dir.join("irradiance.dds");
+                let file = std::fs::File::create(&path)
+                    .map_err(|err| crate::error::Error::IO(err, None))?;
+                let mut writer = std::io::BufWriter::new(file);
+                dds.write(&mut writer)
+                    .map_err(|err| crate::error::Error::DdsFile(err))?;
+
+                let pre_filter_images =
+                    ibl_readback::IBLReadBack::read_pre_filter_cube_map_textures(
+                        &baker, device, queue,
+                    )?;
+
+                save_face(
+                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
+                        acc.extend_from_slice(x.negative_x.as_raw());
+                        acc
+                    }),
+                    pre_filter_images.len() as u32,
+                    &save_dir,
+                    "negative_x",
+                )?;
+                save_face(
+                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
+                        acc.extend_from_slice(x.negative_y.as_raw());
+                        acc
+                    }),
+                    pre_filter_images.len() as u32,
+                    &save_dir,
+                    "negative_y",
+                )?;
+                save_face(
+                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
+                        acc.extend_from_slice(x.negative_z.as_raw());
+                        acc
+                    }),
+                    pre_filter_images.len() as u32,
+                    &save_dir,
+                    "negative_z",
+                )?;
+                save_face(
+                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
+                        acc.extend_from_slice(x.positive_x.as_raw());
+                        acc
+                    }),
+                    pre_filter_images.len() as u32,
+                    &save_dir,
+                    "positive_x",
+                )?;
+                save_face(
+                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
+                        acc.extend_from_slice(x.positive_y.as_raw());
+                        acc
+                    }),
+                    pre_filter_images.len() as u32,
+                    &save_dir,
+                    "positive_y",
+                )?;
+                save_face(
+                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
+                        acc.extend_from_slice(x.positive_z.as_raw());
+                        acc
+                    }),
+                    pre_filter_images.len() as u32,
+                    &save_dir,
+                    "positive_z",
+                )?;
+                Ok(())
+            })();
+            match result {
+                Ok(_) => {}
+                Err(err) => log::warn!("{}", err),
+            }
             render_output
                 .create_ibl_handles
                 .insert(create_iblbake_command.handle);

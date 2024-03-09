@@ -134,7 +134,7 @@ pub fn map_texture_options2(
         layout: wgpu::ImageDataLayout {
             offset: 0,
             bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
-            rows_per_image: None,
+            rows_per_image: Some(buffer_dimensions.height as u32),
         },
     };
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {

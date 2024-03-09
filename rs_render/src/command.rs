@@ -169,6 +169,7 @@ pub struct CreateIBLBake {
     pub handle: TextureHandle,
     pub file_path: PathBuf,
     pub bake_info: BakeInfo,
+    pub save_dir: Option<PathBuf>,
 }
 
 pub trait RenderTask {

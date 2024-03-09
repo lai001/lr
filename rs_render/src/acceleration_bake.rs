@@ -5,6 +5,7 @@ use crate::{
         panorama_to_cube::PanoramaToCubePipeline,
         pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapComputePipeline,
     },
+    global_shaders::pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader,
     shader_library::ShaderLibrary,
     texture_loader::TextureLoader,
 };
@@ -107,7 +108,7 @@ impl AccelerationBaker {
             mip_level_count: cube_map_textures.len() as u32,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rg11b10Float,
+            format: PreFilterEnvironmentCubeMapShader::get_format(),
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });

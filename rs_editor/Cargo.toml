@@ -48,11 +48,12 @@ path-slash = "0.1.4"
 md-5 = { version = "0.10.6" }
 anyhow = { version = "1.0.79" }
 lazy_static = "1.4.0"
+image_dds = { version = "0.5.0" }
 egui-gizmo = { version = "0.12.0", path = "../.xmake/deps/egui-gizmo" }
-rs_render = { version = "0.1.0", path = "../rs_render" }
-rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
-rs_artifact = { version = "0.1.0", path = "../rs_artifact" }
-rs_engine = { version = "0.1.0", path = "../rs_engine" }
-rs_hotreload_plugin = { version = "0.1.0", path = "../rs_hotreload_plugin" }
-rs_shader_compiler = { version = "0.1.0", path = "../rs_shader_compiler" }
-rs_core_minimal = { version = "0.1.0", path = "../rs_core_minimal" }
+rs_render = { path = "../rs_render" }
+rs_foundation = { path = "../rs_foundation" }
+rs_artifact = { path = "../rs_artifact" }
+rs_engine = { path = "../rs_engine" }
+rs_hotreload_plugin = { path = "../rs_hotreload_plugin" }
+rs_shader_compiler = { path = "../rs_shader_compiler" }
+rs_core_minimal = { path = "../rs_core_minimal" }
