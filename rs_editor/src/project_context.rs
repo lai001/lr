@@ -395,14 +395,29 @@ impl ProjectContext {
         for buildin_shader in buildin_shaders {
             let description = buildin_shader.get_shader_description();
             let name = buildin_shader.get_name();
-            let Ok(processed_code) = rs_shader_compiler::pre_process::pre_process(
-                &description.shader_path,
-                description.include_dirs.iter(),
-                description.definitions.iter(),
-            ) else {
-                continue;
-            };
-            shaders.insert(name, processed_code);
+            if rs_core_minimal::file_manager::is_run_from_ide() {
+                match rs_shader_compiler::pre_process::pre_process(
+                    &description.shader_path,
+                    description.include_dirs.iter(),
+                    description.definitions.iter(),
+                ) {
+                    Ok(processed_code) => {
+                        shaders.insert(name, processed_code);
+                    }
+                    Err(err) => {
+                        panic!("{}", err);
+                    }
+                }
+            } else {
+                match std::fs::read_to_string(description.shader_path) {
+                    Ok(processed_code) => {
+                        shaders.insert(name, processed_code);
+                    }
+                    Err(err) => {
+                        panic!("{}", err);
+                    }
+                }
+            }
         }
         shaders
     }

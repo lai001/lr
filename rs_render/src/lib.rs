@@ -36,15 +36,12 @@ pub enum VertexBufferType {
     Noninterleaved,
 }
 
-pub(crate) fn get_cargo_manifest_dir() -> std::path::PathBuf {
-    const CARGO_MANIFEST_DIR: &'static str = env!("CARGO_MANIFEST_DIR");
-    CARGO_MANIFEST_DIR.into()
-}
-
 pub(crate) fn get_buildin_shader_dir() -> std::path::PathBuf {
-    get_cargo_manifest_dir().join("shaders")
+    let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();
+    engine_root_dir.join("rs_render/shaders")
 }
 
 pub(crate) fn get_old_buildin_shader_dir() -> std::path::PathBuf {
-    get_cargo_manifest_dir().join("../rs_computer_graphics/src/shader")
+    let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();
+    engine_root_dir.join("rs_computer_graphics/src/shader")
 }

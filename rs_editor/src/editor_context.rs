@@ -157,6 +157,10 @@ impl EditorContext {
         )));
 
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
+        log::trace!(
+            "Engine Root Dir: {:?}",
+            rs_core_minimal::file_manager::get_engine_root_dir()
+        );
         Self {
             event_loop_proxy,
             engine,
@@ -680,8 +684,8 @@ impl EditorContext {
                         let artifact_file_path = project_context.export()?;
                         let folder_path =
                             project_context.create_build_folder_if_not_exist(&build_config)?;
-                        let current_dir = std::env::current_dir()?;
-                        let target = current_dir.join("../../../rs_desktop_standalone/target");
+                        let target = rs_core_minimal::file_manager::get_engine_root_dir()
+                            .join("rs_desktop_standalone/target");
                         let exe: PathBuf;
                         match build_config.build_type {
                             EBuildType::Debug => {

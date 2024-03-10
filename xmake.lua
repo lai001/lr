@@ -9,6 +9,7 @@ metis_dir = path.absolute(deps_dir .. "METIS")
 gklib_dir = deps_dir .. "GKlib"
 ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
 russimp_prebuild_dir = path.absolute(deps_dir)
+engine_root_dir = path.absolute("./")
 
 includes("BuildScripts/gen_config.lua")
 includes("BuildScripts/build_android_target.lua")
@@ -16,6 +17,7 @@ includes("BuildScripts/code_workspace.lua")
 includes("BuildScripts/fmt.lua")
 includes("BuildScripts/download_deps.lua")
 includes("BuildScripts/build_clean.lua")
+includes("BuildScripts/install_editor.lua")
 
 option("enable_dotnet")
     set_default(false)

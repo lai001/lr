@@ -61,7 +61,7 @@ pub struct DataSource {
     pub property_view_data_source: property_view::DataSource,
     pub project_settings: Option<Rc<RefCell<Settings>>>,
     pub project_settings_open: bool,
-    pub ibl_bake_info: BakeInfo
+    pub ibl_bake_info: BakeInfo,
 }
 
 impl DataSource {

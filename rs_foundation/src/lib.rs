@@ -104,7 +104,7 @@ pub fn cast_to_type_vec<U>(mut buffer: Vec<u8>) -> Vec<U> {
 }
 
 pub fn alignment(n: isize, align: isize) -> isize {
-    return ((n) + (align) - 1) & !((align) - 1);
+    ((n) + (align) - 1) & !((align) - 1)
 }
 
 pub fn next_highest_power_of_two(v: isize) -> isize {
@@ -157,7 +157,30 @@ pub fn change_working_directory() -> Option<String> {
             return Some(current_exe_dir.to_string());
         }
     }
-    return None;
+    None
+}
+
+pub fn get_vec_from_raw_mut<'a, T>(
+    raw_source: *mut *mut T,
+    num_raw_items: std::ffi::c_uint,
+) -> Vec<&'a mut T> {
+    let mut result = vec![];
+    let slice = std::ptr::slice_from_raw_parts(raw_source, num_raw_items as usize);
+    if !slice.is_null() {
+        unsafe {
+            match slice.as_ref() {
+                Some(raw) => {
+                    for itme in raw {
+                        if let Some(item) = itme.as_mut() {
+                            result.push(item);
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+    result
 }
 
 #[cfg(test)]

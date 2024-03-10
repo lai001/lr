@@ -2,11 +2,21 @@ use crate::path_ext::CanonicalizeSlashExt;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "editor")]
+pub fn is_run_from_ide() -> bool {
+    let vars = std::env::vars().filter(|x| x.0 == "CARGO_MANIFEST_DIR".to_string());
+    vars.count() != 0
+}
+
+#[cfg(feature = "editor")]
 pub fn get_engine_root_dir() -> PathBuf {
-    Path::new(file!())
-        .join("../../../")
-        .canonicalize_slash()
-        .unwrap()
+    if is_run_from_ide() {
+        Path::new(file!())
+            .join("../../../")
+            .canonicalize_slash()
+            .unwrap()
+    } else {
+        Path::new("../../../").canonicalize_slash().unwrap()
+    }
 }
 
 #[cfg(feature = "editor")]

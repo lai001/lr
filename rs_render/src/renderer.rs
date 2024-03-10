@@ -5,7 +5,6 @@ use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
-use crate::render_pipeline::phong_pipeline::PhongPipeline;
 use crate::render_pipeline::shading::{self, ShadingPipeline};
 use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
@@ -42,7 +41,6 @@ pub struct Renderer {
     ui_textures: HashMap<u64, egui::TextureId>,
     ibl_bakes: HashMap<u64, AccelerationBaker>,
 
-    // phong_pipeline: PhongPipeline,
     shading_pipeline: ShadingPipeline,
     attachment_pipeline: AttachmentPipeline,
 
@@ -82,13 +80,6 @@ impl Renderer {
         shader_library.load_shader_from(shaders, wgpu_context.get_device());
         let mut sampler_cache = SamplerCache::new();
 
-        let phong_pipeline = PhongPipeline::new(
-            wgpu_context.get_device(),
-            &shader_library,
-            &wgpu_context.get_current_swapchain_format(),
-            false,
-            &mut sampler_cache,
-        );
         let shading_pipeline = ShadingPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
@@ -451,60 +442,25 @@ impl Renderer {
                         &baker, device, queue,
                     )?;
 
-                save_face(
-                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
-                        acc.extend_from_slice(x.negative_x.as_raw());
-                        acc
-                    }),
-                    pre_filter_images.len() as u32,
-                    &save_dir,
-                    "negative_x",
-                )?;
-                save_face(
-                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
-                        acc.extend_from_slice(x.negative_y.as_raw());
-                        acc
-                    }),
-                    pre_filter_images.len() as u32,
-                    &save_dir,
-                    "negative_y",
-                )?;
-                save_face(
-                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
-                        acc.extend_from_slice(x.negative_z.as_raw());
-                        acc
-                    }),
-                    pre_filter_images.len() as u32,
-                    &save_dir,
-                    "negative_z",
-                )?;
-                save_face(
-                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
-                        acc.extend_from_slice(x.positive_x.as_raw());
-                        acc
-                    }),
-                    pre_filter_images.len() as u32,
-                    &save_dir,
-                    "positive_x",
-                )?;
-                save_face(
-                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
-                        acc.extend_from_slice(x.positive_y.as_raw());
-                        acc
-                    }),
-                    pre_filter_images.len() as u32,
-                    &save_dir,
-                    "positive_y",
-                )?;
-                save_face(
-                    pre_filter_images.iter().fold(vec![], |mut acc, x| {
-                        acc.extend_from_slice(x.positive_z.as_raw());
-                        acc
-                    }),
-                    pre_filter_images.len() as u32,
-                    &save_dir,
-                    "positive_z",
-                )?;
+                macro_rules! save_face {
+                    ($face:ident) => {
+                        save_face(
+                            pre_filter_images.iter().fold(vec![], |mut acc, x| {
+                                acc.extend_from_slice(&x.$face.as_raw());
+                                acc
+                            }),
+                            pre_filter_images.len() as u32,
+                            &save_dir,
+                            stringify!($face),
+                        )?
+                    };
+                }
+                save_face!(negative_x);
+                save_face!(negative_y);
+                save_face!(negative_z);
+                save_face!(positive_x);
+                save_face!(positive_y);
+                save_face!(positive_z);
                 Ok(())
             })();
             match result {
