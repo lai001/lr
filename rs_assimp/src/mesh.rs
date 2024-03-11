@@ -5,12 +5,12 @@ use crate::{
     primitive_type::EPrimitiveType,
 };
 // use russimp_sys::AI_MAX_NUMBER_OF_TEXTURECOORDS;
-use std::marker::PhantomData;
+use std::{cell::RefCell, marker::PhantomData, rc::Rc};
 
 pub struct Mesh<'a> {
     c: &'a mut russimp_sys::aiMesh,
     pub name: String,
-    pub bones: Vec<Bone<'a>>,
+    pub bones: Vec<Rc<RefCell<Bone<'a>>>>,
     pub primitive_type: EPrimitiveType,
     pub vertices: Vec<glam::Vec3>,
     pub normals: Vec<glam::Vec3>,
@@ -26,15 +26,20 @@ pub struct Mesh<'a> {
 impl<'a> Mesh<'a> {
     pub fn borrow_from(c: &'a mut russimp_sys::aiMesh) -> Mesh<'a> {
         let name = c.mName.into();
-        let slice = unsafe {
-            std::ptr::slice_from_raw_parts(c.mBones, c.mNumBones as usize)
-                .as_ref()
-                .unwrap()
-        };
         let mut bones = Vec::new();
-        for bone in slice {
-            bones.push(Bone::borrow_from(unsafe { bone.as_mut().unwrap() }));
+        if c.mBones.is_null() == false {
+            let slice = unsafe {
+                std::ptr::slice_from_raw_parts(c.mBones, c.mNumBones as usize)
+                    .as_ref()
+                    .unwrap()
+            };
+            for bone in slice {
+                bones.push(Rc::new(RefCell::new(Bone::borrow_from(unsafe {
+                    bone.as_mut().unwrap()
+                }))));
+            }
         }
+
         let primitive_type =
             EPrimitiveType::from(c.mPrimitiveTypes as russimp_sys::aiPrimitiveType).unwrap();
         let vertices =

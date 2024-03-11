@@ -3,7 +3,13 @@ use crate::{
     node::Node,
     vertex_weight::VertexWeight,
 };
-use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::{Hash, Hasher},
+    marker::PhantomData,
+    rc::Rc,
+};
 
 pub struct Bone<'a> {
     c: &'a mut russimp_sys::aiBone,
@@ -34,28 +40,38 @@ impl<'a> Bone<'a> {
 
     pub fn execute(&mut self, map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>) {
         match unsafe { self.c.mArmature.as_mut() } {
-            Some(ai_armature) => match map.get(&ai_armature.mName.to_string()) {
-                Some(node) => {
-                    self.armature = Some(node.clone());
+            Some(ai_armature) => {
+                let mut h = DefaultHasher::new();
+                format!("{:p}", ai_armature).hash(&mut h);
+                let key = h.finish().to_string();
+                match map.get(&key) {
+                    Some(node) => {
+                        self.armature = Some(node.clone());
+                    }
+                    None => {
+                        self.armature = None;
+                    }
                 }
-                None => {
-                    self.armature = None;
-                }
-            },
+            }
             None => {
                 self.armature = None;
             }
         }
 
         match unsafe { self.c.mNode.as_mut() } {
-            Some(ai_node) => match map.get(&ai_node.mName.to_string()) {
-                Some(node) => {
-                    self.node = Some(node.clone());
+            Some(ai_node) => {
+                let mut h = DefaultHasher::new();
+                format!("{:p}", ai_node).hash(&mut h);
+                let key = h.finish().to_string();
+                match map.get(&key) {
+                    Some(node) => {
+                        self.node = Some(node.clone());
+                    }
+                    None => {
+                        self.node = None;
+                    }
                 }
-                None => {
-                    self.node = None;
-                }
-            },
+            }
             None => {
                 self.node = None;
             }

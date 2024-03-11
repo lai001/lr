@@ -1,11 +1,17 @@
 use russimp_sys::{aiColor3D, aiColor4D, aiMatrix4x4, aiString, aiTexel, aiVector2D, aiVector3D};
 
+use crate::AISTRING_MAXLEN;
+
 pub(crate) trait ConvertToMat4 {
     fn to_mat4(&self) -> glam::Mat4;
 }
 
 pub(crate) trait ConvertToString {
     fn to_string(&self) -> String;
+}
+
+pub(crate) trait ConvertToAIString {
+    fn to_ai_string(&self) -> aiString;
 }
 
 pub(crate) trait ConvertToVec4 {
@@ -68,5 +74,43 @@ impl ConvertToString for aiString {
 impl ConvertToUVec4 for aiTexel {
     fn to_uvec4(&self) -> glam::UVec4 {
         glam::uvec4(self.b as _, self.g as _, self.r as _, self.a as _)
+    }
+}
+
+impl ConvertToAIString for String {
+    fn to_ai_string(&self) -> aiString {
+        let len = self.as_bytes().len();
+        let len = AISTRING_MAXLEN.min(len);
+        let mut ai_string = aiString {
+            length: len as _,
+            data: [0; AISTRING_MAXLEN],
+        };
+        unsafe {
+            let raw = std::slice::from_raw_parts(
+                std::mem::transmute::<*const u8, *const i8>(self.as_ptr()),
+                len,
+            );
+            ai_string.data.copy_from_slice(raw);
+        };
+        ai_string
+    }
+}
+
+impl ConvertToAIString for &str {
+    fn to_ai_string(&self) -> aiString {
+        let len = self.as_bytes().len();
+        let len = AISTRING_MAXLEN.min(len);
+        let mut ai_string = aiString {
+            length: len as _,
+            data: [0; AISTRING_MAXLEN],
+        };
+        unsafe {
+            let raw = std::slice::from_raw_parts(
+                std::mem::transmute::<*const u8, *const i8>(self.as_ptr()),
+                len,
+            );
+            ai_string.data.copy_from_slice(raw);
+        };
+        ai_string
     }
 }

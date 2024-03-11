@@ -1,7 +1,8 @@
 use crate::{convert::ConvertToString, metadata::Metadata};
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::{Hash, Hasher},
     marker::PhantomData,
     rc::{Rc, Weak},
 };
@@ -14,6 +15,20 @@ pub struct Node<'a> {
     pub metadata: Option<Metadata<'a>>,
     marker: PhantomData<&'a ()>,
 }
+
+impl<'a> Hash for Node<'a> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        format!("{:p}", self.c).hash(state);
+    }
+}
+
+impl<'a> PartialEq for Node<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        format!("{:p}", self.c) == format!("{:p}", other)
+    }
+}
+
+impl<'a> Eq for Node<'a> {}
 
 impl<'a> Node<'a> {
     pub fn new(c: &'a mut russimp_sys::aiNode) -> Node<'a> {
@@ -34,18 +49,26 @@ impl<'a> Node<'a> {
 
     pub fn parent_and_leaf(&mut self, map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>) {
         match unsafe { self.c.mParent.as_mut() } {
-            Some(parent) => match map.get_mut(&parent.mName.to_string()) {
-                Some(parent_node) => {
-                    self.parent = Some(Rc::downgrade(parent_node));
+            Some(parent) => {
+                let mut h = DefaultHasher::new();
+                format!("{:p}", parent).hash(&mut h);
+                let key = h.finish().to_string();
+                match map.get_mut(&key) {
+                    Some(parent_node) => {
+                        self.parent = Some(Rc::downgrade(parent_node));
+                    }
+                    None => {}
                 }
-                None => {}
-            },
+            }
             None => {}
         }
         self.children.clear();
         let children = rs_foundation::get_vec_from_raw_mut(self.c.mChildren, self.c.mNumChildren);
         for item in children {
-            match map.get_mut(&item.mName.to_string()) {
+            let mut h = DefaultHasher::new();
+            format!("{:p}", item).hash(&mut h);
+            let key = h.finish().to_string();
+            match map.get_mut(&key) {
                 Some(node) => {
                     self.children.push(node.clone());
                 }

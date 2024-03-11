@@ -1,10 +1,17 @@
 use crate::{
-    convert::ConvertToString, error::Result, get_assimp_error, material::Material, mesh::Mesh,
-    node::Node, post_process_steps::PostProcessSteps,
+    bone::Bone, convert::ConvertToString, error::Result, get_assimp_error, material::Material,
+    mesh::Mesh, node::Node, post_process_steps::PostProcessSteps, property_store::PropertyStore,
+    skeleton::Skeleton,
 };
 use russimp_sys::*;
 use std::{
-    cell::RefCell, collections::HashMap, ffi::CString, marker::PhantomData, path::Path, rc::Rc,
+    cell::RefCell,
+    collections::{hash_map::DefaultHasher, HashMap},
+    ffi::CString,
+    hash::{Hash, Hasher},
+    marker::PhantomData,
+    path::Path,
+    rc::Rc,
 };
 
 fn walk_ai_node<'a, F>(node: &'a mut aiNode, f: &mut F)
@@ -23,10 +30,11 @@ fn collect_all_nodes<'a>(scene: &'a aiScene) -> HashMap<String, Rc<RefCell<Node<
     if scene.mRootNode == std::ptr::null_mut() {
     } else {
         walk_ai_node(unsafe { scene.mRootNode.as_mut().unwrap() }, &mut |child| {
-            nodes.insert(
-                child.mName.to_string(),
-                Rc::new(RefCell::new(Node::new(child))),
-            );
+            let mut h = DefaultHasher::new();
+            let node = Node::new(child);
+            node.hash(&mut h);
+            let node = Rc::new(RefCell::new(node));
+            nodes.insert(h.finish().to_string(), node);
         });
     }
     nodes
@@ -41,76 +49,142 @@ fn build_node_tree(map: &mut HashMap<String, Rc<RefCell<Node>>>) {
     }
 }
 
+fn collect_armatures<'a>(
+    bones: HashMap<String, Rc<RefCell<Bone<'a>>>>,
+) -> HashMap<String, Rc<RefCell<Node<'a>>>> {
+    let mut nodes = HashMap::new();
+    for (_, bone) in bones {
+        if let Some(armature) = &bone.borrow().armature {
+            nodes.insert(armature.borrow().name.clone(), armature.clone());
+        }
+    }
+    nodes
+}
+
 pub struct Scene<'a> {
     c: *const russimp_sys::aiScene,
     pub name: String,
     pub meshes: Vec<Mesh<'a>>,
     pub root_node: Option<Rc<RefCell<Node<'a>>>>,
     all_nodes: HashMap<String, Rc<RefCell<Node<'a>>>>,
+    armatures: HashMap<String, Rc<RefCell<Node<'a>>>>,
     pub materials: Vec<Material<'a>>,
+    pub skeletons: Vec<Skeleton<'a>>,
     marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Scene<'a> {
+    unsafe fn new(ai_scene: *const aiScene) -> Result<Scene<'a>> {
+        if ai_scene == std::ptr::null() {
+            return Err(crate::error::Error::Assimp(get_assimp_error()));
+        }
+        let ai_scene = ai_scene.as_ref().unwrap();
+
+        let mut all_nodes = collect_all_nodes(ai_scene);
+        build_node_tree(&mut all_nodes);
+
+        let mut skeletons: Vec<Skeleton<'a>> = vec![];
+        if ai_scene.mSkeletons.is_null() == false {
+            let slice = std::ptr::slice_from_raw_parts(
+                ai_scene.mSkeletons,
+                ai_scene.mNumSkeletons as usize,
+            )
+            .as_ref()
+            .unwrap();
+
+            for item in slice {
+                let mut skeleton = Skeleton::borrow_from(item.as_mut().unwrap());
+                for bone in &mut skeleton.bones {
+                    bone.execute(&all_nodes);
+                }
+                skeletons.push(skeleton);
+            }
+        }
+
+        let root_node = match ai_scene.mRootNode.as_mut() {
+            Some(m_root_node) => {
+                let name = m_root_node.mName.to_string();
+                all_nodes.get(&name).cloned()
+            }
+            None => None,
+        };
+
+        let slice = std::ptr::slice_from_raw_parts(ai_scene.mMeshes, ai_scene.mNumMeshes as usize)
+            .as_ref()
+            .unwrap();
+        let mut meshes = Vec::new();
+        for mesh in slice {
+            let mut mesh = Mesh::borrow_from(mesh.as_mut().unwrap());
+            for bone in &mut mesh.bones {
+                bone.borrow_mut().execute(&mut all_nodes);
+            }
+            meshes.push(mesh);
+        }
+
+        let slice =
+            std::ptr::slice_from_raw_parts(ai_scene.mMaterials, ai_scene.mNumMaterials as usize)
+                .as_ref()
+                .unwrap();
+        let mut materials: Vec<Material<'a>> = vec![];
+        for material in slice {
+            let material = Material::borrow_from(material.as_mut().unwrap());
+            materials.push(material);
+        }
+
+        let mut bones = HashMap::new();
+        for mesh in &meshes {
+            for bone in &mesh.bones {
+                let node = bone.borrow().node.clone().unwrap();
+                let node = node.borrow();
+                let mut h = DefaultHasher::new();
+                node.hash(&mut h);
+                let key = h.finish().to_string();
+                bones.insert(key, bone.clone());
+            }
+        }
+
+        let scene_name = ai_scene.mName.into();
+        let scene = Scene {
+            c: ai_scene,
+            name: scene_name,
+            meshes,
+            root_node,
+            all_nodes,
+            materials,
+            skeletons,
+            marker: PhantomData,
+            armatures: collect_armatures(bones),
+        };
+
+        Ok(scene)
+    }
+
     pub fn from_file<P: AsRef<Path>>(path: P, flags: PostProcessSteps) -> Result<Scene<'a>> {
         let path = path.as_ref();
         let path = path.as_os_str().as_encoded_bytes();
         let path = CString::new(path).map_err(|err| crate::error::Error::Nul(err))?;
         unsafe {
             let ai_scene = russimp_sys::aiImportFile(path.as_ptr(), flags.bits());
-            if ai_scene == std::ptr::null() {
-                return Err(crate::error::Error::Assimp(get_assimp_error()));
-            }
-            let ai_scene = ai_scene.as_ref().unwrap();
+            Self::new(ai_scene)
+        }
+    }
 
-            let mut all_nodes = collect_all_nodes(ai_scene);
-            build_node_tree(&mut all_nodes);
-
-            let root_node = match ai_scene.mRootNode.as_mut() {
-                Some(m_root_node) => {
-                    let name = m_root_node.mName.to_string();
-                    all_nodes.get(&name).cloned()
-                }
-                None => None,
-            };
-
-            let slice =
-                std::ptr::slice_from_raw_parts(ai_scene.mMeshes, ai_scene.mNumMeshes as usize)
-                    .as_ref()
-                    .unwrap();
-            let mut meshes = Vec::new();
-            for mesh in slice {
-                let mut mesh = Mesh::borrow_from(mesh.as_mut().unwrap());
-                for bone in &mut mesh.bones {
-                    bone.execute(&mut all_nodes);
-                }
-                meshes.push(mesh);
-            }
-
-            let slice = std::ptr::slice_from_raw_parts(
-                ai_scene.mMaterials,
-                ai_scene.mNumMaterials as usize,
-            )
-            .as_ref()
-            .unwrap();
-            let mut materials: Vec<Material<'a>> = vec![];
-            for material in slice {
-                let material = Material::borrow_from(material.as_mut().unwrap());
-                materials.push(material);
-            }
-
-            let scene_name = ai_scene.mName.into();
-            let scene = Scene {
-                c: ai_scene,
-                marker: PhantomData,
-                meshes,
-                root_node,
-                name: scene_name,
-                all_nodes,
-                materials,
-            };
-
-            Ok(scene)
+    pub fn from_file_with_properties<P: AsRef<Path>>(
+        path: P,
+        flags: PostProcessSteps,
+        props: PropertyStore,
+    ) -> Result<Scene<'a>> {
+        let path = path.as_ref();
+        let path = path.as_os_str().as_encoded_bytes();
+        let path = CString::new(path).map_err(|err| crate::error::Error::Nul(err))?;
+        unsafe {
+            let ai_scene = russimp_sys::aiImportFileExWithProperties(
+                path.as_ptr(),
+                flags.bits(),
+                std::ptr::null_mut(),
+                props.get(),
+            );
+            Self::new(ai_scene)
         }
     }
 }
@@ -126,6 +200,7 @@ impl<'a> Drop for Scene<'a> {
 #[cfg(test)]
 mod test {
     use super::{PostProcessSteps, Scene};
+    use crate::{config, property_store::PropertyStore};
     use std::iter::zip;
 
     #[test]
@@ -137,6 +212,25 @@ mod test {
             PostProcessSteps::PopulateArmatureData | PostProcessSteps::Triangulate,
         )
         .expect("Exists");
+        dump(scene);
+    }
+
+    #[test]
+    fn test_case_1() {
+        let resource_path =
+            rs_core_minimal::file_manager::get_engine_resource("Remote/MonkeyAnim.fbx");
+        let mut props = PropertyStore::new();
+        props.set_property_bool(&config::AI_CONFIG_FBX_USE_SKELETON_BONE_CONTAINER, true);
+        let scene = Scene::from_file_with_properties(
+            resource_path,
+            PostProcessSteps::PopulateArmatureData | PostProcessSteps::Triangulate,
+            props,
+        )
+        .expect("Exists");
+        dump(scene);
+    }
+
+    fn dump(scene: Scene<'_>) {
         println!("Nodes:");
         for (k, v) in scene.all_nodes.iter() {
             let v = v.borrow();
@@ -147,7 +241,8 @@ mod test {
                 },
                 None => None,
             };
-            println!("    {k}\n        parent: {parent_name:?}");
+            let node_name = v.name.clone();
+            println!("    {node_name}\n        parent: {parent_name:?}");
             println!("        metadata:");
             if let Some(metadata) = &v.metadata {
                 for (key, value) in zip(&metadata.keys, &metadata.values) {
@@ -173,9 +268,7 @@ mod test {
                 mesh.faces.len(),
             );
             for bone in &mesh.bones {
-                if let Some(armature) = bone.armature.as_ref() {
-                    println!("        armature: {}", armature.borrow().name.clone());
-                }
+                println!("        bone: {}", bone.borrow().name);
             }
         }
         println!("Materials:");
@@ -188,6 +281,24 @@ mod test {
             for property in &material.material_properties {
                 println!("        {}, {:?}", property.key, property.value);
             }
+        }
+
+        println!("Skeletons:");
+        for skeleton in &scene.skeletons {
+            println!("    {}", skeleton.name);
+            for bone in &skeleton.bones {
+                if let Some(node) = &bone.node {
+                    println!("        {}", node.borrow().name);
+                }
+                if let Some(armature) = &bone.armature {
+                    println!("        {}", armature.borrow().name);
+                }
+            }
+        }
+
+        println!("Armatures:");
+        for armature in scene.armatures.values() {
+            println!("    {}", armature.borrow().name);
         }
     }
 }
