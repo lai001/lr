@@ -40,8 +40,9 @@ impl<'a> Mesh<'a> {
             }
         }
 
-        let primitive_type =
-            EPrimitiveType::from(c.mPrimitiveTypes as russimp_sys::aiPrimitiveType).unwrap();
+        let primitive_type = (c.mPrimitiveTypes as russimp_sys::aiPrimitiveType)
+            .try_into()
+            .unwrap();
         let vertices =
             unsafe { std::slice::from_raw_parts_mut(c.mVertices, c.mNumVertices as usize) };
         let vertices = vertices.iter_mut().map(|x| x.to_vec3()).collect();

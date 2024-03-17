@@ -1,7 +1,7 @@
 use crate::{
-    bone::Bone, convert::ConvertToString, error::Result, get_assimp_error, material::Material,
-    mesh::Mesh, node::Node, post_process_steps::PostProcessSteps, property_store::PropertyStore,
-    skeleton::Skeleton,
+    animation::Animation, bone::Bone, convert::ConvertToString, error::Result, get_assimp_error,
+    material::Material, mesh::Mesh, metadata::Metadata, node::Node,
+    post_process_steps::PostProcessSteps, property_store::PropertyStore, skeleton::Skeleton,
 };
 use russimp_sys::*;
 use std::{
@@ -66,10 +66,12 @@ pub struct Scene<'a> {
     pub name: String,
     pub meshes: Vec<Mesh<'a>>,
     pub root_node: Option<Rc<RefCell<Node<'a>>>>,
-    all_nodes: HashMap<String, Rc<RefCell<Node<'a>>>>,
-    armatures: HashMap<String, Rc<RefCell<Node<'a>>>>,
+    pub all_nodes: HashMap<String, Rc<RefCell<Node<'a>>>>,
+    pub armatures: HashMap<String, Rc<RefCell<Node<'a>>>>,
     pub materials: Vec<Material<'a>>,
     pub skeletons: Vec<Skeleton<'a>>,
+    pub animations: Vec<Animation<'a>>,
+    pub metadata: Option<Metadata<'a>>,
     marker: PhantomData<&'a ()>,
 }
 
@@ -109,26 +111,33 @@ impl<'a> Scene<'a> {
             None => None,
         };
 
-        let slice = std::ptr::slice_from_raw_parts(ai_scene.mMeshes, ai_scene.mNumMeshes as usize)
-            .as_ref()
-            .unwrap();
         let mut meshes = Vec::new();
-        for mesh in slice {
-            let mut mesh = Mesh::borrow_from(mesh.as_mut().unwrap());
-            for bone in &mut mesh.bones {
-                bone.borrow_mut().execute(&mut all_nodes);
+        if !ai_scene.mMeshes.is_null() {
+            let slice =
+                std::ptr::slice_from_raw_parts(ai_scene.mMeshes, ai_scene.mNumMeshes as usize)
+                    .as_ref()
+                    .unwrap();
+            for mesh in slice {
+                let mut mesh = Mesh::borrow_from(mesh.as_mut().unwrap());
+                for bone in &mut mesh.bones {
+                    bone.borrow_mut().execute(&mut all_nodes);
+                }
+                meshes.push(mesh);
             }
-            meshes.push(mesh);
         }
 
-        let slice =
-            std::ptr::slice_from_raw_parts(ai_scene.mMaterials, ai_scene.mNumMaterials as usize)
-                .as_ref()
-                .unwrap();
         let mut materials: Vec<Material<'a>> = vec![];
-        for material in slice {
-            let material = Material::borrow_from(material.as_mut().unwrap());
-            materials.push(material);
+        if !ai_scene.mMaterials.is_null() {
+            let slice = std::ptr::slice_from_raw_parts(
+                ai_scene.mMaterials,
+                ai_scene.mNumMaterials as usize,
+            )
+            .as_ref()
+            .unwrap();
+            for material in slice {
+                let material = Material::borrow_from(material.as_mut().unwrap());
+                materials.push(material);
+            }
         }
 
         let mut bones = HashMap::new();
@@ -142,6 +151,28 @@ impl<'a> Scene<'a> {
                 bones.insert(key, bone.clone());
             }
         }
+        let metadata = match unsafe { ai_scene.mMetaData.as_mut() } {
+            Some(m_meta_data) => Some(Metadata::borrow_from(m_meta_data)),
+            None => None,
+        };
+
+        let mut animations = vec![];
+
+        if !ai_scene.mAnimations.is_null() {
+            let slice = std::ptr::slice_from_raw_parts_mut(
+                ai_scene.mAnimations,
+                ai_scene.mNumAnimations as _,
+            )
+            .as_mut()
+            .unwrap();
+            for item in slice {
+                let mut animation = Animation::borrow_from(item.as_mut().unwrap());
+                for channel in animation.channels.iter_mut() {
+                    channel.execute(&mut all_nodes);
+                }
+                animations.push(animation);
+            }
+        }
 
         let scene_name = ai_scene.mName.into();
         let scene = Scene {
@@ -150,10 +181,12 @@ impl<'a> Scene<'a> {
             meshes,
             root_node,
             all_nodes,
+            armatures: collect_armatures(bones),
             materials,
             skeletons,
+            animations,
+            metadata,
             marker: PhantomData,
-            armatures: collect_armatures(bones),
         };
 
         Ok(scene)
@@ -201,7 +234,7 @@ impl<'a> Drop for Scene<'a> {
 mod test {
     use super::{PostProcessSteps, Scene};
     use crate::{config, property_store::PropertyStore};
-    use std::iter::zip;
+    use std::{cell::RefCell, iter::zip, rc::Rc};
 
     #[test]
     fn test_case() {
@@ -230,7 +263,27 @@ mod test {
         dump(scene);
     }
 
+    fn walk_armature<'a>(node: Rc<RefCell<crate::node::Node<'a>>>, offset: i32, level: i32) {
+        let spaces = offset + level * 2;
+        let mut s = String::from("");
+        for _ in 0..spaces {
+            s += " ";
+        }
+        println!("{}{}", s, node.borrow().name.clone());
+        for child in node.borrow().children.clone() {
+            walk_armature(child, offset, level + 1);
+        }
+    }
+
     fn dump(scene: Scene<'_>) {
+        println!("Scene Metadata:");
+        if let Some(metadata) = &scene.metadata {
+            for (key, value) in zip(&metadata.keys, &metadata.values) {
+                println!("    {} - {:?}", key, value);
+            }
+        } else {
+            println!("    None");
+        }
         println!("Nodes:");
         for (k, v) in scene.all_nodes.iter() {
             let v = v.borrow();
@@ -256,7 +309,7 @@ mod test {
         for mesh in &scene.meshes {
             println!(
                 "    {}\n        vertices num: {}, normals num: {}, bitangents num: {}, tangents num: {},
-                uv maps num: {}, vertex color maps num: {}, bones num: {}, faces num: {}",
+                uv maps num: {}, vertex color maps num: {}, bones num: {}, faces num: {}, bones num : {}",
                 mesh.name,
                 mesh.vertices.len(),
                 mesh.normals.len(),
@@ -266,9 +319,11 @@ mod test {
                 mesh.colors.len(),
                 mesh.bones.len(),
                 mesh.faces.len(),
+                mesh.bones.len(),
             );
             for bone in &mesh.bones {
                 println!("        bone: {}", bone.borrow().name);
+                println!("            weights num: {}", bone.borrow().weights.len());
             }
         }
         println!("Materials:");
@@ -298,7 +353,28 @@ mod test {
 
         println!("Armatures:");
         for armature in scene.armatures.values() {
-            println!("    {}", armature.borrow().name);
+            println!("    name: {}", armature.borrow().name);
+            walk_armature(armature.clone(), 6, 0);
+        }
+
+        println!("Animations:");
+        for animation in &scene.animations {
+            println!("    name: {}", animation.name);
+            println!("    channels: {}", animation.channels.len());
+            for channel in animation.channels.iter() {
+                println!("        name: {}", channel.node_name);
+                println!("        pre_state: {:?}", channel.pre_state);
+                println!("        post_state: {:?}", channel.post_state);
+                println!("        position_keys: {}", channel.position_keys.len());
+                println!("        scaling_keys: {}", channel.scaling_keys.len());
+                println!("        rotation_keys: {}", channel.rotation_keys.len());
+                println!("");
+            }
+            println!("    mesh_channels: {}", animation.mesh_channels.len());
+            println!(
+                "    morph_mesh_channels: {}",
+                animation.morph_mesh_channels.len()
+            );
         }
     }
 }

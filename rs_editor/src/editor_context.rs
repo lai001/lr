@@ -35,6 +35,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     fmt::Debug,
+    iter::zip,
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
