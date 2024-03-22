@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 pub enum EResourceType {
     Image,
     StaticMesh,
+    SkinMesh,
+    NodeAnim,
     ShaderSourceCode,
     Level,
     Binary,

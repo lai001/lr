@@ -121,7 +121,7 @@ pub fn Application_fromSurface(
         let native_window = crate::native_window::NativeWindow::new(&mut env, surface)
             .ok_or(crate::error::Error::NativeWindowNull)?;
         let mut artifact_input_stream = JavaInputStream::new(env, artifact_input_stream)
-            .ok_or(crate::error::Error::JavaInputStreamNull)?;
+            .map_err(|_| crate::error::Error::JavaInputStreamNull)?;
         FileHeader::check_identification(&mut artifact_input_stream, ARTIFACT_FILE_MAGIC_NUMBERS)
             .map_err(|err| crate::error::Error::CheckIdentificationFail(err))?;
 

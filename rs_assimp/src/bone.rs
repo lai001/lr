@@ -1,15 +1,9 @@
 use crate::{
-    convert::{ConvertToMat4, ConvertToString},
-    node::Node,
+    convert::ConvertToMat4,
+    node::{self, Node},
     vertex_weight::VertexWeight,
 };
-use std::{
-    cell::RefCell,
-    collections::{hash_map::DefaultHasher, HashMap},
-    hash::{Hash, Hasher},
-    marker::PhantomData,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Bone<'a> {
     c: &'a mut russimp_sys::aiBone,
@@ -22,59 +16,45 @@ pub struct Bone<'a> {
 }
 
 impl<'a> Bone<'a> {
-    pub fn borrow_from(c: &'a mut russimp_sys::aiBone) -> Bone<'a> {
+    pub fn borrow_from(
+        c: &'a mut russimp_sys::aiBone,
+        map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
+    ) -> Bone<'a> {
         let name = c.mName.into();
         let offset_matrix = c.mOffsetMatrix.to_mat4();
         let ai_weights = unsafe { std::slice::from_raw_parts(c.mWeights, c.mNumWeights as _) };
         let weights = ai_weights.iter().map(|x| VertexWeight::new(x)).collect();
+
+        let armature = match unsafe { c.mArmature.as_mut() } {
+            Some(ai_armature) => {
+                let path = node::get_node_path(ai_armature);
+                match map.get(&path) {
+                    Some(node) => Some(node.clone()),
+                    None => None,
+                }
+            }
+            None => None,
+        };
+
+        let node = match unsafe { c.mNode.as_mut() } {
+            Some(ai_node) => {
+                let path = node::get_node_path(ai_node);
+                match map.get(&path) {
+                    Some(node) => Some(node.clone()),
+                    None => None,
+                }
+            }
+            None => None,
+        };
+
         Bone {
             c,
             weights,
             name,
             marker: PhantomData,
             offset_matrix,
-            node: None,
-            armature: None,
-        }
-    }
-
-    pub fn execute(&mut self, map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>) {
-        match unsafe { self.c.mArmature.as_mut() } {
-            Some(ai_armature) => {
-                let mut h = DefaultHasher::new();
-                format!("{:p}", ai_armature).hash(&mut h);
-                let key = h.finish().to_string();
-                match map.get(&key) {
-                    Some(node) => {
-                        self.armature = Some(node.clone());
-                    }
-                    None => {
-                        self.armature = None;
-                    }
-                }
-            }
-            None => {
-                self.armature = None;
-            }
-        }
-
-        match unsafe { self.c.mNode.as_mut() } {
-            Some(ai_node) => {
-                let mut h = DefaultHasher::new();
-                format!("{:p}", ai_node).hash(&mut h);
-                let key = h.finish().to_string();
-                match map.get(&key) {
-                    Some(node) => {
-                        self.node = Some(node.clone());
-                    }
-                    None => {
-                        self.node = None;
-                    }
-                }
-            }
-            None => {
-                self.node = None;
-            }
+            node,
+            armature,
         }
     }
 }

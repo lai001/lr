@@ -1,5 +1,5 @@
-use std::marker::PhantomData;
-use crate::{mesh_anim::MeshAnim, mesh_morph_anim::MeshMorphAnim, node_anim::NodeAnim};
+use crate::{mesh_anim::MeshAnim, mesh_morph_anim::MeshMorphAnim, node::Node, node_anim::NodeAnim};
+use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Animation<'a> {
     c: &'a mut russimp_sys::aiAnimation,
@@ -13,7 +13,10 @@ pub struct Animation<'a> {
 }
 
 impl<'a> Animation<'a> {
-    pub fn borrow_from(c: &'a mut russimp_sys::aiAnimation) -> Animation<'a> {
+    pub fn borrow_from(
+        c: &'a mut russimp_sys::aiAnimation,
+        map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
+    ) -> Animation<'a> {
         let name = c.mName.into();
         let duration = c.mDuration;
         let ticks_per_second = c.mTicksPerSecond;
@@ -24,7 +27,10 @@ impl<'a> Animation<'a> {
             let ai_channels =
                 unsafe { std::slice::from_raw_parts_mut(c.mChannels, c.mNumChannels as _) };
             for item in ai_channels.iter_mut() {
-                channels.push(NodeAnim::borrow_from(unsafe { item.as_mut().unwrap() }));
+                channels.push(NodeAnim::borrow_from(
+                    unsafe { item.as_mut().unwrap() },
+                    map,
+                ));
             }
         }
         if !c.mMeshChannels.is_null() {

@@ -2,10 +2,11 @@ use crate::{
     bone::Bone,
     convert::{ConvertToVec3, ConvertToVec4},
     face::Face,
+    node::Node,
     primitive_type::EPrimitiveType,
 };
 // use russimp_sys::AI_MAX_NUMBER_OF_TEXTURECOORDS;
-use std::{cell::RefCell, marker::PhantomData, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Mesh<'a> {
     c: &'a mut russimp_sys::aiMesh,
@@ -24,7 +25,10 @@ pub struct Mesh<'a> {
 }
 
 impl<'a> Mesh<'a> {
-    pub fn borrow_from(c: &'a mut russimp_sys::aiMesh) -> Mesh<'a> {
+    pub fn borrow_from(
+        c: &'a mut russimp_sys::aiMesh,
+        map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
+    ) -> Mesh<'a> {
         let name = c.mName.into();
         let mut bones = Vec::new();
         if c.mBones.is_null() == false {
@@ -34,9 +38,10 @@ impl<'a> Mesh<'a> {
                     .unwrap()
             };
             for bone in slice {
-                bones.push(Rc::new(RefCell::new(Bone::borrow_from(unsafe {
-                    bone.as_mut().unwrap()
-                }))));
+                bones.push(Rc::new(RefCell::new(Bone::borrow_from(
+                    unsafe { bone.as_mut().unwrap() },
+                    map,
+                ))));
             }
         }
 

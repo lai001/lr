@@ -3,7 +3,6 @@ use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct NodeAnim<'a> {
     c: &'a mut russimp_sys::aiNodeAnim,
-    pub node_name: String,
     pub node: Option<Rc<RefCell<Node<'a>>>>,
     pub pre_state: EAnimBehaviour,
     pub post_state: EAnimBehaviour,
@@ -14,8 +13,11 @@ pub struct NodeAnim<'a> {
 }
 
 impl<'a> NodeAnim<'a> {
-    pub fn borrow_from(c: &'a mut russimp_sys::aiNodeAnim) -> NodeAnim<'a> {
-        let node_name = c.mNodeName.into();
+    pub fn borrow_from(
+        c: &'a mut russimp_sys::aiNodeAnim,
+        map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
+    ) -> NodeAnim<'a> {
+        let node_name: String = c.mNodeName.into();
         let pre_state = c.mPreState;
         let post_state = c.mPostState;
         let position_keys =
@@ -39,24 +41,23 @@ impl<'a> NodeAnim<'a> {
             .map(|x| QuatKey::borrow_from(x))
             .collect();
 
+        let node = (|| {
+            for node in map.values() {
+                if node.borrow().name == node_name {
+                    return Some(node.clone());
+                }
+            }
+            None
+        })();
         NodeAnim {
             c,
-            node_name,
+            node,
             pre_state: pre_state.try_into().unwrap(),
             post_state: post_state.try_into().unwrap(),
             position_keys,
             scaling_keys,
             rotation_keys,
             marker: PhantomData,
-            node: None,
-        }
-    }
-
-    pub fn execute(&mut self, map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>) {
-        for node in map.values() {
-            if node.borrow().name == self.node_name {
-                self.node = Some(node.clone());
-            }
         }
     }
 }

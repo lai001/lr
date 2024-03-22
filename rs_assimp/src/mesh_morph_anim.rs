@@ -1,5 +1,5 @@
-use std::marker::PhantomData;
 use crate::mesh_morph_key::MeshMorphKey;
+use std::marker::PhantomData;
 
 pub struct MeshMorphAnim<'a> {
     c: &'a mut russimp_sys::aiMeshMorphAnim,

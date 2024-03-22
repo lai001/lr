@@ -1,17 +1,19 @@
 use crate::{
-    animation::Animation, bone::Bone, convert::ConvertToString, error::Result, get_assimp_error,
-    material::Material, mesh::Mesh, metadata::Metadata, node::Node,
-    post_process_steps::PostProcessSteps, property_store::PropertyStore, skeleton::Skeleton,
+    animation::Animation,
+    bone::Bone,
+    error::Result,
+    get_assimp_error,
+    material::Material,
+    mesh::Mesh,
+    metadata::Metadata,
+    node::{self, get_node_path, Node},
+    post_process_steps::PostProcessSteps,
+    property_store::PropertyStore,
+    skeleton::Skeleton,
 };
 use russimp_sys::*;
 use std::{
-    cell::RefCell,
-    collections::{hash_map::DefaultHasher, HashMap},
-    ffi::CString,
-    hash::{Hash, Hasher},
-    marker::PhantomData,
-    path::Path,
-    rc::Rc,
+    cell::RefCell, collections::HashMap, ffi::CString, marker::PhantomData, path::Path, rc::Rc,
 };
 
 fn walk_ai_node<'a, F>(node: &'a mut aiNode, f: &mut F)
@@ -30,11 +32,9 @@ fn collect_all_nodes<'a>(scene: &'a aiScene) -> HashMap<String, Rc<RefCell<Node<
     if scene.mRootNode == std::ptr::null_mut() {
     } else {
         walk_ai_node(unsafe { scene.mRootNode.as_mut().unwrap() }, &mut |child| {
-            let mut h = DefaultHasher::new();
-            let node = Node::new(child);
-            node.hash(&mut h);
-            let node = Rc::new(RefCell::new(node));
-            nodes.insert(h.finish().to_string(), node);
+            let path = get_node_path(child);
+            let node = Rc::new(RefCell::new(Node::new(child, path.clone())));
+            nodes.insert(path, node);
         });
     }
     nodes
@@ -95,18 +95,15 @@ impl<'a> Scene<'a> {
             .unwrap();
 
             for item in slice {
-                let mut skeleton = Skeleton::borrow_from(item.as_mut().unwrap());
-                for bone in &mut skeleton.bones {
-                    bone.execute(&all_nodes);
-                }
+                let skeleton = Skeleton::borrow_from(item.as_mut().unwrap(), &all_nodes);
                 skeletons.push(skeleton);
             }
         }
 
         let root_node = match ai_scene.mRootNode.as_mut() {
             Some(m_root_node) => {
-                let name = m_root_node.mName.to_string();
-                all_nodes.get(&name).cloned()
+                let path = node::get_node_path(m_root_node);
+                all_nodes.get(&path).cloned()
             }
             None => None,
         };
@@ -118,10 +115,7 @@ impl<'a> Scene<'a> {
                     .as_ref()
                     .unwrap();
             for mesh in slice {
-                let mut mesh = Mesh::borrow_from(mesh.as_mut().unwrap());
-                for bone in &mut mesh.bones {
-                    bone.borrow_mut().execute(&mut all_nodes);
-                }
+                let mesh = Mesh::borrow_from(mesh.as_mut().unwrap(), &mut all_nodes);
                 meshes.push(mesh);
             }
         }
@@ -145,10 +139,7 @@ impl<'a> Scene<'a> {
             for bone in &mesh.bones {
                 let node = bone.borrow().node.clone().unwrap();
                 let node = node.borrow();
-                let mut h = DefaultHasher::new();
-                node.hash(&mut h);
-                let key = h.finish().to_string();
-                bones.insert(key, bone.clone());
+                bones.insert(node.path.clone(), bone.clone());
             }
         }
         let metadata = match unsafe { ai_scene.mMetaData.as_mut() } {
@@ -166,10 +157,7 @@ impl<'a> Scene<'a> {
             .as_mut()
             .unwrap();
             for item in slice {
-                let mut animation = Animation::borrow_from(item.as_mut().unwrap());
-                for channel in animation.channels.iter_mut() {
-                    channel.execute(&mut all_nodes);
-                }
+                let animation = Animation::borrow_from(item.as_mut().unwrap(), &mut all_nodes);
                 animations.push(animation);
             }
         }
@@ -284,6 +272,10 @@ mod test {
         } else {
             println!("    None");
         }
+
+        println!("Root Node:");
+        println!("    {}", scene.root_node.as_ref().unwrap().borrow().name);
+
         println!("Nodes:");
         for (k, v) in scene.all_nodes.iter() {
             let v = v.borrow();
@@ -295,7 +287,7 @@ mod test {
                 None => None,
             };
             let node_name = v.name.clone();
-            println!("    {node_name}\n        parent: {parent_name:?}");
+            println!("    {node_name}({k})\n        parent: {parent_name:?}");
             println!("        metadata:");
             if let Some(metadata) = &v.metadata {
                 for (key, value) in zip(&metadata.keys, &metadata.values) {
@@ -362,7 +354,10 @@ mod test {
             println!("    name: {}", animation.name);
             println!("    channels: {}", animation.channels.len());
             for channel in animation.channels.iter() {
-                println!("        name: {}", channel.node_name);
+                println!(
+                    "        name: {}",
+                    channel.node.as_ref().unwrap().borrow().name
+                );
                 println!("        pre_state: {:?}", channel.pre_state);
                 println!("        post_state: {:?}", channel.post_state);
                 println!("        position_keys: {}", channel.position_keys.len());
