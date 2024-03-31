@@ -1,3 +1,4 @@
+use crate::mesh_buffer::MeshBuffer;
 use crate::thread_pool::ThreadPool;
 use crate::{error::Result, handle::HandleManager};
 use lazy_static::lazy_static;
@@ -25,6 +26,7 @@ struct STResourceManager {
     artifact_reader: Option<ArtifactReader>,
     handle_manager: HandleManager,
     static_meshs: HashMap<url::Url, Arc<StaticMesh>>,
+    mesh_buffers: HashMap<url::Url, Arc<MeshBuffer>>,
 }
 
 impl STResourceManager {
@@ -36,6 +38,7 @@ impl STResourceManager {
             static_meshs: HashMap::new(),
             textures: HashMap::new(),
             virtual_textures: HashMap::new(),
+            mesh_buffers: HashMap::new(),
         }
     }
 
@@ -239,7 +242,9 @@ impl STResourceManager {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, rs_proc_macros::MultipleThreadFunctionsGenerator)]
+#[file("rs_engine/src/resource_manager.rs", "STResourceManager")]
+#[ignore_functions("new")]
 pub struct ResourceManager {
     inner: Arc<Mutex<STResourceManager>>,
 }
@@ -253,105 +258,6 @@ impl ResourceManager {
 
     pub fn default() -> ResourceManager {
         GLOBAL_RESOURCE_MANAGER.clone()
-    }
-
-    pub fn cache_image(&mut self, key: &str, image: Arc<image::DynamicImage>) {
-        self.inner.lock().unwrap().cache_image(key, image);
-    }
-
-    pub fn get_cache_image(&self, key: &str) -> Option<Arc<image::DynamicImage>> {
-        self.inner.lock().unwrap().get_cache_image(key)
-    }
-
-    pub fn get_cache_or_load_image(
-        &self,
-        key: &str,
-        path: &str,
-    ) -> Option<Arc<image::DynamicImage>> {
-        self.inner
-            .lock()
-            .unwrap()
-            .get_cache_or_load_image(key, path)
-    }
-
-    pub fn load_image_from_disk_and_cache(&self, key: &str, path: &str) {
-        self.inner
-            .lock()
-            .unwrap()
-            .load_image_from_disk_and_cache(key, path);
-    }
-
-    pub fn load_images_from_disk_and_cache_parallel(&self, dic: HashMap<&str, &str>) {
-        self.inner
-            .lock()
-            .unwrap()
-            .load_images_from_disk_and_cache_parallel(dic);
-    }
-
-    pub fn set_artifact_reader(&mut self, reader: Option<ArtifactReader>) {
-        self.inner.lock().unwrap().set_artifact_reader(reader);
-    }
-
-    pub fn get_shader_source_code(&mut self, url: &url::Url) -> Result<ShaderSourceCode> {
-        self.inner.lock().unwrap().get_shader_source_code(url)
-    }
-
-    pub fn get_all_shader_source_codes(&mut self) -> Vec<ShaderSourceCode> {
-        self.inner.lock().unwrap().get_all_shader_source_codes()
-    }
-
-    pub fn next_texture(&mut self, url: url::Url) -> crate::handle::TextureHandle {
-        self.inner.lock().unwrap().next_texture(url)
-    }
-
-    pub fn next_ui_texture(&mut self) -> crate::handle::EGUITextureHandle {
-        self.inner.lock().unwrap().next_ui_texture()
-    }
-
-    pub fn next_buffer(&mut self) -> crate::handle::BufferHandle {
-        self.inner.lock().unwrap().next_buffer()
-    }
-
-    pub fn get_level(&mut self, url: &url::Url) -> Result<Level> {
-        self.inner.lock().unwrap().get_level(url)
-    }
-
-    pub fn get_resource_map(&self) -> Result<HashMap<url::Url, ResourceInfo>> {
-        self.inner.lock().unwrap().get_resource_map()
-    }
-
-    pub fn get_resource<T: Asset>(
-        &mut self,
-        url: &url::Url,
-        expected_resource_type: Option<EResourceType>,
-    ) -> Result<T> {
-        self.inner
-            .lock()
-            .unwrap()
-            .get_resource(url, expected_resource_type)
-    }
-
-    pub fn get_static_mesh(&mut self, url: &url::Url) -> Result<Arc<StaticMesh>> {
-        self.inner.lock().unwrap().get_static_mesh(url)
-    }
-
-    pub fn load_static_meshs(&mut self) {
-        self.inner.lock().unwrap().load_static_meshs();
-    }
-
-    pub fn get_texture_by_url(&self, url: &url::Url) -> Option<crate::handle::TextureHandle> {
-        self.inner.lock().unwrap().get_texture_by_url(url)
-    }
-
-    pub fn next_virtual_texture(&mut self, url: url::Url) -> crate::handle::TextureHandle {
-        self.inner.lock().unwrap().next_virtual_texture(url)
-    }
-
-    pub fn get_virtual_texture_by_url(
-        &self,
-        url: &url::Url,
-    ) -> Option<crate::handle::TextureHandle> {
-        self.inner.lock().unwrap().get_virtual_texture_by_url(url)
     }
 }
 

@@ -3,10 +3,7 @@ use crate::camera::Camera;
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::error::Result;
 use crate::render_thread_mode::ERenderThreadMode;
-use crate::{
-    logger::{Logger, LoggerConfiguration},
-    resource_manager::ResourceManager,
-};
+use crate::{logger::Logger, resource_manager::ResourceManager};
 use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::level::ENodeType;
 use rs_artifact::resource_info::ResourceInfo;
@@ -61,15 +58,13 @@ impl Engine {
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
+        logger: Logger,
         mut artifact_reader: Option<ArtifactReader>,
         mut shaders: HashMap<String, String>,
     ) -> Result<Engine>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        let logger = Logger::new(LoggerConfiguration {
-            is_write_to_file: true,
-        });
         let settings: Settings;
         if let Some(artifact_reader) = &mut artifact_reader {
             settings = artifact_reader.get_artifact_file_header().settings.clone();

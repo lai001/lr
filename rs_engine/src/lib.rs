@@ -7,6 +7,7 @@ pub mod file_type;
 pub mod frame_sync;
 pub mod handle;
 pub mod logger;
+pub mod mesh_buffer;
 pub mod mipmap_generator;
 pub mod plugin;
 pub mod plugin_context;
@@ -17,6 +18,7 @@ pub mod rotator;
 pub mod static_virtual_texture_source;
 pub mod sync;
 pub mod thread_pool;
+pub mod url_extension;
 
 pub const ASSET_SCHEME: &str = "asset";
 

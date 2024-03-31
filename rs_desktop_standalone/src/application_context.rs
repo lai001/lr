@@ -3,6 +3,7 @@ use rs_artifact::{artifact::ArtifactReader, EEndianType};
 use rs_engine::{
     engine::Engine,
     frame_sync::{EOptions, FrameSync},
+    logger::{Logger, LoggerConfiguration},
 };
 use std::{collections::HashMap, path::Path};
 use winit::event::{Event, WindowEvent};
@@ -31,6 +32,9 @@ pub struct ApplicationContext {
 impl ApplicationContext {
     pub fn new(window: &winit::window::Window) -> ApplicationContext {
         rs_foundation::change_working_directory();
+        let logger = Logger::new(LoggerConfiguration {
+            is_write_to_file: true,
+        });
         let window_size = window.inner_size();
         let scale_factor = 1.0f32;
         let window_width = window_size.width;
@@ -54,6 +58,7 @@ impl ApplicationContext {
             window_width,
             window_height,
             scale_factor,
+            logger,
             Some(artifact_reader),
             HashMap::new(),
         )

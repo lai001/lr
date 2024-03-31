@@ -1,5 +1,6 @@
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
+    content_folder::EContentFileType,
     model_loader::{MeshCluster, ModelLoader},
     project::{Project, ASSET_FOLDER_NAME},
 };
@@ -11,6 +12,7 @@ use rs_artifact::{
     shader_source_code::ShaderSourceCode, static_mesh::StaticMesh, EEndianType,
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
+use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -21,6 +23,32 @@ use std::{
 
 pub enum EFolderUpdateType {
     Asset,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RecentProjects {
+    pub paths: HashSet<std::path::PathBuf>,
+}
+
+impl RecentProjects {
+    pub fn load() -> RecentProjects {
+        let path = Path::new("./recent_projects.json");
+        if path.exists() {
+            let file = std::fs::File::open(path).unwrap();
+            let reader = std::io::BufReader::new(file);
+            serde_json::from_reader(reader).unwrap()
+        } else {
+            RecentProjects {
+                paths: HashSet::new(),
+            }
+        }
+    }
+
+    pub fn save(&self) -> anyhow::Result<()> {
+        let path = Path::new("./recent_projects.json");
+        std::fs::write(path, serde_json::to_string(self)?)?;
+        Ok(())
+    }
 }
 
 pub struct ProjectContext {
@@ -288,7 +316,7 @@ impl ProjectContext {
         }
 
         let mut texture_files: Vec<Rc<RefCell<crate::texture::TextureFile>>> = Vec::new();
-        Self::collect_texture_files(&self.project.texture_folder, &mut texture_files);
+        Self::collect_texture_files(self.project.content.clone(), &mut texture_files);
         let image_files = Self::collect_image_files(&texture_files);
         for image_file_path in image_files {
             let absolute_image_file_path =
@@ -350,15 +378,23 @@ impl ProjectContext {
         image_paths
     }
 
-    fn collect_texture_files<'a>(
-        texture_folder: &'a crate::texture::TextureFolder,
+    fn collect_texture_files(
+        folder: Rc<RefCell<crate::content_folder::ContentFolder>>,
         files: &mut Vec<Rc<RefCell<crate::texture::TextureFile>>>,
     ) {
-        for texture_file in &texture_folder.texture_files {
-            files.push(texture_file.clone());
+        for content_file in &folder.borrow().files {
+            match content_file {
+                EContentFileType::StaticMesh(_) => todo!(),
+                EContentFileType::SkeletonMesh(_) => todo!(),
+                EContentFileType::NodeAnimation(_) => todo!(),
+                EContentFileType::Skeleton(_) => todo!(),
+                EContentFileType::Texture(texture_file) => {
+                    files.push(texture_file.clone());
+                }
+            }
         }
-        for sub_folder in &texture_folder.texture_folders {
-            Self::collect_texture_files(sub_folder, files);
+        for sub_folder in &folder.borrow().folders {
+            Self::collect_texture_files(sub_folder.clone(), files);
         }
     }
 
@@ -409,12 +445,18 @@ impl ProjectContext {
                     }
                 }
             } else {
-                match std::fs::read_to_string(description.shader_path) {
+                match std::fs::read_to_string(
+                    rs_render::get_buildin_shader_dir().join(name.clone()),
+                ) {
                     Ok(processed_code) => {
                         shaders.insert(name, processed_code);
                     }
                     Err(err) => {
-                        panic!("{}", err);
+                        panic!(
+                            "{}, {:?}",
+                            err,
+                            rs_render::get_buildin_shader_dir().join(name.clone())
+                        );
                     }
                 }
             }

@@ -7,6 +7,7 @@ use rs_artifact::{
     file_header::{FileHeader, ARTIFACT_FILE_MAGIC_NUMBERS},
     EEndianType,
 };
+use rs_engine::logger::{Logger, LoggerConfiguration};
 
 pub struct Application {
     native_window: crate::native_window::NativeWindow,
@@ -22,6 +23,9 @@ impl Application {
         native_window: crate::native_window::NativeWindow,
         artifact_input_stream: JavaInputStream,
     ) -> Result<Application> {
+        let logger = Logger::new(LoggerConfiguration {
+            is_write_to_file: false,
+        });
         let scale_factor = 1.0f32;
 
         let raw_input = egui::RawInput {
@@ -45,6 +49,7 @@ impl Application {
             width,
             height,
             scale_factor,
+            logger,
             Some(artifact_reader),
             std::collections::HashMap::new(),
         )

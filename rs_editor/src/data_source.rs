@@ -1,4 +1,7 @@
-use crate::ui::{property_view, textures_view};
+use crate::{
+    project_context::RecentProjects,
+    ui::{content_browser, property_view},
+};
 use rs_core_minimal::settings::Settings;
 use rs_engine::file_type::EFileType;
 use rs_render::bake_info::BakeInfo;
@@ -57,11 +60,12 @@ pub struct DataSource {
     pub camera_motion_speed: f32,
     pub camera_view_matrix: glam::Mat4,
     pub camera_projection_matrix: glam::Mat4,
-    pub textures_view_data_source: textures_view::DataSource,
     pub property_view_data_source: property_view::DataSource,
+    pub content_data_source: content_browser::DataSource,
     pub project_settings: Option<Rc<RefCell<Settings>>>,
     pub project_settings_open: bool,
     pub ibl_bake_info: BakeInfo,
+    pub recent_projects: RecentProjects,
 }
 
 impl DataSource {
@@ -85,13 +89,14 @@ impl DataSource {
             camera_motion_speed: 0.1,
             current_asset_folder: None,
             highlight_asset_file: None,
-            textures_view_data_source: textures_view::DataSource::new(),
             property_view_data_source: property_view::DataSource::new(),
             camera_view_matrix: glam::Mat4::IDENTITY,
             camera_projection_matrix: glam::Mat4::IDENTITY,
             project_settings: None,
             project_settings_open: false,
             ibl_bake_info: Default::default(),
+            content_data_source: content_browser::DataSource::new(),
+            recent_projects: RecentProjects::load(),
         }
     }
 

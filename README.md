@@ -2,7 +2,7 @@
 
 Windows 10  
 .net6   
-Rust 1.65.0 
+Rust 1.74.0 
 
 ## Feature
 - C# script hot reload

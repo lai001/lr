@@ -7,7 +7,7 @@ pub struct ShadingShader {}
 impl GlobalShader for ShadingShader {
     fn get_shader_description(&self) -> ShaderDescription {
         let shader_description = ShaderDescription {
-            shader_path: get_buildin_shader_dir().join("phong_static_shading.wgsl"),
+            shader_path: get_buildin_shader_dir().join("phong_shading.wgsl"),
             include_dirs: vec![],
             definitions: vec![],
         };

@@ -5,6 +5,7 @@ use std::{
 
 pub mod channel;
 pub mod id_generator;
+pub mod new;
 pub mod profiler;
 
 #[repr(C)]

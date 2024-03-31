@@ -5,6 +5,7 @@ pub mod irradiance_cube_map;
 pub mod panorama_to_cube;
 pub mod pre_filter_environment_cube_map;
 pub mod shading;
+pub mod skeleton_shading;
 pub mod virtual_texture_clean;
 pub mod virtual_texture_feed_back;
 
@@ -13,7 +14,7 @@ use crate::global_shaders::{
     attachment::AttachmentShader, brdf_lut::BrdfLutShader,
     irradiance_cube_map::IrradianceCubeMapShader, panorama_to_cube::PanoramaToCubeShader,
     pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader, shading::ShadingShader,
-    virtual_texture_clean::VirtualTextureCleanShader,
+    skeleton_shading::SkeletonShadingShader, virtual_texture_clean::VirtualTextureCleanShader,
     virtual_texture_feed_back::VirtualTextureFeedBackShader,
 };
 
@@ -27,5 +28,6 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(VirtualTextureFeedBackShader {}),
         Box::new(VirtualTextureCleanShader {}),
         Box::new(ShadingShader {}),
+        Box::new(SkeletonShadingShader {}),
     ]
 }

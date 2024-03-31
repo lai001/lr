@@ -96,6 +96,19 @@ task("code_workspace") do
         local save_path = path.join(path.absolute("./"), file_name)
         print(save_path)
         json.savefile(save_path, code_workspace)
+
+        local proc_macros_test = {
+            ["folders"] = { {
+                ["path"] = path.absolute("./")
+            } },
+            ["settings"] = {
+                ["rust-analyzer.linkedProjects"] = {
+                    path.absolute("./rs_proc_macros/Cargo.toml"),
+                    path.absolute("./rs_proc_macros_test/Cargo.toml")
+                },
+            }
+        }
+        json.savefile(path.join(path.absolute("./"), "proc_macros_test.code-workspace"), proc_macros_test)
     end)
     set_menu {
         usage = "xmake code_workspace",

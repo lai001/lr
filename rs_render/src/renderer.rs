@@ -762,16 +762,19 @@ impl Renderer {
 
     fn set_settings(&mut self, settings: RenderSettings) {
         if settings.virtual_texture_setting.is_enable {
-            let surface_width = self.wgpu_context.get_surface_config().width;
-            let surface_height = self.wgpu_context.get_surface_config().height;
-            self.virtual_texture_pass = VirtualTexturePass::new(
-                self.wgpu_context.get_device(),
-                &self.shader_library,
-                false,
-                glam::uvec2(surface_width, surface_height),
-                settings.virtual_texture_setting.clone(),
-            )
-            .ok();
+            if let Some(_) = &mut self.virtual_texture_pass {
+            } else {
+                let surface_width = self.wgpu_context.get_surface_config().width;
+                let surface_height = self.wgpu_context.get_surface_config().height;
+                self.virtual_texture_pass = VirtualTexturePass::new(
+                    self.wgpu_context.get_device(),
+                    &self.shader_library,
+                    false,
+                    glam::uvec2(surface_width, surface_height),
+                    settings.virtual_texture_setting.clone(),
+                )
+                .ok();
+            }
         } else {
             self.virtual_texture_pass = None;
         }

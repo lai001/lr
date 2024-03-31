@@ -1,4 +1,4 @@
-use crate::{error::Result, level::Level};
+use crate::level::Level;
 use anyhow::anyhow;
 use path_slash::PathBufExt;
 use rs_artifact::EEndianType;
@@ -25,7 +25,7 @@ pub struct Project {
     pub settings: Rc<RefCell<Settings>>,
     pub endian_type: EEndianType,
     pub level: Rc<RefCell<Level>>,
-    pub texture_folder: crate::texture::TextureFolder,
+    pub content: Rc<RefCell<crate::content_folder::ContentFolder>>,
 }
 
 impl Project {
@@ -43,15 +43,6 @@ impl Project {
         Ok(project_file_path)
     }
 
-    fn root_texture_folder() -> crate::texture::TextureFolder {
-        crate::texture::TextureFolder {
-            name: String::from("Textures"),
-            url: url::Url::parse("texture://Textures").unwrap(),
-            texture_files: Vec::new(),
-            texture_folders: Vec::new(),
-        }
-    }
-
     fn create_empty_project_file_to_disk(
         project_parent_folder: &Path,
         project_name: &str,
@@ -67,9 +58,10 @@ impl Project {
             version_str: VERSION_STR.to_string(),
             project_name: project_name.to_string(),
             level: Rc::new(RefCell::new(Level::empty_level())),
-            texture_folder: Self::root_texture_folder(),
+            // texture_folder: Self::root_texture_folder(),
             endian_type: EEndianType::Little,
             settings: Rc::new(RefCell::new(Settings::default())),
+            content: Rc::new(RefCell::new(crate::content_folder::ContentFolder::default())),
         };
         let json_str = serde_json::ser::to_string_pretty(&empty_project)?;
         let mut file = std::fs::File::create(project_file_path)?;
@@ -125,7 +117,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-egui = { version = "0.26.1" }
+egui = { version = "0.27.0" }
 rs_engine = { path = "@engine_path@/rs_engine" }
 
 [lib]

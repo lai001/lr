@@ -1,5 +1,6 @@
 use crate::{
     build_config::EBuildType,
+    content_folder::{ContentFolder, EContentFileType},
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource, MeshItem, ModelViewData},
     editor_ui::EditorUI,
@@ -10,16 +11,19 @@ use crate::{
     property,
     texture::TextureFile,
     ui::{
-        asset_view, level_view,
+        asset_view, content_browser, level_view,
         property_view::{self, ESelectedObject},
-        texture_property_view, textures_view, top_menu,
+        texture_property_view, top_menu,
     },
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use rs_artifact::property_value_type::EPropertyValueType;
 use rs_engine::{
-    camera::Camera, file_type::EFileType, plugin_context::PluginContext,
+    camera::Camera,
+    file_type::EFileType,
+    logger::{Logger, LoggerConfiguration},
+    plugin_context::PluginContext,
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_engine::{
@@ -27,15 +31,11 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     plugin::Plugin,
 };
-use rs_render::{
-    bake_info::BakeInfo,
-    command::{DrawObject, ETextureType, PhongMaterial},
-};
+use rs_render::command::{DrawObject, ETextureType, PhongMaterial};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     fmt::Debug,
-    iter::zip,
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
@@ -84,6 +84,7 @@ pub struct EditorContext {
     plugin_context: Arc<Mutex<PluginContext>>,
     plugins: Vec<Box<dyn Plugin>>,
     frame_sync: FrameSync,
+    model_loader: ModelLoader,
 }
 
 impl EditorContext {
@@ -122,6 +123,13 @@ impl EditorContext {
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     ) -> Self {
         rs_foundation::change_working_directory();
+        let logger = Logger::new(LoggerConfiguration {
+            is_write_to_file: true,
+        });
+        log::trace!(
+            "Engine Root Dir: {:?}",
+            rs_core_minimal::file_manager::get_engine_root_dir()
+        );
 
         let window_size = window.inner_size();
         let scale_factor = 1.0f32;
@@ -144,6 +152,7 @@ impl EditorContext {
             window_width,
             window_height,
             scale_factor,
+            logger,
             artifact_reader,
             ProjectContext::pre_process_shaders(),
         )
@@ -158,10 +167,7 @@ impl EditorContext {
         )));
 
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
-        log::trace!(
-            "Engine Root Dir: {:?}",
-            rs_core_minimal::file_manager::get_engine_root_dir()
-        );
+
         Self {
             event_loop_proxy,
             engine,
@@ -175,6 +181,7 @@ impl EditorContext {
             plugin_context,
             plugins: vec![],
             frame_sync,
+            model_loader: ModelLoader::new(),
         }
     }
 
@@ -449,51 +456,77 @@ impl EditorContext {
         let asset_folder_path = project_context.get_asset_folder_path();
         let asset_folder = Self::build_asset_folder(&asset_folder_path);
         self.editor_ui
-            .set_asset_folder_path(Some(asset_folder_path));
+            .set_asset_folder_path(Some(asset_folder_path.clone()));
         log::trace!("Update asset folder. {:?}", asset_folder);
         self.data_source.asset_folder = Some(asset_folder.clone());
         self.data_source.current_asset_folder = Some(asset_folder);
-        self.data_source.textures_view_data_source.texture_folder =
-            Some(project_context.project.texture_folder.clone());
-        self.data_source
-            .textures_view_data_source
-            .current_texture_folder = Some(project_context.project.texture_folder.clone());
+
         self.data_source.level = Some(project_context.project.level.clone());
-        for texture_file in &project_context.project.texture_folder.texture_files {
-            let texture_file = texture_file.borrow();
-            let Some(image_reference) = &texture_file.image_reference else {
-                continue;
-            };
-            let abs_path = project_context
-                .get_asset_folder_path()
-                .join(image_reference);
-            let _ = self
-                .engine
-                .create_texture_from_path(&abs_path, texture_file.url.clone());
+        let mut texture_files: Vec<Rc<RefCell<TextureFile>>> = vec![];
+        self.data_source.content_data_source.current_folder =
+            Some(project_context.project.content.clone());
+        for file in &project_context.project.content.borrow().files.clone() {
+            match file {
+                EContentFileType::StaticMesh(static_mesh) => {
+                    let file_path =
+                        asset_folder_path.join(&static_mesh.borrow().asset_reference_relative_path);
+                    self.model_loader.load(&file_path).unwrap();
+                }
+                EContentFileType::SkeletonMesh(skeleton_mesh) => {
+                    let file_path = asset_folder_path.join(&skeleton_mesh.borrow().asset_reference);
+                    self.model_loader.load(&file_path).unwrap();
+                }
+                EContentFileType::NodeAnimation(node_animation) => {
+                    let file_path =
+                        asset_folder_path.join(&node_animation.borrow().asset_reference);
+                    self.model_loader.load(&file_path).unwrap();
+                }
+                EContentFileType::Skeleton(skeleton) => {
+                    let file_path = asset_folder_path.join(&skeleton.borrow().asset_reference);
+                    self.model_loader.load(&file_path).unwrap();
+                }
+                EContentFileType::Texture(texture_file) => {
+                    texture_files.push(texture_file.clone());
+                    let texture_file = texture_file.borrow_mut();
+                    let Some(image_reference) = &texture_file.image_reference else {
+                        continue;
+                    };
+                    let abs_path = project_context
+                        .get_asset_folder_path()
+                        .join(image_reference);
+                    let _ = self
+                        .engine
+                        .create_texture_from_path(&abs_path, texture_file.url.clone());
+
+                    {
+                        let url = texture_file.url.clone();
+                        let Some(virtual_image_reference) = &texture_file.virtual_image_reference
+                        else {
+                            continue;
+                        };
+                        let path = project_context
+                            .get_virtual_texture_cache_dir()
+                            .join(virtual_image_reference);
+                        let Ok(source) = StaticVirtualTextureSource::from_file(path, None) else {
+                            continue;
+                        };
+                        self.engine
+                            .create_virtual_texture_source(url.clone(), Box::new(source));
+                        log::trace!(
+                            "Create virtual texture source, url: {}, {}",
+                            url.as_str(),
+                            virtual_image_reference
+                        );
+                    }
+                }
+            }
         }
         self.engine
             .set_settings(project_context.project.settings.borrow().clone());
         self.data_source.project_settings = Some(project_context.project.settings.clone());
 
-        for texture_file in &project_context.project.texture_folder.texture_files {
-            let texture_file = texture_file.borrow();
-            let url = texture_file.url.clone();
-            let Some(virtual_image_reference) = &texture_file.virtual_image_reference else {
-                continue;
-            };
-            let path = project_context
-                .get_virtual_texture_cache_dir()
-                .join(virtual_image_reference);
-            let Ok(source) = StaticVirtualTextureSource::from_file(path, None) else {
-                continue;
-            };
-            self.engine
-                .create_virtual_texture_source(url, Box::new(source));
-            log::trace!("Create virtual texture source: {}", virtual_image_reference);
-        }
         {
-            let nodes = &project_context.project.level.borrow_mut().nodes;
-            let texture_files = project_context.project.texture_folder.texture_files.clone();
+            let nodes = &project_context.project.level.borrow().nodes;
             self.draw_objects = Self::collect_draw_objects(
                 &mut self.engine,
                 &project_context.get_asset_folder_path(),
@@ -504,6 +537,11 @@ impl EditorContext {
         }
         self.project_context = Some(project_context);
         self.try_load_plugin();
+        self.data_source
+            .recent_projects
+            .paths
+            .insert(file_path.to_path_buf());
+        self.data_source.recent_projects.save()?;
         Ok(())
     }
 
@@ -574,12 +612,48 @@ impl EditorContext {
         });
     }
 
-    fn process_import_model(&mut self, file_path: PathBuf) -> anyhow::Result<()> {
+    fn open_model_file(&mut self, file_path: PathBuf) -> anyhow::Result<()> {
+        let project_context = self.project_context.as_mut().ok_or(anyhow!(""))?;
         let file_type = EFileType::from_path(&file_path)
             .context(format!("Invalid file type. {:?}", file_path))?;
         if !SUPPORT_ASSET_MODEL_FILE_TYPES.contains(&file_type) {
             return Err(anyhow!("Not support file type. {:?}", file_type));
         }
+        let asset_reference = file_path
+            .strip_prefix(project_context.get_asset_folder_path())?
+            .to_str()
+            .unwrap();
+
+        let load_result = self
+            .model_loader
+            .load_from_file_as_actor(&file_path, asset_reference.to_string())?;
+
+        let content = project_context.project.content.clone();
+        let mut content = content.borrow_mut();
+        for static_mesh in &load_result.static_meshes {
+            content
+                .files
+                .push(EContentFileType::StaticMesh(static_mesh.clone()));
+        }
+        for skeleton_meshe in &load_result.skeleton_meshes {
+            content
+                .files
+                .push(EContentFileType::SkeletonMesh(skeleton_meshe.clone()));
+        }
+        for node_animation in &load_result.node_animations {
+            content
+                .files
+                .push(EContentFileType::NodeAnimation(node_animation.clone()));
+        }
+        if let Some(skeleton) = &load_result.skeleton {
+            content
+                .files
+                .push(EContentFileType::Skeleton(skeleton.clone()));
+        }
+
+        let level = project_context.project.level.clone();
+        level.borrow_mut().actors.push(load_result.actor);
+
         let mesh_clusters = ModelLoader::load_from_file(&file_path, &[])?;
         self.data_source.is_model_hierarchy_open = true;
         let mut items: Vec<Rc<MeshItem>> = vec![];
@@ -660,6 +734,10 @@ impl EditorContext {
                             EFileDialogType::OpenProject,
                         ));
                 }
+                top_menu::EClickEventType::OpenRecentProject(file_path) => {
+                    let result = self.open_project(&file_path, window);
+                    log::trace!("{result:?}");
+                }
                 top_menu::EClickEventType::SaveProject => {
                     if let Some(project_context) = self.project_context.as_ref() {
                         let save_status = project_context.save();
@@ -711,10 +789,8 @@ impl EditorContext {
                     top_menu::EWindowType::Asset => {
                         self.data_source.is_asset_folder_open = true;
                     }
-                    top_menu::EWindowType::Texture => {
-                        self.data_source
-                            .textures_view_data_source
-                            .is_textures_view_open = true;
+                    top_menu::EWindowType::Content => {
+                        self.data_source.content_data_source.is_open = true;
                     }
                     top_menu::EWindowType::Property => {
                         self.data_source.property_view_data_source.is_open = true;
@@ -778,7 +854,7 @@ impl EditorContext {
                 }
                 asset_view::EClickItemType::File(asset_file) => {
                     self.data_source.highlight_asset_file = Some(asset_file.clone());
-                    let result = self.process_import_model(asset_file.path.clone());
+                    let result = self.open_model_file(asset_file.path.clone());
                     log::trace!("{:?}", result);
                 }
                 asset_view::EClickItemType::Back => todo!(),
@@ -799,31 +875,18 @@ impl EditorContext {
                                 asset_file.path
                             }
                         };
-                        if let Some(current_texture_folder) = self
-                            .data_source
-                            .textures_view_data_source
-                            .current_texture_folder
-                            .as_ref()
+                        if let Some(current_folder) =
+                            &self.data_source.content_data_source.current_folder
                         {
-                            let url = current_texture_folder
-                                .url
-                                .join(&asset_file.name)
-                                .unwrap()
-                                .clone();
+                            let mut current_folder = current_folder.borrow_mut();
+                            let folder_url = current_folder.get_url();
+                            let url = folder_url.join(&asset_file.name).unwrap();
                             let mut texture_file = TextureFile::new(asset_file.name, url);
                             texture_file.image_reference = Some(image_reference);
-                            log::trace!("Create texture: {:?}", &texture_file.url);
-                            project_context
-                                .project
-                                .texture_folder
-                                .texture_files
-                                .push(Rc::new(RefCell::new(texture_file)));
-                            self.data_source.textures_view_data_source.texture_folder =
-                                Some(project_context.project.texture_folder.clone());
-                            self.data_source
-                                .textures_view_data_source
-                                .current_texture_folder =
-                                Some(project_context.project.texture_folder.clone());
+                            log::trace!("Create texture: {:?}", &texture_file.url.as_str());
+                            current_folder.files.push(EContentFileType::Texture(Rc::new(
+                                RefCell::new(texture_file),
+                            )));
                         }
                     }
                 }
@@ -891,10 +954,13 @@ impl EditorContext {
                                     else {
                                         return;
                                     };
-                                    let Some(highlight_texture_file) = &self
-                                        .data_source
-                                        .textures_view_data_source
-                                        .highlight_texture_file
+                                    let Some(highlight_file) =
+                                        &self.data_source.content_data_source.highlight_file
+                                    else {
+                                        return;
+                                    };
+                                    let EContentFileType::Texture(highlight_texture_file) =
+                                        highlight_file
                                     else {
                                         return;
                                     };
@@ -978,22 +1044,7 @@ impl EditorContext {
                 },
             }
         }
-        if let Some(texture_view_event) = &click_event.texture_view_event {
-            match texture_view_event {
-                textures_view::EClickItemType::Folder(_) => {}
-                textures_view::EClickItemType::File(_) => {}
-                textures_view::EClickItemType::SingleClickFile(file) => {
-                    self.data_source.property_view_data_source.selected_object =
-                        Some(ESelectedObject::TextureFile(file.clone()));
-                    self.data_source
-                        .textures_view_data_source
-                        .highlight_texture_file = Some(file.clone());
-                }
-                textures_view::EClickItemType::CreateTexture(_) => {}
-                textures_view::EClickItemType::CreateTextureFolder(_) => {}
-                textures_view::EClickItemType::Back => {}
-            }
-        }
+
         if let Some(gizmo_result) = &click_event.gizmo_result {
             if let Some(selected_node) =
                 &mut self.data_source.property_view_data_source.selected_node
@@ -1030,6 +1081,59 @@ impl EditorContext {
                             }
                         }
                         rs_render::command::EMaterialType::PBR(_) => {}
+                    }
+                }
+            }
+        }
+        if let Some(event) = click_event.content_browser_event {
+            if let Some(current_folder) = &self.data_source.content_data_source.current_folder {
+                match event {
+                    content_browser::EClickEventType::CreateFolder => {
+                        let new_folder_name = &self.data_source.content_data_source.new_folder_name;
+                        let names: Vec<String> = current_folder
+                            .borrow()
+                            .folders
+                            .iter()
+                            .map(|x| x.borrow().name.clone())
+                            .collect();
+                        if !names.contains(new_folder_name) {
+                            let new_folder =
+                                ContentFolder::new(new_folder_name, Some(current_folder.clone()));
+                            current_folder
+                                .borrow_mut()
+                                .folders
+                                .push(Rc::new(RefCell::new(new_folder)));
+                        }
+                    }
+                    content_browser::EClickEventType::Back => {
+                        let parent_folder = current_folder.borrow().parent_folder.clone();
+                        if let Some(parent_folder) = parent_folder {
+                            self.data_source.content_data_source.current_folder =
+                                Some(parent_folder.clone());
+                        }
+                    }
+                    content_browser::EClickEventType::OpenFolder(folder) => {
+                        self.data_source.content_data_source.current_folder = Some(folder);
+                    }
+                    content_browser::EClickEventType::OpenFile(file) => match file {
+                        EContentFileType::StaticMesh(_) => todo!(),
+                        EContentFileType::SkeletonMesh(_) => todo!(),
+                        EContentFileType::NodeAnimation(_) => todo!(),
+                        EContentFileType::Skeleton(_) => todo!(),
+                        EContentFileType::Texture(_) => todo!(),
+                    },
+                    content_browser::EClickEventType::SingleClickFile(file) => {
+                        self.data_source.content_data_source.highlight_file = Some(file.clone());
+                        match file {
+                            EContentFileType::StaticMesh(_) => todo!(),
+                            EContentFileType::SkeletonMesh(_) => todo!(),
+                            EContentFileType::NodeAnimation(_) => todo!(),
+                            EContentFileType::Skeleton(_) => todo!(),
+                            EContentFileType::Texture(texture_file) => {
+                                self.data_source.property_view_data_source.selected_object =
+                                    Some(ESelectedObject::TextureFile(texture_file));
+                            }
+                        }
                     }
                 }
             }

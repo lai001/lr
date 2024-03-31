@@ -9,4 +9,5 @@ pub enum EResourceType {
     ShaderSourceCode,
     Level,
     Binary,
+    Skeleton,
 }

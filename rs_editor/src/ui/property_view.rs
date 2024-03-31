@@ -54,7 +54,7 @@ pub fn draw(
         }
     };
     let mut click: Option<EClickEventType> = None;
-    Window::new(format!("Property ({})", name))
+    Window::new("Property")
         .open(open)
         .vscroll(true)
         .hscroll(true)
@@ -88,6 +88,8 @@ fn content(
     selected_node: &mut crate::level::Node,
 ) -> HashMap<String, EValueModifierType> {
     let mut value_changed: HashMap<String, EValueModifierType> = HashMap::new();
+    ui.label(format!("name: {}", selected_node.name));
+    ui.end_row();
 
     for (property_name, property_value) in &mut selected_node.values {
         ui.label(property_name.clone());

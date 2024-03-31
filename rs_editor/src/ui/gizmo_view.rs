@@ -36,7 +36,7 @@ impl GizmoView {
         self.projection_matrix = projection_matrix;
         self.model_matrix = model_matrix;
         let mut gizmo_response: Option<GizmoResult> = None;
-        egui::Area::new("Gizmo Viewport")
+        egui::Area::new("Gizmo Viewport".into())
             .fixed_pos((0.0, 0.0))
             .show(context, |ui| {
                 ui.with_layer_id(egui::LayerId::background(), |ui| {

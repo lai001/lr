@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
     data_source::DataSource,
@@ -7,7 +9,7 @@ use egui::{menu, Button, Context, TopBottomPanel};
 #[derive(Debug)]
 pub enum EWindowType {
     Asset,
-    Texture,
+    Content,
     Property,
     Level,
 }
@@ -22,6 +24,7 @@ pub enum EToolType {
 pub enum EClickEventType {
     NewProject(String),
     OpenProject,
+    OpenRecentProject(PathBuf),
     OpenProjectSettings,
     SaveProject,
     Export,
@@ -75,6 +78,16 @@ impl TopMenu {
                         click = Some(EClickEventType::OpenVisualStudioCode);
                         ui.close_menu();
                     }
+                    ui.menu_button("Recent Projects", |ui| {
+                        for recent_project_path in &datasource.recent_projects.paths {
+                            let p=rs_core_minimal::path_ext::CanonicalizeSlashExt::canonicalize_slash(&recent_project_path).unwrap();
+                            let p = p.to_str().unwrap();
+                            if ui.button(p).clicked() {
+                                click = Some(EClickEventType::OpenRecentProject(recent_project_path.to_path_buf()));
+                                ui.close_menu();
+                            }
+                        }
+                    });
                     ui.menu_button("Build", |ui| {
                         ui.menu_button("Windows", |ui| {
                             ui.menu_button("Debug", |ui| {
@@ -105,8 +118,8 @@ impl TopMenu {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Asset));
                         ui.close_menu();
                     }
-                    if ui.add(Button::new("Texture")).clicked() {
-                        click = Some(EClickEventType::OpenWindow(EWindowType::Texture));
+                    if ui.add(Button::new("Content")).clicked() {
+                        click = Some(EClickEventType::OpenWindow(EWindowType::Content));
                         ui.close_menu();
                     }
                     if ui.add(Button::new("Property")).clicked() {

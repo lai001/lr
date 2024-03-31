@@ -64,7 +64,7 @@ fn collect_armatures<'a>(
 pub struct Scene<'a> {
     c: *const russimp_sys::aiScene,
     pub name: String,
-    pub meshes: Vec<Mesh<'a>>,
+    pub meshes: Vec<Rc<RefCell<Mesh<'a>>>>,
     pub root_node: Option<Rc<RefCell<Node<'a>>>>,
     pub all_nodes: HashMap<String, Rc<RefCell<Node<'a>>>>,
     pub armatures: HashMap<String, Rc<RefCell<Node<'a>>>>,
@@ -116,8 +116,11 @@ impl<'a> Scene<'a> {
                     .unwrap();
             for mesh in slice {
                 let mesh = Mesh::borrow_from(mesh.as_mut().unwrap(), &mut all_nodes);
-                meshes.push(mesh);
+                meshes.push(Rc::new(RefCell::new(mesh)));
             }
+        }
+        for (_, node) in &mut all_nodes {
+            node.borrow_mut().update_meshes(meshes.clone());
         }
 
         let mut materials: Vec<Material<'a>> = vec![];
@@ -136,7 +139,7 @@ impl<'a> Scene<'a> {
 
         let mut bones = HashMap::new();
         for mesh in &meshes {
-            for bone in &mesh.bones {
+            for bone in &mesh.borrow().bones {
                 let node = bone.borrow().node.clone().unwrap();
                 let node = node.borrow();
                 bones.insert(node.path.clone(), bone.clone());
@@ -288,6 +291,7 @@ mod test {
             };
             let node_name = v.name.clone();
             println!("    {node_name}({k})\n        parent: {parent_name:?}");
+            println!("        contain meshes: {}", !v.meshes.is_empty());
             println!("        metadata:");
             if let Some(metadata) = &v.metadata {
                 for (key, value) in zip(&metadata.keys, &metadata.values) {
@@ -299,6 +303,7 @@ mod test {
         }
         println!("Meshes:");
         for mesh in &scene.meshes {
+            let mesh = mesh.borrow();
             println!(
                 "    {}\n        vertices num: {}, normals num: {}, bitangents num: {}, tangents num: {},
                 uv maps num: {}, vertex color maps num: {}, bones num: {}, faces num: {}, bones num : {}",

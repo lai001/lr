@@ -1,8 +1,8 @@
-use serde::Deserialize;
-use serde::Serialize;
 use crate::asset::Asset;
 use crate::default_url;
 use crate::resource_type::EResourceType;
+use serde::Deserialize;
+use serde::Serialize;
 
 #[repr(C)]
 #[derive(Clone, Debug, Deserialize, Serialize)]

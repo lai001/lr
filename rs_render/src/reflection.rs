@@ -283,6 +283,17 @@ impl Reflection {
                                     attribute.format = wgpu::VertexFormat::Float32x4;
                                 }
                             },
+                            naga::ScalarKind::Sint => match size {
+                                naga::VectorSize::Bi => {
+                                    attribute.format = wgpu::VertexFormat::Sint32x2;
+                                }
+                                naga::VectorSize::Tri => {
+                                    attribute.format = wgpu::VertexFormat::Sint32x3;
+                                }
+                                naga::VectorSize::Quad => {
+                                    attribute.format = wgpu::VertexFormat::Sint32x4;
+                                }
+                            },
                             _ => todo!(),
                         }
                         offset += attribute.format.size();

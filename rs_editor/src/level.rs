@@ -1,4 +1,4 @@
-use crate::property;
+use crate::{actor::Actor, property};
 use rs_artifact::property_value_type::EPropertyValueType;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
@@ -51,6 +51,7 @@ impl Node {
 pub struct Level {
     pub name: String,
     pub nodes: Vec<Rc<RefCell<Node>>>,
+    pub actors: Vec<Rc<RefCell<Actor>>>,
 }
 
 impl Level {
@@ -58,6 +59,7 @@ impl Level {
         Self {
             name: "Empty".to_string(),
             nodes: vec![],
+            actors: vec![],
         }
     }
 }

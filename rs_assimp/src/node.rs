@@ -1,5 +1,6 @@
 use crate::{
     convert::{ConvertToMat4, ConvertToString},
+    mesh::Mesh,
     metadata::Metadata,
 };
 use russimp_sys::aiNode;
@@ -28,6 +29,7 @@ pub struct Node<'a> {
     pub children: Vec<Rc<RefCell<Node<'a>>>>,
     pub metadata: Option<Metadata<'a>>,
     pub transformation: glam::Mat4,
+    pub meshes: Vec<Rc<RefCell<Mesh<'a>>>>,
     marker: PhantomData<&'a ()>,
 }
 
@@ -39,8 +41,10 @@ impl<'a> Node<'a> {
             None => None,
         };
         let transformation = c.mTransformation.to_mat4();
+
         Node {
             c,
+            meshes: vec![],
             parent: None,
             name,
             path,
@@ -70,6 +74,19 @@ impl<'a> Node<'a> {
                 }
                 None => {}
             }
+        }
+    }
+
+    pub fn update_meshes(&mut self, all_meshes: Vec<Rc<RefCell<Mesh<'a>>>>) {
+        let c = &self.c;
+        let ai_meshes: Vec<usize> =
+            unsafe { std::slice::from_raw_parts_mut(c.mMeshes, c.mNumMeshes as _) }
+                .iter()
+                .map(|x| *x as usize)
+                .collect();
+        self.meshes.clear();
+        for ai_meshe in ai_meshes {
+            self.meshes.push(all_meshes[ai_meshe].clone());
         }
     }
 }

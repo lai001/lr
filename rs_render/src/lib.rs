@@ -36,7 +36,7 @@ pub enum VertexBufferType {
     Noninterleaved,
 }
 
-pub(crate) fn get_buildin_shader_dir() -> std::path::PathBuf {
+pub fn get_buildin_shader_dir() -> std::path::PathBuf {
     let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();
     engine_root_dir.join("rs_render/shaders")
 }

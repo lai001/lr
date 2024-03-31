@@ -35,14 +35,13 @@ pub fn draw(
     level: &crate::level::Level,
 ) -> Option<EClickEventType> {
     let mut event: Option<EClickEventType> = None;
-    Window::new(format!("Level({})", level.name))
-        .open(is_open)
-        .show(context, |ui| {
-            ScrollArea::vertical().show(ui, |ui| {
-                for node in &level.nodes {
-                    level_node(ui, node.clone(), &mut event);
-                }
-            });
+    Window::new("Level").open(is_open).show(context, |ui| {
+        ui.label(format!("name: {}", level.name));
+        ScrollArea::vertical().show(ui, |ui| {
+            for node in &level.nodes {
+                level_node(ui, node.clone(), &mut event);
+            }
         });
+    });
     event
 }

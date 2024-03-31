@@ -2,7 +2,7 @@ use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
 use crate::ui::gizmo_view::GizmoView;
 use crate::ui::top_menu::TopMenu;
-use crate::ui::{asset_view, gizmo_settings, level_view, property_view, textures_view, top_menu};
+use crate::ui::{asset_view, content_browser, gizmo_settings, level_view, property_view, top_menu};
 use egui::*;
 use egui_gizmo::GizmoResult;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ pub struct ClickEvent {
     pub click_aseet: Option<asset_view::EClickItemType>,
     pub menu_event: Option<top_menu::EClickEventType>,
     pub property_event: Option<crate::ui::property_view::EClickEventType>, //HashMap<String, EValueModifierType>,
-    pub texture_view_event: Option<textures_view::EClickItemType>,
+    pub content_browser_event: Option<content_browser::EClickEventType>,
     pub gizmo_result: Option<GizmoResult>,
 }
 
@@ -82,21 +82,6 @@ impl EditorUI {
             data_source.highlight_asset_file.as_ref(),
         );
 
-        if let Some(asset_folder_path) = self.asset_folder_path.as_ref() {
-            click.texture_view_event = textures_view::draw(
-                context,
-                &mut data_source.textures_view_data_source.is_textures_view_open,
-                asset_folder_path,
-                data_source
-                    .textures_view_data_source
-                    .texture_folder
-                    .as_ref(),
-                data_source
-                    .textures_view_data_source
-                    .highlight_texture_file
-                    .clone(),
-            );
-        }
         click.property_event = property_view::draw(
             context,
             &mut data_source.property_view_data_source.is_open,
@@ -126,6 +111,13 @@ impl EditorUI {
                 context,
                 &mut data_source.project_settings_open,
                 project_settings,
+            );
+        }
+        if let Some(asset_folder_path) = self.asset_folder_path.as_ref() {
+            click.content_browser_event = content_browser::draw(
+                context,
+                asset_folder_path,
+                &mut data_source.content_data_source,
             );
         }
         click

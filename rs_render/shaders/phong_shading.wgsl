@@ -1,3 +1,6 @@
+#include "common.wgsl"
+#include "virtual_texture.wgsl"
+
 struct VertexIn {
     @location(0) vertex_color: vec4<f32>,
     @location(1) position: vec3<f32>,
@@ -5,6 +8,10 @@ struct VertexIn {
     @location(3) tangent: vec3<f32>,
     @location(4) bitangent: vec3<f32>,
     @location(5) tex_coord: vec2<f32>,
+#ifdef SKELETON_MAX_BONES
+    @location(6) bone_ids: vec4<i32>,
+    @location(7) bone_weights: vec4<f32>,
+#endif    
 };
 
 struct VertexOutput {
@@ -33,6 +40,9 @@ struct Constants
     is_virtual_specular_texture: u32,
     tile_size: f32,
     is_enable_virtual_texture: i32,
+#ifdef SKELETON_MAX_BONES
+    bones: array<mat4x4<f32>, SKELETON_MAX_BONES>,
+#endif
 };
 
 @group(0) @binding(0) var<uniform> constants: Constants;
@@ -47,48 +57,28 @@ struct Constants
 
 @group(3) @binding(0) var base_color_sampler: sampler;
 
-fn mipmap_level(uv: vec2<f32>, texture_size: vec2<f32>) -> f32 {
-    let s = dpdx(uv) * texture_size;
-    let t = dpdy(uv) * texture_size;
-    let delta = max(dot(s, s), dot(t, t));
-    return 0.5 * log2(delta);
-}
-
-fn get_mip_level_size(length: u32, level: u32) -> u32 {
-    return max(u32(1), length >> level);
-}
-
-fn mipmap_size(lod0_size: vec2<f32>, level: u32) -> vec2<f32> {
-    let x = get_mip_level_size(u32(lod0_size.x), level);
-    let y = get_mip_level_size(u32(lod0_size.y), level);
-    return vec2<f32>(f32(x), f32(y));
-}
-
-fn virtual_texture_sample(tex_coord: vec2<f32>, max_lod: u32, texture_size: vec2<f32>) -> vec4<f32> {
-    let physical_size = constants.physical_texture_size;
-    let lod = min(u32(mipmap_level(tex_coord, physical_size)), max_lod);
-    let texture_mip_size = mipmap_size(texture_size, lod);
-    let tile_size = constants.tile_size;
-    let tiles = texture_mip_size / tile_size;
-    let origin = vec2<f32>(textureLoad(page_table_texture, vec2<i32>(tex_coord * tiles), i32(lod)).xy * u32(tile_size));
-    let factor = (tex_coord * texture_mip_size % tile_size) / tile_size;
-    var uv = vec2<f32>(0.0, 0.0);
-    uv.x = mix(origin.x, origin.x + tile_size, factor.x);
-    uv.y = mix(origin.y, origin.y + tile_size, factor.y);
-    uv = uv / physical_size;
-    var color = textureSampleLevel(physical_texture, base_color_sampler, uv, 0.0);
-    return color;
-}
-
 @vertex fn vs_main(vertex_in: VertexIn) -> VertexOutput {
+#ifdef SKELETON_MAX_BONES
+    var bone_transform = constants.bones[vertex_in.bone_ids[0]] * vertex_in.bone_weights[0];
+    bone_transform += constants.bones[vertex_in.bone_ids[1]] * vertex_in.bone_weights[1];
+    bone_transform += constants.bones[vertex_in.bone_ids[2]] * vertex_in.bone_weights[2];
+    bone_transform += constants.bones[vertex_in.bone_ids[3]] * vertex_in.bone_weights[3];
+#endif
+
     let mv = constants.view * constants.model;
     let mvp = constants.projection * mv;
     var result: VertexOutput;
     result.tex_coord = vertex_in.tex_coord;
-    result.position = mvp * vec4<f32>(vertex_in.position, 1.0);
     result.vertex_color = vertex_in.vertex_color;
-    result.normal = vertex_in.normal;
+#ifdef SKELETON_MAX_BONES
+    result.position = mvp * bone_transform * vec4<f32>(vertex_in.position, 1.0);
+    result.frag_position = (constants.model * bone_transform * vec4<f32>(vertex_in.position, 1.0)).xyz;
+    result.normal = (transpose(inverse(constants.model * bone_transform)) * vec4<f32>(vertex_in.normal, 0.0)).xyz;
+#else
+    result.position = mvp * vec4<f32>(vertex_in.position, 1.0);
     result.frag_position = (constants.model * vec4<f32>(vertex_in.position, 1.0)).xyz;
+    result.normal = vertex_in.normal;
+#endif 
     return result;
 }
 

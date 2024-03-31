@@ -1,9 +1,15 @@
-use anyhow::anyhow;
+use crate::{node_animation::NodeAnimation, skeleton_mesh::SkeletonMesh, static_mesh::StaticMesh};
 use rs_artifact::mesh_vertex::MeshVertex;
 use rs_engine::resource_manager::ResourceManager;
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_render::vertex_data_type::skin_mesh_vertex::{SkinMeshVertex, INVALID_BONE};
 use russimp::material::TextureType;
-use std::{collections::HashMap, path::Path};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 pub struct MeshCluster {
     pub name: String,
@@ -24,9 +30,26 @@ pub struct SkinResource {
     pub clusters: Vec<SkinMeshCluster>,
 }
 
-pub struct ModelLoader {}
+pub struct LoadResult {
+    pub asset_reference: String,
+    pub static_meshes: Vec<Rc<RefCell<StaticMesh>>>,
+    pub skeleton_meshes: Vec<Rc<RefCell<SkeletonMesh>>>,
+    pub skeleton: Option<Rc<RefCell<crate::skeleton::Skeleton>>>,
+    pub node_animations: Vec<Rc<RefCell<crate::node_animation::NodeAnimation>>>,
+    pub actor: SingleThreadMutType<crate::actor::Actor>,
+}
+
+pub struct ModelLoader {
+    scene_cache: HashMap<PathBuf, rs_assimp::scene::Scene<'static>>,
+}
 
 impl ModelLoader {
+    pub fn new() -> ModelLoader {
+        ModelLoader {
+            scene_cache: HashMap::new(),
+        }
+    }
+
     fn get_texture_absolute_path(
         model_file_path: &Path,
         texture: &russimp::material::Texture,
@@ -259,58 +282,139 @@ impl ModelLoader {
         Ok(mesh_clusters)
     }
 
-    pub fn load_from_file_as_skin(file_path: &Path) -> anyhow::Result<Vec<SkinMeshCluster>> {
+    pub fn load(&mut self, file_path: &Path) -> anyhow::Result<()> {
+        if !self.scene_cache.contains_key(file_path) {
+            let mut props = rs_assimp::property_store::PropertyStore::new();
+            props.set_property_integer(
+                &rs_assimp::config::AI_CONFIG_FBX_USE_SKELETON_BONE_CONTAINER,
+                1,
+            );
+            self.scene_cache.insert(
+                file_path.to_path_buf(),
+                rs_assimp::scene::Scene::from_file_with_properties(
+                    file_path,
+                    rs_assimp::post_process_steps::PostProcessSteps::Triangulate
+                        | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
+                    props,
+                )?,
+            );
+        }
+        Ok(())
+    }
+
+    pub fn load_from_file_as_actor(
+        &mut self,
+        file_path: &Path,
+        asset_reference: String,
+    ) -> anyhow::Result<LoadResult> {
         let mut props = rs_assimp::property_store::PropertyStore::new();
         props.set_property_integer(
             &rs_assimp::config::AI_CONFIG_FBX_USE_SKELETON_BONE_CONTAINER,
             1,
         );
-        let scene = rs_assimp::scene::Scene::from_file_with_properties(
-            file_path,
-            rs_assimp::post_process_steps::PostProcessSteps::Triangulate
-                | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
-            props,
-        )?;
-        if scene.armatures.is_empty() {
-            return Err(anyhow!("Not contains any armatures."));
+        if !self.scene_cache.contains_key(file_path) {
+            self.scene_cache.insert(
+                file_path.to_path_buf(),
+                rs_assimp::scene::Scene::from_file_with_properties(
+                    file_path,
+                    rs_assimp::post_process_steps::PostProcessSteps::Triangulate
+                        | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
+                    props,
+                )?,
+            );
         }
+        let scene = self.scene_cache.get(file_path).unwrap();
+
         if scene.armatures.len() > 1 {
             log::warn!("Too many armatures");
         }
 
-        let mut mesh_clusters: Vec<SkinMeshCluster> = Vec::new();
+        let mut static_meshes: Vec<Rc<RefCell<StaticMesh>>> = vec![];
+        let mut skeleton_meshes: Vec<Rc<RefCell<SkeletonMesh>>> = vec![];
+        let mut skeleton: Option<Rc<RefCell<crate::skeleton::Skeleton>>> = None;
+        let mut node_animations: Vec<Rc<RefCell<crate::node_animation::NodeAnimation>>> = vec![];
+        let actor: crate::actor::Actor;
 
-        for imported_mesh in &scene.meshes {
-            let mut vertex_buffer: Vec<SkinMeshVertex> = vec![];
-            let mut index_buffer: Vec<u32> = vec![];
-            let mut uv_map: Option<Vec<glam::Vec3>> = None;
-            if let Some(map) = imported_mesh.texture_coords.get(0) {
-                uv_map = Some(map.to_vec());
-            }
-            for face in &imported_mesh.faces {
-                let indices = &face.indices;
-                for index in indices {
-                    let vertex = Self::make_skin_vertex(*index, imported_mesh, &uv_map);
-                    vertex_buffer.push(vertex);
-                    index_buffer.push(*index);
-                }
-            }
-            assert_eq!(vertex_buffer.len() % 3, 0);
-            let bones = imported_mesh
-                .bones
-                .iter()
-                .map(|x| x.borrow().offset_matrix)
-                .collect();
-            let cluster = SkinMeshCluster {
-                vertex_buffer,
-                index_buffer,
-                textures_dic: HashMap::new(),
-                name: imported_mesh.name.clone(),
-                bones,
-            };
-            mesh_clusters.push(cluster);
+        if let Some(armature) = scene.armatures.values().next() {
+            let armature = armature.borrow();
+            skeleton = Some(Rc::new(RefCell::new(crate::skeleton::Skeleton {
+                url: url::Url::parse(&format!("content://{}", armature.name.clone())).unwrap(),
+                asset_reference: asset_reference.clone(),
+                root_bone: armature.path.clone(),
+            })));
         }
 
-        Ok(mesh_clusters)
+        for animation in &scene.animations {
+            let node_animation = NodeAnimation {
+                name: animation.name.clone(),
+                url: url::Url::parse(&format!("content://{}", animation.name.clone())).unwrap(),
+                asset_reference: asset_reference.clone(),
+            };
+            node_animations.push(SingleThreadMut::new(node_animation));
+        }
+
+        for imported_mesh in &scene.meshes {
+            let imported_mesh = imported_mesh.clone();
+            let imported_mesh = imported_mesh.borrow();
+            if imported_mesh.bones.is_empty() {
+                let static_mesh = StaticMesh {
+                    asset_reference_name: imported_mesh.name.clone(),
+                    url: url::Url::parse(&format!("content://{}", imported_mesh.name.clone()))
+                        .unwrap(),
+                    asset_reference_relative_path: asset_reference.clone(),
+                };
+                static_meshes.push(Rc::new(RefCell::new(static_mesh)));
+            } else {
+                let skeleton_mesh = SkeletonMesh {
+                    name: imported_mesh.name.clone(),
+                    url: url::Url::parse(&format!("content://{}", imported_mesh.name.clone()))
+                        .unwrap(),
+                    asset_reference: asset_reference.clone(),
+                    skeleton_url: skeleton.clone().unwrap().clone().borrow().url.clone(),
+                };
+                skeleton_meshes.push(Rc::new(RefCell::new(skeleton_mesh)));
+            }
+        }
+
+        if let Some(skeleton) = skeleton.clone() {
+            let animation_url: Option<url::Url>;
+            if let Some(node_animation) = node_animations.first() {
+                animation_url = Some(node_animation.borrow().url.clone());
+            } else {
+                animation_url = None;
+            }
+
+            let skeleton_mesh_component = crate::scene_node::SkeletonMeshComponent {
+                name: skeleton.borrow().get_name().clone(),
+                skeleton: Some(skeleton.borrow().url.clone()),
+                skeleton_meshes: skeleton_meshes
+                    .iter()
+                    .map(|x| x.borrow().url.clone())
+                    .collect(),
+                animation: animation_url,
+                skeleton_mesh_tree: None,
+                transformation: glam::Mat4::IDENTITY,
+            };
+            actor = crate::actor::Actor {
+                name: scene.name.clone(),
+                scene_node: crate::scene_node::SceneNode {
+                    component: crate::scene_node::EComponentType::SkeletonMeshComponent(
+                        skeleton_mesh_component,
+                    ),
+                    childs: vec![],
+                },
+            };
+        } else {
+            todo!()
+        }
+
+        Ok(LoadResult {
+            asset_reference: asset_reference.clone(),
+            static_meshes,
+            skeleton_meshes,
+            skeleton,
+            node_animations,
+            actor: SingleThreadMut::new(actor),
+        })
     }
 }

@@ -1,9 +1,9 @@
 pub mod asset_view;
+pub mod content_browser;
 pub mod gizmo_settings;
 pub mod gizmo_view;
 pub mod level_view;
 pub mod project_settings;
 pub mod property_view;
 pub mod texture_property_view;
-pub mod textures_view;
 pub mod top_menu;

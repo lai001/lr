@@ -17,6 +17,7 @@ task("install_editor") do
             os.mkdir(prefix)
         end
         os.cp(path.join(engine_root_dir, "rs_editor/target/debug/rs_editor.exe"), prefix, {rootdir = engine_root_dir})
+        os.cp(path.join(engine_root_dir, "rs_editor/target/release/rs_editor.exe"), prefix, {rootdir = engine_root_dir})
         os.cp(path.join(engine_root_dir, "Resource/Editor"), prefix, {rootdir = engine_root_dir})
         os.cp(path.join(engine_root_dir, "Resource/Remote/Font"), prefix, {rootdir = engine_root_dir})
         os.cp(path.join(engine_root_dir, "rs_computer_graphics/src/shader/attachment.wgsl"), prefix, {rootdir = engine_root_dir})
@@ -24,6 +25,7 @@ task("install_editor") do
         os.cp(path.join(engine_root_dir, "rs_editor/target/shaders/*.wgsl"), path.join(prefix, "rs_render/shaders"))
         os.cp(path.join(engine_root_dir, "rs_editor/target/shaders/*.wgsl"), path.join(prefix, "rs_computer_graphics/src/shader"))
         os.cp(path.join(engine_root_dir, "rs_desktop_standalone/target/debug/rs_desktop_standalone.exe"), prefix, {rootdir = engine_root_dir})
+        os.cp(path.join(engine_root_dir, "rs_desktop_standalone/target/release/rs_desktop_standalone.exe"), prefix, {rootdir = engine_root_dir})
     end)
     set_menu {
         usage = "xmake install_editor",
