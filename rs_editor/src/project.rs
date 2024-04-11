@@ -18,7 +18,7 @@ pub const SHADER_FOLDER_NAME: &str = "shader";
 pub const SRC_FOLDER_NAME: &str = "src";
 pub const VERSION_STR: &str = "0.0.1";
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Project {
     pub version_str: String,
     pub project_name: String,

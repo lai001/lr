@@ -2,12 +2,12 @@
 #include "virtual_texture.wgsl"
 
 struct VertexIn {
-    @location(0) vertex_color: vec4<f32>,
-    @location(1) position: vec3<f32>,
-    @location(2) normal: vec3<f32>,
-    @location(3) tangent: vec3<f32>,
-    @location(4) bitangent: vec3<f32>,
-    @location(5) tex_coord: vec2<f32>,
+    @location(0) position: vec3<f32>,
+    @location(1) tex_coord: vec2<f32>,
+    @location(2) vertex_color: vec4<f32>,
+    @location(3) normal: vec3<f32>,
+    @location(4) tangent: vec3<f32>,
+    @location(5) bitangent: vec3<f32>,
 #ifdef SKELETON_MAX_BONES
     @location(6) bone_ids: vec4<i32>,
     @location(7) bone_weights: vec4<f32>,

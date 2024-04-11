@@ -1,6 +1,8 @@
 use crate::static_mesh::StaticMesh;
 use crate::texture::TextureFile;
-use crate::{node_animation::NodeAnimation, skeleton::Skeleton, skeleton_mesh::SkeletonMesh};
+use crate::{
+    skeleton::Skeleton, skeleton_animation::SkeletonAnimation, skeleton_mesh::SkeletonMesh,
+};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
 
@@ -8,7 +10,7 @@ use std::{cell::RefCell, rc::Rc};
 pub enum EContentFileType {
     StaticMesh(Rc<RefCell<StaticMesh>>),
     SkeletonMesh(Rc<RefCell<SkeletonMesh>>),
-    NodeAnimation(Rc<RefCell<NodeAnimation>>),
+    SkeletonAnimation(Rc<RefCell<SkeletonAnimation>>),
     Skeleton(Rc<RefCell<Skeleton>>),
     Texture(Rc<RefCell<TextureFile>>),
 }

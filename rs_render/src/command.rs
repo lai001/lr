@@ -130,6 +130,7 @@ pub struct DrawObject {
     pub index_buffer: Option<BufferHandle>,
     pub index_count: Option<u32>,
     pub material_type: EMaterialType,
+    pub bones: Option<[glam::Mat4; crate::global_shaders::skeleton_shading::NUM_MAX_BONE]>,
 }
 
 #[derive(Clone)]

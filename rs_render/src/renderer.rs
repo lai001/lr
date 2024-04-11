@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::shading::{self, ShadingPipeline};
+use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
 use crate::virtual_texture_pass::VirtualTexturePass;
@@ -42,6 +43,7 @@ pub struct Renderer {
     ibl_bakes: HashMap<u64, AccelerationBaker>,
 
     shading_pipeline: ShadingPipeline,
+    skin_mesh_shading_pipeline: SkinMeshShadingPipeline,
     attachment_pipeline: AttachmentPipeline,
 
     depth_texture: DepthTexture,
@@ -81,6 +83,13 @@ impl Renderer {
         let mut sampler_cache = SamplerCache::new();
 
         let shading_pipeline = ShadingPipeline::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &wgpu_context.get_current_swapchain_format(),
+            false,
+            &mut sampler_cache,
+        );
+        let skin_mesh_shading_pipeline = SkinMeshShadingPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
             &wgpu_context.get_current_swapchain_format(),
@@ -144,6 +153,7 @@ impl Renderer {
             render_doc_context: crate::renderdoc::Context::new().ok(),
             virtual_texture_pass,
             settings,
+            skin_mesh_shading_pipeline,
         }
     }
 
@@ -589,6 +599,7 @@ impl Renderer {
                     for vertex_buffer in &draw_object_command.vertex_buffers {
                         if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
                             vertex_buffers.push(vertex_buffer);
+                            break;
                         }
                     }
                     if vertex_buffers.is_empty() {
@@ -742,18 +753,48 @@ impl Renderer {
                         Some(pass) => pass.get_indirect_table_view(),
                         None => self.default_textures.get_black_u32_texture_view(),
                     };
-                    self.shading_pipeline.draw(
-                        device,
-                        queue,
-                        surface_texture_view,
-                        &self.depth_texture.get_view(),
-                        &constants,
-                        &[mesh_buffer],
-                        &diffuse_texture_view,
-                        &specular_texture_view,
-                        &physical_texture_view,
-                        &indirect_table_view,
-                    );
+                    if draw_object_command.bones.is_none() {
+                        self.shading_pipeline.draw(
+                            device,
+                            queue,
+                            surface_texture_view,
+                            &self.depth_texture.get_view(),
+                            &constants,
+                            &[mesh_buffer],
+                            &diffuse_texture_view,
+                            &specular_texture_view,
+                            &physical_texture_view,
+                            &indirect_table_view,
+                        );
+                    } else {
+                        let skin_constants = crate::render_pipeline::skin_mesh_shading::Constants {
+                            model: constants.model,
+                            view: constants.view,
+                            projection: constants.projection,
+                            is_enable_virtual_texture: 0,
+                            physical_texture_size: constants.physical_texture_size,
+                            tile_size: constants.tile_size,
+                            diffuse_texture_size: constants.diffuse_texture_size,
+                            diffuse_texture_max_lod: constants.diffuse_texture_max_lod,
+                            is_virtual_diffuse_texture: 0,
+                            specular_texture_size: constants.specular_texture_size,
+                            specular_texture_max_lod: constants.specular_texture_max_lod,
+                            is_virtual_specular_texture: 0,
+                            bones: draw_object_command.bones.unwrap().clone(),
+                        };
+                        self.skin_mesh_shading_pipeline.draw(
+                            device,
+                            queue,
+                            surface_texture_view,
+                            &self.depth_texture.get_view(),
+                            &skin_constants,
+                            &[mesh_buffer],
+                            &diffuse_texture_view,
+                            &specular_texture_view,
+                            &physical_texture_view,
+                            &indirect_table_view,
+                        );
+                    }
                 }
                 EMaterialType::PBR(_) => todo!(),
             }

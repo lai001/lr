@@ -5,7 +5,7 @@ pub enum EResourceType {
     Image,
     StaticMesh,
     SkinMesh,
-    NodeAnim,
+    SkeletonAnimation,
     ShaderSourceCode,
     Level,
     Binary,

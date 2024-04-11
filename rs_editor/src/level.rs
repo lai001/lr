@@ -47,7 +47,7 @@ impl Node {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Level {
     pub name: String,
     pub nodes: Vec<Rc<RefCell<Node>>>,

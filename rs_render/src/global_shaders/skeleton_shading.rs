@@ -2,6 +2,8 @@ use super::global_shader::GlobalShader;
 use crate::get_buildin_shader_dir;
 use rs_shader_compiler::pre_process::{Definition, ShaderDescription};
 
+pub const NUM_MAX_BONE: usize = 255;
+
 pub struct SkeletonShadingShader {}
 
 impl GlobalShader for SkeletonShadingShader {
@@ -11,7 +13,7 @@ impl GlobalShader for SkeletonShadingShader {
             include_dirs: vec![],
             definitions: vec![Definition {
                 name: "SKELETON_MAX_BONES".to_string(),
-                value: Some("255".to_string()),
+                value: Some(NUM_MAX_BONE.to_string()),
             }],
         };
         shader_description

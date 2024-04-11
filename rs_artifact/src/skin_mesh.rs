@@ -1,5 +1,4 @@
 use crate::asset::Asset;
-use crate::default_url;
 use crate::resource_type::EResourceType;
 use serde::Deserialize;
 use serde::Serialize;
@@ -20,10 +19,10 @@ pub struct SkinMeshVertex {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SkinMesh {
     pub name: String,
-    pub id: uuid::Uuid,
     pub url: url::Url,
     pub vertexes: Vec<SkinMeshVertex>,
     pub indexes: Vec<u32>,
+    pub bone_paths: Vec<String>,
 }
 
 impl Asset for SkinMesh {
@@ -33,17 +32,5 @@ impl Asset for SkinMesh {
 
     fn get_resource_type(&self) -> EResourceType {
         EResourceType::StaticMesh
-    }
-}
-
-impl Default for SkinMesh {
-    fn default() -> Self {
-        Self {
-            name: Default::default(),
-            id: Default::default(),
-            url: default_url().clone(),
-            vertexes: Default::default(),
-            indexes: Default::default(),
-        }
     }
 }

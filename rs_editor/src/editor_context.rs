@@ -19,11 +19,13 @@ use crate::{
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use rs_artifact::property_value_type::EPropertyValueType;
+use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_engine::{
     camera::Camera,
     file_type::EFileType,
     logger::{Logger, LoggerConfiguration},
     plugin_context::PluginContext,
+    resource_manager::ResourceManager,
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_engine::{
@@ -129,6 +131,8 @@ impl EditorContext {
         log::trace!(
             "Engine Root Dir: {:?}",
             rs_core_minimal::file_manager::get_engine_root_dir()
+                .canonicalize_slash()
+                .unwrap()
         );
 
         let window_size = window.inner_size();
@@ -260,6 +264,7 @@ impl EditorContext {
                         }
                     }
                     WindowEvent::RedrawRequested => {
+                        self.engine.tick();
                         let is_minimized = window.is_minimized().unwrap_or(false);
                         let is_visible = window.is_visible().unwrap_or(true);
                         if !is_visible || is_minimized {
@@ -475,15 +480,31 @@ impl EditorContext {
                 EContentFileType::SkeletonMesh(skeleton_mesh) => {
                     let file_path = asset_folder_path.join(&skeleton_mesh.borrow().asset_reference);
                     self.model_loader.load(&file_path).unwrap();
+                    self.model_loader.to_runtime_skin_mesh(
+                        skeleton_mesh.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                        true,
+                    );
                 }
-                EContentFileType::NodeAnimation(node_animation) => {
+                EContentFileType::SkeletonAnimation(node_animation) => {
                     let file_path =
                         asset_folder_path.join(&node_animation.borrow().asset_reference);
                     self.model_loader.load(&file_path).unwrap();
+                    self.model_loader.to_runtime_skeleton_animation(
+                        node_animation.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                    );
                 }
                 EContentFileType::Skeleton(skeleton) => {
                     let file_path = asset_folder_path.join(&skeleton.borrow().asset_reference);
                     self.model_loader.load(&file_path).unwrap();
+                    let skeleton = self.model_loader.to_runtime_skeleton(
+                        skeleton.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                    );
                 }
                 EContentFileType::Texture(texture_file) => {
                     texture_files.push(texture_file.clone());
@@ -518,6 +539,19 @@ impl EditorContext {
                             virtual_image_reference
                         );
                     }
+                }
+            }
+        }
+        for actor in project_context.project.level.borrow().actors.clone() {
+            let root_scene_node = &mut actor.borrow_mut().scene_node;
+            match &mut root_scene_node.component {
+                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                crate::scene_node::EComponentType::SkeletonMeshComponent(
+                    skeleton_mesh_component,
+                ) => {
+                    skeleton_mesh_component
+                        .initialize(ResourceManager::default(), &mut self.engine);
                 }
             }
         }
@@ -643,7 +677,7 @@ impl EditorContext {
         for node_animation in &load_result.node_animations {
             content
                 .files
-                .push(EContentFileType::NodeAnimation(node_animation.clone()));
+                .push(EContentFileType::SkeletonAnimation(node_animation.clone()));
         }
         if let Some(skeleton) = &load_result.skeleton {
             content
@@ -673,6 +707,29 @@ impl EditorContext {
     }
 
     fn process_redraw_request(&mut self, window: &mut winit::window::Window) {
+        if let Some(project_context) = &mut self.project_context {
+            for actor in project_context.project.level.borrow().actors.clone() {
+                let root_scene_node = &mut actor.borrow_mut().scene_node;
+                match &mut root_scene_node.component {
+                    crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                    crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                    crate::scene_node::EComponentType::SkeletonMeshComponent(
+                        skeleton_mesh_component,
+                    ) => {
+                        skeleton_mesh_component.camera_did_update(
+                            self.camera.get_view_matrix(),
+                            self.camera.get_projection_matrix(),
+                        );
+                        skeleton_mesh_component.update(self.engine.get_game_time());
+
+                        for draw_object in skeleton_mesh_component.get_draw_objects() {
+                            self.engine.draw(draw_object);
+                        }
+                    }
+                }
+            }
+        }
+
         for (_, draw_object) in self.draw_objects.clone() {
             self.engine.draw(draw_object);
         }
@@ -736,7 +793,7 @@ impl EditorContext {
                 }
                 top_menu::EClickEventType::OpenRecentProject(file_path) => {
                     let result = self.open_project(&file_path, window);
-                    log::trace!("{result:?}");
+                    log::trace!("Open project {result:?}");
                 }
                 top_menu::EClickEventType::SaveProject => {
                     if let Some(project_context) = self.project_context.as_ref() {
@@ -1118,7 +1175,7 @@ impl EditorContext {
                     content_browser::EClickEventType::OpenFile(file) => match file {
                         EContentFileType::StaticMesh(_) => todo!(),
                         EContentFileType::SkeletonMesh(_) => todo!(),
-                        EContentFileType::NodeAnimation(_) => todo!(),
+                        EContentFileType::SkeletonAnimation(_) => todo!(),
                         EContentFileType::Skeleton(_) => todo!(),
                         EContentFileType::Texture(_) => todo!(),
                     },
@@ -1127,7 +1184,7 @@ impl EditorContext {
                         match file {
                             EContentFileType::StaticMesh(_) => todo!(),
                             EContentFileType::SkeletonMesh(_) => todo!(),
-                            EContentFileType::NodeAnimation(_) => todo!(),
+                            EContentFileType::SkeletonAnimation(_) => todo!(),
                             EContentFileType::Skeleton(_) => todo!(),
                             EContentFileType::Texture(texture_file) => {
                                 self.data_source.property_view_data_source.selected_object =

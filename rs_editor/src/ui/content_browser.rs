@@ -142,7 +142,7 @@ fn draw_content(
                                 ui.label(skeleton_mesh.borrow().get_name().clone());
                             });
                         }
-                        EContentFileType::NodeAnimation(node_animation) => {
+                        EContentFileType::SkeletonAnimation(node_animation) => {
                             ui.vertical(|ui| {
                                 ui.set_max_height(50.0);
                                 ui.set_max_width(50.0);

@@ -72,6 +72,12 @@ impl Logger {
                                     .as_mut()
                                     .unwrap()
                                     .write_fmt(format_args!("{}\n", content));
+                                match level {
+                                    log::Level::Error | log::Level::Warn => {
+                                        let _ = writer.as_mut().unwrap().flush();
+                                    }
+                                    _ => {}
+                                }
                             }
                         }
                         Err(_) => {}

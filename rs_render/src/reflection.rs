@@ -27,14 +27,17 @@ impl VertexBufferLayoutBuilder {
 
     pub fn get_vertex_buffer_layout(&self) -> Vec<VertexBufferLayout> {
         match &self.vertex_buffer_type {
-            VertexBufferType::Interleaved(verification) => {
-                let vertex_buffer_layout = VertexBufferLayout {
-                    array_stride: verification.size as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &self.vertex_attributes.first().unwrap(),
-                };
-
-                vec![vertex_buffer_layout]
+            VertexBufferType::Interleaved(verifications) => {
+                assert_eq!(verifications.len(), self.vertex_attributes.len());
+                verifications
+                    .iter()
+                    .zip(self.vertex_attributes.iter())
+                    .map(|(verification, vertex_attribute)| VertexBufferLayout {
+                        array_stride: verification.size as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &vertex_attribute,
+                    })
+                    .collect()
             }
             VertexBufferType::Noninterleaved => self
                 .vertex_attributes
@@ -54,8 +57,7 @@ impl VertexBufferLayoutBuilder {
 
 pub struct Reflection {
     module: Module,
-    interleaved_vertex_attributes: Vec<wgpu::VertexAttribute>,
-    noninterleaved_vertex_attributes: Vec<Vec<wgpu::VertexAttribute>>,
+    vertex_attributes: Vec<wgpu::VertexAttribute>,
     array_stride: u64,
     pipeline_type: EPipelineType,
     bind_group_layout_entrys: Vec<Vec<BindGroupLayoutEntry>>,
@@ -81,16 +83,9 @@ impl Reflection {
         let bind_group_layout_entrys =
             Self::extract_bind_group_layout_entrys(&module, &pipeline_type);
 
-        let mut noninterleaved_vertex_attributes = Vec::<Vec<wgpu::VertexAttribute>>::new();
-        for mut vertex_attribute in vertex_attributes.to_vec() {
-            vertex_attribute.offset = 0;
-            noninterleaved_vertex_attributes.push(vec![vertex_attribute]);
-        }
-
         let reflection = Reflection {
             module,
-            interleaved_vertex_attributes: vertex_attributes,
-            noninterleaved_vertex_attributes,
+            vertex_attributes,
             array_stride,
             pipeline_type,
             bind_group_layout_entrys,
@@ -104,33 +99,47 @@ impl Reflection {
         vertex_buffer_type: VertexBufferType,
     ) -> VertexBufferLayoutBuilder {
         match &vertex_buffer_type {
-            VertexBufferType::Interleaved(verification) => {
-                let mut offsets = Vec::<u64>::new();
-                let mut current_offset: u64 = 0;
-                let mut vertex_attributes = self.interleaved_vertex_attributes.clone();
+            VertexBufferType::Interleaved(verifications) => {
+                let mut vertex_attributes_layout: Vec<Vec<VertexAttribute>> =
+                    Vec::with_capacity(verifications.len());
+                let mut index: usize = 0;
+                let mut _vertex_attributes = self.vertex_attributes.clone();
 
-                for field in verification.fields.iter() {
-                    match field {
-                        type_layout::Field::Field { size, .. } => {
-                            offsets.push(current_offset);
-                            current_offset += *size as u64;
-                        }
-                        type_layout::Field::Padding { size } => {
-                            current_offset += *size as u64;
+                for verification in verifications {
+                    let mut vertex_attributes: Vec<VertexAttribute> =
+                        Vec::with_capacity(verification.fields.len());
+                    let mut current_offset: u64 = 0;
+                    let mut offsets = Vec::<u64>::new();
+                    for field in verification.fields.iter() {
+                        match field {
+                            type_layout::Field::Field { size, .. } => {
+                                let attr = _vertex_attributes.get_mut(index).unwrap();
+                                attr.offset = current_offset;
+                                vertex_attributes.push(*attr);
+                                offsets.push(current_offset);
+                                current_offset += *size as u64;
+                                index += 1;
+                            }
+                            type_layout::Field::Padding { size } => {
+                                current_offset += *size as u64;
+                            }
                         }
                     }
-                }
-                debug_assert_eq!(vertex_attributes.len(), offsets.len());
-                for (vertex_attribute, offset) in vertex_attributes.iter_mut().zip(offsets) {
-                    vertex_attribute.offset = offset;
+                    debug_assert_eq!(vertex_attributes.len(), offsets.len());
+                    vertex_attributes_layout.push(vertex_attributes);
                 }
                 let builder =
-                    VertexBufferLayoutBuilder::new(vec![vertex_attributes], vertex_buffer_type);
+                    VertexBufferLayoutBuilder::new(vertex_attributes_layout, vertex_buffer_type);
                 builder
             }
             VertexBufferType::Noninterleaved => {
+                let mut noninterleaved_vertex_attributes = Vec::<Vec<wgpu::VertexAttribute>>::new();
+                for mut vertex_attribute in self.vertex_attributes.to_vec() {
+                    vertex_attribute.offset = 0;
+                    noninterleaved_vertex_attributes.push(vec![vertex_attribute]);
+                }
                 let builder = VertexBufferLayoutBuilder::new(
-                    self.noninterleaved_vertex_attributes.clone(),
+                    noninterleaved_vertex_attributes,
                     vertex_buffer_type,
                 );
                 builder
@@ -546,23 +555,12 @@ impl Reflection {
         self.array_stride
     }
 
-    pub fn get_interleaved_vertex_attributes(&self) -> &[VertexAttribute] {
-        self.interleaved_vertex_attributes.as_ref()
-    }
-
     pub fn get_module(&self) -> &Module {
         &self.module
     }
 
     pub fn get_bind_group_layout_entrys(&self) -> &[Vec<BindGroupLayoutEntry>] {
         self.bind_group_layout_entrys.as_ref()
-    }
-
-    pub fn noninterleaved_vertex_attribute(&self, index: usize) -> &[VertexAttribute] {
-        self.noninterleaved_vertex_attributes
-            .get(index)
-            .unwrap()
-            .as_ref()
     }
 
     pub fn get_pipeline_type(&self) -> &EPipelineType {

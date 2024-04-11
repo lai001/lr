@@ -386,7 +386,7 @@ impl ProjectContext {
             match content_file {
                 EContentFileType::StaticMesh(_) => todo!(),
                 EContentFileType::SkeletonMesh(_) => todo!(),
-                EContentFileType::NodeAnimation(_) => todo!(),
+                EContentFileType::SkeletonAnimation(_) => todo!(),
                 EContentFileType::Skeleton(_) => todo!(),
                 EContentFileType::Texture(texture_file) => {
                     files.push(texture_file.clone());
@@ -431,33 +431,28 @@ impl ProjectContext {
         for buildin_shader in buildin_shaders {
             let description = buildin_shader.get_shader_description();
             let name = buildin_shader.get_name();
-            if rs_core_minimal::file_manager::is_run_from_ide() {
-                match rs_shader_compiler::pre_process::pre_process(
-                    &description.shader_path,
-                    description.include_dirs.iter(),
-                    description.definitions.iter(),
-                ) {
-                    Ok(processed_code) => {
-                        shaders.insert(name, processed_code);
-                    }
-                    Err(err) => {
-                        panic!("{}", err);
-                    }
+            let pre_process_code = rs_shader_compiler::pre_process::pre_process(
+                &description.shader_path,
+                description.include_dirs.iter(),
+                description.definitions.iter(),
+            );
+            match pre_process_code {
+                Ok(code) => {
+                    shaders.insert(name, code);
+                    continue;
                 }
-            } else {
-                match std::fs::read_to_string(
-                    rs_render::get_buildin_shader_dir().join(name.clone()),
-                ) {
-                    Ok(processed_code) => {
-                        shaders.insert(name, processed_code);
-                    }
-                    Err(err) => {
-                        panic!(
-                            "{}, {:?}",
-                            err,
-                            rs_render::get_buildin_shader_dir().join(name.clone())
-                        );
-                    }
+                Err(err) => {
+                    log::trace!("{err}");
+                }
+            }
+            let path = rs_render::get_buildin_shader_dir().join(name.clone());
+            let code = std::fs::read_to_string(path.clone());
+            match code {
+                Ok(code) => {
+                    shaders.insert(name, code);
+                }
+                Err(err) => {
+                    panic!("{}, {:?}", err, path);
                 }
             }
         }

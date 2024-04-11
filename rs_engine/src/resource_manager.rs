@@ -26,6 +26,9 @@ struct STResourceManager {
     artifact_reader: Option<ArtifactReader>,
     handle_manager: HandleManager,
     static_meshs: HashMap<url::Url, Arc<StaticMesh>>,
+    skin_meshes: HashMap<url::Url, Arc<rs_artifact::skin_mesh::SkinMesh>>,
+    skeleton_animations: HashMap<url::Url, Arc<rs_artifact::skeleton_animation::SkeletonAnimation>>,
+    skeletons: HashMap<url::Url, Arc<rs_artifact::skeleton::Skeleton>>,
     mesh_buffers: HashMap<url::Url, Arc<MeshBuffer>>,
 }
 
@@ -39,7 +42,49 @@ impl STResourceManager {
             textures: HashMap::new(),
             virtual_textures: HashMap::new(),
             mesh_buffers: HashMap::new(),
+            skin_meshes: HashMap::new(),
+            skeleton_animations: HashMap::new(),
+            skeletons: HashMap::new(),
         }
+    }
+
+    fn add_skin_mesh(
+        &mut self,
+        url: url::Url,
+        skin_mesh: Arc<rs_artifact::skin_mesh::SkinMesh>,
+    ) -> Option<Arc<rs_artifact::skin_mesh::SkinMesh>> {
+        self.skin_meshes.insert(url, skin_mesh)
+    }
+
+    fn get_skin_mesh(&mut self, url: &url::Url) -> Option<Arc<rs_artifact::skin_mesh::SkinMesh>> {
+        self.skin_meshes.get(url).cloned()
+    }
+
+    fn add_skeleton_animation(
+        &mut self,
+        url: url::Url,
+        skin_animation: Arc<rs_artifact::skeleton_animation::SkeletonAnimation>,
+    ) -> Option<Arc<rs_artifact::skeleton_animation::SkeletonAnimation>> {
+        self.skeleton_animations.insert(url, skin_animation)
+    }
+
+    fn get_skeleton_animation(
+        &mut self,
+        url: &url::Url,
+    ) -> Option<Arc<rs_artifact::skeleton_animation::SkeletonAnimation>> {
+        self.skeleton_animations.get(url).cloned()
+    }
+
+    fn add_skeleton(
+        &mut self,
+        url: url::Url,
+        skeleton: Arc<rs_artifact::skeleton::Skeleton>,
+    ) -> Option<Arc<rs_artifact::skeleton::Skeleton>> {
+        self.skeletons.insert(url, skeleton)
+    }
+
+    fn get_skeleton(&mut self, url: &url::Url) -> Option<Arc<rs_artifact::skeleton::Skeleton>> {
+        self.skeletons.get(url).cloned()
     }
 
     fn load_static_meshs(&mut self) {

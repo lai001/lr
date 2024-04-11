@@ -50,6 +50,8 @@ pub struct Engine {
     camera: Camera,
     state: State,
     settings: Settings,
+    game_time: std::time::Instant,
+    game_time_sec: f32,
 }
 
 impl Engine {
@@ -123,14 +125,20 @@ impl Engine {
                             diffuse_texture: None,
                             specular_texture: None,
                         };
+                        let (vertexes0, vertexes1) = Self::convert_vertex(&static_mesh.vertexes);
 
-                        let draw_object = Self::create_draw_object_from_static_mesh_internal(
+                        let draw_object = Self::create_draw_object_from_mesh_internal(
                             &mut render_thread_mode,
                             &mut resource_manager,
-                            &static_mesh.vertexes,
+                            vec![
+                                rs_foundation::cast_to_raw_buffer(&vertexes0),
+                                rs_foundation::cast_to_raw_buffer(&vertexes1),
+                            ],
+                            static_mesh.vertexes.len() as u32,
                             &static_mesh.indexes,
                             EMaterialType::Phong(material),
                             draw_object_id,
+                            None,
                         );
                         draw_object_id += 1;
                         draw_objects.push(draw_object);
@@ -150,6 +158,8 @@ impl Engine {
             state: State::default(),
             settings,
             draw_object_id,
+            game_time: std::time::Instant::now(),
+            game_time_sec: 0.0,
         };
 
         Ok(engine)
@@ -231,13 +241,15 @@ impl Engine {
             .set_new_window(window, surface_width, surface_height)
     }
 
-    fn create_draw_object_from_static_mesh_internal(
+    fn create_draw_object_from_mesh_internal(
         render_thread_mode: &mut ERenderThreadMode,
         resource_manager: &mut ResourceManager,
-        vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
+        vertex_buffers: Vec<&[u8]>,
+        vertex_count: u32,
         indexes: &[u32],
         material_type: EMaterialType,
         id: u32,
+        bones: Option<[glam::Mat4; rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE]>,
     ) -> DrawObject {
         let index_buffer_handle = resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -251,29 +263,117 @@ impl Engine {
         };
         let message = RenderCommand::CreateBuffer(create_buffer);
         render_thread_mode.send_command(message);
-
-        let vertex_buffer_handle = resource_manager.next_buffer();
-        let buffer_create_info = BufferCreateInfo {
-            label: Some("StaticMesh::VertexBuffer".to_string()),
-            contents: rs_foundation::cast_to_raw_buffer(&vertexes).to_vec(),
-            usage: wgpu::BufferUsages::VERTEX,
-        };
-        let create_buffer = CreateBuffer {
-            handle: *vertex_buffer_handle,
-            buffer_create_info,
-        };
-        let message = RenderCommand::CreateBuffer(create_buffer);
-        render_thread_mode.send_command(message);
+        let mut vertex_buffer_handles: Vec<u64> = Vec::with_capacity(vertex_buffers.len());
+        for vertex_buffer in vertex_buffers {
+            let vertex_buffer_handle = resource_manager.next_buffer();
+            let buffer_create_info = BufferCreateInfo {
+                label: Some("StaticMesh::VertexBuffer".to_string()),
+                contents: vertex_buffer.to_vec(),
+                usage: wgpu::BufferUsages::VERTEX,
+            };
+            let create_buffer = CreateBuffer {
+                handle: *vertex_buffer_handle,
+                buffer_create_info,
+            };
+            let message = RenderCommand::CreateBuffer(create_buffer);
+            render_thread_mode.send_command(message);
+            vertex_buffer_handles.push(*vertex_buffer_handle);
+        }
 
         let draw_object = DrawObject {
-            vertex_buffers: vec![*vertex_buffer_handle],
-            vertex_count: vertexes.len() as u32,
+            vertex_buffers: vertex_buffer_handles,
+            vertex_count,
             index_buffer: Some(*index_buffer_handle),
             index_count: Some(indexes.len() as u32),
             material_type,
             id,
+            bones,
         };
         draw_object
+    }
+
+    fn create_draw_object_from_static_mesh_internal(
+        &mut self,
+        vertexes0: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex0],
+        vertexes1: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex1],
+        indexes: &[u32],
+        material_type: EMaterialType,
+    ) -> DrawObject {
+        assert_eq!(vertexes0.len(), vertexes1.len());
+        let draw_object = Self::create_draw_object_from_mesh_internal(
+            &mut self.render_thread_mode,
+            &mut self.resource_manager,
+            vec![
+                rs_foundation::cast_to_raw_buffer(&vertexes0),
+                rs_foundation::cast_to_raw_buffer(&vertexes1),
+            ],
+            vertexes0.len() as u32,
+            indexes,
+            material_type,
+            self.draw_object_id,
+            None,
+        );
+        self.draw_object_id += 1;
+        draw_object
+    }
+
+    fn convert_vertex(
+        vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
+    ) -> (
+        Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0>,
+        Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex1>,
+    ) {
+        let mut vertexes0: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0> =
+            Vec::with_capacity(vertexes.len());
+        let mut vertexes1: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex1> =
+            Vec::with_capacity(vertexes.len());
+
+        for vertex in vertexes {
+            vertexes0.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex0 {
+                position: vertex.position,
+                tex_coord: vertex.tex_coord,
+            });
+            vertexes1.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex1 {
+                vertex_color: vertex.vertex_color,
+                normal: vertex.normal,
+                tangent: vertex.tangent,
+                bitangent: vertex.bitangent,
+            });
+        }
+        (vertexes0, vertexes1)
+    }
+
+    fn convert_vertex2(
+        vertexes: &[rs_artifact::skin_mesh::SkinMeshVertex],
+    ) -> (
+        Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0>,
+        Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex1>,
+        Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex2>,
+    ) {
+        let mut vertexes0: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0> =
+            Vec::with_capacity(vertexes.len());
+        let mut vertexes1: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex1> =
+            Vec::with_capacity(vertexes.len());
+        let mut vertexes2: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex2> =
+            Vec::with_capacity(vertexes.len());
+
+        for vertex in vertexes {
+            vertexes0.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex0 {
+                position: vertex.position,
+                tex_coord: vertex.tex_coord,
+            });
+            vertexes1.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex1 {
+                vertex_color: vertex.vertex_color,
+                normal: vertex.normal,
+                tangent: vertex.tangent,
+                bitangent: vertex.bitangent,
+            });
+            vertexes2.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex2 {
+                bone_ids: vertex.bones.into(),
+                bone_weights: vertex.weights.into(),
+            });
+        }
+        (vertexes0, vertexes1, vertexes2)
     }
 
     pub fn create_draw_object_from_static_mesh(
@@ -282,16 +382,58 @@ impl Engine {
         indexes: &[u32],
         material_type: EMaterialType,
     ) -> DrawObject {
-        let draw_object = Self::create_draw_object_from_static_mesh_internal(
+        let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
+        self.create_draw_object_from_static_mesh_internal(
+            &vertexes0,
+            &vertexes1,
+            indexes,
+            material_type,
+        )
+    }
+
+    fn create_draw_object_from_skin_mesh_internal(
+        &mut self,
+        vertexes0: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex0],
+        vertexes1: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex1],
+        vertexes2: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex2],
+        indexes: &[u32],
+        material_type: EMaterialType,
+    ) -> DrawObject {
+        assert_eq!(vertexes0.len(), vertexes1.len());
+        assert_eq!(vertexes1.len(), vertexes2.len());
+
+        let draw_object = Self::create_draw_object_from_mesh_internal(
             &mut self.render_thread_mode,
             &mut self.resource_manager,
-            vertexes,
+            vec![
+                rs_foundation::cast_to_raw_buffer(&vertexes0),
+                rs_foundation::cast_to_raw_buffer(&vertexes1),
+                rs_foundation::cast_to_raw_buffer(&vertexes2),
+            ],
+            vertexes0.len() as u32,
             indexes,
             material_type,
             self.draw_object_id,
+            Some([glam::Mat4::IDENTITY; rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE]),
         );
         self.draw_object_id += 1;
         draw_object
+    }
+
+    pub fn create_draw_object_from_skin_mesh(
+        &mut self,
+        vertexes: &[rs_artifact::skin_mesh::SkinMeshVertex],
+        indexes: &[u32],
+        material_type: EMaterialType,
+    ) -> DrawObject {
+        let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
+        self.create_draw_object_from_skin_mesh_internal(
+            &vertexes0,
+            &vertexes1,
+            &vertexes2,
+            indexes,
+            material_type,
+        )
     }
 
     pub fn draw(&mut self, draw_object: DrawObject) {
@@ -427,6 +569,16 @@ impl Engine {
         let render_command = RenderCommand::Settings(settings.render_setting.clone());
         self.render_thread_mode.send_command(render_command);
         self.settings = settings;
+    }
+
+    pub fn tick(&mut self) {
+        let now = std::time::Instant::now();
+        self.game_time_sec += (now - self.game_time).as_secs_f32();
+        self.game_time = now;
+    }
+
+    pub fn get_game_time(&self) -> f32 {
+        self.game_time_sec
     }
 }
 

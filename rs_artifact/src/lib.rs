@@ -15,6 +15,7 @@ pub mod resource_info;
 pub mod resource_type;
 pub mod shader_source_code;
 pub mod skeleton;
+pub mod skeleton_animation;
 pub mod skin_mesh;
 pub mod static_mesh;
 pub mod type_expected;

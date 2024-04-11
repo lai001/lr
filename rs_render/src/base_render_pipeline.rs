@@ -346,7 +346,14 @@ impl BaseRenderPipeline {
             }
 
             for mesh_buffer in mesh_buffers {
-                debug_assert_eq!(self.slots as usize, mesh_buffer.vertex_buffers.len());
+                if self.slots as usize != mesh_buffer.vertex_buffers.len() {
+                    panic!(
+                        "{}, slots {} != vertex buffers {}",
+                        self.tag,
+                        self.slots,
+                        mesh_buffer.vertex_buffers.len()
+                    );
+                }
                 for (slot, vertex_buffer) in mesh_buffer.vertex_buffers.iter().enumerate() {
                     render_pass.set_vertex_buffer(slot as u32, vertex_buffer.slice(..));
                 }

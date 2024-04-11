@@ -32,7 +32,7 @@ pub mod wgpu_context;
 
 #[derive(Debug)]
 pub enum VertexBufferType {
-    Interleaved(type_layout::TypeLayoutInfo),
+    Interleaved(Vec<type_layout::TypeLayoutInfo>),
     Noninterleaved,
 }
 

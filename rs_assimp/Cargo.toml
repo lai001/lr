@@ -13,4 +13,6 @@ strum = "0.26.1"
 strum_macros = "0.26.1"
 lazy_static = "1.4.0"
 rs_foundation = { path = "../rs_foundation" }
+
+[dev-dependencies]
 rs_core_minimal = { path = "../rs_core_minimal" }

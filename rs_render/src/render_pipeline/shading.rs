@@ -5,7 +5,7 @@ use crate::{
     gpu_vertex_buffer::GpuVertexBufferImp,
     sampler_cache::SamplerCache,
     shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::MeshVertex,
+    vertex_data_type::mesh_vertex::*,
     VertexBufferType,
 };
 use std::sync::Arc;
@@ -65,7 +65,10 @@ impl ShadingPipeline {
             if is_noninterleaved {
                 Some(VertexBufferType::Noninterleaved)
             } else {
-                Some(VertexBufferType::Interleaved(MeshVertex::type_layout()))
+                Some(VertexBufferType::Interleaved(vec![
+                    MeshVertex0::type_layout(),
+                    MeshVertex1::type_layout(),
+                ]))
             },
             None,
         );
