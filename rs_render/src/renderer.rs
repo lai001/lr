@@ -1,4 +1,5 @@
 use crate::acceleration_bake::AccelerationBaker;
+use crate::base_render_pipeline_pool::BaseRenderPipelinePool;
 use crate::cube_map::CubeMap;
 use crate::default_textures::DefaultTextures;
 use crate::depth_texture::DepthTexture;
@@ -58,6 +59,8 @@ pub struct Renderer {
     virtual_texture_pass: Option<VirtualTexturePass>,
 
     settings: RenderSettings,
+
+    base_render_pipeline_pool: BaseRenderPipelinePool,
 }
 
 impl Renderer {
@@ -81,7 +84,7 @@ impl Renderer {
         let mut shader_library = ShaderLibrary::new();
         shader_library.load_shader_from(shaders, wgpu_context.get_device());
         let mut sampler_cache = SamplerCache::new();
-
+        let mut base_render_pipeline_pool = BaseRenderPipelinePool::default();
         let shading_pipeline = ShadingPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
@@ -93,8 +96,8 @@ impl Renderer {
             wgpu_context.get_device(),
             &shader_library,
             &wgpu_context.get_current_swapchain_format(),
-            false,
             &mut sampler_cache,
+            &mut base_render_pipeline_pool,
         );
         let depth_texture = DepthTexture::new(
             surface_width,
@@ -154,6 +157,7 @@ impl Renderer {
             virtual_texture_pass,
             settings,
             skin_mesh_shading_pipeline,
+            base_render_pipeline_pool,
         }
     }
 
@@ -578,6 +582,14 @@ impl Renderer {
                         .virtual_texture_sources
                         .insert(command.handle, VirtualTextureSource::new(command.source));
                 }
+            }
+            RenderCommand::ChangeViewMode(new_view_mode) => {
+                self.skin_mesh_shading_pipeline.set_view_mode(
+                    new_view_mode,
+                    self.wgpu_context.get_device(),
+                    &self.shader_library,
+                    &mut self.base_render_pipeline_pool,
+                );
             }
         }
         return None;

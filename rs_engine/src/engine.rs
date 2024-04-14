@@ -2,6 +2,7 @@ use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::error::Result;
+use crate::input_mode::EInputMode;
 use crate::render_thread_mode::ERenderThreadMode;
 use crate::{logger::Logger, resource_manager::ResourceManager};
 use rs_artifact::artifact::ArtifactReader;
@@ -15,13 +16,13 @@ use rs_render::command::{
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::renderer::Renderer;
+use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 struct State {
-    is_cursor_visible: bool,
     camera_movement_speed: f32,
     camera_motion_speed: f32,
     #[cfg(not(target_os = "android"))]
@@ -31,7 +32,6 @@ struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            is_cursor_visible: false,
             camera_movement_speed: 0.01,
             camera_motion_speed: 0.1,
             #[cfg(not(target_os = "android"))]
@@ -52,6 +52,7 @@ pub struct Engine {
     settings: Settings,
     game_time: std::time::Instant,
     game_time_sec: f32,
+    input_mode: EInputMode,
 }
 
 impl Engine {
@@ -131,14 +132,21 @@ impl Engine {
                             &mut render_thread_mode,
                             &mut resource_manager,
                             vec![
-                                rs_foundation::cast_to_raw_buffer(&vertexes0),
-                                rs_foundation::cast_to_raw_buffer(&vertexes1),
+                                (
+                                    Some("MeshVertex0"),
+                                    rs_foundation::cast_to_raw_buffer(&vertexes0),
+                                ),
+                                (
+                                    Some("MeshVertex1"),
+                                    rs_foundation::cast_to_raw_buffer(&vertexes1),
+                                ),
                             ],
                             static_mesh.vertexes.len() as u32,
                             &static_mesh.indexes,
                             EMaterialType::Phong(material),
                             draw_object_id,
                             None,
+                            Some(static_mesh.url.to_string()),
                         );
                         draw_object_id += 1;
                         draw_objects.push(draw_object);
@@ -160,6 +168,7 @@ impl Engine {
             draw_object_id,
             game_time: std::time::Instant::now(),
             game_time_sec: 0.0,
+            input_mode: EInputMode::UI,
         };
 
         Ok(engine)
@@ -200,7 +209,7 @@ impl Engine {
                 &mut self.camera,
                 virtual_key_code,
                 element_state,
-                self.state.is_cursor_visible,
+                self.input_mode,
                 self.state.camera_movement_speed,
             );
         }
@@ -244,16 +253,20 @@ impl Engine {
     fn create_draw_object_from_mesh_internal(
         render_thread_mode: &mut ERenderThreadMode,
         resource_manager: &mut ResourceManager,
-        vertex_buffers: Vec<&[u8]>,
+        vertex_buffers: Vec<(Option<&str>, &[u8])>,
         vertex_count: u32,
         indexes: &[u32],
         material_type: EMaterialType,
         id: u32,
         bones: Option<[glam::Mat4; rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE]>,
+        name: Option<String>,
     ) -> DrawObject {
         let index_buffer_handle = resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
-            label: Some("StaticMesh::IndexBuffer".to_string()),
+            label: Some(format!(
+                "IndexBuffer.{}",
+                name.clone().unwrap_or("".to_string())
+            )),
             contents: rs_foundation::cast_to_raw_buffer(&indexes).to_vec(),
             usage: wgpu::BufferUsages::INDEX,
         };
@@ -264,10 +277,10 @@ impl Engine {
         let message = RenderCommand::CreateBuffer(create_buffer);
         render_thread_mode.send_command(message);
         let mut vertex_buffer_handles: Vec<u64> = Vec::with_capacity(vertex_buffers.len());
-        for vertex_buffer in vertex_buffers {
+        for (name, vertex_buffer) in vertex_buffers {
             let vertex_buffer_handle = resource_manager.next_buffer();
             let buffer_create_info = BufferCreateInfo {
-                label: Some("StaticMesh::VertexBuffer".to_string()),
+                label: Some(format!("VertexBuffer.{}", name.unwrap_or(""))),
                 contents: vertex_buffer.to_vec(),
                 usage: wgpu::BufferUsages::VERTEX,
             };
@@ -298,20 +311,29 @@ impl Engine {
         vertexes1: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex1],
         indexes: &[u32],
         material_type: EMaterialType,
+        name: Option<String>,
     ) -> DrawObject {
         assert_eq!(vertexes0.len(), vertexes1.len());
+        let name = name.unwrap_or("".to_string());
         let draw_object = Self::create_draw_object_from_mesh_internal(
             &mut self.render_thread_mode,
             &mut self.resource_manager,
             vec![
-                rs_foundation::cast_to_raw_buffer(&vertexes0),
-                rs_foundation::cast_to_raw_buffer(&vertexes1),
+                (
+                    Some(&format!("{name}.MeshVertex0")),
+                    rs_foundation::cast_to_raw_buffer(&vertexes0),
+                ),
+                (
+                    Some(&format!("{name}.MeshVertex1")),
+                    rs_foundation::cast_to_raw_buffer(&vertexes1),
+                ),
             ],
             vertexes0.len() as u32,
             indexes,
             material_type,
             self.draw_object_id,
             None,
+            Some(name),
         );
         self.draw_object_id += 1;
         draw_object
@@ -381,6 +403,7 @@ impl Engine {
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
         indexes: &[u32],
         material_type: EMaterialType,
+        name: Option<String>,
     ) -> DrawObject {
         let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
         self.create_draw_object_from_static_mesh_internal(
@@ -388,6 +411,7 @@ impl Engine {
             &vertexes1,
             indexes,
             material_type,
+            name,
         )
     }
 
@@ -398,23 +422,35 @@ impl Engine {
         vertexes2: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex2],
         indexes: &[u32],
         material_type: EMaterialType,
+        name: Option<String>,
     ) -> DrawObject {
         assert_eq!(vertexes0.len(), vertexes1.len());
         assert_eq!(vertexes1.len(), vertexes2.len());
+        let name = name.unwrap_or("".to_string());
 
         let draw_object = Self::create_draw_object_from_mesh_internal(
             &mut self.render_thread_mode,
             &mut self.resource_manager,
             vec![
-                rs_foundation::cast_to_raw_buffer(&vertexes0),
-                rs_foundation::cast_to_raw_buffer(&vertexes1),
-                rs_foundation::cast_to_raw_buffer(&vertexes2),
+                (
+                    Some(&format!("{name}.MeshVertex0")),
+                    rs_foundation::cast_to_raw_buffer(&vertexes0),
+                ),
+                (
+                    Some(&format!("{name}.MeshVertex1")),
+                    rs_foundation::cast_to_raw_buffer(&vertexes1),
+                ),
+                (
+                    Some(&format!("{name}.MeshVertex2")),
+                    rs_foundation::cast_to_raw_buffer(&vertexes2),
+                ),
             ],
             vertexes0.len() as u32,
             indexes,
             material_type,
             self.draw_object_id,
             Some([glam::Mat4::IDENTITY; rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE]),
+            Some(name),
         );
         self.draw_object_id += 1;
         draw_object
@@ -425,6 +461,7 @@ impl Engine {
         vertexes: &[rs_artifact::skin_mesh::SkinMeshVertex],
         indexes: &[u32],
         material_type: EMaterialType,
+        name: Option<String>,
     ) -> DrawObject {
         let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
         self.create_draw_object_from_skin_mesh_internal(
@@ -433,6 +470,7 @@ impl Engine {
             &vertexes2,
             indexes,
             material_type,
+            name,
         )
     }
 
@@ -448,7 +486,7 @@ impl Engine {
                 DefaultCameraInputEventHandle::mouse_motion_handle(
                     &mut self.camera,
                     delta,
-                    self.state.is_cursor_visible,
+                    self.input_mode,
                     self.state.camera_motion_speed,
                 );
             }
@@ -579,6 +617,19 @@ impl Engine {
 
     pub fn get_game_time(&self) -> f32 {
         self.game_time_sec
+    }
+
+    pub fn set_input_mode(&mut self, input_mode: EInputMode) {
+        self.input_mode = input_mode;
+    }
+
+    pub fn get_input_mode(&self) -> EInputMode {
+        self.input_mode
+    }
+
+    pub fn set_view_mode(&mut self, view_mode: EViewModeType) {
+        self.render_thread_mode
+            .send_command(RenderCommand::ChangeViewMode(view_mode));
     }
 }
 

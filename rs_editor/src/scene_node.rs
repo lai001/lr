@@ -109,6 +109,7 @@ impl SkeletonMeshComponent {
                 &skin_mesh.vertexes,
                 &skin_mesh.indexes,
                 material_type,
+                Some(skin_mesh.name.clone()),
             );
             self.run_time
                 .as_mut()
@@ -145,7 +146,7 @@ impl SkeletonMeshComponent {
         let mut scale = glam::Vec3::ONE;
         let mut rotation = glam::Quat::IDENTITY;
 
-        let animation_time = animation_time * 60.0 % skeleton_animation.duration as f32;
+        let ticks_per_second = skeleton_animation.ticks_per_second;
         if let Some(animation) = skeleton_animation
             .channels
             .iter()
@@ -154,13 +155,16 @@ impl SkeletonMeshComponent {
             if animation.position_keys.len() == 1 {
                 position = animation.position_keys[0].value;
             } else {
-                if let Some(position_keys) = animation
-                    .position_keys
-                    .windows(2)
-                    .find(|position_keys| animation_time <= position_keys[1].time as f32)
+                if let Some(position_keys) =
+                    animation.position_keys.windows(2).find(|position_keys| {
+                        animation_time <= (position_keys[1].time / ticks_per_second) as f32
+                    })
                 {
-                    let alpha = (animation_time - position_keys[0].time as f32)
-                        / (position_keys[1].time - position_keys[0].time) as f32;
+                    let alpha = (animation_time
+                        - (position_keys[0].time / ticks_per_second) as f32)
+                        / ((position_keys[1].time / ticks_per_second)
+                            - (position_keys[0].time / ticks_per_second))
+                            as f32;
                     position = position_keys[0].value.lerp(position_keys[1].value, alpha);
                 }
             }
@@ -169,11 +173,12 @@ impl SkeletonMeshComponent {
                 scale = animation.scaling_keys[0].value;
             } else {
                 if let Some(scaling_keys) = animation.scaling_keys.windows(2).find(|scaling_keys| {
-                    animation_time >= scaling_keys[0].time as f32
-                        && animation_time <= scaling_keys[1].time as f32
+                    animation_time <= (scaling_keys[1].time / ticks_per_second) as f32
                 }) {
-                    let alpha = (animation_time - scaling_keys[0].time as f32)
-                        / (scaling_keys[1].time - scaling_keys[0].time) as f32;
+                    let alpha = (animation_time - (scaling_keys[0].time / ticks_per_second) as f32)
+                        / ((scaling_keys[1].time / ticks_per_second)
+                            - (scaling_keys[0].time / ticks_per_second))
+                            as f32;
                     scale = scaling_keys[0].value.lerp(scaling_keys[1].value, alpha);
                 }
             }
@@ -183,20 +188,24 @@ impl SkeletonMeshComponent {
             } else {
                 if let Some(rotation_keys) =
                     animation.rotation_keys.windows(2).find(|rotation_keys| {
-                        animation_time >= rotation_keys[0].time as f32
-                            && animation_time <= rotation_keys[1].time as f32
+                        animation_time <= (rotation_keys[1].time / ticks_per_second) as f32
                     })
                 {
-                    let alpha = (animation_time - rotation_keys[0].time as f32)
-                        / (rotation_keys[1].time - rotation_keys[0].time) as f32;
-                    rotation = rotation_keys[0].value.lerp(rotation_keys[1].value, alpha);
+                    let alpha = (animation_time
+                        - (rotation_keys[0].time / ticks_per_second) as f32)
+                        / ((rotation_keys[1].time / ticks_per_second)
+                            - (rotation_keys[0].time / ticks_per_second))
+                            as f32;
+                    rotation = rotation_keys[0].value.slerp(rotation_keys[1].value, alpha);
                 }
             }
         }
 
         let final_transform = if let Some(parent) = &skeleton_bone.parent {
-            *node_anim_transforms.get(parent).unwrap()
-                * glam::Mat4::from_scale_rotation_translation(scale, rotation, position)
+            let self_transform =
+                glam::Mat4::from_scale_rotation_translation(scale, rotation, position);
+            let parent_transform = *node_anim_transforms.get(parent).unwrap();
+            parent_transform * self_transform
         } else {
             glam::Mat4::from_scale_rotation_translation(scale, rotation, position)
         };
@@ -224,7 +233,7 @@ impl SkeletonMeshComponent {
         let Some(skeleton_animation) = run_time.skeleton_animation.as_ref() else {
             return;
         };
-        let duration = skeleton_animation.duration;
+        let duration = skeleton_animation.duration / skeleton_animation.ticks_per_second;
         let animation_time = time % duration as f32;
         let mut node_anim_transforms: HashMap<String, glam::Mat4> = HashMap::new();
         let root_bone = skeleton.bones.get(&skeleton.root_bone).unwrap();

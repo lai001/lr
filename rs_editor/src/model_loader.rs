@@ -1,6 +1,7 @@
 use crate::{
     skeleton_animation::SkeletonAnimation, skeleton_mesh::SkeletonMesh, static_mesh::StaticMesh,
 };
+use anyhow::Context;
 use rs_artifact::{
     mesh_vertex::MeshVertex,
     skin_mesh::{SkinMesh, SkinMeshVertex},
@@ -579,17 +580,23 @@ impl ModelLoader {
 
         if let Some(armature) = scene.armatures.values().next() {
             let armature = armature.borrow();
+            let name = armature.name.clone().replace("|", "_");
+            let url =
+                url::Url::parse(&format!("content://{}", name)).context(armature.name.clone())?;
             skeleton = Some(Rc::new(RefCell::new(crate::skeleton::Skeleton {
-                url: url::Url::parse(&format!("content://{}", armature.name.clone())).unwrap(),
+                url,
                 asset_reference: asset_reference.clone(),
                 root_bone: armature.path.clone(),
             })));
         }
 
         for animation in &scene.animations {
+            let name = animation.name.clone().replace("|", "_");
+            let url =
+                url::Url::parse(&format!("content://{}", name)).context(animation.name.clone())?;
             let node_animation = SkeletonAnimation {
                 name: animation.name.clone(),
-                url: url::Url::parse(&format!("content://{}", animation.name.clone())).unwrap(),
+                url,
                 asset_reference: asset_reference.clone(),
             };
             node_animations.push(SingleThreadMut::new(node_animation));
@@ -598,19 +605,20 @@ impl ModelLoader {
         for imported_mesh in &scene.meshes {
             let imported_mesh = imported_mesh.clone();
             let imported_mesh = imported_mesh.borrow();
+            let name = imported_mesh.name.clone().replace("|", "_");
+            let url = url::Url::parse(&format!("content://{}", name))
+                .context(imported_mesh.name.clone())?;
             if imported_mesh.bones.is_empty() {
                 let static_mesh = StaticMesh {
                     asset_reference_name: imported_mesh.name.clone(),
-                    url: url::Url::parse(&format!("content://{}", imported_mesh.name.clone()))
-                        .unwrap(),
+                    url,
                     asset_reference_relative_path: asset_reference.clone(),
                 };
                 static_meshes.push(Rc::new(RefCell::new(static_mesh)));
             } else {
                 let skeleton_mesh = SkeletonMesh {
                     name: imported_mesh.name.clone(),
-                    url: url::Url::parse(&format!("content://{}", imported_mesh.name.clone()))
-                        .unwrap(),
+                    url,
                     asset_reference: asset_reference.clone(),
                     skeleton_url: skeleton.clone().unwrap().clone().borrow().url.clone(),
                 };

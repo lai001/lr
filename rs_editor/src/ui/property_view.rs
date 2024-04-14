@@ -1,5 +1,5 @@
 use super::texture_property_view;
-use egui::{Context, Ui, Vec2, Window};
+use egui::{Context, Ui, Vec2};
 use rs_artifact::property_value_type::EPropertyValueType;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -37,24 +37,13 @@ pub enum EClickEventType {
 }
 
 pub fn draw(
+    window: egui::Window,
     context: &Context,
     open: &mut bool,
     selected_object: &mut Option<ESelectedObject>,
 ) -> Option<EClickEventType> {
-    let name = {
-        if let Some(selected_object) = selected_object {
-            match selected_object {
-                ESelectedObject::Node(node) => node.borrow().name.to_string(),
-                ESelectedObject::TextureFile(texture_file) => {
-                    texture_file.borrow().name.to_string()
-                }
-            }
-        } else {
-            "".to_string()
-        }
-    };
     let mut click: Option<EClickEventType> = None;
-    Window::new("Property")
+    window
         .open(open)
         .vscroll(true)
         .hscroll(true)

@@ -1,11 +1,13 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
+    base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     global_shaders::skeleton_shading::SkeletonShadingShader,
     gpu_buffer,
     gpu_vertex_buffer::GpuVertexBufferImp,
     sampler_cache::SamplerCache,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2},
+    view_mode::EViewModeType,
     VertexBufferType,
 };
 use std::sync::Arc;
@@ -31,7 +33,8 @@ pub struct Constants {
 }
 
 pub struct SkinMeshShadingPipeline {
-    base_render_pipeline: BaseRenderPipeline,
+    base_render_pipeline: Arc<BaseRenderPipeline>,
+    builder: BaseRenderPipelineBuilder,
     sampler: Arc<Sampler>,
 }
 
@@ -40,46 +43,38 @@ impl SkinMeshShadingPipeline {
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
-        is_noninterleaved: bool,
         sampler_cache: &mut SamplerCache,
+        pool: &mut BaseRenderPipelinePool,
     ) -> SkinMeshShadingPipeline {
-        let base_render_pipeline = BaseRenderPipeline::new(
-            device,
-            shader_library,
-            &SkeletonShadingShader {},
-            &[Some(texture_format.clone().into())],
-            Some(DepthStencilState {
+        let builder = BaseRenderPipelineBuilder::default()
+            .set_targets(vec![Some(texture_format.clone().into())])
+            .set_depth_stencil(Some(DepthStencilState {
                 depth_compare: CompareFunction::Less,
                 format: TextureFormat::Depth32Float,
                 depth_write_enabled: true,
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
-            }),
-            None,
-            None,
-            Some(PrimitiveState {
+            }))
+            .set_vertex_buffer_type(Some(VertexBufferType::Interleaved(vec![
+                MeshVertex0::type_layout(),
+                MeshVertex1::type_layout(),
+                MeshVertex2::type_layout(),
+            ])))
+            .set_primitive(Some(PrimitiveState {
                 topology: PrimitiveTopology::TriangleList,
                 cull_mode: None,
                 polygon_mode: PolygonMode::Fill,
                 ..Default::default()
-            }),
-            if is_noninterleaved {
-                Some(VertexBufferType::Noninterleaved)
-            } else {
-                Some(VertexBufferType::Interleaved(vec![
-                    MeshVertex0::type_layout(),
-                    MeshVertex1::type_layout(),
-                    MeshVertex2::type_layout(),
-                ]))
-            },
-            None,
-        );
+            }));
+        let base_render_pipeline =
+            pool.get(device, shader_library, &SkeletonShadingShader {}, &builder);
 
         let sampler = sampler_cache.create_sampler(device, &SamplerDescriptor::default());
 
         SkinMeshShadingPipeline {
             base_render_pipeline,
             sampler,
+            builder,
         }
     }
 
@@ -96,7 +91,8 @@ impl SkinMeshShadingPipeline {
         physical_texture_view: &TextureView,
         page_table_texture_view: &TextureView,
     ) {
-        let uniform_buf = gpu_buffer::uniform::from(device, constants, Some("shading.constants"));
+        let uniform_buf =
+            gpu_buffer::uniform::from(device, constants, Some("SkinMeshShadingPipeline.constants"));
 
         self.base_render_pipeline.draw_resources2(
             device,
@@ -122,6 +118,41 @@ impl SkinMeshShadingPipeline {
             None,
             None,
             Some(depth_view),
+        );
+    }
+
+    pub fn set_view_mode(
+        &mut self,
+        view_mode: EViewModeType,
+        device: &Device,
+        shader_library: &ShaderLibrary,
+        pool: &mut BaseRenderPipelinePool,
+    ) {
+        match view_mode {
+            EViewModeType::Wireframe => {
+                self.builder = self.builder.clone().set_primitive(Some(PrimitiveState {
+                    topology: PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    polygon_mode: PolygonMode::Line,
+                    ..Default::default()
+                }));
+            }
+            EViewModeType::Lit => {
+                self.builder = self.builder.clone().set_primitive(Some(PrimitiveState {
+                    topology: PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    polygon_mode: PolygonMode::Fill,
+                    ..Default::default()
+                }));
+            }
+            EViewModeType::Unlit => todo!(),
+        }
+
+        self.base_render_pipeline = pool.get(
+            device,
+            shader_library,
+            &SkeletonShadingShader {},
+            &self.builder,
         );
     }
 }

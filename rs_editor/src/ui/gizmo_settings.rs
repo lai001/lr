@@ -1,9 +1,8 @@
-use crate::data_source::{AssetFile, AssetFolder};
-use egui::{color_picker::Alpha, Color32, Context, RichText, Ui, Widget, Window};
+use egui::{color_picker::Alpha, Context, Widget};
 use egui_gizmo::{GizmoMode, GizmoOrientation, GizmoVisuals};
-use rs_engine::file_type::EFileType;
 
 pub fn draw(
+    window: egui::Window,
     context: &Context,
     visuals: &mut GizmoVisuals,
     gizmo_mode: &mut GizmoMode,
@@ -20,7 +19,7 @@ pub fn draw(
     let inactive_alpha = &mut visuals.inactive_alpha;
     let highlight_alpha = &mut visuals.highlight_alpha;
 
-    egui::Window::new("Gizmo Settings")
+    window
         .resizable(false)
         .default_open(false)
         .show(context, |ui| {

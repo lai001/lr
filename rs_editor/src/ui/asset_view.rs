@@ -1,5 +1,5 @@
 use crate::data_source::{AssetFile, AssetFolder};
-use egui::{Color32, Context, RichText, Ui, Window};
+use egui::{Color32, Context, RichText, Ui};
 use rs_engine::file_type::EFileType;
 
 #[derive(Debug)]
@@ -12,6 +12,7 @@ pub enum EClickItemType {
 }
 
 pub fn draw(
+    window: egui::Window,
     context: &Context,
     open: &mut bool,
     asset_folder: Option<&AssetFolder>,
@@ -19,7 +20,7 @@ pub fn draw(
 ) -> Option<EClickItemType> {
     let mut click_back: Option<EClickItemType> = None;
     let mut click_asset: Option<EClickItemType> = None;
-    Window::new("Asset")
+    window
         .open(open)
         .vscroll(true)
         .hscroll(true)
@@ -110,7 +111,10 @@ fn draw_content(
                                     }
                                 }
                                 match file.get_file_type() {
-                                    EFileType::Fbx | EFileType::Glb | EFileType::Blend => {
+                                    EFileType::Fbx
+                                    | EFileType::Glb
+                                    | EFileType::Blend
+                                    | EFileType::Dae => {
                                         ui.image(egui::include_image!(
                                             "../../../Resource/Editor/model.svg"
                                         ));
@@ -133,7 +137,10 @@ fn draw_content(
                                     click_item = Some(EClickItemType::File(file.clone()));
                                 }
                                 match file.get_file_type() {
-                                    EFileType::Fbx | EFileType::Glb | EFileType::Blend => {}
+                                    EFileType::Fbx
+                                    | EFileType::Glb
+                                    | EFileType::Blend
+                                    | EFileType::Dae => {}
                                     EFileType::Jpeg
                                     | EFileType::Jpg
                                     | EFileType::Png

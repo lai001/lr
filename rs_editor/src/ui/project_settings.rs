@@ -1,9 +1,14 @@
-use egui::{Context, Ui, Window};
+use egui::{Context, Ui};
 use rs_core_minimal::settings::{Backends, PowerPreference, Settings};
 use std::{cell::RefCell, rc::Rc};
 
-pub fn draw(context: &Context, open: &mut bool, project_settings: Rc<RefCell<Settings>>) {
-    Window::new("Project Settings")
+pub fn draw(
+    window: egui::Window,
+    context: &Context,
+    open: &mut bool,
+    project_settings: Rc<RefCell<Settings>>,
+) {
+    window
         .open(open)
         .vscroll(true)
         .hscroll(true)

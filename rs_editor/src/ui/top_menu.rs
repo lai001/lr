@@ -1,10 +1,10 @@
-use std::path::PathBuf;
-
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
     data_source::DataSource,
 };
 use egui::{menu, Button, Context, TopBottomPanel};
+use rs_render::view_mode::EViewModeType;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum EWindowType {
@@ -32,6 +32,7 @@ pub enum EClickEventType {
     Build(BuildConfig),
     OpenWindow(EWindowType),
     Tool(EToolType),
+    ViewMode(EViewModeType),
 }
 
 pub struct TopMenu {
@@ -187,6 +188,25 @@ impl TopMenu {
                         click = Some(EClickEventType::Tool(EToolType::DebugShader));
                         ui.close_menu();
                     }
+                    ui.menu_button("View Mode", |ui| {
+                        if ui.radio_value(&mut datasource.view_mode, EViewModeType::Wireframe, "Wireframe").clicked(){
+                            click = Some(EClickEventType::ViewMode(EViewModeType::Wireframe));
+                        }
+                        if ui.radio_value(
+                            &mut datasource.view_mode,
+                            EViewModeType::Lit,
+                            "Lit",
+                        ).clicked() {
+                            click = Some(EClickEventType::ViewMode(EViewModeType::Lit));
+                        }
+                        if ui.radio_value(
+                            &mut datasource.view_mode,
+                            EViewModeType::Unlit,
+                            "Unlit",
+                        ).clicked() {
+                            click = Some(EClickEventType::ViewMode(EViewModeType::Unlit));
+                        }
+                    });
                 });
             });
         });

@@ -5,6 +5,7 @@ use crate::ui::top_menu::TopMenu;
 use crate::ui::{asset_view, content_browser, gizmo_settings, level_view, property_view, top_menu};
 use egui::*;
 use egui_gizmo::GizmoResult;
+use rs_engine::input_mode::EInputMode;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
 
@@ -69,20 +70,25 @@ impl EditorUI {
 
         Self::model_hierarchy_window(context, data_source, &mut click);
         if let Some(level) = &data_source.level {
+            let window = Self::new_window("Level", data_source.input_mode);
             click.click_node = crate::ui::level_view::draw(
+                window,
                 context,
                 &mut data_source.is_level_view_open,
                 &level.as_ref().borrow(),
             );
         }
+        let window = Self::new_window("Asset", data_source.input_mode);
         click.click_aseet = asset_view::draw(
+            window,
             context,
             &mut data_source.is_asset_folder_open,
             data_source.current_asset_folder.as_ref(),
             data_source.highlight_asset_file.as_ref(),
         );
-
+        let window = Self::new_window("Property", data_source.input_mode);
         click.property_event = property_view::draw(
+            window,
             context,
             &mut data_source.property_view_data_source.is_open,
             &mut data_source.property_view_data_source.selected_object,
@@ -98,8 +104,9 @@ impl EditorUI {
                 );
             }
         }
-
+        let window = Self::new_window("Gizmo Settings", data_source.input_mode);
         gizmo_settings::draw(
+            window,
             context,
             &mut self.gizmo_view.visuals,
             &mut self.gizmo_view.gizmo_mode,
@@ -107,17 +114,22 @@ impl EditorUI {
             &mut self.gizmo_view.custom_highlight_color,
         );
         if let Some(project_settings) = data_source.project_settings.clone() {
+            let window = Self::new_window("Project Settings", data_source.input_mode);
             crate::ui::project_settings::draw(
+                window,
                 context,
                 &mut data_source.project_settings_open,
                 project_settings,
             );
         }
         if let Some(asset_folder_path) = self.asset_folder_path.as_ref() {
+            let window = Self::new_window("Content Browser", data_source.input_mode);
             click.content_browser_event = content_browser::draw(
+                window,
                 context,
                 asset_folder_path,
                 &mut data_source.content_data_source,
+                // data_source.input_mode,
             );
         }
         click
@@ -129,6 +141,7 @@ impl EditorUI {
         click: &mut ClickEvent,
     ) {
         Window::new("Model Hierarchy")
+            .enabled(data_source.input_mode.is_interact_ui())
             .open(&mut data_source.is_model_hierarchy_open)
             .show(context, |ui| {
                 if let Some(model_view_data) = data_source.model_view_data.as_ref() {
@@ -163,5 +176,11 @@ impl EditorUI {
                     Self::render_collapsing_header(ui, &mesh_item.childs, file_path, click);
                 });
         }
+    }
+
+    fn new_window(name: &str, input_mode: EInputMode) -> egui::Window<'static> {
+        Window::new(name)
+            .enabled(input_mode.is_interact_ui())
+            .interactable(input_mode.is_interact_ui())
     }
 }

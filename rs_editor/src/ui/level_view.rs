@@ -1,4 +1,4 @@
-use egui::{Context, ScrollArea, Ui, Window};
+use egui::{Context, ScrollArea, Ui};
 use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
@@ -30,12 +30,13 @@ fn level_node(
 }
 
 pub fn draw(
+    window: egui::Window,
     context: &Context,
     is_open: &mut bool,
     level: &crate::level::Level,
 ) -> Option<EClickEventType> {
     let mut event: Option<EClickEventType> = None;
-    Window::new("Level").open(is_open).show(context, |ui| {
+    window.open(is_open).show(context, |ui| {
         ui.label(format!("name: {}", level.name));
         ScrollArea::vertical().show(ui, |ui| {
             for node in &level.nodes {

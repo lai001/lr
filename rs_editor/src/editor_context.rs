@@ -63,6 +63,7 @@ lazy_static! {
         m.insert(EFileType::Fbx);
         m.insert(EFileType::Glb);
         m.insert(EFileType::Blend);
+        m.insert(EFileType::Dae);
         m
     };
     static ref SUPPORT_ASSET_FILE_TYPES: HashSet<EFileType> = {
@@ -201,7 +202,7 @@ impl EditorContext {
                     DefaultCameraInputEventHandle::mouse_motion_handle(
                         &mut self.camera,
                         *delta,
-                        self.data_source.is_cursor_visible,
+                        self.engine.get_input_mode(),
                         self.data_source.camera_motion_speed,
                     );
                 }
@@ -297,7 +298,7 @@ impl EditorContext {
                                 &mut self.camera,
                                 virtual_key_code,
                                 element_state,
-                                self.data_source.is_cursor_visible,
+                                self.engine.get_input_mode(),
                                 self.data_source.camera_movement_speed,
                             );
                         }
@@ -310,6 +311,23 @@ impl EditorContext {
                             .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
                         std::thread::sleep(wait);
                         window.request_redraw();
+
+                        match self.engine.get_input_mode() {
+                            rs_engine::input_mode::EInputMode::Game => {
+                                window
+                                    .set_cursor_grab(winit::window::CursorGrabMode::Confined)
+                                    .unwrap();
+                                window.set_cursor_visible(false);
+                            }
+                            rs_engine::input_mode::EInputMode::UI => {
+                                window
+                                    .set_cursor_grab(winit::window::CursorGrabMode::None)
+                                    .unwrap();
+                                window.set_cursor_visible(true);
+                            }
+                            rs_engine::input_mode::EInputMode::GameUI => todo!(),
+                        }
+                        self.data_source.input_mode = self.engine.get_input_mode();
                     }
                     WindowEvent::Destroyed => {}
                     _ => {}
@@ -393,17 +411,19 @@ impl EditorContext {
             .insert(virtual_keycode, event.state);
 
         if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::F1], true) {
-            self.data_source.is_cursor_visible = !self.data_source.is_cursor_visible;
-            if self.data_source.is_cursor_visible {
-                window
-                    .set_cursor_grab(winit::window::CursorGrabMode::None)
-                    .unwrap();
-            } else {
-                window
-                    .set_cursor_grab(winit::window::CursorGrabMode::Confined)
-                    .unwrap();
+            match self.engine.get_input_mode() {
+                rs_engine::input_mode::EInputMode::Game => {
+                    self.engine
+                        .set_input_mode(rs_engine::input_mode::EInputMode::UI);
+                }
+                rs_engine::input_mode::EInputMode::UI => {
+                    self.engine
+                        .set_input_mode(rs_engine::input_mode::EInputMode::Game);
+                }
+                rs_engine::input_mode::EInputMode::GameUI => {
+                    todo!()
+                }
             }
-            window.set_cursor_visible(self.data_source.is_cursor_visible);
         }
 
         if Self::is_keys_pressed(
@@ -451,6 +471,101 @@ impl EditorContext {
         reg.is_match(name)
     }
 
+    fn content_load_resources(
+        engine: &mut rs_engine::engine::Engine,
+        model_loader: &mut ModelLoader,
+        project_context: &ProjectContext,
+        files: Vec<EContentFileType>,
+    ) {
+        let asset_folder_path = project_context.get_asset_folder_path();
+        for file in files {
+            match file {
+                EContentFileType::StaticMesh(static_mesh) => {
+                    let file_path =
+                        asset_folder_path.join(&static_mesh.borrow().asset_reference_relative_path);
+                    model_loader.load(&file_path).unwrap();
+                }
+                EContentFileType::SkeletonMesh(skeleton_mesh) => {
+                    let file_path = asset_folder_path.join(&skeleton_mesh.borrow().asset_reference);
+                    model_loader.load(&file_path).unwrap();
+                    model_loader.to_runtime_skin_mesh(
+                        skeleton_mesh.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                        true,
+                    );
+                }
+                EContentFileType::SkeletonAnimation(node_animation) => {
+                    let file_path =
+                        asset_folder_path.join(&node_animation.borrow().asset_reference);
+                    model_loader.load(&file_path).unwrap();
+                    model_loader.to_runtime_skeleton_animation(
+                        node_animation.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                    );
+                }
+                EContentFileType::Skeleton(skeleton) => {
+                    let file_path = asset_folder_path.join(&skeleton.borrow().asset_reference);
+                    model_loader.load(&file_path).unwrap();
+                    let skeleton = model_loader.to_runtime_skeleton(
+                        skeleton.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                    );
+                }
+                EContentFileType::Texture(texture_file) => {
+                    let texture_file = texture_file.borrow_mut();
+                    let Some(image_reference) = &texture_file.image_reference else {
+                        continue;
+                    };
+                    let abs_path = project_context
+                        .get_asset_folder_path()
+                        .join(image_reference);
+                    let _ = engine.create_texture_from_path(&abs_path, texture_file.url.clone());
+
+                    {
+                        let url = texture_file.url.clone();
+                        let Some(virtual_image_reference) = &texture_file.virtual_image_reference
+                        else {
+                            continue;
+                        };
+                        let path = project_context
+                            .get_virtual_texture_cache_dir()
+                            .join(virtual_image_reference);
+                        let Ok(source) = StaticVirtualTextureSource::from_file(path, None) else {
+                            continue;
+                        };
+                        engine.create_virtual_texture_source(url.clone(), Box::new(source));
+                        log::trace!(
+                            "Create virtual texture source, url: {}, {}",
+                            url.as_str(),
+                            virtual_image_reference
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn add_new_actors(
+        engine: &mut rs_engine::engine::Engine,
+        actors: Vec<Rc<RefCell<crate::actor::Actor>>>,
+    ) {
+        for actor in actors {
+            let root_scene_node = &mut actor.borrow_mut().scene_node;
+            match &mut root_scene_node.component {
+                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                crate::scene_node::EComponentType::SkeletonMeshComponent(
+                    skeleton_mesh_component,
+                ) => {
+                    skeleton_mesh_component.initialize(ResourceManager::default(), engine);
+                }
+            }
+        }
+    }
+
     fn open_project(
         &mut self,
         file_path: &Path,
@@ -470,91 +585,25 @@ impl EditorContext {
         let mut texture_files: Vec<Rc<RefCell<TextureFile>>> = vec![];
         self.data_source.content_data_source.current_folder =
             Some(project_context.project.content.clone());
+        Self::content_load_resources(
+            &mut self.engine,
+            &mut self.model_loader,
+            &project_context,
+            project_context.project.content.borrow().files.clone(),
+        );
         for file in &project_context.project.content.borrow().files.clone() {
             match file {
-                EContentFileType::StaticMesh(static_mesh) => {
-                    let file_path =
-                        asset_folder_path.join(&static_mesh.borrow().asset_reference_relative_path);
-                    self.model_loader.load(&file_path).unwrap();
-                }
-                EContentFileType::SkeletonMesh(skeleton_mesh) => {
-                    let file_path = asset_folder_path.join(&skeleton_mesh.borrow().asset_reference);
-                    self.model_loader.load(&file_path).unwrap();
-                    self.model_loader.to_runtime_skin_mesh(
-                        skeleton_mesh.clone(),
-                        &asset_folder_path,
-                        ResourceManager::default(),
-                        true,
-                    );
-                }
-                EContentFileType::SkeletonAnimation(node_animation) => {
-                    let file_path =
-                        asset_folder_path.join(&node_animation.borrow().asset_reference);
-                    self.model_loader.load(&file_path).unwrap();
-                    self.model_loader.to_runtime_skeleton_animation(
-                        node_animation.clone(),
-                        &asset_folder_path,
-                        ResourceManager::default(),
-                    );
-                }
-                EContentFileType::Skeleton(skeleton) => {
-                    let file_path = asset_folder_path.join(&skeleton.borrow().asset_reference);
-                    self.model_loader.load(&file_path).unwrap();
-                    let skeleton = self.model_loader.to_runtime_skeleton(
-                        skeleton.clone(),
-                        &asset_folder_path,
-                        ResourceManager::default(),
-                    );
-                }
                 EContentFileType::Texture(texture_file) => {
                     texture_files.push(texture_file.clone());
-                    let texture_file = texture_file.borrow_mut();
-                    let Some(image_reference) = &texture_file.image_reference else {
-                        continue;
-                    };
-                    let abs_path = project_context
-                        .get_asset_folder_path()
-                        .join(image_reference);
-                    let _ = self
-                        .engine
-                        .create_texture_from_path(&abs_path, texture_file.url.clone());
+                }
+                _ => {}
+            }
+        }
+        Self::add_new_actors(
+            &mut self.engine,
+            project_context.project.level.borrow().actors.clone(),
+        );
 
-                    {
-                        let url = texture_file.url.clone();
-                        let Some(virtual_image_reference) = &texture_file.virtual_image_reference
-                        else {
-                            continue;
-                        };
-                        let path = project_context
-                            .get_virtual_texture_cache_dir()
-                            .join(virtual_image_reference);
-                        let Ok(source) = StaticVirtualTextureSource::from_file(path, None) else {
-                            continue;
-                        };
-                        self.engine
-                            .create_virtual_texture_source(url.clone(), Box::new(source));
-                        log::trace!(
-                            "Create virtual texture source, url: {}, {}",
-                            url.as_str(),
-                            virtual_image_reference
-                        );
-                    }
-                }
-            }
-        }
-        for actor in project_context.project.level.borrow().actors.clone() {
-            let root_scene_node = &mut actor.borrow_mut().scene_node;
-            match &mut root_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
-                crate::scene_node::EComponentType::SkeletonMeshComponent(
-                    skeleton_mesh_component,
-                ) => {
-                    skeleton_mesh_component
-                        .initialize(ResourceManager::default(), &mut self.engine);
-                }
-            }
-        }
         self.engine
             .set_settings(project_context.project.settings.borrow().clone());
         self.data_source.project_settings = Some(project_context.project.settings.clone());
@@ -664,26 +713,28 @@ impl EditorContext {
 
         let content = project_context.project.content.clone();
         let mut content = content.borrow_mut();
+        let mut add_files: Vec<EContentFileType> = vec![];
         for static_mesh in &load_result.static_meshes {
-            content
-                .files
-                .push(EContentFileType::StaticMesh(static_mesh.clone()));
+            add_files.push(EContentFileType::StaticMesh(static_mesh.clone()));
         }
         for skeleton_meshe in &load_result.skeleton_meshes {
-            content
-                .files
-                .push(EContentFileType::SkeletonMesh(skeleton_meshe.clone()));
+            add_files.push(EContentFileType::SkeletonMesh(skeleton_meshe.clone()));
         }
         for node_animation in &load_result.node_animations {
-            content
-                .files
-                .push(EContentFileType::SkeletonAnimation(node_animation.clone()));
+            add_files.push(EContentFileType::SkeletonAnimation(node_animation.clone()));
         }
         if let Some(skeleton) = &load_result.skeleton {
-            content
-                .files
-                .push(EContentFileType::Skeleton(skeleton.clone()));
+            add_files.push(EContentFileType::Skeleton(skeleton.clone()));
         }
+        Self::content_load_resources(
+            &mut self.engine,
+            &mut self.model_loader,
+            project_context,
+            add_files.clone(),
+        );
+        content.files.append(&mut add_files);
+
+        Self::add_new_actors(&mut self.engine, vec![load_result.actor.clone()]);
 
         let level = project_context.project.level.clone();
         level.borrow_mut().actors.push(load_result.actor);
@@ -901,6 +952,9 @@ impl EditorContext {
                     if self.project_context.is_some() {
                         self.data_source.project_settings_open = true;
                     }
+                }
+                top_menu::EClickEventType::ViewMode(mode) => {
+                    self.engine.set_view_mode(mode);
                 }
             }
         }
@@ -1248,6 +1302,7 @@ impl EditorContext {
             &mesh_cluster.vertex_buffer,
             &mesh_cluster.index_buffer,
             rs_render::command::EMaterialType::Phong(material),
+            Some(node.name.clone()),
         );
         Ok(draw_object)
     }

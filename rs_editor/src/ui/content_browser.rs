@@ -1,5 +1,5 @@
 use crate::content_folder::{ContentFolder, EContentFileType};
-use egui::{Color32, Context, RichText, Ui, Window};
+use egui::{Color32, Context, RichText, Ui};
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 pub struct DataSource {
@@ -35,6 +35,7 @@ enum EItemType {
 }
 
 pub fn draw(
+    window: egui::Window,
     context: &Context,
     asset_folder_path: &Path,
     data_source: &mut DataSource,
@@ -44,7 +45,7 @@ pub fn draw(
     let mut click_item: Option<EClickEventType> = None;
     let open = &mut data_source.is_open;
     let current_folder = data_source.current_folder.clone();
-    Window::new("Content Browser")
+    window
         .open(open)
         .vscroll(true)
         .hscroll(true)

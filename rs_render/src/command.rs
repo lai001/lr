@@ -1,5 +1,5 @@
 use crate::{
-    bake_info::BakeInfo, egui_render::EGUIRenderOutput,
+    bake_info::BakeInfo, egui_render::EGUIRenderOutput, view_mode::EViewModeType,
     virtual_texture_source::TVirtualTextureSource,
 };
 use rs_core_minimal::settings::RenderSettings;
@@ -194,6 +194,7 @@ pub enum RenderCommand {
     Task(TaskType),
     Settings(RenderSettings),
     Present,
+    ChangeViewMode(EViewModeType),
     #[cfg(feature = "renderdoc")]
     CaptureFrame,
 }

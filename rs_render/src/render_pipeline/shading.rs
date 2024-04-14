@@ -94,7 +94,8 @@ impl ShadingPipeline {
         physical_texture_view: &TextureView,
         page_table_texture_view: &TextureView,
     ) {
-        let uniform_buf = gpu_buffer::uniform::from(device, constants, Some("shading.constants"));
+        let uniform_buf =
+            gpu_buffer::uniform::from(device, constants, Some("ShadingPipeline.constants"));
 
         self.base_render_pipeline.draw_resources2(
             device,

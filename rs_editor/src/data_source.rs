@@ -3,8 +3,9 @@ use crate::{
     ui::{content_browser, property_view},
 };
 use rs_core_minimal::settings::Settings;
-use rs_engine::file_type::EFileType;
+use rs_engine::{file_type::EFileType, input_mode::EInputMode};
 use rs_render::bake_info::BakeInfo;
+use rs_render::view_mode::EViewModeType;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 #[derive(Debug)]
@@ -55,7 +56,6 @@ pub struct DataSource {
     pub model_view_data: Option<ModelViewData>,
     pub is_level_view_open: bool,
     pub level: Option<Rc<RefCell<crate::level::Level>>>,
-    pub is_cursor_visible: bool,
     pub camera_movement_speed: f32,
     pub camera_motion_speed: f32,
     pub camera_view_matrix: glam::Mat4,
@@ -66,6 +66,8 @@ pub struct DataSource {
     pub project_settings_open: bool,
     pub ibl_bake_info: BakeInfo,
     pub recent_projects: RecentProjects,
+    pub input_mode: EInputMode,
+    pub view_mode: EViewModeType,
 }
 
 impl DataSource {
@@ -84,7 +86,6 @@ impl DataSource {
             model_view_data: None,
             is_level_view_open: true,
             level: None,
-            is_cursor_visible: true,
             camera_movement_speed: 0.01,
             camera_motion_speed: 0.1,
             current_asset_folder: None,
@@ -97,6 +98,8 @@ impl DataSource {
             ibl_bake_info: Default::default(),
             content_data_source: content_browser::DataSource::new(),
             recent_projects: RecentProjects::load(),
+            input_mode: EInputMode::UI,
+            view_mode: EViewModeType::Lit,
         }
     }
 

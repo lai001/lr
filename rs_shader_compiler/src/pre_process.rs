@@ -1,7 +1,7 @@
 use path_slash::PathBufExt;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Definition {
     pub name: String,
     pub value: Option<String>,
@@ -17,7 +17,7 @@ impl Definition {
     }
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ShaderDescription {
     pub shader_path: PathBuf,
     pub include_dirs: Vec<PathBuf>,
