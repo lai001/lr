@@ -6,6 +6,7 @@ pub struct HandleManager {
     virtual_texture_idgenerator: IDGenerator,
     buffer_idgenerator: IDGenerator,
     gui_texture_idgenerator: IDGenerator,
+    sampler_idgenerator: IDGenerator,
 }
 
 impl HandleManager {
@@ -15,6 +16,7 @@ impl HandleManager {
             virtual_texture_idgenerator: IDGenerator::new(),
             buffer_idgenerator: IDGenerator::new(),
             gui_texture_idgenerator: IDGenerator::new(),
+            sampler_idgenerator: IDGenerator::new(),
         }
     }
 
@@ -42,6 +44,13 @@ impl HandleManager {
     pub fn next_buffer(&mut self) -> BufferHandle {
         let new_id = self.buffer_idgenerator.get_next_id();
         BufferHandle {
+            inner: Arc::new(new_id),
+        }
+    }
+
+    pub fn next_sampler(&mut self) -> SamplerHandle {
+        let new_id = self.sampler_idgenerator.get_next_id();
+        SamplerHandle {
             inner: Arc::new(new_id),
         }
     }
@@ -79,6 +88,19 @@ pub struct BufferHandle {
 }
 
 impl Deref for BufferHandle {
+    type Target = u64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+#[derive(Eq, Hash, PartialEq, Clone, Debug)]
+pub struct SamplerHandle {
+    inner: Arc<u64>,
+}
+
+impl Deref for SamplerHandle {
     type Target = u64;
 
     fn deref(&self) -> &Self::Target {

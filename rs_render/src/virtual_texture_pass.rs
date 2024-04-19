@@ -6,7 +6,8 @@ use crate::{
     frame_buffer::FrameBuffer,
     gpu_vertex_buffer::GpuVertexBufferImp,
     render_pipeline::{
-        virtual_texture_feed_back::{Constants, VirtualTextureFeedBackPipeline},
+        skin_mesh_virtual_texture_feed_back::SkinMeshVirtualTextureFeedBackPipeline,
+        virtual_texture_feed_back::StaticMeshVirtualTextureFeedBackPipeline,
         virtual_texture_feed_back_clean::VirtualTextureFeedBackClearPipeline,
     },
     shader_library::ShaderLibrary,
@@ -36,7 +37,8 @@ const INVALID_ID: u32 = u32::MAX;
 
 pub struct VirtualTexturePass {
     settings: VirtualTextureSetting,
-    feeb_back_pipeline: VirtualTextureFeedBackPipeline,
+    feeb_back_pipeline: StaticMeshVirtualTextureFeedBackPipeline,
+    static_mesh_feed_back_pipeline: SkinMeshVirtualTextureFeedBackPipeline,
     virtual_texture_feed_back_clear_pipeline: VirtualTextureFeedBackClearPipeline,
     feeb_back_frame_buffer: FrameBuffer,
     feed_back_size: glam::UVec2,
@@ -61,7 +63,13 @@ impl VirtualTexturePass {
         let feed_back_texture_format = TextureFormat::Rgba32Uint;
         let feeb_back_frame_buffer =
             Self::create_feeb_back_frame_buffer(device, feed_back_texture_format, feed_back_size);
-        let feeb_back_pipeline = VirtualTextureFeedBackPipeline::new(
+        let feeb_back_pipeline = StaticMeshVirtualTextureFeedBackPipeline::new(
+            device,
+            shader_library,
+            &feed_back_texture_format,
+            is_noninterleaved,
+        );
+        let static_mesh_feed_back_pipeline = SkinMeshVirtualTextureFeedBackPipeline::new(
             device,
             shader_library,
             &feed_back_texture_format,
@@ -109,6 +117,7 @@ impl VirtualTexturePass {
             indirect_table,
             indirect_table_datas,
             output_feeb_back,
+            static_mesh_feed_back_pipeline: static_mesh_feed_back_pipeline,
         })
     }
 
@@ -233,31 +242,35 @@ impl VirtualTexturePass {
         device: &Device,
         queue: &Queue,
         mesh_buffers: &[GpuVertexBufferImp],
-        model: glam::Mat4,
-        view: glam::Mat4,
-        projection: glam::Mat4,
-        id: u32,
+
+        binding_resources: Vec<Vec<BindingResource>>,
+        is_static_mesh: bool,
     ) {
-        let constants = Constants {
-            model,
-            view,
-            projection,
-            physical_texture_size: self.settings.physical_texture_size,
-            scene_factor: self.settings.feed_back_texture_div,
-            feedback_bias: self.settings.feedback_bias,
-            id,
-        };
-        self.feeb_back_pipeline.draw(
-            device,
-            queue,
-            &self.feeb_back_frame_buffer.get_color_texture_view(),
-            &self
-                .feeb_back_frame_buffer
-                .get_depth_texture_view()
-                .expect("Not null"),
-            &constants,
-            mesh_buffers,
-        );
+        if is_static_mesh {
+            self.feeb_back_pipeline.draw(
+                device,
+                queue,
+                &self.feeb_back_frame_buffer.get_color_texture_view(),
+                &self
+                    .feeb_back_frame_buffer
+                    .get_depth_texture_view()
+                    .expect("Not null"),
+                binding_resources,
+                mesh_buffers,
+            );
+        } else {
+            self.static_mesh_feed_back_pipeline.draw(
+                device,
+                queue,
+                &self.feeb_back_frame_buffer.get_color_texture_view(),
+                &self
+                    .feeb_back_frame_buffer
+                    .get_depth_texture_view()
+                    .expect("Not null"),
+                binding_resources,
+                mesh_buffers,
+            );
+        }
     }
 
     fn load_texture(

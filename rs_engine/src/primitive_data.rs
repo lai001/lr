@@ -37,12 +37,12 @@ impl PrimitiveData {
 
     fn get_base_plane_data() -> (Vec<MeshVertex>, Vec<u32>) {
         let base_plane_data = [
-            Self::vertex(glam::vec4(-1.0, 1.0, 0.0, 1.0), glam::vec2(0.0, 0.0)),
-            Self::vertex(glam::vec4(1.0, 1.0, 0.0, 1.0), glam::vec2(1.0, 0.0)),
-            Self::vertex(glam::vec4(1.0, -1.0, 0.0, 1.0), glam::vec2(1.0, 1.0)),
-            Self::vertex(glam::vec4(-1.0, -1.0, 0.0, 1.0), glam::vec2(0.0, 1.0)),
+            Self::vertex(glam::vec4(-1.0, 0.0, -1.0, 1.0), glam::vec2(0.0, 0.0)),
+            Self::vertex(glam::vec4(1.0, 0.0, -1.0, 1.0), glam::vec2(1.0, 0.0)),
+            Self::vertex(glam::vec4(1.0, 0.0, 1.0, 1.0), glam::vec2(1.0, 1.0)),
+            Self::vertex(glam::vec4(-1.0, 0.0, 1.0, 1.0), glam::vec2(0.0, 1.0)),
         ];
-        let front_plane_index: Vec<u32> = [2, 1, 0, 3, 2, 0].to_vec();
+        let front_plane_index: Vec<u32> = [0, 1, 3, 1, 2, 3].to_vec();
         (
             [base_plane_data].concat().to_vec(),
             [front_plane_index].concat().to_vec(),

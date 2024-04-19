@@ -21,19 +21,18 @@ use lazy_static::lazy_static;
 use rs_artifact::property_value_type::EPropertyValueType;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_engine::{
-    camera::Camera,
+    camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
+    frame_sync::{EOptions, FrameSync},
+    plugin::Plugin,
+};
+use rs_engine::{
+    drawable::EDrawObjectType,
     file_type::EFileType,
     logger::{Logger, LoggerConfiguration},
     plugin_context::PluginContext,
     resource_manager::ResourceManager,
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
-use rs_engine::{
-    camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
-    frame_sync::{EOptions, FrameSync},
-    plugin::Plugin,
-};
-use rs_render::command::{DrawObject, ETextureType, PhongMaterial};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -80,8 +79,7 @@ pub struct EditorContext {
     egui_winit_state: Option<egui_winit::State>,
     data_source: DataSource,
     project_context: Option<ProjectContext>,
-    draw_objects: HashMap<uuid::Uuid, DrawObject>,
-    camera: Camera,
+    draw_objects: HashMap<uuid::Uuid, EDrawObjectType>,
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     editor_ui: EditorUI,
     plugin_context: Arc<Mutex<PluginContext>>,
@@ -164,7 +162,6 @@ impl EditorContext {
         .unwrap();
 
         let data_source = DataSource::new();
-        let camera = Camera::default(window_width, window_height);
         let editor_ui = EditorUI::new(egui_winit_state.egui_ctx());
 
         let plugin_context = Arc::new(Mutex::new(PluginContext::new(
@@ -180,7 +177,6 @@ impl EditorContext {
             data_source,
             project_context: None,
             draw_objects: HashMap::new(),
-            camera,
             virtual_key_code_states: HashMap::new(),
             editor_ui,
             plugin_context,
@@ -199,10 +195,11 @@ impl EditorContext {
         match event {
             Event::DeviceEvent { event, .. } => match event {
                 winit::event::DeviceEvent::MouseMotion { delta } => {
+                    let input_mode = self.engine.get_input_mode();
                     DefaultCameraInputEventHandle::mouse_motion_handle(
-                        &mut self.camera,
+                        &mut self.engine.get_camera_mut(),
                         *delta,
-                        self.engine.get_input_mode(),
+                        input_mode,
                         self.data_source.camera_motion_speed,
                     );
                 }
@@ -230,7 +227,9 @@ impl EditorContext {
                     }
                     WindowEvent::Resized(size) => {
                         log::trace!("Window resized: {:?}", size);
-                        self.camera.set_window_size(size.width, size.height);
+                        self.engine
+                            .get_camera_mut()
+                            .set_window_size(size.width, size.height);
                         self.engine.resize(size.width, size.height);
                     }
                     WindowEvent::MouseWheel { delta, .. } => match delta {
@@ -294,15 +293,15 @@ impl EditorContext {
                         }
 
                         for (virtual_key_code, element_state) in &self.virtual_key_code_states {
+                            let input_mode = self.engine.get_input_mode();
                             DefaultCameraInputEventHandle::keyboard_input_handle(
-                                &mut self.camera,
+                                &mut self.engine.get_camera_mut(),
                                 virtual_key_code,
                                 element_state,
-                                self.engine.get_input_mode(),
+                                input_mode,
                                 self.data_source.camera_movement_speed,
                             );
                         }
-                        self.camera_did_update();
 
                         self.process_redraw_request(window);
                         let wait = self
@@ -613,9 +612,7 @@ impl EditorContext {
             self.draw_objects = Self::collect_draw_objects(
                 &mut self.engine,
                 &project_context.get_asset_folder_path(),
-                &self.camera,
                 nodes.iter(),
-                texture_files,
             );
         }
         self.project_context = Some(project_context);
@@ -767,22 +764,20 @@ impl EditorContext {
                     crate::scene_node::EComponentType::SkeletonMeshComponent(
                         skeleton_mesh_component,
                     ) => {
-                        skeleton_mesh_component.camera_did_update(
-                            self.camera.get_view_matrix(),
-                            self.camera.get_projection_matrix(),
-                        );
-                        skeleton_mesh_component.update(self.engine.get_game_time());
+                        skeleton_mesh_component
+                            .update(self.engine.get_game_time(), &mut self.engine);
 
                         for draw_object in skeleton_mesh_component.get_draw_objects() {
-                            self.engine.draw(draw_object);
+                            self.engine.draw2(draw_object);
                         }
                     }
                 }
             }
         }
 
-        for (_, draw_object) in self.draw_objects.clone() {
-            self.engine.draw(draw_object);
+        for (_, draw_object) in self.draw_objects.iter_mut() {
+            self.engine.update_draw_object(draw_object);
+            self.engine.draw2(draw_object);
         }
         self.process_ui(window);
 
@@ -812,6 +807,45 @@ impl EditorContext {
         }
 
         self.engine.present();
+    }
+
+    pub fn prepreocess_shader() -> anyhow::Result<()> {
+        let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
+        let output_path =
+            rs_core_minimal::file_manager::get_engine_root_dir().join("rs_editor/target/shaders");
+        if !output_path.exists() {
+            std::fs::create_dir(output_path.clone())
+                .context(anyhow!("Can not create dir {:?}", output_path))?;
+        }
+
+        let mut compile_commands = vec![];
+        for buildin_shader in buildin_shaders {
+            let description = buildin_shader.get_shader_description();
+            let name = buildin_shader.get_name();
+            let processed_code = rs_shader_compiler::pre_process::pre_process(
+                &description.shader_path,
+                description.include_dirs.iter(),
+                description.definitions.iter(),
+            )?;
+            let filepath = output_path.join(name);
+            std::fs::write(filepath.clone(), processed_code)
+                .context(anyhow!("Can not write to file {:?}", filepath))?;
+
+            let compile_command = buildin_shader.as_ref().to_compile_command();
+            compile_commands.push(compile_command);
+        }
+        let output_path = rs_core_minimal::file_manager::get_engine_root_dir().join(".vscode");
+        if !output_path.exists() {
+            std::fs::create_dir(output_path.clone())
+                .context(anyhow!("Can not create dir {:?}", output_path))?;
+        }
+        let target_path = output_path.join("shader_compile_commands.json");
+        let _ = std::fs::write(
+            target_path.clone(),
+            serde_json::to_string(&compile_commands)?,
+        )
+        .context(anyhow!("Can not write to file {:?}", target_path))?;
+        Ok(())
     }
 
     fn process_ui(&mut self, window: &mut winit::window::Window) {
@@ -914,38 +948,7 @@ impl EditorContext {
                             .send_event(ECustomEventType::OpenFileDialog(EFileDialogType::IBL));
                     }
                     top_menu::EToolType::DebugShader => {
-                        let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
-                        let output_path = rs_core_minimal::file_manager::get_engine_root_dir()
-                            .join("rs_editor/target/shaders");
-                        if !output_path.exists() {
-                            std::fs::create_dir(output_path.clone()).unwrap();
-                        }
-
-                        let mut compile_commands = vec![];
-                        for buildin_shader in buildin_shaders {
-                            let description = buildin_shader.get_shader_description();
-                            let name = buildin_shader.get_name();
-                            let processed_code = rs_shader_compiler::pre_process::pre_process(
-                                &description.shader_path,
-                                description.include_dirs.iter(),
-                                description.definitions.iter(),
-                            )
-                            .unwrap();
-                            let filepath = output_path.join(name);
-                            let _ = std::fs::write(filepath, processed_code);
-
-                            let compile_command = buildin_shader.as_ref().to_compile_command();
-                            compile_commands.push(compile_command);
-                        }
-                        let output_path =
-                            rs_core_minimal::file_manager::get_engine_root_dir().join(".vscode");
-                        if !output_path.exists() {
-                            std::fs::create_dir(output_path.clone()).unwrap();
-                        }
-                        let _ = std::fs::write(
-                            output_path.join("shader_compile_commands.json"),
-                            serde_json::to_string(&compile_commands).unwrap(),
-                        );
+                        Self::prepreocess_shader();
                     }
                 },
                 top_menu::EClickEventType::OpenProjectSettings => {
@@ -1022,7 +1025,6 @@ impl EditorContext {
                 if let Ok(draw_object) = Self::node_to_draw_object(
                     &mut self.engine,
                     &project_context.get_asset_folder_path(),
-                    &self.camera,
                     &node,
                 ) {
                     self.draw_objects.insert(node.id, draw_object);
@@ -1082,26 +1084,19 @@ impl EditorContext {
                                         .get_mut(property::name::TEXTURE)
                                         .unwrap();
                                     *value = EPropertyValueType::Texture(Some(url.clone()));
-                                    let Some(texture_handle) = self
-                                        .engine
-                                        .get_mut_resource_manager()
-                                        .get_texture_by_url(url)
-                                    else {
-                                        return;
-                                    };
+
                                     let Some(draw_object) =
                                         self.draw_objects.get_mut(&selected_node.id)
                                     else {
                                         return;
                                     };
-
-                                    match &mut draw_object.material_type {
-                                        rs_render::command::EMaterialType::Phong(material) => {
-                                            material.diffuse_texture =
-                                                Some(ETextureType::Base(*texture_handle));
-                                            material.specular_texture = Some(*texture_handle);
+                                    match draw_object {
+                                        EDrawObjectType::Static(draw_object) => {
+                                            draw_object.diffuse_texture_url = Some(url.clone());
                                         }
-                                        rs_render::command::EMaterialType::PBR(_) => {}
+                                        EDrawObjectType::Skin(draw_object) => {
+                                            draw_object.diffuse_texture_url = Some(url.clone());
+                                        }
                                     }
                                 })();
                             }
@@ -1185,13 +1180,17 @@ impl EditorContext {
                     }
                 }
                 if let Some(draw_object) = self.draw_objects.get_mut(&selected_node.id) {
-                    match &mut draw_object.material_type {
-                        rs_render::command::EMaterialType::Phong(material) => {
+                    match draw_object {
+                        EDrawObjectType::Static(draw_object) => {
                             if let Some(model_matrix) = selected_node.get_model_matrix() {
-                                material.constants.model = model_matrix;
+                                draw_object.constants.model = model_matrix;
                             }
                         }
-                        rs_render::command::EMaterialType::PBR(_) => {}
+                        EDrawObjectType::Skin(draw_object) => {
+                            if let Some(model_matrix) = selected_node.get_model_matrix() {
+                                draw_object.constants.model = model_matrix;
+                            }
+                        }
                     }
                 }
             }
@@ -1270,23 +1269,12 @@ impl EditorContext {
     fn node_to_draw_object(
         engine: &mut rs_engine::engine::Engine,
         asset_folder_path: &Path,
-        camera: &Camera,
         node: &crate::level::Node,
-    ) -> anyhow::Result<DrawObject> {
+    ) -> anyhow::Result<EDrawObjectType> {
         let mesh_reference = node
             .mesh_reference
             .as_ref()
             .ok_or(anyhow!("No mesh reference"))?;
-        let constants = rs_render::render_pipeline::phong_pipeline::Constants {
-            model: glam::Mat4::IDENTITY,
-            view: camera.get_view_matrix(),
-            projection: camera.get_projection_matrix(),
-        };
-        let material = PhongMaterial {
-            constants,
-            diffuse_texture: None,
-            specular_texture: None,
-        };
 
         let mesh_clusters = ModelLoader::load_from_file(
             &asset_folder_path.join(mesh_reference.file_path.clone()),
@@ -1301,7 +1289,6 @@ impl EditorContext {
         let draw_object = engine.create_draw_object_from_static_mesh(
             &mesh_cluster.vertex_buffer,
             &mesh_cluster.index_buffer,
-            rs_render::command::EMaterialType::Phong(material),
             Some(node.name.clone()),
         );
         Ok(draw_object)
@@ -1310,22 +1297,17 @@ impl EditorContext {
     fn collect_draw_objects(
         engine: &mut rs_engine::engine::Engine,
         asset_folder_path: &Path,
-        camera: &Camera,
         nodes: std::slice::Iter<'_, Rc<RefCell<crate::level::Node>>>,
-        texture_files: Vec<Rc<RefCell<TextureFile>>>,
-    ) -> HashMap<uuid::Uuid, DrawObject> {
-        let mut draw_objects: HashMap<uuid::Uuid, DrawObject> = HashMap::new();
+    ) -> HashMap<uuid::Uuid, EDrawObjectType> {
+        let mut draw_objects: HashMap<uuid::Uuid, EDrawObjectType> = HashMap::new();
         for node in nodes {
             let id: uuid::Uuid;
             {
                 id = node.borrow().id;
             }
-            let Ok(mut draw_object) = Self::node_to_draw_object(
-                engine,
-                asset_folder_path,
-                camera,
-                &node.as_ref().borrow(),
-            ) else {
+            let Ok(mut draw_object) =
+                Self::node_to_draw_object(engine, asset_folder_path, &node.as_ref().borrow())
+            else {
                 continue;
             };
             let mut node = node.borrow_mut();
@@ -1335,57 +1317,18 @@ impl EditorContext {
             let EPropertyValueType::Texture(Some(texture_url)) = texture_value else {
                 continue;
             };
-            let Some(texture_file) = texture_files.iter().find(|x| {
-                let file = x.borrow();
-                file.url == *texture_url
-            }) else {
-                continue;
-            };
-            let texture_file = texture_file.borrow();
-            // let Some(texture_handle) = engine
-            //     .get_mut_resource_manager()
-            //     .get_texture_by_url(texture_url)
-            // else {
-            //     continue;
-            // };
-            match &mut draw_object.material_type {
-                rs_render::command::EMaterialType::Phong(material) => {
-                    if texture_file.is_virtual_texture {
-                        if let Some(texture_handle) = engine
-                            .get_mut_resource_manager()
-                            .get_virtual_texture_by_url(texture_url)
-                        {
-                            material.diffuse_texture = Some(ETextureType::Virtual(*texture_handle));
-                        }
-                    } else {
-                        if let Some(texture_handle) = engine
-                            .get_mut_resource_manager()
-                            .get_texture_by_url(texture_url)
-                        {
-                            material.diffuse_texture = Some(ETextureType::Base(*texture_handle));
-                        }
-                    }
-                    // material.specular_texture = Some(*texture_handle);
+            match &mut draw_object {
+                EDrawObjectType::Static(draw_object) => {
+                    draw_object.diffuse_texture_url = Some(texture_url.clone());
                 }
-                rs_render::command::EMaterialType::PBR(_) => {}
+                EDrawObjectType::Skin(draw_object) => {
+                    draw_object.diffuse_texture_url = Some(texture_url.clone());
+                }
             }
+
             draw_objects.insert(id, draw_object);
         }
         draw_objects
-    }
-
-    fn camera_did_update(&mut self) {
-        self.data_source.camera_view_matrix = self.camera.get_view_matrix();
-        self.data_source.camera_projection_matrix = self.camera.get_projection_matrix();
-        for (_, draw_objects) in &mut self.draw_objects {
-            match &mut draw_objects.material_type {
-                rs_render::command::EMaterialType::Phong(material) => {
-                    material.constants.projection = self.camera.get_projection_matrix();
-                    material.constants.view = self.camera.get_view_matrix();
-                }
-                rs_render::command::EMaterialType::PBR(_) => {}
-            }
-        }
     }
 }
 

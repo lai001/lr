@@ -13,6 +13,7 @@ use wgpu::*;
 pub type BufferHandle = u64;
 pub type EGUITextureHandle = u64;
 pub type TextureHandle = u64;
+pub type SamplerHandle = u64;
 
 #[derive(Clone)]
 pub struct TextureDescriptorCreateInfo {
@@ -76,6 +77,12 @@ pub struct CreateBuffer {
 }
 
 #[derive(Clone)]
+pub struct CreateSampler {
+    pub handle: SamplerHandle,
+    pub sampler_descriptor: SamplerDescriptor<'static>,
+}
+
+#[derive(Clone)]
 pub struct BufferCreateInfo {
     pub label: Option<String>,
     pub contents: Vec<u8>,
@@ -94,32 +101,18 @@ pub struct InitTextureData {
     pub data_layout: wgpu::ImageDataLayout,
 }
 
-#[derive(Clone, Debug)]
-pub struct PBRMaterial {
-    pub albedo_texture: Option<TextureHandle>,
-    pub normal_texture: Option<TextureHandle>,
-    pub metallic_texture: Option<TextureHandle>,
-    pub roughness_texture: Option<TextureHandle>,
-    pub ibl_texture: Option<TextureHandle>,
-}
-
 #[derive(Clone)]
 pub enum ETextureType {
     Base(TextureHandle),
     Virtual(TextureHandle),
+    None,
 }
 
 #[derive(Clone)]
-pub struct PhongMaterial {
-    pub constants: crate::render_pipeline::phong_pipeline::Constants,
-    pub diffuse_texture: Option<ETextureType>,
-    pub specular_texture: Option<TextureHandle>,
-}
-
-#[derive(Clone)]
-pub enum EMaterialType {
-    Phong(PhongMaterial),
-    PBR(PBRMaterial),
+pub enum EBindingResource {
+    Texture(ETextureType),
+    Constants(BufferHandle),
+    Sampler(SamplerHandle),
 }
 
 #[derive(Clone)]
@@ -129,8 +122,10 @@ pub struct DrawObject {
     pub vertex_count: u32,
     pub index_buffer: Option<BufferHandle>,
     pub index_count: Option<u32>,
-    pub material_type: EMaterialType,
-    pub bones: Option<[glam::Mat4; crate::global_shaders::skeleton_shading::NUM_MAX_BONE]>,
+    pub global_binding_resources: Vec<EBindingResource>,
+    pub vt_binding_resources: Vec<EBindingResource>,
+    pub binding_resources: Vec<Vec<EBindingResource>>,
+    pub render_pipeline: String,
 }
 
 #[derive(Clone)]
@@ -195,6 +190,7 @@ pub enum RenderCommand {
     Settings(RenderSettings),
     Present,
     ChangeViewMode(EViewModeType),
+    CreateSampler(CreateSampler),
     #[cfg(feature = "renderdoc")]
     CaptureFrame,
 }

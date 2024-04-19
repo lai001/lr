@@ -14,6 +14,7 @@ pub mod egui_render;
 pub mod error;
 pub mod frame_buffer;
 pub mod global_shaders;
+pub mod global_uniform;
 pub mod gpu_buffer;
 pub mod gpu_vertex_buffer;
 pub mod ibl_readback;

@@ -1,10 +1,5 @@
+use crate::misc::is_run_from_ide;
 use std::path::{Path, PathBuf};
-
-#[cfg(feature = "editor")]
-pub fn is_run_from_ide() -> bool {
-    let vars = std::env::vars().filter(|x| x.0 == "VSCODE_HANDLES_UNCAUGHT_ERRORS".to_string());
-    vars.count() != 0
-}
 
 #[cfg(feature = "editor")]
 pub fn get_engine_root_dir() -> PathBuf {

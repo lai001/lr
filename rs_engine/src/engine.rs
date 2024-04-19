@@ -1,6 +1,7 @@
 use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
+use crate::drawable::{EDrawObjectType, SkinMeshDrawObject, StaticMeshDrawObject};
 use crate::error::Result;
 use crate::input_mode::EInputMode;
 use crate::render_thread_mode::ERenderThreadMode;
@@ -9,10 +10,12 @@ use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::level::ENodeType;
 use rs_artifact::resource_info::ResourceInfo;
 use rs_core_minimal::settings::Settings;
+use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateTexture, CreateVirtualTexture, DrawObject,
-    EMaterialType, InitTextureData, PhongMaterial, RenderCommand, TextureDescriptorCreateInfo,
+    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateSampler, CreateTexture,
+    CreateVirtualTexture, DrawObject, EBindingResource, ETextureType, InitTextureData,
+    RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer,
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::renderer::Renderer;
@@ -20,7 +23,6 @@ use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
 struct State {
     camera_movement_speed: f32,
@@ -53,6 +55,11 @@ pub struct Engine {
     game_time: std::time::Instant,
     game_time_sec: f32,
     input_mode: EInputMode,
+    global_constants: rs_render::global_uniform::Constants,
+    global_constants_handle: crate::handle::BufferHandle,
+    global_sampler_handle: crate::handle::SamplerHandle,
+    virtual_texture_source_infos:
+        HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
 }
 
 impl Engine {
@@ -96,6 +103,26 @@ impl Engine {
         let mut draw_objects: Vec<DrawObject> = Vec::new();
 
         let mut render_thread_mode = ERenderThreadMode::from(renderer, true);
+
+        let global_constants_handle = resource_manager.next_buffer();
+        let global_constants = Default::default();
+        let command = RenderCommand::CreateBuffer(CreateBuffer {
+            handle: *global_constants_handle,
+            buffer_create_info: BufferCreateInfo {
+                label: Some("Global.Constants".to_string()),
+                contents: rs_foundation::cast_to_raw_buffer(&vec![global_constants]).to_vec(),
+                usage: wgpu::BufferUsages::all(),
+            },
+        });
+        render_thread_mode.send_command(command);
+
+        let global_sampler_handle = resource_manager.next_sampler();
+        let command = RenderCommand::CreateSampler(CreateSampler {
+            handle: *global_sampler_handle,
+            sampler_descriptor: wgpu::SamplerDescriptor::default(),
+        });
+        render_thread_mode.send_command(command);
+
         let camera = Camera::default(surface_width, surface_height);
         let mut level: Option<rs_artifact::level::Level> = None;
         let mut draw_object_id: u32 = 0;
@@ -116,16 +143,6 @@ impl Engine {
                             continue;
                         };
 
-                        let constants = rs_render::render_pipeline::phong_pipeline::Constants {
-                            model: glam::Mat4::IDENTITY,
-                            view: camera.get_view_matrix(),
-                            projection: camera.get_projection_matrix(),
-                        };
-                        let material = PhongMaterial {
-                            constants,
-                            diffuse_texture: None,
-                            specular_texture: None,
-                        };
                         let (vertexes0, vertexes1) = Self::convert_vertex(&static_mesh.vertexes);
 
                         let draw_object = Self::create_draw_object_from_mesh_internal(
@@ -143,10 +160,13 @@ impl Engine {
                             ],
                             static_mesh.vertexes.len() as u32,
                             &static_mesh.indexes,
-                            EMaterialType::Phong(material),
                             draw_object_id,
-                            None,
                             Some(static_mesh.url.to_string()),
+                            rs_render::renderer::STATIC_MESH_RENDER_PIPELINE.to_string(),
+                            vec![
+                                EBindingResource::Constants(*global_constants_handle),
+                                EBindingResource::Sampler(*global_sampler_handle),
+                            ],
                         );
                         draw_object_id += 1;
                         draw_objects.push(draw_object);
@@ -169,6 +189,10 @@ impl Engine {
             game_time: std::time::Instant::now(),
             game_time_sec: 0.0,
             input_mode: EInputMode::UI,
+            global_constants,
+            global_constants_handle: global_constants_handle.clone(),
+            global_sampler_handle: global_sampler_handle.clone(),
+            virtual_texture_source_infos: HashMap::new(),
         };
 
         Ok(engine)
@@ -213,7 +237,24 @@ impl Engine {
                 self.state.camera_movement_speed,
             );
         }
-        self.camera_did_update();
+
+        self.camera_did_update(
+            self.camera.get_view_matrix(),
+            self.camera.get_projection_matrix(),
+        );
+
+        let virtual_texture_setting = &self.settings.render_setting.virtual_texture_setting;
+        self.global_constants.physical_texture_size =
+            virtual_texture_setting.physical_texture_size as f32;
+        self.global_constants.is_enable_virtual_texture = if virtual_texture_setting.is_enable {
+            1
+        } else {
+            0
+        };
+        self.global_constants.tile_size = virtual_texture_setting.tile_size as f32;
+        self.global_constants.scene_factor = virtual_texture_setting.feed_back_texture_div as f32;
+        self.global_constants.feedback_bias = virtual_texture_setting.feedback_bias;
+        self.update_global_constants();
 
         for draw_object in &self.draw_objects {
             self.render_thread_mode
@@ -256,10 +297,10 @@ impl Engine {
         vertex_buffers: Vec<(Option<&str>, &[u8])>,
         vertex_count: u32,
         indexes: &[u32],
-        material_type: EMaterialType,
         id: u32,
-        bones: Option<[glam::Mat4; rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE]>,
         name: Option<String>,
+        render_pipeline: String,
+        global_binding_resources: Vec<EBindingResource>,
     ) -> DrawObject {
         let index_buffer_handle = resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -294,49 +335,23 @@ impl Engine {
         }
 
         let draw_object = DrawObject {
+            id,
             vertex_buffers: vertex_buffer_handles,
             vertex_count,
             index_buffer: Some(*index_buffer_handle),
             index_count: Some(indexes.len() as u32),
-            material_type,
-            id,
-            bones,
+            render_pipeline,
+            binding_resources: vec![],
+            global_binding_resources,
+            vt_binding_resources: vec![],
         };
         draw_object
     }
 
-    fn create_draw_object_from_static_mesh_internal(
-        &mut self,
-        vertexes0: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex0],
-        vertexes1: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex1],
-        indexes: &[u32],
-        material_type: EMaterialType,
-        name: Option<String>,
-    ) -> DrawObject {
-        assert_eq!(vertexes0.len(), vertexes1.len());
-        let name = name.unwrap_or("".to_string());
-        let draw_object = Self::create_draw_object_from_mesh_internal(
-            &mut self.render_thread_mode,
-            &mut self.resource_manager,
-            vec![
-                (
-                    Some(&format!("{name}.MeshVertex0")),
-                    rs_foundation::cast_to_raw_buffer(&vertexes0),
-                ),
-                (
-                    Some(&format!("{name}.MeshVertex1")),
-                    rs_foundation::cast_to_raw_buffer(&vertexes1),
-                ),
-            ],
-            vertexes0.len() as u32,
-            indexes,
-            material_type,
-            self.draw_object_id,
-            None,
-            Some(name),
-        );
+    fn next_draw_object_id(&mut self) -> u32 {
+        let id = self.draw_object_id;
         self.draw_object_id += 1;
-        draw_object
+        id
     }
 
     fn convert_vertex(
@@ -402,81 +417,313 @@ impl Engine {
         &mut self,
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
         indexes: &[u32],
-        material_type: EMaterialType,
         name: Option<String>,
-    ) -> DrawObject {
-        let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
-        self.create_draw_object_from_static_mesh_internal(
-            &vertexes0,
-            &vertexes1,
-            indexes,
-            material_type,
-            name,
-        )
-    }
-
-    fn create_draw_object_from_skin_mesh_internal(
-        &mut self,
-        vertexes0: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex0],
-        vertexes1: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex1],
-        vertexes2: &[rs_render::vertex_data_type::mesh_vertex::MeshVertex2],
-        indexes: &[u32],
-        material_type: EMaterialType,
-        name: Option<String>,
-    ) -> DrawObject {
-        assert_eq!(vertexes0.len(), vertexes1.len());
-        assert_eq!(vertexes1.len(), vertexes2.len());
+    ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
+        let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
+        let id = self.next_draw_object_id();
+        let index_buffer_handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("rs.IndexBuffer.{}", name.clone())),
+            contents: rs_foundation::cast_to_raw_buffer(&indexes).to_vec(),
+            usage: wgpu::BufferUsages::INDEX,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *index_buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+        let vertex_buffers = vec![
+            (
+                format!("rs.{name}.MeshVertex0"),
+                rs_foundation::cast_to_raw_buffer(&vertexes0),
+            ),
+            (
+                format!("rs.{name}.MeshVertex1"),
+                rs_foundation::cast_to_raw_buffer(&vertexes1),
+            ),
+        ];
+        let mut vertex_buffer_handles: Vec<crate::handle::BufferHandle> =
+            Vec::with_capacity(vertex_buffers.len());
+        for (name, vertex_buffer) in vertex_buffers {
+            let vertex_buffer_handle = self.resource_manager.next_buffer();
+            let buffer_create_info = BufferCreateInfo {
+                label: Some(format!("rs.{}.VertexBuffer", name)),
+                contents: vertex_buffer.to_vec(),
+                usage: wgpu::BufferUsages::VERTEX,
+            };
+            let create_buffer = CreateBuffer {
+                handle: *vertex_buffer_handle,
+                buffer_create_info,
+            };
+            let message = RenderCommand::CreateBuffer(create_buffer);
+            self.render_thread_mode.send_command(message);
+            vertex_buffer_handles.push(vertex_buffer_handle);
+        }
 
-        let draw_object = Self::create_draw_object_from_mesh_internal(
-            &mut self.render_thread_mode,
-            &mut self.resource_manager,
-            vec![
-                (
-                    Some(&format!("{name}.MeshVertex0")),
-                    rs_foundation::cast_to_raw_buffer(&vertexes0),
-                ),
-                (
-                    Some(&format!("{name}.MeshVertex1")),
-                    rs_foundation::cast_to_raw_buffer(&vertexes1),
-                ),
-                (
-                    Some(&format!("{name}.MeshVertex2")),
-                    rs_foundation::cast_to_raw_buffer(&vertexes2),
-                ),
+        let constants_buffer_handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("rs.{}.Constants", name.clone())),
+            contents: rs_foundation::cast_any_as_u8_slice(
+                &rs_render::render_pipeline::shading::Constants::default(),
+            )
+            .to_vec(),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::MAP_WRITE,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *constants_buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+
+        let object = StaticMeshDrawObject {
+            id,
+            vertex_buffers: vertex_buffer_handles,
+            vertex_count: vertexes0.len() as u32,
+            index_buffer: Some(index_buffer_handle),
+            index_count: Some(indexes.len() as u32),
+            global_binding_resources: vec![
+                EBindingResource::Constants(*self.global_constants_handle),
+                EBindingResource::Sampler(*self.global_sampler_handle),
             ],
-            vertexes0.len() as u32,
-            indexes,
-            material_type,
-            self.draw_object_id,
-            Some([glam::Mat4::IDENTITY; rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE]),
-            Some(name),
-        );
-        self.draw_object_id += 1;
-        draw_object
+            vt_binding_resources: vec![EBindingResource::Constants(*constants_buffer_handle)],
+            binding_resources: vec![
+                vec![
+                    EBindingResource::Texture(ETextureType::None),
+                    EBindingResource::Texture(ETextureType::None),
+                ],
+                vec![EBindingResource::Constants(*constants_buffer_handle)],
+            ],
+            render_pipeline: rs_render::renderer::STATIC_MESH_RENDER_PIPELINE.to_string(),
+            constants: Default::default(),
+            diffuse_texture_url: Default::default(),
+            specular_texture_url: Default::default(),
+            constants_buffer_handle,
+        };
+        EDrawObjectType::Static(object)
     }
 
     pub fn create_draw_object_from_skin_mesh(
         &mut self,
         vertexes: &[rs_artifact::skin_mesh::SkinMeshVertex],
         indexes: &[u32],
-        material_type: EMaterialType,
         name: Option<String>,
-    ) -> DrawObject {
+    ) -> EDrawObjectType {
+        let name = name.unwrap_or("".to_string());
         let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
-        self.create_draw_object_from_skin_mesh_internal(
-            &vertexes0,
-            &vertexes1,
-            &vertexes2,
-            indexes,
-            material_type,
-            name,
-        )
+        let id = self.next_draw_object_id();
+        let index_buffer_handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("rs.IndexBuffer.{}", name.clone())),
+            contents: rs_foundation::cast_to_raw_buffer(&indexes).to_vec(),
+            usage: wgpu::BufferUsages::INDEX,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *index_buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+        let vertex_buffers = vec![
+            (
+                format!("rs.{name}.MeshVertex0"),
+                rs_foundation::cast_to_raw_buffer(&vertexes0),
+            ),
+            (
+                format!("rs.{name}.MeshVertex1"),
+                rs_foundation::cast_to_raw_buffer(&vertexes1),
+            ),
+            (
+                format!("rs.{name}.MeshVertex2"),
+                rs_foundation::cast_to_raw_buffer(&vertexes2),
+            ),
+        ];
+        let mut vertex_buffer_handles: Vec<crate::handle::BufferHandle> =
+            Vec::with_capacity(vertex_buffers.len());
+        for (name, vertex_buffer) in vertex_buffers {
+            let vertex_buffer_handle = self.resource_manager.next_buffer();
+            let buffer_create_info = BufferCreateInfo {
+                label: Some(format!("rs.{}.VertexBuffer", name)),
+                contents: vertex_buffer.to_vec(),
+                usage: wgpu::BufferUsages::VERTEX,
+            };
+            let create_buffer = CreateBuffer {
+                handle: *vertex_buffer_handle,
+                buffer_create_info,
+            };
+            let message = RenderCommand::CreateBuffer(create_buffer);
+            self.render_thread_mode.send_command(message);
+            vertex_buffer_handles.push(vertex_buffer_handle);
+        }
+
+        let constants_buffer_handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("rs.{}.Constants", name.clone())),
+            contents: rs_foundation::cast_any_as_u8_slice(
+                &rs_render::render_pipeline::skin_mesh_shading::Constants::default(),
+            )
+            .to_vec(),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::MAP_WRITE,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *constants_buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+
+        let object = SkinMeshDrawObject {
+            id,
+            vertex_buffers: vertex_buffer_handles,
+            vertex_count: vertexes0.len() as u32,
+            index_buffer: Some(index_buffer_handle),
+            index_count: Some(indexes.len() as u32),
+            global_binding_resources: vec![
+                EBindingResource::Constants(*self.global_constants_handle),
+                EBindingResource::Sampler(*self.global_sampler_handle),
+            ],
+            vt_binding_resources: vec![EBindingResource::Constants(*constants_buffer_handle)],
+            binding_resources: vec![
+                vec![
+                    EBindingResource::Texture(ETextureType::None),
+                    EBindingResource::Texture(ETextureType::None),
+                ],
+                vec![EBindingResource::Constants(*constants_buffer_handle)],
+            ],
+            render_pipeline: rs_render::renderer::SKIN_MESH_RENDER_PIPELINE.to_string(),
+            constants: Default::default(),
+            diffuse_texture_url: Default::default(),
+            specular_texture_url: Default::default(),
+            constants_buffer_handle,
+        };
+        EDrawObjectType::Skin(object)
+    }
+
+    pub fn update_draw_object(&mut self, object: &mut EDrawObjectType) {
+        match object {
+            EDrawObjectType::Static(object) => {
+                self.update_buffer(
+                    object.constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.constants),
+                );
+                if let Some(texture_url) = object.diffuse_texture_url.as_ref() {
+                    if let Some(virtual_texture_handle) = self
+                        .resource_manager
+                        .get_virtual_texture_by_url(texture_url)
+                    {
+                        let source = self.virtual_texture_source_infos.get(texture_url).unwrap();
+                        {
+                            let source = source.lock().unwrap();
+                            let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                                source.get_size().min_element(),
+                            );
+                            let max_lod = max_mips
+                                - self
+                                    .settings
+                                    .render_setting
+                                    .virtual_texture_setting
+                                    .tile_size
+                                    .ilog2()
+                                - 1;
+                            object.constants.diffuse_texture_max_lod = max_lod;
+                            object.constants.diffuse_texture_size = source.get_size().as_vec2();
+                        }
+                        object.constants.is_virtual_diffuse_texture = 1;
+                        object.binding_resources[0][0] = EBindingResource::Texture(
+                            ETextureType::Virtual(*virtual_texture_handle),
+                        );
+                    } else if let Some(base_texture_handle) =
+                        self.resource_manager.get_texture_by_url(texture_url)
+                    {
+                        object.constants.is_virtual_diffuse_texture = 0;
+                        object.binding_resources[0][0] =
+                            EBindingResource::Texture(ETextureType::Base(*base_texture_handle));
+                    }
+                }
+            }
+            EDrawObjectType::Skin(object) => {
+                self.update_buffer(
+                    object.constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.constants),
+                );
+                if let Some(texture_url) = object.diffuse_texture_url.as_ref() {
+                    if let Some(virtual_texture_handle) = self
+                        .resource_manager
+                        .get_virtual_texture_by_url(texture_url)
+                    {
+                        let source = self.virtual_texture_source_infos.get(texture_url).unwrap();
+                        {
+                            let source = source.lock().unwrap();
+                            let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                                source.get_size().min_element(),
+                            );
+                            let max_lod = max_mips
+                                - self
+                                    .settings
+                                    .render_setting
+                                    .virtual_texture_setting
+                                    .tile_size
+                                    .ilog2()
+                                - 1;
+                            object.constants.diffuse_texture_max_lod = max_lod;
+                            object.constants.diffuse_texture_size = source.get_size().as_vec2();
+                        }
+                        object.constants.is_virtual_diffuse_texture = 1;
+                        object.binding_resources[0][0] = EBindingResource::Texture(
+                            ETextureType::Virtual(*virtual_texture_handle),
+                        );
+                    } else if let Some(base_texture_handle) =
+                        self.resource_manager.get_texture_by_url(texture_url)
+                    {
+                        object.constants.is_virtual_diffuse_texture = 0;
+                        object.binding_resources[0][0] =
+                            EBindingResource::Texture(ETextureType::Base(*base_texture_handle));
+                    }
+                }
+            }
+        }
     }
 
     pub fn draw(&mut self, draw_object: DrawObject) {
         self.render_thread_mode
             .send_command(RenderCommand::DrawObject(draw_object));
+    }
+
+    pub fn draw2(&mut self, draw_object: &EDrawObjectType) {
+        match draw_object {
+            EDrawObjectType::Static(static_objcet) => {
+                let draw_object = DrawObject {
+                    id: static_objcet.id,
+                    vertex_buffers: static_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                    vertex_count: static_objcet.vertex_count,
+                    index_buffer: static_objcet.index_buffer.clone().map(|x| *x),
+                    index_count: static_objcet.index_count,
+                    global_binding_resources: static_objcet.global_binding_resources.clone(),
+                    vt_binding_resources: static_objcet.vt_binding_resources.clone(),
+                    binding_resources: static_objcet.binding_resources.clone(),
+                    render_pipeline: static_objcet.render_pipeline.clone(),
+                };
+                self.render_thread_mode
+                    .send_command(RenderCommand::DrawObject(draw_object));
+            }
+            EDrawObjectType::Skin(skin_objcet) => {
+                let draw_object = DrawObject {
+                    id: skin_objcet.id,
+                    vertex_buffers: skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                    vertex_count: skin_objcet.vertex_count,
+                    index_buffer: skin_objcet.index_buffer.clone().map(|x| *x),
+                    index_count: skin_objcet.index_count,
+                    global_binding_resources: skin_objcet.global_binding_resources.clone(),
+                    vt_binding_resources: skin_objcet.vt_binding_resources.clone(),
+                    binding_resources: skin_objcet.binding_resources.clone(),
+                    render_pipeline: skin_objcet.render_pipeline.clone(),
+                };
+                self.render_thread_mode
+                    .send_command(RenderCommand::DrawObject(draw_object));
+            }
+        }
     }
 
     #[cfg(not(target_os = "android"))]
@@ -509,16 +756,19 @@ impl Engine {
             .insert(virtual_keycode, event.state);
     }
 
-    fn camera_did_update(&mut self) {
-        for draw_objects in &mut self.draw_objects {
-            match &mut draw_objects.material_type {
-                rs_render::command::EMaterialType::Phong(material) => {
-                    material.constants.projection = self.camera.get_projection_matrix();
-                    material.constants.view = self.camera.get_view_matrix();
-                }
-                rs_render::command::EMaterialType::PBR(_) => {}
-            }
-        }
+    pub fn camera_did_update(&mut self, view: glam::Mat4, projection: glam::Mat4) {
+        self.global_constants.view = view;
+        self.global_constants.projection = projection;
+        self.global_constants.view_projection =
+            self.global_constants.projection * self.global_constants.view;
+    }
+
+    fn update_global_constants(&mut self) {
+        let command = RenderCommand::UpdateBuffer(UpdateBuffer {
+            handle: *self.global_constants_handle,
+            data: rs_foundation::cast_to_raw_buffer(&vec![self.global_constants]).to_vec(),
+        });
+        self.render_thread_mode.send_command(command);
     }
 
     pub fn get_mut_resource_manager(&mut self) -> &mut ResourceManager {
@@ -564,10 +814,13 @@ impl Engine {
         url: url::Url,
         source: Box<dyn TVirtualTextureSource>,
     ) {
+        let ref_source = MultipleThreadMut::new(source);
+        self.virtual_texture_source_infos
+            .insert(url.clone(), ref_source.clone());
         let handle = self.resource_manager.next_virtual_texture(url.clone());
         let command = CreateVirtualTexture {
             handle: *handle,
-            source: Arc::new(Mutex::new(source)),
+            source: ref_source.clone(),
         };
         let render_command = RenderCommand::CreateVirtualTextureSource(command);
         self.render_thread_mode.send_command(render_command);
@@ -630,6 +883,40 @@ impl Engine {
     pub fn set_view_mode(&mut self, view_mode: EViewModeType) {
         self.render_thread_mode
             .send_command(RenderCommand::ChangeViewMode(view_mode));
+    }
+
+    pub fn create_buffer(
+        &mut self,
+        buffer: &[u8],
+        usage: wgpu::BufferUsages,
+        name: Option<&str>,
+    ) -> crate::handle::BufferHandle {
+        let handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("{}", name.clone().unwrap_or(""))),
+            contents: buffer.to_vec(),
+            usage,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+        handle.clone()
+    }
+
+    pub fn update_buffer(&mut self, handle: crate::handle::BufferHandle, buffer: &[u8]) {
+        let update_buffer = rs_render::command::UpdateBuffer {
+            handle: *handle,
+            data: buffer.to_vec(),
+        };
+        let message = RenderCommand::UpdateBuffer(update_buffer);
+        self.render_thread_mode.send_command(message);
+    }
+
+    pub fn get_camera_mut(&mut self) -> &mut Camera {
+        &mut self.camera
     }
 }
 

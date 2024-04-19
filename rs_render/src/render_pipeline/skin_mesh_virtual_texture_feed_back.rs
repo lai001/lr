@@ -1,29 +1,29 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
-    global_shaders::virtual_texture_feed_back::StaticMeshVirtualTextureFeedBackShader,
+    global_shaders::virtual_texture_feed_back::SkinMeshVirtualTextureFeedBackShader,
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::MeshVertex0,
+    vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex2},
     VertexBufferType,
 };
 use type_layout::TypeLayout;
 use wgpu::*;
 
-pub struct StaticMeshVirtualTextureFeedBackPipeline {
+pub struct SkinMeshVirtualTextureFeedBackPipeline {
     base_render_pipeline: BaseRenderPipeline,
 }
 
-impl StaticMeshVirtualTextureFeedBackPipeline {
+impl SkinMeshVirtualTextureFeedBackPipeline {
     pub fn new(
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
         is_noninterleaved: bool,
-    ) -> StaticMeshVirtualTextureFeedBackPipeline {
+    ) -> SkinMeshVirtualTextureFeedBackPipeline {
         let base_render_pipeline = BaseRenderPipeline::new(
             device,
             shader_library,
-            &StaticMeshVirtualTextureFeedBackShader {},
+            &SkinMeshVirtualTextureFeedBackShader {},
             &[Some(texture_format.clone().into())],
             Some(DepthStencilState {
                 depth_compare: CompareFunction::Less,
@@ -43,12 +43,13 @@ impl StaticMeshVirtualTextureFeedBackPipeline {
             } else {
                 Some(VertexBufferType::Interleaved(vec![
                     MeshVertex0::type_layout(),
+                    MeshVertex2::type_layout(),
                 ]))
             },
             None,
         );
 
-        StaticMeshVirtualTextureFeedBackPipeline {
+        SkinMeshVirtualTextureFeedBackPipeline {
             base_render_pipeline,
         }
     }

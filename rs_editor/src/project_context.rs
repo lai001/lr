@@ -431,28 +431,35 @@ impl ProjectContext {
         for buildin_shader in buildin_shaders {
             let description = buildin_shader.get_shader_description();
             let name = buildin_shader.get_name();
-            let pre_process_code = rs_shader_compiler::pre_process::pre_process(
-                &description.shader_path,
-                description.include_dirs.iter(),
-                description.definitions.iter(),
-            );
-            match pre_process_code {
-                Ok(code) => {
-                    shaders.insert(name, code);
-                    continue;
+            if rs_core_minimal::misc::is_dev_mode() {
+                let pre_process_code = rs_shader_compiler::pre_process::pre_process(
+                    &description.shader_path,
+                    description.include_dirs.iter(),
+                    description.definitions.iter(),
+                );
+                match pre_process_code {
+                    Ok(code) => {
+                        if shaders.insert(name.clone(), code).is_some() {
+                            panic!("{} is already exists", name);
+                        }
+                        continue;
+                    }
+                    Err(err) => {
+                        log::trace!("{err}");
+                    }
                 }
-                Err(err) => {
-                    log::trace!("{err}");
-                }
-            }
-            let path = rs_render::get_buildin_shader_dir().join(name.clone());
-            let code = std::fs::read_to_string(path.clone());
-            match code {
-                Ok(code) => {
-                    shaders.insert(name, code);
-                }
-                Err(err) => {
-                    panic!("{}, {:?}", err, path);
+            } else {
+                let path = rs_render::get_buildin_shader_dir().join(name.clone());
+                let code = std::fs::read_to_string(path.clone());
+                match code {
+                    Ok(code) => {
+                        if shaders.insert(name.clone(), code).is_some() {
+                            panic!("{} is already exists", name);
+                        }
+                    }
+                    Err(err) => {
+                        panic!("{}, {:?}", err, path);
+                    }
                 }
             }
         }

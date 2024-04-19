@@ -3,8 +3,7 @@ use rs_artifact::{
     skeleton_animation::SkeletonAnimation,
     skin_mesh::SkinMesh,
 };
-use rs_engine::{engine::Engine, resource_manager::ResourceManager};
-use rs_render::command::{DrawObject, EMaterialType, PhongMaterial};
+use rs_engine::{drawable::EDrawObjectType, engine::Engine, resource_manager::ResourceManager};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
@@ -25,7 +24,7 @@ pub struct StaticMeshComponent {
 
 #[derive(Clone)]
 struct SkeletonMeshComponentRuntime {
-    draw_objects: HashMap<String, DrawObject>,
+    draw_objects: HashMap<String, EDrawObjectType>,
     skeleton: Option<Arc<Skeleton>>,
     skeleton_animation: Option<Arc<SkeletonAnimation>>,
     skin_meshes: Vec<Arc<SkinMesh>>,
@@ -86,6 +85,9 @@ impl SkeletonMeshComponent {
             let Some(skeleton) = skeleton.clone() else {
                 continue;
             };
+            let Some(run_time) = self.run_time.as_mut() else {
+                continue;
+            };
             let mut model = glam::Mat4::IDENTITY;
             if let Some((_, skeleton_mesh_hierarchy_node)) = skeleton
                 .skeleton_mesh_hierarchy
@@ -95,43 +97,22 @@ impl SkeletonMeshComponent {
                 model = skeleton_mesh_hierarchy_node.transformation;
             }
 
-            let material_type = EMaterialType::Phong(PhongMaterial {
-                constants: rs_render::render_pipeline::phong_pipeline::Constants {
-                    model,
-                    view: glam::Mat4::IDENTITY,
-                    projection: glam::Mat4::IDENTITY,
-                },
-                diffuse_texture: None,
-                specular_texture: None,
-            });
-
-            let draw_object = engine.create_draw_object_from_skin_mesh(
+            let mut draw_object = engine.create_draw_object_from_skin_mesh(
                 &skin_mesh.vertexes,
                 &skin_mesh.indexes,
-                material_type,
                 Some(skin_mesh.name.clone()),
             );
-            self.run_time
-                .as_mut()
-                .unwrap()
+            match &mut draw_object {
+                EDrawObjectType::Static(_) => panic!(),
+                EDrawObjectType::Skin(draw_object) => {
+                    draw_object.constants.model = model;
+                }
+            }
+            run_time
                 .draw_objects
                 .insert(skin_mesh.name.clone(), draw_object);
-            self.run_time.as_mut().unwrap().skin_meshes.push(skin_mesh);
-        }
-    }
 
-    pub fn camera_did_update(&mut self, view: glam::Mat4, projection: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        for (_, draw_object) in run_time.draw_objects.iter_mut() {
-            match &mut draw_object.material_type {
-                EMaterialType::Phong(material) => {
-                    material.constants.view = view;
-                    material.constants.projection = projection;
-                }
-                EMaterialType::PBR(_) => todo!(),
-            }
+            self.run_time.as_mut().unwrap().skin_meshes.push(skin_mesh);
         }
     }
 
@@ -223,7 +204,7 @@ impl SkeletonMeshComponent {
         }
     }
 
-    pub fn update(&mut self, time: f32) {
+    pub fn update(&mut self, time: f32, engine: &mut Engine) {
         let Some(run_time) = self.run_time.as_mut() else {
             return;
         };
@@ -252,13 +233,19 @@ impl SkeletonMeshComponent {
                 bones[index] = *node_anim_transform;
             }
             let draw_object = run_time.draw_objects.get_mut(&skin_mesh.name).unwrap();
-            draw_object.bones = Some(bones.clone());
+            match draw_object {
+                EDrawObjectType::Static(_) => panic!(),
+                EDrawObjectType::Skin(draw_object) => {
+                    draw_object.constants.bones.copy_from_slice(&bones);
+                }
+            }
+            engine.update_draw_object(draw_object);
         }
     }
 
-    pub fn get_draw_objects(&self) -> Vec<DrawObject> {
+    pub fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
         match &self.run_time {
-            Some(x) => x.draw_objects.values().map(|x| x.clone()).collect(),
+            Some(x) => x.draw_objects.values().map(|x| x).collect(),
             None => vec![],
         }
     }

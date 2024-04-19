@@ -6,7 +6,7 @@ use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
-use crate::render_pipeline::shading::{self, ShadingPipeline};
+use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
@@ -21,6 +21,9 @@ use std::ops::Deref;
 use std::path::Path;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
+
+pub const SKIN_MESH_RENDER_PIPELINE: &str = "SKIN_MESH_RENDER_PIPELINE";
+pub const STATIC_MESH_RENDER_PIPELINE: &str = "STATIC_MESH_RENDER_PIPELINE";
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
@@ -42,6 +45,7 @@ pub struct Renderer {
     buffers: HashMap<u64, Buffer>,
     ui_textures: HashMap<u64, egui::TextureId>,
     ibl_bakes: HashMap<u64, AccelerationBaker>,
+    samplers: HashMap<u64, Sampler>,
 
     shading_pipeline: ShadingPipeline,
     skin_mesh_shading_pipeline: SkinMeshShadingPipeline,
@@ -90,13 +94,11 @@ impl Renderer {
             &shader_library,
             &wgpu_context.get_current_swapchain_format(),
             false,
-            &mut sampler_cache,
         );
         let skin_mesh_shading_pipeline = SkinMeshShadingPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
             &wgpu_context.get_current_swapchain_format(),
-            &mut sampler_cache,
             &mut base_render_pipeline_pool,
         );
         let depth_texture = DepthTexture::new(
@@ -158,6 +160,7 @@ impl Renderer {
             settings,
             skin_mesh_shading_pipeline,
             base_render_pipeline_pool,
+            samplers: HashMap::new(),
         }
     }
 
@@ -532,6 +535,12 @@ impl Renderer {
             self.wgpu_context.get_queue(),
             surface_texture_view,
             depth_texture_view,
+            Color {
+                r: 0.5,
+                g: 0.5,
+                b: 0.5,
+                a: 1.0,
+            },
         );
 
         if let Some(pass) = &self.virtual_texture_pass {
@@ -591,6 +600,13 @@ impl Renderer {
                     &mut self.base_render_pipeline_pool,
                 );
             }
+            RenderCommand::CreateSampler(create_sampler) => {
+                let sampler = self
+                    .wgpu_context
+                    .get_device()
+                    .create_sampler(&create_sampler.sampler_descriptor);
+                self.samplers.insert(create_sampler.handle, sampler);
+            }
         }
         return None;
     }
@@ -603,42 +619,108 @@ impl Renderer {
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
         for draw_object_command in &self.draw_object_commands {
-            match &draw_object_command.material_type {
-                EMaterialType::Phong(material) => {
-                    let mut vertex_buffers = Vec::<&Buffer>::new();
-                    let mut index_buffer: Option<&wgpu::Buffer> = None;
+            let is_virtual = draw_object_command
+                .binding_resources
+                .iter()
+                .flatten()
+                .find(|x| match x {
+                    EBindingResource::Texture(texture) => match texture {
+                        ETextureType::Virtual(_) => true,
+                        _ => false,
+                    },
+                    _ => false,
+                })
+                .is_some();
+            if !is_virtual {
+                continue;
+            }
+            let mut vertex_buffers = Vec::<&Buffer>::new();
+            let mut index_buffer: Option<&wgpu::Buffer> = None;
 
-                    for vertex_buffer in &draw_object_command.vertex_buffers {
-                        if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
-                            vertex_buffers.push(vertex_buffer);
-                            break;
-                        }
+            match draw_object_command.render_pipeline.as_str() {
+                SKIN_MESH_RENDER_PIPELINE => {
+                    vertex_buffers.push(
+                        self.buffers
+                            .get(&draw_object_command.vertex_buffers[0])
+                            .unwrap(),
+                    );
+                    vertex_buffers.push(
+                        self.buffers
+                            .get(&draw_object_command.vertex_buffers[2])
+                            .unwrap(),
+                    );
+                }
+                STATIC_MESH_RENDER_PIPELINE => {
+                    vertex_buffers.push(
+                        self.buffers
+                            .get(&draw_object_command.vertex_buffers[0])
+                            .unwrap(),
+                    );
+                }
+                _ => {}
+            }
+
+            if vertex_buffers.is_empty() {
+                continue;
+            }
+            if let Some(handle) = draw_object_command.index_buffer {
+                if let Some(buffer) = self.buffers.get(&handle) {
+                    index_buffer = Some(buffer);
+                }
+            }
+            let mesh_buffer = GpuVertexBufferImp {
+                vertex_buffers: &vertex_buffers,
+                vertex_count: draw_object_command.vertex_count,
+                index_buffer,
+                index_count: draw_object_command.index_count,
+            };
+
+            let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![vec![], vec![]];
+
+            for binding_resource_type in draw_object_command.global_binding_resources.iter() {
+                let binding_resource = group_binding_resource.get_mut(0).unwrap();
+                match binding_resource_type {
+                    EBindingResource::Texture(_) => {}
+                    EBindingResource::Constants(buffer_handle) => {
+                        let buffer = self.buffers.get(buffer_handle).unwrap().as_entire_binding();
+                        binding_resource.push(buffer);
                     }
-                    if vertex_buffers.is_empty() {
-                        continue;
+                    EBindingResource::Sampler(_) => {}
+                }
+            }
+
+            for binding_resource_type in draw_object_command.vt_binding_resources.iter() {
+                let binding_resource = group_binding_resource.get_mut(1).unwrap();
+                match binding_resource_type {
+                    EBindingResource::Texture(_) => {}
+                    EBindingResource::Constants(buffer_handle) => {
+                        let buffer = self.buffers.get(buffer_handle).unwrap().as_entire_binding();
+                        binding_resource.push(buffer);
                     }
-                    if let Some(handle) = draw_object_command.index_buffer {
-                        if let Some(buffer) = self.buffers.get(&handle) {
-                            index_buffer = Some(buffer);
-                        }
-                    }
-                    let mesh_buffer = GpuVertexBufferImp {
-                        vertex_buffers: &vertex_buffers,
-                        vertex_count: draw_object_command.vertex_count,
-                        index_buffer,
-                        index_count: draw_object_command.index_count,
-                    };
+                    EBindingResource::Sampler(_) => {}
+                }
+            }
+
+            match draw_object_command.render_pipeline.as_str() {
+                SKIN_MESH_RENDER_PIPELINE => {
                     virtual_texture_pass.render(
                         device,
                         queue,
                         &[mesh_buffer.clone()],
-                        material.constants.model.clone(),
-                        material.constants.view.clone(),
-                        material.constants.projection.clone(),
-                        draw_object_command.id,
+                        group_binding_resource,
+                        false,
                     );
                 }
-                EMaterialType::PBR(_) => todo!(),
+                STATIC_MESH_RENDER_PIPELINE => {
+                    virtual_texture_pass.render(
+                        device,
+                        queue,
+                        &[mesh_buffer.clone()],
+                        group_binding_resource,
+                        true,
+                    );
+                }
+                _ => {}
             }
         }
         let result = virtual_texture_pass.parse_feed_back(
@@ -660,155 +742,162 @@ impl Renderer {
     fn draw_objects(&mut self, surface_texture_view: &wgpu::TextureView) {
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
+
         for draw_object_command in &self.draw_object_commands {
-            match &draw_object_command.material_type {
-                EMaterialType::Phong(material) => {
-                    let diffuse_texture: &Texture;
-                    let specular_texture: &Texture;
-                    let binding = self.default_textures.get_white_texture();
-                    if let Some(diffuse_texture_type) = &material.diffuse_texture {
-                        match diffuse_texture_type {
-                            ETextureType::Base(diffuse_texture_handle) => {
-                                diffuse_texture = self
-                                    .textures
-                                    .get(&diffuse_texture_handle)
-                                    .unwrap_or(&binding);
-                            }
-                            ETextureType::Virtual(_) => {
-                                diffuse_texture = &binding;
-                            }
-                        }
-                    } else {
-                        diffuse_texture = &binding;
-                    }
-                    if let Some(specular_texture_handle) = material.specular_texture {
-                        specular_texture = self
-                            .textures
-                            .get(&specular_texture_handle)
-                            .unwrap_or(&binding);
-                    } else {
-                        specular_texture = &binding;
-                    }
+            let mut vertex_buffers = Vec::<&Buffer>::new();
+            let mut index_buffer: Option<&wgpu::Buffer> = None;
 
-                    let mut vertex_buffers = Vec::<&Buffer>::new();
-                    let mut index_buffer: Option<&wgpu::Buffer> = None;
+            for vertex_buffer in &draw_object_command.vertex_buffers {
+                if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
+                    vertex_buffers.push(vertex_buffer);
+                }
+            }
+            if vertex_buffers.is_empty() {
+                return;
+            }
+            if let Some(handle) = draw_object_command.index_buffer {
+                if let Some(buffer) = self.buffers.get(&handle) {
+                    index_buffer = Some(buffer);
+                }
+            }
+            let mesh_buffer = GpuVertexBufferImp {
+                vertex_buffers: &vertex_buffers,
+                vertex_count: draw_object_command.vertex_count,
+                index_buffer,
+                index_count: draw_object_command.index_count,
+            };
 
-                    for vertex_buffer in &draw_object_command.vertex_buffers {
-                        if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
-                            vertex_buffers.push(vertex_buffer);
-                        }
+            enum _ResourceType<'a> {
+                Buffer(&'a Buffer),
+                TextureView(TextureView),
+                Sampler(&'a Sampler),
+            }
+
+            let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![vec![]];
+            let mut resources: Vec<_ResourceType> = Vec::new();
+
+            for global_binding_resource in draw_object_command.global_binding_resources.iter() {
+                match global_binding_resource {
+                    EBindingResource::Texture(_) => {}
+                    EBindingResource::Constants(handle) => {
+                        let buffer = self.buffers.get(handle).unwrap();
+                        resources.push(_ResourceType::Buffer(buffer));
                     }
-                    if vertex_buffers.is_empty() {
-                        return;
-                    }
-                    if let Some(handle) = draw_object_command.index_buffer {
-                        if let Some(buffer) = self.buffers.get(&handle) {
-                            index_buffer = Some(buffer);
-                        }
-                    }
-                    let mesh_buffer = GpuVertexBufferImp {
-                        vertex_buffers: &vertex_buffers,
-                        vertex_count: draw_object_command.vertex_count,
-                        index_buffer,
-                        index_count: draw_object_command.index_count,
-                    };
-
-                    let diffuse_texture_view =
-                        diffuse_texture.create_view(&TextureViewDescriptor::default());
-                    let specular_texture_view =
-                        specular_texture.create_view(&TextureViewDescriptor::default());
-
-                    let mut constants = shading::Constants {
-                        model: material.constants.model,
-                        view: material.constants.view,
-                        projection: material.constants.projection,
-                        is_enable_virtual_texture: 0,
-                        physical_texture_size: glam::Vec2::splat(
-                            self.settings.virtual_texture_setting.physical_texture_size as f32,
-                        ),
-                        tile_size: self.settings.virtual_texture_setting.tile_size as f32,
-                        diffuse_texture_size: Default::default(),
-                        diffuse_texture_max_lod: Default::default(),
-                        is_virtual_diffuse_texture: Default::default(),
-                        specular_texture_size: Default::default(),
-                        specular_texture_max_lod: Default::default(),
-                        is_virtual_specular_texture: Default::default(),
-                    };
-
-                    if let Some(virtual_texture_pass) = &self.virtual_texture_pass {
-                        if let Some(ETextureType::Virtual(diffuse_texture_handle)) =
-                            &material.diffuse_texture
-                        {
-                            let source = virtual_texture_pass
-                                .virtual_texture_sources
-                                .get(diffuse_texture_handle);
-                            if let Some(source) = source {
-                                let max_mips = rs_core_minimal::misc::calculate_max_mips(
-                                    source.get_size().min_element(),
-                                );
-                                let max_lod = max_mips
-                                    - self.settings.virtual_texture_setting.tile_size.ilog2()
-                                    - 1;
-                                constants.diffuse_texture_max_lod = max_lod;
-                                constants.diffuse_texture_size = source.get_size().as_vec2();
-                                constants.is_virtual_diffuse_texture = 1;
-                            }
-                        }
-                        constants.is_enable_virtual_texture = 1;
-                    }
-
-                    let physical_texture_view = match &self.virtual_texture_pass {
-                        Some(pass) => pass.get_physical_texture_view(),
-                        None => self.default_textures.get_black_texture_view(),
-                    };
-                    let indirect_table_view = match &self.virtual_texture_pass {
-                        Some(pass) => pass.get_indirect_table_view(),
-                        None => self.default_textures.get_black_u32_texture_view(),
-                    };
-                    if draw_object_command.bones.is_none() {
-                        self.shading_pipeline.draw(
-                            device,
-                            queue,
-                            surface_texture_view,
-                            &self.depth_texture.get_view(),
-                            &constants,
-                            &[mesh_buffer],
-                            &diffuse_texture_view,
-                            &specular_texture_view,
-                            &physical_texture_view,
-                            &indirect_table_view,
-                        );
-                    } else {
-                        let skin_constants = crate::render_pipeline::skin_mesh_shading::Constants {
-                            model: constants.model,
-                            view: constants.view,
-                            projection: constants.projection,
-                            is_enable_virtual_texture: 0,
-                            physical_texture_size: constants.physical_texture_size,
-                            tile_size: constants.tile_size,
-                            diffuse_texture_size: constants.diffuse_texture_size,
-                            diffuse_texture_max_lod: constants.diffuse_texture_max_lod,
-                            is_virtual_diffuse_texture: 0,
-                            specular_texture_size: constants.specular_texture_size,
-                            specular_texture_max_lod: constants.specular_texture_max_lod,
-                            is_virtual_specular_texture: 0,
-                            bones: draw_object_command.bones.unwrap().clone(),
-                        };
-                        self.skin_mesh_shading_pipeline.draw(
-                            device,
-                            queue,
-                            surface_texture_view,
-                            &self.depth_texture.get_view(),
-                            &skin_constants,
-                            &[mesh_buffer],
-                            &diffuse_texture_view,
-                            &specular_texture_view,
-                            &physical_texture_view,
-                            &indirect_table_view,
-                        );
+                    EBindingResource::Sampler(handle) => {
+                        let sampler = self.samplers.get(handle).unwrap();
+                        resources.push(_ResourceType::Sampler(sampler));
                     }
                 }
-                EMaterialType::PBR(_) => todo!(),
+            }
+
+            let physical_texture_view = match &self.virtual_texture_pass {
+                Some(pass) => pass.get_physical_texture_view(),
+                None => self.default_textures.get_black_texture_view(),
+            };
+            let indirect_table_view = match &self.virtual_texture_pass {
+                Some(pass) => pass.get_indirect_table_view(),
+                None => self.default_textures.get_black_u32_texture_view(),
+            };
+            resources.push(_ResourceType::TextureView(physical_texture_view));
+            resources.push(_ResourceType::TextureView(indirect_table_view));
+            for resource in resources.iter() {
+                match resource {
+                    _ResourceType::Buffer(buffer) => {
+                        group_binding_resource[0].push(buffer.as_entire_binding());
+                    }
+                    _ResourceType::TextureView(texture_view) => {
+                        group_binding_resource[0].push(BindingResource::TextureView(texture_view));
+                    }
+                    _ResourceType::Sampler(sampler) => {
+                        group_binding_resource[0].push(BindingResource::Sampler(sampler));
+                    }
+                }
+            }
+
+            let mut resources: Vec<Vec<_ResourceType>> =
+                Vec::with_capacity(draw_object_command.binding_resources.len());
+
+            for binding_resources in draw_object_command.binding_resources.iter() {
+                let mut binding_resource: Vec<_ResourceType> =
+                    Vec::with_capacity(binding_resources.len());
+                for binding_resource_type in binding_resources.iter() {
+                    match binding_resource_type {
+                        EBindingResource::Texture(texture_type) => match texture_type {
+                            ETextureType::Base(texture_handle) => {
+                                let binding = self.default_textures.get_white_texture();
+                                let texture =
+                                    self.textures.get(&texture_handle).unwrap_or(&binding);
+                                let texture_view =
+                                    texture.create_view(&TextureViewDescriptor::default());
+                                binding_resource.push(_ResourceType::TextureView(texture_view));
+                            }
+                            ETextureType::Virtual(_) => {
+                                let binding = self.default_textures.get_white_texture();
+                                let texture_view =
+                                    binding.create_view(&TextureViewDescriptor::default());
+                                binding_resource.push(_ResourceType::TextureView(texture_view));
+                            }
+                            ETextureType::None => {
+                                let binding = self.default_textures.get_white_texture();
+                                let texture_view =
+                                    binding.create_view(&TextureViewDescriptor::default());
+                                binding_resource.push(_ResourceType::TextureView(texture_view));
+                            }
+                        },
+                        EBindingResource::Constants(buffer_handle) => {
+                            binding_resource.push(_ResourceType::Buffer(
+                                self.buffers.get(buffer_handle).unwrap(),
+                            ));
+                        }
+                        EBindingResource::Sampler(handle) => {
+                            let sampler = self.samplers.get(handle).unwrap();
+                            binding_resource.push(_ResourceType::Sampler(sampler));
+                        }
+                    }
+                }
+                resources.push(binding_resource);
+            }
+
+            for resource in resources.iter() {
+                let mut binding_resource: Vec<BindingResource> = Vec::with_capacity(resource.len());
+                for resource_type in resource.iter() {
+                    match resource_type {
+                        _ResourceType::Buffer(buffer) => {
+                            binding_resource.push(buffer.as_entire_binding());
+                        }
+                        _ResourceType::TextureView(texture_view) => {
+                            binding_resource.push(BindingResource::TextureView(texture_view));
+                        }
+                        _ResourceType::Sampler(sampler) => {
+                            binding_resource.push(BindingResource::Sampler(sampler));
+                        }
+                    }
+                }
+                group_binding_resource.push(binding_resource);
+            }
+
+            match draw_object_command.render_pipeline.as_str() {
+                SKIN_MESH_RENDER_PIPELINE => {
+                    self.skin_mesh_shading_pipeline.draw(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &self.depth_texture.get_view(),
+                        &[mesh_buffer],
+                        group_binding_resource,
+                    );
+                }
+                STATIC_MESH_RENDER_PIPELINE => {
+                    self.shading_pipeline.draw(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &self.depth_texture.get_view(),
+                        &[mesh_buffer],
+                        group_binding_resource,
+                    );
+                }
+                _ => todo!(),
             }
         }
     }

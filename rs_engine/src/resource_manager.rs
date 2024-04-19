@@ -278,6 +278,10 @@ impl STResourceManager {
         self.handle_manager.next_buffer()
     }
 
+    fn next_sampler(&mut self) -> crate::handle::SamplerHandle {
+        self.handle_manager.next_sampler()
+    }
+
     fn get_texture_by_url(&self, url: &url::Url) -> Option<crate::handle::TextureHandle> {
         self.textures.get(url).cloned()
     }

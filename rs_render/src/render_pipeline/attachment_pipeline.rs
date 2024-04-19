@@ -49,6 +49,7 @@ impl AttachmentPipeline {
         queue: &Queue,
         output_view: &TextureView,
         depth_view: &TextureView,
+        clear_color: wgpu::Color,
     ) {
         self.base_render_pipeline.draw_resources2(
             device,
@@ -62,7 +63,7 @@ impl AttachmentPipeline {
             }],
             &[ColorAttachment {
                 color_ops: Some(Operations {
-                    load: LoadOp::Clear(Color::TRANSPARENT),
+                    load: LoadOp::Clear(clear_color),
                     store: StoreOp::Store,
                 }),
                 view: output_view,

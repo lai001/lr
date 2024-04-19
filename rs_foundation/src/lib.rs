@@ -58,6 +58,12 @@ pub fn math_remap_value_range(
         + to_range.start
 }
 
+pub fn cast_any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    unsafe {
+        ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
+    }
+}
+
 pub fn get_object_address<T>(object: &T) -> String {
     let raw_ptr = object as *const T;
     std::format!("{:?}", raw_ptr)

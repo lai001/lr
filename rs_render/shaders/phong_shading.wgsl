@@ -1,4 +1,5 @@
 #include "common.wgsl"
+#include "global_constants.wgsl"
 #include "virtual_texture.wgsl"
 
 struct VertexIn {
@@ -11,7 +12,7 @@ struct VertexIn {
 #ifdef SKELETON_MAX_BONES
     @location(6) bone_ids: vec4<i32>,
     @location(7) bone_weights: vec4<f32>,
-#endif    
+#endif
 };
 
 struct VertexOutput {
@@ -29,33 +30,31 @@ struct FragmentOutput {
 struct Constants
 {
     model: mat4x4<f32>,
-    view: mat4x4<f32>,
-    projection: mat4x4<f32>,
-    physical_texture_size: vec2<f32>,
     diffuse_texture_size: vec2<f32>,
     diffuse_texture_max_lod: u32,
     is_virtual_diffuse_texture: u32,
     specular_texture_size: vec2<f32>,
     specular_texture_max_lod: u32,
     is_virtual_specular_texture: u32,
-    tile_size: f32,
-    is_enable_virtual_texture: i32,
+    id: u32,
 #ifdef SKELETON_MAX_BONES
     bones: array<mat4x4<f32>, SKELETON_MAX_BONES>,
 #endif
 };
 
-@group(0) @binding(0) var<uniform> constants: Constants;
+@group(0) @binding(0) var<uniform> global_constants: GlobalConstants;
+
+@group(0) @binding(1) var base_color_sampler: sampler;
+
+@group(0) @binding(2) var physical_texture: texture_2d<f32>;
+
+@group(0) @binding(3) var page_table_texture: texture_2d<u32>;
 
 @group(1) @binding(0) var diffuse_texture: texture_2d<f32>;
 
 @group(1) @binding(1) var specular_texture: texture_2d<f32>;
 
-@group(2) @binding(0) var physical_texture: texture_2d<f32>;
-
-@group(2) @binding(1) var page_table_texture: texture_2d<u32>;
-
-@group(3) @binding(0) var base_color_sampler: sampler;
+@group(2) @binding(0) var<uniform> constants: Constants;
 
 @vertex fn vs_main(vertex_in: VertexIn) -> VertexOutput {
 #ifdef SKELETON_MAX_BONES
@@ -65,8 +64,7 @@ struct Constants
     bone_transform += constants.bones[vertex_in.bone_ids[3]] * vertex_in.bone_weights[3];
 #endif
 
-    let mv = constants.view * constants.model;
-    let mvp = constants.projection * mv;
+    let mvp = global_constants.view_projection * constants.model;
     var result: VertexOutput;
     result.tex_coord = vertex_in.tex_coord;
     result.vertex_color = vertex_in.vertex_color;
@@ -78,13 +76,13 @@ struct Constants
     result.position = mvp * vec4<f32>(vertex_in.position, 1.0);
     result.frag_position = (constants.model * vec4<f32>(vertex_in.position, 1.0)).xyz;
     result.normal = vertex_in.normal;
-#endif 
+#endif
     return result;
 }
 
 @fragment fn fs_main(vertex: VertexOutput) -> FragmentOutput {
     var fragment_output: FragmentOutput;
-    if constants.is_enable_virtual_texture == 1 {
+    if global_constants.is_enable_virtual_texture == 1 {
         if constants.is_virtual_diffuse_texture == 1 {
             let diffuse_color = virtual_texture_sample(vertex.tex_coord, constants.diffuse_texture_max_lod, constants.diffuse_texture_size);
             fragment_output.color = diffuse_color;

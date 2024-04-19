@@ -1,10 +1,8 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
-    global_shaders::skeleton_shading::SkeletonShadingShader,
-    gpu_buffer,
+    global_shaders::skeleton_shading::{SkeletonShadingShader, NUM_MAX_BONE},
     gpu_vertex_buffer::GpuVertexBufferImp,
-    sampler_cache::SamplerCache,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2},
     view_mode::EViewModeType,
@@ -18,24 +16,41 @@ use wgpu::*;
 #[derive(Clone, Copy, Debug)]
 pub struct Constants {
     pub model: glam::Mat4,
-    pub view: glam::Mat4,
-    pub projection: glam::Mat4,
-    pub physical_texture_size: glam::Vec2,
     pub diffuse_texture_size: glam::Vec2,
     pub diffuse_texture_max_lod: u32,
     pub is_virtual_diffuse_texture: u32,
     pub specular_texture_size: glam::Vec2,
     pub specular_texture_max_lod: u32,
     pub is_virtual_specular_texture: u32,
-    pub tile_size: f32,
-    pub is_enable_virtual_texture: i32,
+    pub id: u32,
+    _pad8_0: u32,
+    _pad8_1: u32,
+    _pad8_2: u32,
     pub bones: [glam::Mat4; 255],
+}
+
+impl Default for Constants {
+    fn default() -> Self {
+        Self {
+            model: Default::default(),
+            diffuse_texture_size: Default::default(),
+            diffuse_texture_max_lod: Default::default(),
+            is_virtual_diffuse_texture: Default::default(),
+            specular_texture_size: Default::default(),
+            specular_texture_max_lod: Default::default(),
+            is_virtual_specular_texture: Default::default(),
+            bones: [glam::Mat4::IDENTITY; NUM_MAX_BONE],
+            id: Default::default(),
+            _pad8_0: Default::default(),
+            _pad8_1: Default::default(),
+            _pad8_2: Default::default(),
+        }
+    }
 }
 
 pub struct SkinMeshShadingPipeline {
     base_render_pipeline: Arc<BaseRenderPipeline>,
     builder: BaseRenderPipelineBuilder,
-    sampler: Arc<Sampler>,
 }
 
 impl SkinMeshShadingPipeline {
@@ -43,7 +58,6 @@ impl SkinMeshShadingPipeline {
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
-        sampler_cache: &mut SamplerCache,
         pool: &mut BaseRenderPipelinePool,
     ) -> SkinMeshShadingPipeline {
         let builder = BaseRenderPipelineBuilder::default()
@@ -69,11 +83,8 @@ impl SkinMeshShadingPipeline {
         let base_render_pipeline =
             pool.get(device, shader_library, &SkeletonShadingShader {}, &builder);
 
-        let sampler = sampler_cache.create_sampler(device, &SamplerDescriptor::default());
-
         SkinMeshShadingPipeline {
             base_render_pipeline,
-            sampler,
             builder,
         }
     }
@@ -84,31 +95,13 @@ impl SkinMeshShadingPipeline {
         queue: &Queue,
         output_view: &TextureView,
         depth_view: &TextureView,
-        constants: &Constants,
         mesh_buffers: &[GpuVertexBufferImp],
-        diffuse_texture_view: &TextureView,
-        specular_texture_view: &TextureView,
-        physical_texture_view: &TextureView,
-        page_table_texture_view: &TextureView,
+        binding_resource: Vec<Vec<BindingResource<'_>>>,
     ) {
-        let uniform_buf =
-            gpu_buffer::uniform::from(device, constants, Some("SkinMeshShadingPipeline.constants"));
-
         self.base_render_pipeline.draw_resources2(
             device,
             queue,
-            vec![
-                vec![uniform_buf.as_entire_binding()],
-                vec![
-                    BindingResource::TextureView(&diffuse_texture_view),
-                    BindingResource::TextureView(&specular_texture_view),
-                ],
-                vec![
-                    BindingResource::TextureView(&physical_texture_view),
-                    BindingResource::TextureView(&page_table_texture_view),
-                ],
-                vec![BindingResource::Sampler(&self.sampler)],
-            ],
+            binding_resource,
             mesh_buffers,
             &[ColorAttachment {
                 color_ops: None,

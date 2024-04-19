@@ -1,4 +1,4 @@
-use rs_proc_macros::MultipleThreadFunctionsGenerator;
+use rs_proc_macros::{GlobalShader, MultipleThreadFunctionsGenerator};
 use std::sync::{Arc, Mutex};
 
 struct STResourceManager {}
@@ -39,6 +39,12 @@ impl ResourceManager {
         }
     }
 }
+
+#[derive(GlobalShader)]
+#[file("rs_render/shaders/phong_shading.wgsl")]
+#[include_dirs("rs_render/shaders")]
+#[defines("A=1", "B=2")]
+pub struct TestShader {}
 
 #[cfg(test)]
 mod test {
