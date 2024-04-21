@@ -21,6 +21,14 @@ pub fn get_node_path(ai_node: &mut aiNode) -> String {
     path
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum ENodeType {
+    Axis,
+    Bone,
+    Mesh,
+    Armature,
+}
+
 pub struct Node<'a> {
     c: &'a mut russimp_sys::aiNode,
     pub parent: Option<Weak<RefCell<Node<'a>>>>,
@@ -30,6 +38,8 @@ pub struct Node<'a> {
     pub metadata: Option<Metadata<'a>>,
     pub transformation: glam::Mat4,
     pub meshes: Vec<Rc<RefCell<Mesh<'a>>>>,
+    pub(crate) is_bone: bool,
+    pub bone_offset_matrix: Option<glam::Mat4>,
     marker: PhantomData<&'a ()>,
 }
 
@@ -52,6 +62,8 @@ impl<'a> Node<'a> {
             metadata,
             transformation,
             marker: PhantomData,
+            is_bone: false,
+            bone_offset_matrix: None,
         }
     }
 
@@ -87,6 +99,20 @@ impl<'a> Node<'a> {
         self.meshes.clear();
         for ai_meshe in ai_meshes {
             self.meshes.push(all_meshes[ai_meshe].clone());
+        }
+    }
+
+    pub fn get_node_type(&self) -> ENodeType {
+        if !self.meshes.is_empty() {
+            ENodeType::Mesh
+        } else if self.is_bone {
+            if self.bone_offset_matrix.is_none() {
+                ENodeType::Armature
+            } else {
+                ENodeType::Bone
+            }
+        } else {
+            ENodeType::Axis
         }
     }
 }

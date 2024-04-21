@@ -122,12 +122,16 @@ impl SkeletonMeshComponent {
         bone_map: &HashMap<String, SkeletonBone>,
         skeleton_animation: Arc<SkeletonAnimation>,
         animation_time: f32,
+        skeleton_mesh_hierarchy: &HashMap<String, rs_artifact::skeleton::SkeletonMeshHierarchyNode>,
+        gather_parent_node_transformation: glam::Mat4,
+        global_inverse_transform: glam::Mat4,
     ) {
         let mut position = glam::Vec3::ZERO;
         let mut scale = glam::Vec3::ONE;
         let mut rotation = glam::Quat::IDENTITY;
-
+        let mut has_anim = false;
         let ticks_per_second = skeleton_animation.ticks_per_second;
+
         if let Some(animation) = skeleton_animation
             .channels
             .iter()
@@ -180,18 +184,26 @@ impl SkeletonMeshComponent {
                     rotation = rotation_keys[0].value.slerp(rotation_keys[1].value, alpha);
                 }
             }
+
+            has_anim = true;
         }
 
-        let final_transform = if let Some(parent) = &skeleton_bone.parent {
-            let self_transform =
-                glam::Mat4::from_scale_rotation_translation(scale, rotation, position);
-            let parent_transform = *node_anim_transforms.get(parent).unwrap();
-            parent_transform * self_transform
-        } else {
-            glam::Mat4::from_scale_rotation_translation(scale, rotation, position)
-        };
+        let mut attached_node_transformation = skeleton_mesh_hierarchy
+            .get(&skeleton_bone.path)
+            .unwrap()
+            .transformation;
 
-        node_anim_transforms.insert(skeleton_bone.path.clone(), final_transform);
+        let self_anim_transform =
+            glam::Mat4::from_scale_rotation_translation(scale, rotation, position).transpose();
+        if has_anim {
+            attached_node_transformation = self_anim_transform;
+        }
+
+        let global_transform = attached_node_transformation * gather_parent_node_transformation;
+        let bone_space_transformation =
+            (skeleton_bone.offset_matrix * global_transform * global_inverse_transform).transpose();
+
+        node_anim_transforms.insert(skeleton_bone.path.clone(), bone_space_transformation);
 
         for child in &skeleton_bone.childs {
             Self::walk_skeleton_bone(
@@ -200,6 +212,9 @@ impl SkeletonMeshComponent {
                 bone_map,
                 skeleton_animation.clone(),
                 animation_time,
+                skeleton_mesh_hierarchy,
+                global_transform,
+                global_inverse_transform,
             );
         }
     }
@@ -218,12 +233,26 @@ impl SkeletonMeshComponent {
         let animation_time = time % duration as f32;
         let mut node_anim_transforms: HashMap<String, glam::Mat4> = HashMap::new();
         let root_bone = skeleton.bones.get(&skeleton.root_bone).unwrap();
+        let global_inverse_transform = skeleton
+            .skeleton_mesh_hierarchy
+            .get(&skeleton.root_node)
+            .unwrap()
+            .transformation
+            .inverse();
+
         Self::walk_skeleton_bone(
             &mut node_anim_transforms,
             root_bone,
             &skeleton.bones,
             skeleton_animation.clone(),
             animation_time,
+            &skeleton.skeleton_mesh_hierarchy,
+            skeleton
+                .skeleton_mesh_hierarchy
+                .get(&root_bone.path)
+                .unwrap()
+                .transformation,
+            global_inverse_transform,
         );
 
         for skin_mesh in run_time.skin_meshes.clone() {

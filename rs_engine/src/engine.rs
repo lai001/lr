@@ -1,6 +1,7 @@
 use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
+use crate::console_cmd::ConsoleCmd;
 use crate::drawable::{EDrawObjectType, SkinMeshDrawObject, StaticMeshDrawObject};
 use crate::error::Result;
 use crate::input_mode::EInputMode;
@@ -10,7 +11,9 @@ use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::level::ENodeType;
 use rs_artifact::resource_info::ResourceInfo;
 use rs_core_minimal::settings::Settings;
-use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
+use rs_foundation::new::{
+    MultipleThreadMut, MultipleThreadMutType, SingleThreadMut, SingleThreadMutType,
+};
 use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
     BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateSampler, CreateTexture,
@@ -21,6 +24,7 @@ use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::renderer::Renderer;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -60,6 +64,7 @@ pub struct Engine {
     global_sampler_handle: crate::handle::SamplerHandle,
     virtual_texture_source_infos:
         HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
+    console_cmds: SingleThreadMutType<HashMap<String, SingleThreadMutType<ConsoleCmd>>>,
 }
 
 impl Engine {
@@ -193,6 +198,7 @@ impl Engine {
             global_constants_handle: global_constants_handle.clone(),
             global_sampler_handle: global_sampler_handle.clone(),
             virtual_texture_source_infos: HashMap::new(),
+            console_cmds: SingleThreadMut::new(HashMap::new()),
         };
 
         Ok(engine)
@@ -917,6 +923,22 @@ impl Engine {
 
     pub fn get_camera_mut(&mut self) -> &mut Camera {
         &mut self.camera
+    }
+
+    pub fn get_console_cmd_mut(&self, key: &str) -> Option<SingleThreadMutType<ConsoleCmd>> {
+        self.console_cmds.borrow().get(key).cloned()
+    }
+
+    pub fn insert_console_cmd(&mut self, key: &str, c: ConsoleCmd) {
+        self.console_cmds
+            .borrow_mut()
+            .insert(key.to_string(), SingleThreadMut::new(c));
+    }
+
+    pub fn get_console_cmds(
+        &self,
+    ) -> SingleThreadMutType<HashMap<String, SingleThreadMutType<ConsoleCmd>>> {
+        self.console_cmds.clone()
     }
 }
 

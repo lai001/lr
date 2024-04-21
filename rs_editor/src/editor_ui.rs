@@ -2,7 +2,10 @@ use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
 use crate::ui::gizmo_view::GizmoView;
 use crate::ui::top_menu::TopMenu;
-use crate::ui::{asset_view, content_browser, gizmo_settings, level_view, property_view, top_menu};
+use crate::ui::{
+    asset_view, console_cmds_view, content_browser, gizmo_settings, level_view, property_view,
+    top_menu,
+};
 use egui::*;
 use egui_gizmo::GizmoResult;
 use rs_engine::input_mode::EInputMode;
@@ -130,6 +133,15 @@ impl EditorUI {
                 asset_folder_path,
                 &mut data_source.content_data_source,
                 // data_source.input_mode,
+            );
+        }
+        if let Some(console_cmds) = &data_source.console_cmds {
+            let window = Self::new_window("Console Cmds", data_source.input_mode);
+            console_cmds_view::draw(
+                window,
+                context,
+                &mut data_source.is_console_cmds_view_open,
+                &mut console_cmds.borrow_mut(),
             );
         }
         click

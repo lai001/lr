@@ -12,6 +12,7 @@ pub enum EWindowType {
     Content,
     Property,
     Level,
+    ComsoleCmds,
 }
 
 #[derive(Debug)]
@@ -129,6 +130,10 @@ impl TopMenu {
                     }
                     if ui.add(Button::new("Level")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Level));
+                        ui.close_menu();
+                    }
+                    if ui.add(Button::new("Comsole Cmds")).clicked() {
+                        click = Some(EClickEventType::OpenWindow(EWindowType::ComsoleCmds));
                         ui.close_menu();
                     }
                 });

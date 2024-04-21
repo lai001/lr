@@ -49,6 +49,37 @@ fn build_node_tree(map: &mut HashMap<String, Rc<RefCell<Node>>>) {
     }
 }
 
+fn resolve_is_bone<'a>(node: Rc<RefCell<Node<'a>>>) {
+    node.borrow_mut().is_bone = true;
+    for node in node.borrow().children.iter() {
+        resolve_is_bone(node.clone());
+    }
+}
+
+fn resolve_node_bone_offset_matrix<'a>(
+    all_nodes: HashMap<String, Rc<RefCell<Node<'a>>>>,
+    meshes: Vec<Rc<RefCell<Mesh<'a>>>>,
+) {
+    let mut offset_matrixs: HashMap<String, glam::Mat4> = HashMap::new();
+    for mesh in meshes {
+        for bone in &mesh.borrow().bones {
+            let offset_matrix = bone.borrow().offset_matrix;
+            let old = offset_matrixs.insert(
+                bone.borrow().node.clone().unwrap().borrow().path.clone(),
+                offset_matrix,
+            );
+            if let Some(old) = old {
+                assert_eq!(old, offset_matrix);
+            }
+        }
+    }
+    for (path, node) in all_nodes.iter() {
+        if let Some(offset_matrix) = offset_matrixs.get(path) {
+            node.borrow_mut().bone_offset_matrix = Some(*offset_matrix);
+        }
+    }
+}
+
 fn collect_armatures<'a>(
     bones: HashMap<String, Rc<RefCell<Bone<'a>>>>,
 ) -> HashMap<String, Rc<RefCell<Node<'a>>>> {
@@ -57,6 +88,9 @@ fn collect_armatures<'a>(
         if let Some(armature) = &bone.borrow().armature {
             nodes.insert(armature.borrow().name.clone(), armature.clone());
         }
+    }
+    for node in nodes.values() {
+        resolve_is_bone(node.clone());
     }
     nodes
 }
@@ -164,7 +198,7 @@ impl<'a> Scene<'a> {
                 animations.push(animation);
             }
         }
-
+        resolve_node_bone_offset_matrix(all_nodes.clone(), meshes.clone());
         let scene_name = ai_scene.mName.into();
         let scene = Scene {
             c: ai_scene,
@@ -242,7 +276,7 @@ mod test {
     #[test]
     fn test_case_1() {
         let resource_path =
-            rs_core_minimal::file_manager::get_engine_resource("Remote/MonkeyAnim.fbx");
+            rs_core_minimal::file_manager::get_engine_resource("Remote/FinalBaseMesh.glb");
         let mut props = PropertyStore::new();
         props.set_property_bool(&config::AI_CONFIG_FBX_USE_SKELETON_BONE_CONTAINER, true);
         let scene = Scene::from_file_with_properties(
@@ -291,7 +325,11 @@ mod test {
             };
             let node_name = v.name.clone();
             println!("    {node_name}({k})\n        parent: {parent_name:?}");
-            println!("        contain meshes: {}", !v.meshes.is_empty());
+            println!("        type: {:?}", v.get_node_type());
+            println!(
+                "        transformation: {:?}",
+                v.transformation.to_scale_rotation_translation()
+            );
             println!("        metadata:");
             if let Some(metadata) = &v.metadata {
                 for (key, value) in zip(&metadata.keys, &metadata.values) {
@@ -320,6 +358,10 @@ mod test {
             );
             for bone in &mesh.bones {
                 println!("        bone: {}", bone.borrow().name);
+                println!(
+                    "            offset_matrix: {:?}",
+                    bone.borrow().offset_matrix.to_scale_rotation_translation()
+                );
                 println!("            weights num: {}", bone.borrow().weights.len());
             }
         }

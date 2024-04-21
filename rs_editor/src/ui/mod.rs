@@ -1,4 +1,5 @@
 pub mod asset_view;
+pub mod console_cmds_view;
 pub mod content_browser;
 pub mod gizmo_settings;
 pub mod gizmo_view;

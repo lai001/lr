@@ -150,7 +150,7 @@ impl EditorContext {
             None,
         );
         let artifact_reader = None;
-        let engine = rs_engine::engine::Engine::new(
+        let mut engine = rs_engine::engine::Engine::new(
             window,
             window_width,
             window_height,
@@ -160,8 +160,10 @@ impl EditorContext {
             ProjectContext::pre_process_shaders(),
         )
         .unwrap();
+        Self::insert_cmds(&mut engine);
 
-        let data_source = DataSource::new();
+        let mut data_source = DataSource::new();
+        data_source.console_cmds = Some(engine.get_console_cmds());
         let editor_ui = EditorUI::new(egui_winit_state.egui_ctx());
 
         let plugin_context = Arc::new(Mutex::new(PluginContext::new(
@@ -184,6 +186,16 @@ impl EditorContext {
             frame_sync,
             model_loader: ModelLoader::new(),
         }
+    }
+
+    fn insert_cmds(engine: &mut rs_engine::engine::Engine) {
+        engine.insert_console_cmd(
+            rs_engine::console_cmd::RS_TEST_KEY,
+            rs_engine::console_cmd::ConsoleCmd {
+                key: String::from(rs_engine::console_cmd::RS_TEST_KEY),
+                value: rs_engine::console_cmd::EValue::I32(0),
+            },
+        );
     }
 
     pub fn handle_event(
@@ -427,6 +439,15 @@ impl EditorContext {
 
         if Self::is_keys_pressed(
             &mut self.virtual_key_code_states,
+            &[KeyCode::Backquote],
+            true,
+        ) {
+            self.data_source.is_console_cmds_view_open =
+                !self.data_source.is_console_cmds_view_open;
+        }
+
+        if Self::is_keys_pressed(
+            &mut self.virtual_key_code_states,
             &[KeyCode::AltLeft, KeyCode::F4],
             true,
         ) {
@@ -491,7 +512,6 @@ impl EditorContext {
                         skeleton_mesh.clone(),
                         &asset_folder_path,
                         ResourceManager::default(),
-                        true,
                     );
                 }
                 EContentFileType::SkeletonAnimation(node_animation) => {
@@ -939,6 +959,9 @@ impl EditorContext {
                     }
                     top_menu::EWindowType::Level => {
                         self.data_source.is_level_view_open = true;
+                    }
+                    top_menu::EWindowType::ComsoleCmds => {
+                        self.data_source.is_console_cmds_view_open = true;
                     }
                 },
                 top_menu::EClickEventType::Tool(tool_type) => match tool_type {

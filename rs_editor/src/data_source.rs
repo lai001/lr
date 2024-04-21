@@ -3,10 +3,11 @@ use crate::{
     ui::{content_browser, property_view},
 };
 use rs_core_minimal::settings::Settings;
-use rs_engine::{file_type::EFileType, input_mode::EInputMode};
+use rs_engine::{console_cmd::ConsoleCmd, file_type::EFileType, input_mode::EInputMode};
+use rs_foundation::new::SingleThreadMutType;
 use rs_render::bake_info::BakeInfo;
 use rs_render::view_mode::EViewModeType;
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
 #[derive(Debug)]
 pub struct MeshItem {
@@ -68,6 +69,8 @@ pub struct DataSource {
     pub recent_projects: RecentProjects,
     pub input_mode: EInputMode,
     pub view_mode: EViewModeType,
+    pub console_cmds: Option<Rc<RefCell<HashMap<String, SingleThreadMutType<ConsoleCmd>>>>>,
+    pub is_console_cmds_view_open: bool,
 }
 
 impl DataSource {
@@ -100,6 +103,8 @@ impl DataSource {
             recent_projects: RecentProjects::load(),
             input_mode: EInputMode::UI,
             view_mode: EViewModeType::Lit,
+            console_cmds: None,
+            is_console_cmds_view_open: false,
         }
     }
 

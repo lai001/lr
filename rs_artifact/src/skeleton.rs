@@ -15,6 +15,7 @@ pub struct SkeletonBone {
     pub path: String,
     pub parent: Option<String>,
     pub childs: Vec<String>,
+    pub offset_matrix: glam::Mat4,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

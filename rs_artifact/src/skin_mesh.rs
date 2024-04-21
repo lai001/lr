@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 #[repr(C)]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct SkinMeshVertex {
     pub vertex_color: glam::Vec4,
     pub position: glam::Vec3,

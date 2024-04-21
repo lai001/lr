@@ -2,6 +2,7 @@ use crate::{
     skeleton_animation::SkeletonAnimation, skeleton_mesh::SkeletonMesh, static_mesh::StaticMesh,
 };
 use anyhow::Context;
+use glam::Vec3Swizzles;
 use rs_artifact::{
     mesh_vertex::MeshVertex,
     skin_mesh::{SkinMesh, SkinMeshVertex},
@@ -13,6 +14,7 @@ use russimp::material::TextureType;
 use std::{
     cell::RefCell,
     collections::HashMap,
+    iter::zip,
     path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
@@ -156,54 +158,40 @@ impl ModelLoader {
         index: u32,
         imported_mesh: &rs_assimp::mesh::Mesh,
         uv_map: &Option<Vec<glam::Vec3>>,
+        default_normal: &glam::Vec3,
+        default_tangent: &glam::Vec3,
+        default_bitangent: &glam::Vec3,
+        default_vertex_color: &glam::Vec4,
     ) -> SkinMeshVertex {
         let mut texture_coord: glam::Vec2 = glam::vec2(0.0, 0.0);
         if let Some(uv_map) = uv_map {
             let uv = uv_map.get(index as usize).unwrap();
-            texture_coord = glam::vec2(uv.x, uv.y);
+            texture_coord = uv.xy();
         }
         let vertex = imported_mesh.vertices.get(index as usize).unwrap();
-        let mut vertex_color: glam::Vec4 = glam::Vec4::default();
+        let mut vertex_color: &glam::Vec4 = default_vertex_color;
         if let Some(color) = imported_mesh.colors.get(index as usize) {
             if let Some(color) = color.get(0) {
-                vertex_color = *color;
+                vertex_color = color;
             }
         }
         let normal = imported_mesh
             .normals
             .get(index as usize)
-            .unwrap_or(&glam::Vec3 {
-                x: 0.5,
-                y: 0.5,
-                z: 1.0,
-            });
+            .unwrap_or(default_normal);
         let tangent = imported_mesh
             .tangents
             .get(index as usize)
-            .unwrap_or(&glam::Vec3::X);
+            .unwrap_or(default_tangent);
         let bitangent = imported_mesh
             .bitangents
             .get(index as usize)
-            .unwrap_or(&glam::Vec3::Y);
-        let mut vertex_bones: [i32; 4] = [INVALID_BONE, INVALID_BONE, INVALID_BONE, INVALID_BONE];
-        let mut weights: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
-        for (bone_index, bone) in imported_mesh.bones.iter().enumerate() {
-            let bone = bone.borrow();
-            for weight in &bone.weights {
-                if weight.vertex_id == index {
-                    for (vertex_bone_index, vertex_bone) in vertex_bones.iter_mut().enumerate() {
-                        if *vertex_bone == INVALID_BONE {
-                            *vertex_bone = bone_index as _;
-                            weights[vertex_bone_index] = weight.weight;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+            .unwrap_or(default_bitangent);
+        let vertex_bones: [i32; 4] = [INVALID_BONE, INVALID_BONE, INVALID_BONE, INVALID_BONE];
+        let weights: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
 
         let vertex = SkinMeshVertex {
-            vertex_color,
+            vertex_color: vertex_color.clone(),
             position: vertex.clone(),
             normal: normal.clone(),
             tangent: tangent.clone(),
@@ -302,7 +290,6 @@ impl ModelLoader {
         skeleton_mesh: Rc<RefCell<SkeletonMesh>>,
         asset_folder: &Path,
         resource_manager: ResourceManager,
-        is_triangle_list: bool,
     ) -> Arc<SkinMesh> {
         let url = skeleton_mesh.borrow().url.clone();
         match resource_manager.get_skin_mesh(&url) {
@@ -319,28 +306,72 @@ impl ModelLoader {
                     .iter()
                     .find(|x| x.borrow().name == skeleton_mesh.borrow().name)
                     .expect("Find matching mesh.");
+                let mut triangle_count: usize = 0;
+                for face in &imported_mesh.borrow().faces {
+                    debug_assert_eq!(face.indices.len(), 3);
+                    triangle_count += 1;
+                }
+
                 let mut vertex_buffer: Vec<SkinMeshVertex> = vec![];
-                let mut index_buffer: Vec<u32> = vec![];
+                let mut index_buffer: Vec<u32> = Vec::with_capacity(triangle_count * 3);
                 let mut uv_map: Option<Vec<glam::Vec3>> = None;
                 if let Some(map) = imported_mesh.borrow().texture_coords.get(0) {
                     uv_map = Some(map.to_vec());
                 }
-                let mut f_index = 0;
+
+                let default_normal = glam::Vec3 {
+                    x: 0.5,
+                    y: 0.5,
+                    z: 1.0,
+                };
+                let default_tangent = glam::Vec3::X;
+                let default_bitangent = glam::Vec3::Y;
+                let default_vertex_color = glam::Vec4::ZERO;
+                let mut vertex_helper: HashMap<usize, bool> = HashMap::new();
+                for face in &imported_mesh.borrow().faces {
+                    for index in &face.indices {
+                        vertex_helper.insert(*index as usize, false);
+                    }
+                }
+                vertex_buffer.resize(vertex_helper.len(), Default::default());
+
                 for face in &imported_mesh.borrow().faces {
                     let indices = &face.indices;
                     for index in indices {
-                        let vertex =
-                            Self::make_skin_vertex(*index, &imported_mesh.borrow(), &uv_map);
-                        vertex_buffer.push(vertex);
-                        if is_triangle_list {
-                            index_buffer.push(f_index);
-                            f_index += 1;
-                        } else {
-                            index_buffer.push(*index);
+                        index_buffer.push(*index);
+                        let is_create = vertex_helper.get_mut(&((*index) as usize)).unwrap();
+                        if *is_create {
+                            continue;
+                        }
+                        *is_create = true;
+                        let vertex = Self::make_skin_vertex(
+                            *index,
+                            &imported_mesh.borrow(),
+                            &uv_map,
+                            &default_normal,
+                            &default_tangent,
+                            &default_bitangent,
+                            &default_vertex_color,
+                        );
+                        vertex_buffer[(*index) as usize] = vertex;
+                    }
+                }
+
+                for (bone_index, bone) in imported_mesh.borrow().bones.iter().enumerate() {
+                    let bone = bone.borrow();
+                    for weight in &bone.weights {
+                        let vertex = vertex_buffer.get_mut(weight.vertex_id as usize).unwrap();
+                        for (vertex_bone, vertex_weight) in
+                            zip(vertex.bones.iter_mut(), vertex.weights.iter_mut())
+                        {
+                            if *vertex_bone == INVALID_BONE {
+                                *vertex_bone = bone_index as _;
+                                *vertex_weight = weight.weight;
+                                break;
+                            }
                         }
                     }
                 }
-                assert_eq!(vertex_buffer.len() % 3, 0);
 
                 let bone_paths = imported_mesh
                     .borrow()
@@ -447,6 +478,7 @@ impl ModelLoader {
         bones: &mut HashMap<String, rs_artifact::skeleton::SkeletonBone>,
     ) {
         let node = node.borrow();
+        let offset_matrix = node.bone_offset_matrix.unwrap_or(glam::Mat4::IDENTITY);
         let bone = rs_artifact::skeleton::SkeletonBone {
             path: node.path.clone(),
             parent,
@@ -455,6 +487,7 @@ impl ModelLoader {
                 .iter()
                 .map(|x| x.borrow().path.clone())
                 .collect(),
+            offset_matrix,
         };
 
         for child_node in node.children.iter() {
@@ -550,9 +583,9 @@ impl ModelLoader {
         asset_reference: String,
     ) -> anyhow::Result<LoadResult> {
         let mut props = rs_assimp::property_store::PropertyStore::new();
-        props.set_property_integer(
+        props.set_property_bool(
             &rs_assimp::config::AI_CONFIG_FBX_USE_SKELETON_BONE_CONTAINER,
-            1,
+            true,
         );
         if !self.scene_cache.contains_key(file_path) {
             self.scene_cache.insert(
