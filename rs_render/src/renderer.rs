@@ -6,6 +6,7 @@ use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
+use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::sampler_cache::SamplerCache;
@@ -24,6 +25,7 @@ use wgpu::*;
 
 pub const SKIN_MESH_RENDER_PIPELINE: &str = "SKIN_MESH_RENDER_PIPELINE";
 pub const STATIC_MESH_RENDER_PIPELINE: &str = "STATIC_MESH_RENDER_PIPELINE";
+pub const GRID_RENDER_PIPELINE: &str = "GRID_RENDER_PIPELINE";
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
@@ -49,6 +51,7 @@ pub struct Renderer {
 
     shading_pipeline: ShadingPipeline,
     skin_mesh_shading_pipeline: SkinMeshShadingPipeline,
+    grid_render_pipeline: GridPipeline,
     attachment_pipeline: AttachmentPipeline,
 
     depth_texture: DepthTexture,
@@ -128,6 +131,12 @@ impl Renderer {
         } else {
             virtual_texture_pass = None;
         }
+        let grid_render_pipeline = GridPipeline::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &wgpu_context.get_current_swapchain_format(),
+            &mut base_render_pipeline_pool,
+        );
 
         Renderer {
             wgpu_context,
@@ -161,6 +170,7 @@ impl Renderer {
             skin_mesh_shading_pipeline,
             base_render_pipeline_pool,
             samplers: HashMap::new(),
+            grid_render_pipeline,
         }
     }
 
@@ -774,18 +784,18 @@ impl Renderer {
             }
 
             let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![vec![]];
-            let mut resources: Vec<_ResourceType> = Vec::new();
+            let mut global_resources: Vec<_ResourceType> = Vec::new();
 
             for global_binding_resource in draw_object_command.global_binding_resources.iter() {
                 match global_binding_resource {
                     EBindingResource::Texture(_) => {}
                     EBindingResource::Constants(handle) => {
                         let buffer = self.buffers.get(handle).unwrap();
-                        resources.push(_ResourceType::Buffer(buffer));
+                        global_resources.push(_ResourceType::Buffer(buffer));
                     }
                     EBindingResource::Sampler(handle) => {
                         let sampler = self.samplers.get(handle).unwrap();
-                        resources.push(_ResourceType::Sampler(sampler));
+                        global_resources.push(_ResourceType::Sampler(sampler));
                     }
                 }
             }
@@ -798,9 +808,9 @@ impl Renderer {
                 Some(pass) => pass.get_indirect_table_view(),
                 None => self.default_textures.get_black_u32_texture_view(),
             };
-            resources.push(_ResourceType::TextureView(physical_texture_view));
-            resources.push(_ResourceType::TextureView(indirect_table_view));
-            for resource in resources.iter() {
+            global_resources.push(_ResourceType::TextureView(physical_texture_view));
+            global_resources.push(_ResourceType::TextureView(indirect_table_view));
+            for resource in global_resources.iter() {
                 match resource {
                     _ResourceType::Buffer(buffer) => {
                         group_binding_resource[0].push(buffer.as_entire_binding());
@@ -895,6 +905,16 @@ impl Renderer {
                         &self.depth_texture.get_view(),
                         &[mesh_buffer],
                         group_binding_resource,
+                    );
+                }
+                GRID_RENDER_PIPELINE => {
+                    self.grid_render_pipeline.draw(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &self.depth_texture.get_view(),
+                        &[mesh_buffer],
+                        vec![vec![group_binding_resource[0][0].clone()]],
                     );
                 }
                 _ => todo!(),

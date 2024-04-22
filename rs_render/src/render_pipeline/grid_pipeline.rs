@@ -2,9 +2,7 @@ use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     global_shaders::grid::GridShader,
-    gpu_buffer,
     gpu_vertex_buffer::GpuVertexBufferImp,
-    sampler_cache::SamplerCache,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::MeshVertex0,
     VertexBufferType,
@@ -17,14 +15,10 @@ use wgpu::*;
 #[derive(Clone, Copy, Debug)]
 pub struct Constants {
     pub model: glam::Mat4,
-    pub view: glam::Mat4,
-    pub projection: glam::Mat4,
 }
 
 pub struct GridPipeline {
     base_render_pipeline: Arc<BaseRenderPipeline>,
-    builder: BaseRenderPipelineBuilder,
-    sampler: Arc<Sampler>,
 }
 
 impl GridPipeline {
@@ -32,11 +26,22 @@ impl GridPipeline {
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
-        sampler_cache: &mut SamplerCache,
         pool: &mut BaseRenderPipelinePool,
     ) -> GridPipeline {
         let builder = BaseRenderPipelineBuilder::default()
-            .set_targets(vec![Some(texture_format.clone().into())])
+            .set_shader(&GridShader {})
+            .set_targets(vec![Some(ColorTargetState {
+                format: texture_format.clone(),
+                blend: Some(BlendState {
+                    color: BlendComponent {
+                        src_factor: wgpu::BlendFactor::SrcAlpha,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: BlendComponent::OVER,
+                }),
+                write_mask: ColorWrites::ALL,
+            })])
             .set_depth_stencil(Some(DepthStencilState {
                 depth_compare: CompareFunction::Less,
                 format: TextureFormat::Depth32Float,
@@ -55,12 +60,8 @@ impl GridPipeline {
             }));
         let base_render_pipeline = pool.get(device, shader_library, &GridShader {}, &builder);
 
-        let sampler = sampler_cache.create_sampler(device, &SamplerDescriptor::default());
-
         GridPipeline {
             base_render_pipeline,
-            sampler,
-            builder,
         }
     }
 
@@ -70,16 +71,13 @@ impl GridPipeline {
         queue: &Queue,
         output_view: &TextureView,
         depth_view: &TextureView,
-        constants: &Constants,
         mesh_buffers: &[GpuVertexBufferImp],
+        binding_resource: Vec<Vec<BindingResource<'_>>>,
     ) {
-        let uniform_buf =
-            gpu_buffer::uniform::from(device, constants, Some("GridPipeline.constants"));
-
         self.base_render_pipeline.draw_resources2(
             device,
             queue,
-            vec![vec![uniform_buf.as_entire_binding()]],
+            binding_resource,
             mesh_buffers,
             &[ColorAttachment {
                 color_ops: None,

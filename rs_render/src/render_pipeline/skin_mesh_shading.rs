@@ -61,6 +61,7 @@ impl SkinMeshShadingPipeline {
         pool: &mut BaseRenderPipelinePool,
     ) -> SkinMeshShadingPipeline {
         let builder = BaseRenderPipelineBuilder::default()
+            .set_shader(&SkeletonShadingShader {})
             .set_targets(vec![Some(texture_format.clone().into())])
             .set_depth_stencil(Some(DepthStencilState {
                 depth_compare: CompareFunction::Less,

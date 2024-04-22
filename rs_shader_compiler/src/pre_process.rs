@@ -17,7 +17,7 @@ impl Definition {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Default)]
 pub struct ShaderDescription {
     pub shader_path: PathBuf,
     pub include_dirs: Vec<PathBuf>,

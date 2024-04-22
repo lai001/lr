@@ -14,7 +14,6 @@ pub mod mesh_buffer;
 pub mod mipmap_generator;
 pub mod plugin;
 pub mod plugin_context;
-pub mod primitive_data;
 pub mod render_thread_mode;
 pub mod resource_manager;
 pub mod rotator;

@@ -3,6 +3,7 @@ use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
 use crate::global_shaders::global_shader::GlobalShader;
 use crate::shader_library::ShaderLibrary;
 use crate::VertexBufferType;
+use rs_shader_compiler::pre_process::ShaderDescription;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::{collections::HashMap, hash::Hash};
@@ -10,7 +11,7 @@ use wgpu::{ColorTargetState, DepthStencilState, Device, MultisampleState, Primit
 
 #[derive(PartialEq, Clone, Default)]
 pub struct BaseRenderPipelineBuilder {
-    // shader: ShaderDescription,
+    shader: ShaderDescription,
     targets: Vec<Option<ColorTargetState>>,
     depth_stencil: Option<DepthStencilState>,
     multisample: Option<MultisampleState>,
@@ -56,6 +57,11 @@ impl BaseRenderPipelineBuilder {
         hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
     ) -> Self {
         self.hooks = hooks;
+        self
+    }
+
+    pub fn set_shader(mut self, global_shader: &impl GlobalShader) -> Self {
+        self.shader = global_shader.get_shader_description();
         self
     }
 }
@@ -115,6 +121,7 @@ impl BaseRenderPipelinePool {
                 builder.vertex_buffer_type.clone(),
                 builder.hooks.clone(),
             );
+            log::trace!("Cache render pipeline: {}", global_shader.get_name());
             self.base_render_pipelines
                 .insert(builder.clone(), Arc::new(base_render_pipeline));
         }

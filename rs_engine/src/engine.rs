@@ -10,6 +10,7 @@ use crate::{logger::Logger, resource_manager::ResourceManager};
 use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::level::ENodeType;
 use rs_artifact::resource_info::ResourceInfo;
+use rs_core_minimal::primitive_data::PrimitiveData;
 use rs_core_minimal::settings::Settings;
 use rs_foundation::new::{
     MultipleThreadMut, MultipleThreadMutType, SingleThreadMut, SingleThreadMutType,
@@ -21,11 +22,13 @@ use rs_render::command::{
     RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer,
 };
 use rs_render::egui_render::EGUIRenderOutput;
+use rs_render::global_uniform;
 use rs_render::renderer::Renderer;
+use rs_render::vertex_data_type::mesh_vertex::MeshVertex0;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::iter::zip;
 use std::path::Path;
 
 struct State {
@@ -65,6 +68,7 @@ pub struct Engine {
     virtual_texture_source_infos:
         HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
     console_cmds: SingleThreadMutType<HashMap<String, SingleThreadMutType<ConsoleCmd>>>,
+    grid_draw_object: Option<DrawObject>,
 }
 
 impl Engine {
@@ -110,7 +114,7 @@ impl Engine {
         let mut render_thread_mode = ERenderThreadMode::from(renderer, true);
 
         let global_constants_handle = resource_manager.next_buffer();
-        let global_constants = Default::default();
+        let global_constants = global_uniform::Constants::default();
         let command = RenderCommand::CreateBuffer(CreateBuffer {
             handle: *global_constants_handle,
             buffer_create_info: BufferCreateInfo {
@@ -181,6 +185,18 @@ impl Engine {
             level = Some(_level);
         })();
 
+        let grid_draw_object = if cfg!(feature = "editor") {
+            draw_object_id += 1;
+            Some(Self::create_grid_draw_object(
+                draw_object_id,
+                resource_manager.clone(),
+                &mut render_thread_mode,
+                global_constants_handle.clone(),
+            ))
+        } else {
+            None
+        };
+
         let engine = Engine {
             render_thread_mode,
             resource_manager,
@@ -199,6 +215,7 @@ impl Engine {
             global_sampler_handle: global_sampler_handle.clone(),
             virtual_texture_source_infos: HashMap::new(),
             console_cmds: SingleThreadMut::new(HashMap::new()),
+            grid_draw_object,
         };
 
         Ok(engine)
@@ -265,6 +282,11 @@ impl Engine {
         for draw_object in &self.draw_objects {
             self.render_thread_mode
                 .send_command(RenderCommand::DrawObject(draw_object.clone()));
+        }
+
+        if let Some(grid_draw_object) = &self.grid_draw_object {
+            self.render_thread_mode
+                .send_command(RenderCommand::DrawObject(grid_draw_object.clone()));
         }
 
         self.render_thread_mode
@@ -939,6 +961,72 @@ impl Engine {
         &self,
     ) -> SingleThreadMutType<HashMap<String, SingleThreadMutType<ConsoleCmd>>> {
         self.console_cmds.clone()
+    }
+
+    #[cfg(feature = "editor")]
+    fn create_grid_draw_object(
+        id: u32,
+        resource_manager: ResourceManager,
+        render_thread_mode: &mut ERenderThreadMode,
+        global_constants_handle: crate::handle::BufferHandle,
+    ) -> DrawObject {
+        let grid_data = PrimitiveData::quad();
+        let name = "Grid";
+        let index_buffer_handle = resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("rs.IndexBuffer.{}", name.clone())),
+            contents: rs_foundation::cast_to_raw_buffer(&grid_data.indices).to_vec(),
+            usage: wgpu::BufferUsages::INDEX,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *index_buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        render_thread_mode.send_command(message);
+
+        let mut vertexes0: Vec<MeshVertex0> = vec![];
+
+        for (position, tex_coord) in zip(&grid_data.vertex_positions, &grid_data.vertex_tex_coords)
+        {
+            vertexes0.push(MeshVertex0 {
+                position: *position,
+                tex_coord: *tex_coord,
+            });
+        }
+        let vertex_buffers = vec![(
+            format!("rs.{name}.MeshVertex0"),
+            rs_foundation::cast_to_raw_buffer(&vertexes0),
+        )];
+        let mut vertex_buffer_handles: Vec<crate::handle::BufferHandle> =
+            Vec::with_capacity(vertex_buffers.len());
+        for (name, vertex_buffer) in vertex_buffers {
+            let vertex_buffer_handle = resource_manager.next_buffer();
+            let buffer_create_info = BufferCreateInfo {
+                label: Some(format!("rs.{}.VertexBuffer", name)),
+                contents: vertex_buffer.to_vec(),
+                usage: wgpu::BufferUsages::VERTEX,
+            };
+            let create_buffer = CreateBuffer {
+                handle: *vertex_buffer_handle,
+                buffer_create_info,
+            };
+            let message = RenderCommand::CreateBuffer(create_buffer);
+            render_thread_mode.send_command(message);
+            vertex_buffer_handles.push(vertex_buffer_handle);
+        }
+
+        DrawObject {
+            id,
+            vertex_buffers: vertex_buffer_handles.iter().map(|x| **x).collect(),
+            vertex_count: vertexes0.len() as u32,
+            index_buffer: Some(*index_buffer_handle),
+            index_count: Some(grid_data.indices.len() as u32),
+            global_binding_resources: vec![EBindingResource::Constants(*global_constants_handle)],
+            vt_binding_resources: vec![],
+            binding_resources: vec![],
+            render_pipeline: rs_render::renderer::GRID_RENDER_PIPELINE.to_string(),
+        }
     }
 }
 
