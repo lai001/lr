@@ -1,16 +1,17 @@
 use super::texture_property_view;
 use egui::{Context, Ui, Vec2};
 use rs_artifact::property_value_type::EPropertyValueType;
+use rs_engine::content::texture::TextureFile;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub enum ESelectedObject {
-    Node(Rc<RefCell<crate::level::Node>>),
-    TextureFile(Rc<RefCell<crate::texture::TextureFile>>),
+    Actor(Rc<RefCell<rs_engine::actor::Actor>>),
+    TextureFile(Rc<RefCell<TextureFile>>),
 }
 
 pub struct DataSource {
     pub is_open: bool,
-    pub selected_node: Option<Rc<RefCell<crate::level::Node>>>,
+    pub selected_actor: Option<Rc<RefCell<rs_engine::actor::Actor>>>,
     pub selected_object: Option<ESelectedObject>,
 }
 
@@ -18,7 +19,7 @@ impl DataSource {
     pub fn new() -> Self {
         Self {
             is_open: true,
-            selected_node: None,
+            selected_actor: None,
             selected_object: None,
         }
     }
@@ -52,20 +53,11 @@ pub fn draw(
         .show(context, |ui| {
             if let Some(selected_object) = selected_object {
                 match selected_object {
-                    ESelectedObject::Node(node) => {
-                        egui::Grid::new("PropertyGrid")
-                            .num_columns(2)
-                            .spacing([40.0, 4.0])
-                            .striped(true)
-                            .show(ui, |ui| {
-                                let value_changed = content(ui, &mut node.borrow_mut());
-                                click = Some(EClickEventType::Node(value_changed));
-                            });
-                    }
                     ESelectedObject::TextureFile(texture_file) => {
                         let click_event = texture_property_view::draw(ui, texture_file.clone());
                         click = click_event.map_or(None, |x| Some(EClickEventType::TextureFile(x)));
                     }
+                    ESelectedObject::Actor(actor) => todo!(),
                 }
             }
         });
@@ -74,13 +66,14 @@ pub fn draw(
 
 fn content(
     ui: &mut Ui,
-    selected_node: &mut crate::level::Node,
+    name: &str,
+    values: Rc<RefCell<HashMap<String, EPropertyValueType>>>,
 ) -> HashMap<String, EValueModifierType> {
     let mut value_changed: HashMap<String, EValueModifierType> = HashMap::new();
-    ui.label(format!("name: {}", selected_node.name));
+    ui.label(format!("name: {}", name));
     ui.end_row();
 
-    for (property_name, property_value) in &mut selected_node.values {
+    for (property_name, property_value) in values.borrow_mut().iter_mut() {
         ui.label(property_name.clone());
         match property_value {
             EPropertyValueType::Texture(_) => {

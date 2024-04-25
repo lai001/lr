@@ -1,4 +1,4 @@
-use crate::texture::TextureFile;
+use rs_engine::content::texture::TextureFile;
 use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]

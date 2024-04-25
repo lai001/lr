@@ -101,14 +101,14 @@ pub struct InitTextureData {
     pub data_layout: wgpu::ImageDataLayout,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ETextureType {
     Base(TextureHandle),
     Virtual(TextureHandle),
     None,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum EBindingResource {
     Texture(ETextureType),
     Constants(BufferHandle),

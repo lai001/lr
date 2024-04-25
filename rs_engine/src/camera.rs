@@ -82,6 +82,11 @@ impl Camera {
         self.update_view_matrix();
     }
 
+    pub fn set_world_location(&mut self, world_location: glam::Vec3) {
+        self.world_location = world_location;
+        self.update_view_matrix();
+    }
+
     pub fn add_local_location(&mut self, location: glam::Vec3) {
         self.world_location += self.forward_vector * location.z;
         self.world_location += self.forward_vector.cross(self.up_vector).normalize() * location.x;

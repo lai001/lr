@@ -18,9 +18,9 @@ pub struct ClickMeshItem {
     pub item: Rc<MeshItem>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct ClickEvent {
-    pub click_node: Option<level_view::EClickEventType>,
+    pub click_actor: Option<level_view::EClickEventType>,
     pub mesh_item: Option<ClickMeshItem>,
     pub click_aseet: Option<asset_view::EClickItemType>,
     pub menu_event: Option<top_menu::EClickEventType>,
@@ -74,7 +74,7 @@ impl EditorUI {
         Self::model_hierarchy_window(context, data_source, &mut click);
         if let Some(level) = &data_source.level {
             let window = Self::new_window("Level", data_source.input_mode);
-            click.click_node = crate::ui::level_view::draw(
+            click.click_actor = crate::ui::level_view::draw(
                 window,
                 context,
                 &mut data_source.is_level_view_open,
@@ -96,16 +96,42 @@ impl EditorUI {
             &mut data_source.property_view_data_source.is_open,
             &mut data_source.property_view_data_source.selected_object,
         );
-        if let Some(selected_node) = &data_source.property_view_data_source.selected_node {
-            let node = selected_node.as_ref().borrow_mut();
-            if let Some(model_matrix) = node.get_model_matrix() {
-                click.gizmo_result = self.gizmo_view.draw(
-                    context,
-                    data_source.camera_view_matrix,
-                    data_source.camera_projection_matrix,
-                    model_matrix,
-                );
+        if let Some(selected_actor) = &data_source.property_view_data_source.selected_actor {
+            let mut selected_actor = selected_actor.as_ref().borrow_mut();
+            match &mut selected_actor.scene_node.component {
+                rs_engine::scene_node::EComponentType::SceneComponent(component) => {
+                    click.gizmo_result = self.gizmo_view.draw(
+                        context,
+                        data_source.camera_view_matrix,
+                        data_source.camera_projection_matrix,
+                        component.transformation,
+                    );
+                }
+                rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
+                    click.gizmo_result = self.gizmo_view.draw(
+                        context,
+                        data_source.camera_view_matrix,
+                        data_source.camera_projection_matrix,
+                        component.transformation,
+                    );
+                }
+                rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                    click.gizmo_result = self.gizmo_view.draw(
+                        context,
+                        data_source.camera_view_matrix,
+                        data_source.camera_projection_matrix,
+                        component.transformation,
+                    );
+                }
             }
+            // if let Some(model_matrix) = node.get_model_matrix() {
+            //     click.gizmo_result = self.gizmo_view.draw(
+            //         context,
+            //         data_source.camera_view_matrix,
+            //         data_source.camera_projection_matrix,
+            //         model_matrix,
+            //     );
+            // }
         }
         let window = Self::new_window("Gizmo Settings", data_source.input_mode);
         gizmo_settings::draw(

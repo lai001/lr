@@ -61,7 +61,10 @@ where
     let asset_header: AssetHeader = FileHeader::get_header2(&mut reader, endian_type)?;
     if let Some(expected_resource_type) = expected_resource_type {
         if asset_header.resource_type != expected_resource_type {
-            return Err(crate::error::Error::ResourceTypeNotMatch);
+            return Err(crate::error::Error::ResourceTypeNotMatch(Some(format!(
+                "{:?} != {:?}",
+                asset_header.resource_type, expected_resource_type
+            ))));
         }
     }
     let offset = length + ASSET_FILE_MAGIC_NUMBERS.len() as u64 + HEADER_LENGTH_SIZE as u64;

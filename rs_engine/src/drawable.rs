@@ -1,13 +1,13 @@
 use crate::handle::BufferHandle;
 use rs_render::command::EBindingResource;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum EDrawObjectType {
     Static(StaticMeshDrawObject),
     Skin(SkinMeshDrawObject),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StaticMeshDrawObject {
     pub(crate) id: u32,
     pub(crate) vertex_buffers: Vec<BufferHandle>,
@@ -24,7 +24,7 @@ pub struct StaticMeshDrawObject {
     pub specular_texture_url: Option<url::Url>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SkinMeshDrawObject {
     pub(crate) id: u32,
     pub(crate) vertex_buffers: Vec<BufferHandle>,

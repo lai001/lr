@@ -1,9 +1,12 @@
+use crate::{
+    content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
+    resource_manager::ResourceManager,
+};
 use rs_artifact::{
     skeleton::{Skeleton, SkeletonBone},
     skeleton_animation::SkeletonAnimation,
     skin_mesh::SkinMesh,
 };
-use rs_engine::{drawable::EDrawObjectType, engine::Engine, resource_manager::ResourceManager};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
@@ -22,7 +25,7 @@ pub struct StaticMeshComponent {
     pub transformation: glam::Mat4,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct SkeletonMeshComponentRuntime {
     draw_objects: HashMap<String, EDrawObjectType>,
     skeleton: Option<Arc<Skeleton>>,
@@ -30,12 +33,12 @@ struct SkeletonMeshComponentRuntime {
     skin_meshes: Vec<Arc<SkinMesh>>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SkeletonMeshComponent {
     pub name: String,
-    pub skeleton: Option<url::Url>,
-    pub skeleton_meshes: Vec<url::Url>,
-    pub animation: Option<url::Url>,
+    pub skeleton_url: Option<url::Url>,
+    pub skeleton_mesh_urls: Vec<url::Url>,
+    pub animation_url: Option<url::Url>,
     pub transformation: glam::Mat4,
     #[serde(skip)]
     run_time: Option<SkeletonMeshComponentRuntime>,
@@ -44,31 +47,53 @@ pub struct SkeletonMeshComponent {
 impl SkeletonMeshComponent {
     pub fn new(
         name: String,
-        skeleton: Option<url::Url>,
-        skeleton_meshes: Vec<url::Url>,
-        animation: Option<url::Url>,
+        skeleton_url: Option<url::Url>,
+        skeleton_mesh_urls: Vec<url::Url>,
+        animation_url: Option<url::Url>,
         transformation: glam::Mat4,
     ) -> SkeletonMeshComponent {
         SkeletonMeshComponent {
             name,
-            skeleton,
-            skeleton_meshes,
-            animation,
+            skeleton_url,
+            skeleton_mesh_urls,
+            animation_url,
             transformation,
             run_time: None,
         }
     }
 
-    pub fn initialize(&mut self, resource_manager: ResourceManager, engine: &mut Engine) {
+    pub fn initialize(
+        &mut self,
+        resource_manager: ResourceManager,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+    ) {
         let mut skeleton: Option<Arc<Skeleton>> = None;
         let mut skeleton_animation: Option<Arc<SkeletonAnimation>> = None;
 
-        if let Some(skeleton_url) = &self.skeleton {
-            skeleton = resource_manager.get_skeleton(&skeleton_url);
+        if let Some(skeleton_url) = &self.skeleton_url {
+            for file in files.iter() {
+                log::trace!("{:?}", file);
+                if let EContentFileType::Skeleton(content_skeleton) = file {
+                    if &content_skeleton.borrow().url == skeleton_url {
+                        skeleton =
+                            resource_manager.get_skeleton(&content_skeleton.borrow().asset_url);
+                        break;
+                    }
+                }
+            }
         }
 
-        if let Some(animation_url) = &self.animation {
-            skeleton_animation = resource_manager.get_skeleton_animation(&animation_url);
+        if let Some(animation_url) = &self.animation_url {
+            for file in files.iter() {
+                if let EContentFileType::SkeletonAnimation(content_skeleton_animation) = file {
+                    if &content_skeleton_animation.borrow().url == animation_url {
+                        skeleton_animation = resource_manager
+                            .get_skeleton_animation(&content_skeleton_animation.borrow().asset_url);
+                        break;
+                    }
+                }
+            }
         }
 
         self.run_time = Some(SkeletonMeshComponentRuntime {
@@ -78,8 +103,18 @@ impl SkeletonMeshComponent {
             skin_meshes: vec![],
         });
 
-        for skeleton_mesh in &self.skeleton_meshes {
-            let Some(skin_mesh) = resource_manager.get_skin_mesh(skeleton_mesh) else {
+        for skeleton_mesh in &self.skeleton_mesh_urls {
+            let mut skin_mesh: Option<Arc<SkinMesh>> = None;
+            for file in files.iter() {
+                if let EContentFileType::SkeletonMesh(content_skin_mesh) = file {
+                    if &content_skin_mesh.borrow().url == skeleton_mesh {
+                        skin_mesh =
+                            resource_manager.get_skin_mesh(&content_skin_mesh.borrow().asset_url);
+                        break;
+                    }
+                }
+            }
+            let Some(skin_mesh) = skin_mesh else {
                 continue;
             };
             let Some(skeleton) = skeleton.clone() else {
@@ -280,14 +315,14 @@ impl SkeletonMeshComponent {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum EComponentType {
     SceneComponent(SceneComponent),
     StaticMeshComponent(StaticMeshComponent),
     SkeletonMeshComponent(SkeletonMeshComponent),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SceneNode {
     pub component: EComponentType,
     pub childs: Vec<SceneNode>,

@@ -82,6 +82,9 @@ impl TopMenu {
                     }
                     ui.menu_button("Recent Projects", |ui| {
                         for recent_project_path in &datasource.recent_projects.paths {
+                            if !recent_project_path.exists() {
+                                continue;
+                            }
                             let p=rs_core_minimal::path_ext::CanonicalizeSlashExt::canonicalize_slash(&recent_project_path).unwrap();
                             let p = p.to_str().unwrap();
                             if ui.button(p).clicked() {

@@ -1,6 +1,3 @@
-use crate::{
-    skeleton_animation::SkeletonAnimation, skeleton_mesh::SkeletonMesh, static_mesh::StaticMesh,
-};
 use anyhow::Context;
 use glam::Vec3Swizzles;
 use rs_artifact::{
@@ -29,11 +26,12 @@ pub struct MeshCluster {
 
 pub struct LoadResult {
     pub asset_reference: String,
-    pub static_meshes: Vec<Rc<RefCell<StaticMesh>>>,
-    pub skeleton_meshes: Vec<Rc<RefCell<SkeletonMesh>>>,
-    pub skeleton: Option<Rc<RefCell<crate::skeleton::Skeleton>>>,
-    pub node_animations: Vec<Rc<RefCell<crate::skeleton_animation::SkeletonAnimation>>>,
-    pub actor: SingleThreadMutType<crate::actor::Actor>,
+    pub static_meshes: Vec<Rc<RefCell<rs_engine::content::static_mesh::StaticMesh>>>,
+    pub skeleton_meshes: Vec<Rc<RefCell<rs_engine::content::skeleton_mesh::SkeletonMesh>>>,
+    pub skeleton: Option<Rc<RefCell<rs_engine::content::skeleton::Skeleton>>>,
+    pub node_animations:
+        Vec<Rc<RefCell<rs_engine::content::skeleton_animation::SkeletonAnimation>>>,
+    pub actor: SingleThreadMutType<rs_engine::actor::Actor>,
 }
 
 pub struct ModelLoader {
@@ -287,16 +285,15 @@ impl ModelLoader {
 
     pub fn to_runtime_skin_mesh<'a>(
         &self,
-        skeleton_mesh: Rc<RefCell<SkeletonMesh>>,
+        skeleton_mesh: Rc<RefCell<rs_engine::content::skeleton_mesh::SkeletonMesh>>,
         asset_folder: &Path,
         resource_manager: ResourceManager,
     ) -> Arc<SkinMesh> {
-        let url = skeleton_mesh.borrow().url.clone();
+        let url = skeleton_mesh.borrow().asset_url.clone();
         match resource_manager.get_skin_mesh(&url) {
             Some(loaded_mesh) => loaded_mesh.clone(),
             None => {
-                let asset_reference = skeleton_mesh.borrow().asset_reference.clone();
-                let path = asset_folder.join(asset_reference.clone());
+                let path = asset_folder.join(skeleton_mesh.borrow().get_relative_path());
                 let scene_cache = self
                     .scene_cache
                     .get(&path)
@@ -304,7 +301,7 @@ impl ModelLoader {
                 let imported_mesh = scene_cache
                     .meshes
                     .iter()
-                    .find(|x| x.borrow().name == skeleton_mesh.borrow().name)
+                    .find(|x| x.borrow().name == skeleton_mesh.borrow().get_skeleton_mesh_name())
                     .expect("Find matching mesh.");
                 let mut triangle_count: usize = 0;
                 for face in &imported_mesh.borrow().faces {
@@ -380,14 +377,15 @@ impl ModelLoader {
                     .map(|x| x.borrow().node.clone().unwrap().borrow().path.clone())
                     .collect();
                 let skin_mesh = SkinMesh {
-                    name: skeleton_mesh.borrow().name.clone(),
-                    url: skeleton_mesh.borrow().url.clone(),
+                    name: skeleton_mesh.borrow().get_skeleton_mesh_name().clone(),
+                    url: skeleton_mesh.borrow().asset_url.clone(),
                     vertexes: vertex_buffer,
                     indexes: index_buffer,
                     bone_paths,
                 };
                 let skin_mesh = Arc::new(skin_mesh);
-                resource_manager.add_skin_mesh(skin_mesh.url.clone(), skin_mesh.clone());
+                resource_manager
+                    .add_skin_mesh(skeleton_mesh.borrow().asset_url.clone(), skin_mesh.clone());
                 log::trace!(
                     r#"Load skin mesh "{}" from scene {:?}."#,
                     skin_mesh.clone().name,
@@ -400,16 +398,15 @@ impl ModelLoader {
 
     pub fn to_runtime_skeleton_animation<'a>(
         &self,
-        skeleton_animation: Rc<RefCell<SkeletonAnimation>>,
+        skeleton_animation: Rc<RefCell<rs_engine::content::skeleton_animation::SkeletonAnimation>>,
         asset_folder: &Path,
         resource_manager: ResourceManager,
     ) -> Arc<rs_artifact::skeleton_animation::SkeletonAnimation> {
-        let url = skeleton_animation.borrow().url.clone();
+        let url = skeleton_animation.borrow().asset_url.clone();
         match resource_manager.get_skeleton_animation(&url) {
             Some(loaded_animation) => loaded_animation.clone(),
             None => {
-                let asset_reference = skeleton_animation.borrow().asset_reference.clone();
-                let path = asset_folder.join(asset_reference.clone());
+                let path = asset_folder.join(skeleton_animation.borrow().get_relative_path());
                 let scene_cache = self
                     .scene_cache
                     .get(&path)
@@ -417,7 +414,7 @@ impl ModelLoader {
                 let animation = scene_cache
                     .animations
                     .iter()
-                    .find(|x| x.name == skeleton_animation.borrow().name)
+                    .find(|x| x.name == skeleton_animation.borrow().get_animation_name())
                     .expect("Find matching animation.");
                 let mut channels: Vec<rs_artifact::node_anim::NodeAnim> = vec![];
                 for channel in &animation.channels {
@@ -451,8 +448,8 @@ impl ModelLoader {
                     channels.push(node_anim);
                 }
                 let skeleton_animation = rs_artifact::skeleton_animation::SkeletonAnimation {
-                    name: skeleton_animation.borrow().name.clone(),
-                    url: url.clone(),
+                    name: skeleton_animation.borrow().get_animation_name().clone(),
+                    url: skeleton_animation.borrow().asset_url.clone(),
                     duration: animation.duration,
                     ticks_per_second: animation.ticks_per_second,
                     channels,
@@ -529,16 +526,15 @@ impl ModelLoader {
 
     pub fn to_runtime_skeleton<'a>(
         &self,
-        skeleton: Rc<RefCell<crate::skeleton::Skeleton>>,
+        skeleton: Rc<RefCell<rs_engine::content::skeleton::Skeleton>>,
         asset_folder: &Path,
         resource_manager: ResourceManager,
     ) -> Arc<rs_artifact::skeleton::Skeleton> {
-        let url = skeleton.borrow().url.clone();
+        let url = skeleton.borrow().asset_url.clone();
         match resource_manager.get_skeleton(&url) {
             Some(loaded_skeleton) => loaded_skeleton.clone(),
             None => {
-                let asset_reference = skeleton.borrow().asset_reference.clone();
-                let path = asset_folder.join(asset_reference.clone());
+                let path = asset_folder.join(skeleton.borrow().get_relative_path());
                 let scene = self
                     .scene_cache
                     .get(&path)
@@ -559,7 +555,7 @@ impl ModelLoader {
                 Self::make_bones(armature.clone(), None, &mut bones);
                 let skeleton = rs_artifact::skeleton::Skeleton {
                     name: armature.borrow().name.clone(),
-                    url: url.clone(),
+                    url: skeleton.borrow().asset_url.clone(),
                     root_bone: armature.borrow().path.clone(),
                     root_node: root_node.borrow().path.clone(),
                     bones,
@@ -604,34 +600,42 @@ impl ModelLoader {
             log::warn!("Too many armatures");
         }
 
-        let mut static_meshes: Vec<Rc<RefCell<StaticMesh>>> = vec![];
-        let mut skeleton_meshes: Vec<Rc<RefCell<SkeletonMesh>>> = vec![];
-        let mut skeleton: Option<Rc<RefCell<crate::skeleton::Skeleton>>> = None;
-        let mut node_animations: Vec<Rc<RefCell<crate::skeleton_animation::SkeletonAnimation>>> =
+        let mut static_meshes: Vec<Rc<RefCell<rs_engine::content::static_mesh::StaticMesh>>> =
             vec![];
-        let actor: crate::actor::Actor;
+        let mut skeleton_meshes: Vec<Rc<RefCell<rs_engine::content::skeleton_mesh::SkeletonMesh>>> =
+            vec![];
+        let mut skeleton: Option<Rc<RefCell<rs_engine::content::skeleton::Skeleton>>> = None;
+        let mut node_animations: Vec<
+            Rc<RefCell<rs_engine::content::skeleton_animation::SkeletonAnimation>>,
+        > = vec![];
+        let actor: rs_engine::actor::Actor;
 
         if let Some(armature) = scene.armatures.values().next() {
             let armature = armature.borrow();
             let name = armature.name.clone().replace("|", "_");
             let url =
                 url::Url::parse(&format!("content://{}", name)).context(armature.name.clone())?;
-            skeleton = Some(Rc::new(RefCell::new(crate::skeleton::Skeleton {
-                url,
-                asset_reference: asset_reference.clone(),
-                root_bone: armature.path.clone(),
-            })));
+
+            let asset_url = rs_engine::content::skeleton::Skeleton::make_asset_url(
+                &asset_reference,
+                &armature.path,
+            );
+            skeleton = Some(Rc::new(RefCell::new(
+                rs_engine::content::skeleton::Skeleton { url, asset_url },
+            )));
         }
 
         for animation in &scene.animations {
-            let name = animation.name.clone().replace("|", "_");
-            let url =
-                url::Url::parse(&format!("content://{}", name)).context(animation.name.clone())?;
-            let node_animation = SkeletonAnimation {
-                name: animation.name.clone(),
-                url,
-                asset_reference: asset_reference.clone(),
-            };
+            let animation_name = animation.name.clone();
+            let url = url::Url::parse(&format!("content://{}", animation_name))
+                .context(animation_name.clone())?;
+            let asset_url =
+                rs_engine::content::skeleton_animation::SkeletonAnimation::make_asset_url(
+                    &asset_reference,
+                    &animation_name,
+                );
+            let node_animation =
+                rs_engine::content::skeleton_animation::SkeletonAnimation { url, asset_url };
             node_animations.push(SingleThreadMut::new(node_animation));
         }
 
@@ -642,18 +646,21 @@ impl ModelLoader {
             let url = url::Url::parse(&format!("content://{}", name))
                 .context(imported_mesh.name.clone())?;
             if imported_mesh.bones.is_empty() {
-                let static_mesh = StaticMesh {
+                let static_mesh = rs_engine::content::static_mesh::StaticMesh {
                     asset_reference_name: imported_mesh.name.clone(),
                     url,
                     asset_reference_relative_path: asset_reference.clone(),
                 };
                 static_meshes.push(Rc::new(RefCell::new(static_mesh)));
             } else {
-                let skeleton_mesh = SkeletonMesh {
-                    name: imported_mesh.name.clone(),
+                let asset_url = rs_engine::content::skeleton_mesh::SkeletonMesh::make_asset_url(
+                    &asset_reference,
+                    &imported_mesh.name,
+                );
+                let skeleton_mesh = rs_engine::content::skeleton_mesh::SkeletonMesh {
                     url,
-                    asset_reference: asset_reference.clone(),
                     skeleton_url: skeleton.clone().unwrap().clone().borrow().url.clone(),
+                    asset_url,
                 };
                 skeleton_meshes.push(Rc::new(RefCell::new(skeleton_mesh)));
             }
@@ -667,7 +674,7 @@ impl ModelLoader {
                 animation_url = None;
             }
 
-            let skeleton_mesh_component = crate::scene_node::SkeletonMeshComponent::new(
+            let skeleton_mesh_component = rs_engine::scene_node::SkeletonMeshComponent::new(
                 skeleton.borrow().get_name().clone(),
                 Some(skeleton.borrow().url.clone()),
                 skeleton_meshes
@@ -678,10 +685,10 @@ impl ModelLoader {
                 glam::Mat4::IDENTITY,
             );
 
-            actor = crate::actor::Actor {
+            actor = rs_engine::actor::Actor {
                 name: scene.name.clone(),
-                scene_node: crate::scene_node::SceneNode {
-                    component: crate::scene_node::EComponentType::SkeletonMeshComponent(
+                scene_node: rs_engine::scene_node::SceneNode {
+                    component: rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                         skeleton_mesh_component,
                     ),
                     childs: vec![],

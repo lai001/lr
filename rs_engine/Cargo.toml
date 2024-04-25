@@ -11,6 +11,7 @@ editor = [
     "rs_shader_compiler/editor",
     "rs_render/editor",
     "rs_core_minimal/editor",
+    "dep:anyhow"
 ]
 standalone = [
     "rs_shader_compiler/standalone",
@@ -19,6 +20,10 @@ standalone = [
 ]
 
 [dependencies]
+md-5 = { version = "0.10.6" }
+anyhow = { version = "1.0.79", optional = true }
+serde = { version = "1.0.193", features = ["derive", "rc"] }
+serde_json = "1.0.111"
 chrono = "0.4"
 log = "0.4.17"
 env_logger = "0.10.0"

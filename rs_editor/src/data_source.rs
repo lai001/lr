@@ -56,7 +56,7 @@ pub struct DataSource {
     pub highlight_asset_file: Option<AssetFile>,
     pub model_view_data: Option<ModelViewData>,
     pub is_level_view_open: bool,
-    pub level: Option<Rc<RefCell<crate::level::Level>>>,
+    pub level: Option<Rc<RefCell<rs_engine::content::level::Level>>>,
     pub camera_movement_speed: f32,
     pub camera_motion_speed: f32,
     pub camera_view_matrix: glam::Mat4,

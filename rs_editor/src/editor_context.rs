@@ -1,15 +1,12 @@
 use crate::{
     build_config::EBuildType,
-    content_folder::{ContentFolder, EContentFileType},
+    content_folder::ContentFolder,
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource, MeshItem, ModelViewData},
     editor_ui::EditorUI,
-    level::MeshReference,
     model_loader::ModelLoader,
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
-    property,
-    texture::TextureFile,
     ui::{
         asset_view, content_browser, level_view,
         property_view::{self, ESelectedObject},
@@ -18,10 +15,10 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
-use rs_artifact::property_value_type::EPropertyValueType;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_engine::{
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
+    content::{content_file_type::EContentFileType, texture::TextureFile},
     frame_sync::{EOptions, FrameSync},
     plugin::Plugin,
 };
@@ -506,7 +503,8 @@ impl EditorContext {
                     model_loader.load(&file_path).unwrap();
                 }
                 EContentFileType::SkeletonMesh(skeleton_mesh) => {
-                    let file_path = asset_folder_path.join(&skeleton_mesh.borrow().asset_reference);
+                    let file_path =
+                        asset_folder_path.join(&skeleton_mesh.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     model_loader.to_runtime_skin_mesh(
                         skeleton_mesh.clone(),
@@ -516,7 +514,7 @@ impl EditorContext {
                 }
                 EContentFileType::SkeletonAnimation(node_animation) => {
                     let file_path =
-                        asset_folder_path.join(&node_animation.borrow().asset_reference);
+                        asset_folder_path.join(&node_animation.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     model_loader.to_runtime_skeleton_animation(
                         node_animation.clone(),
@@ -525,7 +523,7 @@ impl EditorContext {
                     );
                 }
                 EContentFileType::Skeleton(skeleton) => {
-                    let file_path = asset_folder_path.join(&skeleton.borrow().asset_reference);
+                    let file_path = asset_folder_path.join(&skeleton.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     let skeleton = model_loader.to_runtime_skeleton(
                         skeleton.clone(),
@@ -563,23 +561,25 @@ impl EditorContext {
                         );
                     }
                 }
+                EContentFileType::Level(_) => {}
             }
         }
     }
 
     fn add_new_actors(
         engine: &mut rs_engine::engine::Engine,
-        actors: Vec<Rc<RefCell<crate::actor::Actor>>>,
+        actors: Vec<Rc<RefCell<rs_engine::actor::Actor>>>,
+        files: &[EContentFileType],
     ) {
         for actor in actors {
             let root_scene_node = &mut actor.borrow_mut().scene_node;
             match &mut root_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
-                crate::scene_node::EComponentType::SkeletonMeshComponent(
+                rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                rs_engine::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                     skeleton_mesh_component,
                 ) => {
-                    skeleton_mesh_component.initialize(ResourceManager::default(), engine);
+                    skeleton_mesh_component.initialize(ResourceManager::default(), engine, files);
                 }
             }
         }
@@ -600,7 +600,6 @@ impl EditorContext {
         self.data_source.asset_folder = Some(asset_folder.clone());
         self.data_source.current_asset_folder = Some(asset_folder);
 
-        self.data_source.level = Some(project_context.project.level.clone());
         let mut texture_files: Vec<Rc<RefCell<TextureFile>>> = vec![];
         self.data_source.content_data_source.current_folder =
             Some(project_context.project.content.clone());
@@ -618,23 +617,39 @@ impl EditorContext {
                 _ => {}
             }
         }
-        Self::add_new_actors(
-            &mut self.engine,
-            project_context.project.level.borrow().actors.clone(),
-        );
 
         self.engine
             .set_settings(project_context.project.settings.borrow().clone());
         self.data_source.project_settings = Some(project_context.project.settings.clone());
 
         {
-            let nodes = &project_context.project.level.borrow().nodes;
-            self.draw_objects = Self::collect_draw_objects(
-                &mut self.engine,
-                &project_context.get_asset_folder_path(),
-                nodes.iter(),
-            );
+            let binding = project_context.project.content.borrow();
+            let find_level = binding
+                .files
+                .iter()
+                .find(|x| match x {
+                    EContentFileType::Level(_) => true,
+                    _ => false,
+                })
+                .map(|x| match x {
+                    EContentFileType::Level(level) => Some(level),
+                    _ => None,
+                })
+                .flatten();
+
+            self.data_source.level = find_level.cloned();
+
+            if let Some(level) = find_level.cloned() {
+                if let Some(folder) = &self.data_source.content_data_source.current_folder {
+                    Self::add_new_actors(
+                        &mut self.engine,
+                        level.borrow().actors.clone(),
+                        &folder.borrow().files,
+                    );
+                }
+            }
         }
+
         self.project_context = Some(project_context);
         self.try_load_plugin();
         self.data_source
@@ -713,7 +728,15 @@ impl EditorContext {
     }
 
     fn open_model_file(&mut self, file_path: PathBuf) -> anyhow::Result<()> {
-        let project_context = self.project_context.as_mut().ok_or(anyhow!(""))?;
+        let project_context = self
+            .project_context
+            .as_mut()
+            .ok_or(anyhow!("Project context is null"))?;
+        let active_level = self
+            .data_source
+            .level
+            .clone()
+            .ok_or(anyhow!("Active level is null"))?;
         let file_type = EFileType::from_path(&file_path)
             .context(format!("Invalid file type. {:?}", file_path))?;
         if !SUPPORT_ASSET_MODEL_FILE_TYPES.contains(&file_type) {
@@ -751,10 +774,13 @@ impl EditorContext {
         );
         content.files.append(&mut add_files);
 
-        Self::add_new_actors(&mut self.engine, vec![load_result.actor.clone()]);
+        Self::add_new_actors(
+            &mut self.engine,
+            vec![load_result.actor.clone()],
+            &content.files,
+        );
 
-        let level = project_context.project.level.clone();
-        level.borrow_mut().actors.push(load_result.actor);
+        active_level.borrow_mut().actors.push(load_result.actor);
 
         let mesh_clusters = ModelLoader::load_from_file(&file_path, &[])?;
         self.data_source.is_model_hierarchy_open = true;
@@ -776,19 +802,21 @@ impl EditorContext {
 
     fn process_redraw_request(&mut self, window: &mut winit::window::Window) {
         if let Some(project_context) = &mut self.project_context {
-            for actor in project_context.project.level.borrow().actors.clone() {
-                let root_scene_node = &mut actor.borrow_mut().scene_node;
-                match &mut root_scene_node.component {
-                    crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                    crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
-                    crate::scene_node::EComponentType::SkeletonMeshComponent(
-                        skeleton_mesh_component,
-                    ) => {
-                        skeleton_mesh_component
-                            .update(self.engine.get_game_time(), &mut self.engine);
+            if let Some(active_level) = self.data_source.level.clone() {
+                for actor in active_level.borrow().actors.clone() {
+                    let root_scene_node = &mut actor.borrow_mut().scene_node;
+                    match &mut root_scene_node.component {
+                        rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                        rs_engine::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                        rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
+                            skeleton_mesh_component,
+                        ) => {
+                            skeleton_mesh_component
+                                .update(self.engine.get_game_time(), &mut self.engine);
 
-                        for draw_object in skeleton_mesh_component.get_draw_objects() {
-                            self.engine.draw2(draw_object);
+                            for draw_object in skeleton_mesh_component.get_draw_objects() {
+                                self.engine.draw2(draw_object);
+                            }
                         }
                     }
                 }
@@ -908,7 +936,7 @@ impl EditorContext {
                 }
                 top_menu::EClickEventType::Export => {
                     if let Some(project_context) = self.project_context.as_mut() {
-                        let result = project_context.export();
+                        let result = project_context.export(&mut self.model_loader);
                         log::trace!("{:?}", result);
                     }
                 }
@@ -922,7 +950,7 @@ impl EditorContext {
                     let result = (|project_context: Option<&mut ProjectContext>| {
                         let project_context =
                             project_context.ok_or(anyhow!("project_context is null"))?;
-                        let artifact_file_path = project_context.export()?;
+                        let artifact_file_path = project_context.export(&mut self.model_loader)?;
                         let folder_path =
                             project_context.create_build_folder_if_not_exist(&build_config)?;
                         let target = rs_core_minimal::file_manager::get_engine_root_dir()
@@ -1029,103 +1057,20 @@ impl EditorContext {
                 }
             }
         }
-        if let Some(mesh_item) = click_event.mesh_item {
-            if let Some(project_context) = self.project_context.as_mut() {
-                let file_path = mesh_item
-                    .file_path
-                    .strip_prefix(project_context.get_asset_folder_path())
-                    .unwrap();
-                let node = crate::level::Node {
-                    name: mesh_item.item.name.clone(),
-                    mesh_reference: Some(MeshReference {
-                        file_path: file_path.to_path_buf(),
-                        referenced_mesh_name: mesh_item.item.name.clone(),
-                    }),
-                    childs: vec![],
-                    values: crate::level::default_node3d_properties(),
-                    id: uuid::Uuid::new_v4(),
-                };
-                if let Ok(draw_object) = Self::node_to_draw_object(
-                    &mut self.engine,
-                    &project_context.get_asset_folder_path(),
-                    &node,
-                ) {
-                    self.draw_objects.insert(node.id, draw_object);
-                }
-                project_context
-                    .project
-                    .level
-                    .borrow_mut()
-                    .nodes
-                    .push(Rc::new(RefCell::new(node)));
-                self.data_source.level = Some(project_context.project.level.clone());
-            }
-        }
-        if let Some(click_node) = click_event.click_node {
-            match click_node {
-                level_view::EClickEventType::Node(node) => {
+
+        if let Some(click_actor) = click_event.click_actor {
+            match click_actor {
+                level_view::EClickEventType::Actor(actor) => {
                     self.data_source.property_view_data_source.is_open = true;
-                    self.data_source.property_view_data_source.selected_node = Some(node.clone());
+                    self.data_source.property_view_data_source.selected_actor = Some(actor.clone());
                     self.data_source.property_view_data_source.selected_object =
-                        Some(ESelectedObject::Node(node.clone()));
+                        Some(ESelectedObject::Actor(actor.clone()));
                 }
             }
         }
         if let Some(property_event) = click_event.property_event {
             match property_event {
-                property_view::EClickEventType::Node(property_event) => {
-                    for (property_name, modifier) in property_event {
-                        match modifier {
-                            property_view::EValueModifierType::ValueType(_) => {}
-                            property_view::EValueModifierType::Assign => {
-                                (|| {
-                                    if property_name != property::name::TEXTURE {
-                                        return;
-                                    }
-                                    let Some(selected_node) = self
-                                        .data_source
-                                        .property_view_data_source
-                                        .selected_node
-                                        .clone()
-                                    else {
-                                        return;
-                                    };
-                                    let Some(highlight_file) =
-                                        &self.data_source.content_data_source.highlight_file
-                                    else {
-                                        return;
-                                    };
-                                    let EContentFileType::Texture(highlight_texture_file) =
-                                        highlight_file
-                                    else {
-                                        return;
-                                    };
-                                    let url = &highlight_texture_file.borrow().url;
-                                    let mut selected_node = selected_node.borrow_mut();
-                                    let value = selected_node
-                                        .values
-                                        .get_mut(property::name::TEXTURE)
-                                        .unwrap();
-                                    *value = EPropertyValueType::Texture(Some(url.clone()));
-
-                                    let Some(draw_object) =
-                                        self.draw_objects.get_mut(&selected_node.id)
-                                    else {
-                                        return;
-                                    };
-                                    match draw_object {
-                                        EDrawObjectType::Static(draw_object) => {
-                                            draw_object.diffuse_texture_url = Some(url.clone());
-                                        }
-                                        EDrawObjectType::Skin(draw_object) => {
-                                            draw_object.diffuse_texture_url = Some(url.clone());
-                                        }
-                                    }
-                                })();
-                            }
-                        }
-                    }
-                }
+                property_view::EClickEventType::Node(property_event) => {}
                 property_view::EClickEventType::TextureFile(event) => match event {
                     texture_property_view::EClickEventType::IsVirtualTexture(
                         is_virtual_texture,
@@ -1174,50 +1119,7 @@ impl EditorContext {
             }
         }
 
-        if let Some(gizmo_result) = &click_event.gizmo_result {
-            if let Some(selected_node) =
-                &mut self.data_source.property_view_data_source.selected_node
-            {
-                let mut selected_node = selected_node.borrow_mut();
-                if let Some(rotation) = selected_node.values.get_mut(property::name::ROTATION) {
-                    if let EPropertyValueType::Quat(rotation) = rotation {
-                        rotation.x = gizmo_result.rotation.v.x;
-                        rotation.y = gizmo_result.rotation.v.y;
-                        rotation.z = gizmo_result.rotation.v.z;
-                        rotation.w = gizmo_result.rotation.s;
-                    }
-                }
-                if let Some(translation) = selected_node.values.get_mut(property::name::TRANSLATION)
-                {
-                    if let EPropertyValueType::Vec3(translation) = translation {
-                        translation.x = gizmo_result.translation.x;
-                        translation.y = gizmo_result.translation.y;
-                        translation.z = gizmo_result.translation.z;
-                    }
-                }
-                if let Some(scale) = selected_node.values.get_mut(property::name::SCALE) {
-                    if let EPropertyValueType::Vec3(scale) = scale {
-                        scale.x = gizmo_result.scale.x;
-                        scale.y = gizmo_result.scale.y;
-                        scale.z = gizmo_result.scale.z;
-                    }
-                }
-                if let Some(draw_object) = self.draw_objects.get_mut(&selected_node.id) {
-                    match draw_object {
-                        EDrawObjectType::Static(draw_object) => {
-                            if let Some(model_matrix) = selected_node.get_model_matrix() {
-                                draw_object.constants.model = model_matrix;
-                            }
-                        }
-                        EDrawObjectType::Skin(draw_object) => {
-                            if let Some(model_matrix) = selected_node.get_model_matrix() {
-                                draw_object.constants.model = model_matrix;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        if let Some(gizmo_result) = &click_event.gizmo_result {}
         if let Some(event) = click_event.content_browser_event {
             if let Some(current_folder) = &self.data_source.content_data_source.current_folder {
                 match event {
@@ -1254,6 +1156,7 @@ impl EditorContext {
                         EContentFileType::SkeletonAnimation(_) => todo!(),
                         EContentFileType::Skeleton(_) => todo!(),
                         EContentFileType::Texture(_) => todo!(),
+                        EContentFileType::Level(_) => todo!(),
                     },
                     content_browser::EClickEventType::SingleClickFile(file) => {
                         self.data_source.content_data_source.highlight_file = Some(file.clone());
@@ -1266,6 +1169,7 @@ impl EditorContext {
                                 self.data_source.property_view_data_source.selected_object =
                                     Some(ESelectedObject::TextureFile(texture_file));
                             }
+                            EContentFileType::Level(_) => todo!(),
                         }
                     }
                 }
@@ -1287,71 +1191,6 @@ impl EditorContext {
             }
         }
         result
-    }
-
-    fn node_to_draw_object(
-        engine: &mut rs_engine::engine::Engine,
-        asset_folder_path: &Path,
-        node: &crate::level::Node,
-    ) -> anyhow::Result<EDrawObjectType> {
-        let mesh_reference = node
-            .mesh_reference
-            .as_ref()
-            .ok_or(anyhow!("No mesh reference"))?;
-
-        let mesh_clusters = ModelLoader::load_from_file(
-            &asset_folder_path.join(mesh_reference.file_path.clone()),
-            &[],
-        )?;
-        let mesh_cluster = mesh_clusters
-            .iter()
-            .filter(|x| x.name == mesh_reference.referenced_mesh_name)
-            .next()
-            .ok_or(anyhow!("{} not found", mesh_reference.referenced_mesh_name))?;
-
-        let draw_object = engine.create_draw_object_from_static_mesh(
-            &mesh_cluster.vertex_buffer,
-            &mesh_cluster.index_buffer,
-            Some(node.name.clone()),
-        );
-        Ok(draw_object)
-    }
-
-    fn collect_draw_objects(
-        engine: &mut rs_engine::engine::Engine,
-        asset_folder_path: &Path,
-        nodes: std::slice::Iter<'_, Rc<RefCell<crate::level::Node>>>,
-    ) -> HashMap<uuid::Uuid, EDrawObjectType> {
-        let mut draw_objects: HashMap<uuid::Uuid, EDrawObjectType> = HashMap::new();
-        for node in nodes {
-            let id: uuid::Uuid;
-            {
-                id = node.borrow().id;
-            }
-            let Ok(mut draw_object) =
-                Self::node_to_draw_object(engine, asset_folder_path, &node.as_ref().borrow())
-            else {
-                continue;
-            };
-            let mut node = node.borrow_mut();
-            let Some(texture_value) = node.values.get_mut(property::name::TEXTURE) else {
-                continue;
-            };
-            let EPropertyValueType::Texture(Some(texture_url)) = texture_value else {
-                continue;
-            };
-            match &mut draw_object {
-                EDrawObjectType::Static(draw_object) => {
-                    draw_object.diffuse_texture_url = Some(texture_url.clone());
-                }
-                EDrawObjectType::Skin(draw_object) => {
-                    draw_object.diffuse_texture_url = Some(texture_url.clone());
-                }
-            }
-
-            draw_objects.insert(id, draw_object);
-        }
-        draw_objects
     }
 }
 

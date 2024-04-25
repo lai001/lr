@@ -12,5 +12,5 @@ editor = []
 [dependencies]
 dunce = "1.0.4"
 path-slash = "0.1.4"
-serde = { version = "1.0.193", features = ["derive"] }
+serde = { version = "1.0.193", features = ["derive", "rc"] }
 glam = { version = "0.22.0" }

@@ -1,11 +1,14 @@
+use crate::mipmap_generator::MipmapGenerator;
+#[cfg(feature = "editor")]
 use anyhow::{anyhow, Context, Result};
 use image::GenericImage;
 use md5::Digest;
 use rs_artifact::{
+    asset::Asset,
+    resource_type::EResourceType,
     virtual_texture::image::{decode_from_path, TileIndex},
     EEndianType,
 };
-use rs_engine::mipmap_generator::MipmapGenerator;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -21,6 +24,16 @@ pub struct TextureFile {
     pub virtual_image_reference: Option<String>,
 }
 
+impl Asset for TextureFile {
+    fn get_url(&self) -> url::Url {
+        self.url.clone()
+    }
+
+    fn get_resource_type(&self) -> EResourceType {
+        EResourceType::Content(rs_artifact::content_type::EContentType::Texture)
+    }
+}
+
 impl TextureFile {
     pub fn new(name: String, url: url::Url) -> Self {
         Self {
@@ -32,6 +45,7 @@ impl TextureFile {
         }
     }
 
+    #[cfg(feature = "editor")]
     pub fn is_virtual_image_cache_vaild<P: AsRef<Path>>(
         &self,
         virtual_cache_dir: P,
@@ -58,6 +72,7 @@ impl TextureFile {
         Ok(decode_result.map(|_| ())?)
     }
 
+    #[cfg(feature = "editor")]
     pub fn create_virtual_texture_cache<P: AsRef<Path>>(
         &mut self,
         asset_folder: P,
@@ -83,6 +98,7 @@ impl TextureFile {
         create_result
     }
 
+    #[cfg(feature = "editor")]
     pub fn get_pref_virtual_cache_name<P: AsRef<Path>>(&self, asset_folder: P) -> Result<String> {
         let Some(image_reference) = &self.image_reference else {
             return Err(anyhow!("image_reference is null."));
@@ -99,7 +115,7 @@ impl TextureFile {
         Ok(result)
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, feature = "editor"))]
     fn decode_virtual_texture_to_dir<P: AsRef<Path>>(
         path: P,
         out_dir: P,
@@ -127,6 +143,7 @@ impl TextureFile {
     }
 }
 
+#[cfg(feature = "editor")]
 pub fn create_virtual_texture_cache_file<P: AsRef<Path>>(
     file_path: P,
     output: P,

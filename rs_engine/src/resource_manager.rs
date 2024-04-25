@@ -1,9 +1,9 @@
+use crate::content::level::Level;
 use crate::mesh_buffer::MeshBuffer;
 use crate::thread_pool::ThreadPool;
 use crate::{error::Result, handle::HandleManager};
 use lazy_static::lazy_static;
 use rs_artifact::asset::Asset;
-use rs_artifact::level::Level;
 use rs_artifact::resource_info::ResourceInfo;
 use rs_artifact::static_mesh::StaticMesh;
 use rs_artifact::{
@@ -57,7 +57,10 @@ impl STResourceManager {
     }
 
     fn get_skin_mesh(&mut self, url: &url::Url) -> Option<Arc<rs_artifact::skin_mesh::SkinMesh>> {
-        self.skin_meshes.get(url).cloned()
+        if let Some(skin_meshe) = self.skin_meshes.get(url) {
+            return Some(skin_meshe.clone());
+        }
+        None
     }
 
     fn add_skeleton_animation(
@@ -72,7 +75,10 @@ impl STResourceManager {
         &mut self,
         url: &url::Url,
     ) -> Option<Arc<rs_artifact::skeleton_animation::SkeletonAnimation>> {
-        self.skeleton_animations.get(url).cloned()
+        if let Some(skeleton_animation) = self.skeleton_animations.get(url) {
+            return Some(skeleton_animation.clone());
+        }
+        None
     }
 
     fn add_skeleton(
@@ -84,7 +90,11 @@ impl STResourceManager {
     }
 
     fn get_skeleton(&mut self, url: &url::Url) -> Option<Arc<rs_artifact::skeleton::Skeleton>> {
-        self.skeletons.get(url).cloned()
+        if let Some(skeleton) = self.skeletons.get(url) {
+            return Some(skeleton.clone());
+        }
+
+        None
     }
 
     fn load_static_meshs(&mut self) {
@@ -127,7 +137,12 @@ impl STResourceManager {
             .as_mut()
             .ok_or(crate::error::Error::ArtifactReaderNotSet)?;
         let level = reader
-            .get_resource::<rs_artifact::level::Level>(url, Some(EResourceType::Level))
+            .get_resource::<Level>(
+                url,
+                Some(EResourceType::Content(
+                    rs_artifact::content_type::EContentType::Level,
+                )),
+            )
             .map_err(|err| crate::error::Error::Artifact(err, None))?;
         Ok(level)
     }

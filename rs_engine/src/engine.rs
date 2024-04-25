@@ -2,14 +2,17 @@ use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::console_cmd::ConsoleCmd;
+use crate::content::content_file_type::EContentFileType;
 use crate::drawable::{EDrawObjectType, SkinMeshDrawObject, StaticMeshDrawObject};
 use crate::error::Result;
 use crate::input_mode::EInputMode;
 use crate::render_thread_mode::ERenderThreadMode;
+use crate::scene_node::EComponentType;
 use crate::{logger::Logger, resource_manager::ResourceManager};
 use rs_artifact::artifact::ArtifactReader;
-use rs_artifact::level::ENodeType;
+use rs_artifact::content_type::EContentType;
 use rs_artifact::resource_info::ResourceInfo;
+use rs_artifact::resource_type::EResourceType;
 use rs_core_minimal::primitive_data::PrimitiveData;
 use rs_core_minimal::settings::Settings;
 use rs_foundation::new::{
@@ -30,6 +33,7 @@ use rs_render::virtual_texture_source::TVirtualTextureSource;
 use std::collections::HashMap;
 use std::iter::zip;
 use std::path::Path;
+use std::sync::Arc;
 
 struct State {
     camera_movement_speed: f32,
@@ -53,7 +57,7 @@ pub struct Engine {
     render_thread_mode: ERenderThreadMode,
     resource_manager: ResourceManager,
     logger: Logger,
-    level: Option<rs_artifact::level::Level>,
+    level: Option<crate::content::level::Level>,
     draw_objects: Vec<DrawObject>,
     draw_object_id: u32,
     camera: Camera,
@@ -91,6 +95,15 @@ impl Engine {
         } else {
             settings = Settings::default();
         }
+
+        #[cfg(target_os = "android")]
+        (|| {
+            if settings.render_setting.backends == rs_core_minimal::settings::Backends::DX12 {
+                panic!("Not supported render backend on android platform.");
+            }
+        })();
+
+        log::trace!("{:?}", settings);
         let mut resource_manager = ResourceManager::default();
         resource_manager.set_artifact_reader(artifact_reader);
         resource_manager.load_static_meshs();
@@ -132,8 +145,9 @@ impl Engine {
         });
         render_thread_mode.send_command(command);
 
-        let camera = Camera::default(surface_width, surface_height);
-        let mut level: Option<rs_artifact::level::Level> = None;
+        let mut camera = Camera::default(surface_width, surface_height);
+        camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
+        let mut level: Option<crate::content::level::Level> = None;
         let mut draw_object_id: u32 = 0;
         (|| {
             let Some(url) = Self::find_first_level(&mut resource_manager) else {
@@ -142,50 +156,11 @@ impl Engine {
             let Ok(_level) = resource_manager.get_level(&url) else {
                 return;
             };
-            for node in &_level.nodes {
-                match node {
-                    ENodeType::Node3D(node3d) => {
-                        let Some(mesh_url) = &node3d.mesh_url else {
-                            continue;
-                        };
-                        let Ok(static_mesh) = resource_manager.get_static_mesh(mesh_url) else {
-                            continue;
-                        };
-
-                        let (vertexes0, vertexes1) = Self::convert_vertex(&static_mesh.vertexes);
-
-                        let draw_object = Self::create_draw_object_from_mesh_internal(
-                            &mut render_thread_mode,
-                            &mut resource_manager,
-                            vec![
-                                (
-                                    Some("MeshVertex0"),
-                                    rs_foundation::cast_to_raw_buffer(&vertexes0),
-                                ),
-                                (
-                                    Some("MeshVertex1"),
-                                    rs_foundation::cast_to_raw_buffer(&vertexes1),
-                                ),
-                            ],
-                            static_mesh.vertexes.len() as u32,
-                            &static_mesh.indexes,
-                            draw_object_id,
-                            Some(static_mesh.url.to_string()),
-                            rs_render::renderer::STATIC_MESH_RENDER_PIPELINE.to_string(),
-                            vec![
-                                EBindingResource::Constants(*global_constants_handle),
-                                EBindingResource::Sampler(*global_sampler_handle),
-                            ],
-                        );
-                        draw_object_id += 1;
-                        draw_objects.push(draw_object);
-                    }
-                }
-            }
             level = Some(_level);
         })();
 
-        let grid_draw_object = if cfg!(feature = "editor") {
+        #[cfg(feature = "editor")]
+        let grid_draw_object = (|| {
             draw_object_id += 1;
             Some(Self::create_grid_draw_object(
                 draw_object_id,
@@ -193,9 +168,14 @@ impl Engine {
                 &mut render_thread_mode,
                 global_constants_handle.clone(),
             ))
-        } else {
-            None
-        };
+        })();
+        #[cfg(not(feature = "editor"))]
+        let grid_draw_object = None;
+        
+        #[cfg(feature = "editor")]
+        let input_mode = EInputMode::UI;
+        #[cfg(not(feature = "editor"))]
+        let input_mode = EInputMode::Game;
 
         let engine = Engine {
             render_thread_mode,
@@ -209,7 +189,7 @@ impl Engine {
             draw_object_id,
             game_time: std::time::Instant::now(),
             game_time_sec: 0.0,
-            input_mode: EInputMode::UI,
+            input_mode,
             global_constants,
             global_constants_handle: global_constants_handle.clone(),
             global_sampler_handle: global_sampler_handle.clone(),
@@ -221,12 +201,128 @@ impl Engine {
         Ok(engine)
     }
 
+    pub fn init_level(&mut self) {
+        if let Ok(resource_map) = self.resource_manager.get_resource_map() {
+            for (url, resource_info) in resource_map {
+                match resource_info.resource_type {
+                    rs_artifact::resource_type::EResourceType::SkinMesh => {
+                        if let Ok(skin_mesh) = self
+                            .resource_manager
+                            .get_resource::<rs_artifact::skin_mesh::SkinMesh>(
+                                &url,
+                                Some(resource_info.resource_type),
+                            )
+                        {
+                            self.resource_manager
+                                .add_skin_mesh(url.clone(), Arc::new(skin_mesh));
+                        }
+                    }
+                    rs_artifact::resource_type::EResourceType::SkeletonAnimation => {
+                        if let Ok(skeleton_animation) =
+                            self.resource_manager
+                                .get_resource::<rs_artifact::skeleton_animation::SkeletonAnimation>(
+                                    &url,
+                                    Some(resource_info.resource_type),
+                                )
+                        {
+                            self.resource_manager
+                                .add_skeleton_animation(url.clone(), Arc::new(skeleton_animation));
+                        }
+                    }
+                    rs_artifact::resource_type::EResourceType::Skeleton => {
+                        if let Ok(skeleton) = self
+                            .resource_manager
+                            .get_resource::<rs_artifact::skeleton::Skeleton>(
+                                &url,
+                                Some(resource_info.resource_type),
+                            )
+                        {
+                            self.resource_manager
+                                .add_skeleton(url.clone(), Arc::new(skeleton));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let Some(level) = self.level.as_mut() else {
+            return;
+        };
+        for actor in level.actors.clone() {
+            let root_scene_node = &mut actor.borrow_mut().scene_node;
+            match &mut root_scene_node.component {
+                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                crate::scene_node::EComponentType::SkeletonMeshComponent(
+                    skeleton_mesh_component,
+                ) => {
+                    let mut files: Vec<EContentFileType> = vec![];
+                    if let Some(url) = skeleton_mesh_component.skeleton_url.as_ref() {
+                        match self
+                            .resource_manager
+                            .get_resource::<crate::content::skeleton::Skeleton>(
+                                url,
+                                Some(EResourceType::Content(EContentType::Skeleton)),
+                            ) {
+                            Ok(content_skeleton) => {
+                                files.push(EContentFileType::Skeleton(SingleThreadMut::new(
+                                    content_skeleton,
+                                )));
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
+                        }
+                    }
+                    if let Some(url) = skeleton_mesh_component.animation_url.as_ref() {
+                        match self
+                            .resource_manager
+                            .get_resource::<crate::content::skeleton_animation::SkeletonAnimation>(
+                            url,
+                            Some(EResourceType::Content(EContentType::SkeletonAnimation)),
+                        ) {
+                            Ok(skeleton_animation) => {
+                                files.push(EContentFileType::SkeletonAnimation(
+                                    SingleThreadMut::new(skeleton_animation),
+                                ));
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
+                        }
+                    }
+
+                    for url in &skeleton_mesh_component.skeleton_mesh_urls {
+                        match self
+                            .resource_manager
+                            .get_resource::<crate::content::skeleton_mesh::SkeletonMesh>(
+                                url,
+                                Some(EResourceType::Content(EContentType::SkeletonMesh)),
+                            ) {
+                            Ok(skeleton_mesh) => {
+                                files.push(EContentFileType::SkeletonMesh(SingleThreadMut::new(
+                                    skeleton_mesh,
+                                )));
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
+                        }
+                    }
+
+                    skeleton_mesh_component.initialize(ResourceManager::default(), self, &files);
+                }
+            }
+        }
+    }
+
     fn find_first_level(resource_manager: &mut ResourceManager) -> Option<url::Url> {
         let Ok(resource_map) = resource_manager.get_resource_map() else {
             return None;
         };
         for (k, v) in resource_map {
-            if k.scheme() != "asset" {
+            if k.scheme() != "content" {
                 continue;
             }
             let Some(host) = k.host() else {
@@ -278,6 +374,21 @@ impl Engine {
         self.global_constants.scene_factor = virtual_texture_setting.feed_back_texture_div as f32;
         self.global_constants.feedback_bias = virtual_texture_setting.feedback_bias;
         self.update_global_constants();
+
+        if let Some(level) = self.level.as_ref() {
+            for actor in level.actors.clone() {
+                match &mut actor.borrow_mut().scene_node.component {
+                    EComponentType::SceneComponent(_) => todo!(),
+                    EComponentType::StaticMeshComponent(_) => todo!(),
+                    EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
+                        skeleton_mesh_component.update(self.get_game_time(), self);
+                        for draw_object in skeleton_mesh_component.get_draw_objects() {
+                            self.draw2(draw_object);
+                        }
+                    }
+                }
+            }
+        }
 
         for draw_object in &self.draw_objects {
             self.render_thread_mode
@@ -1027,6 +1138,14 @@ impl Engine {
             binding_resources: vec![],
             render_pipeline: rs_render::renderer::GRID_RENDER_PIPELINE.to_string(),
         }
+    }
+
+    pub fn set_camera_movement_speed(&mut self, new_speed: f32) {
+        self.state.camera_movement_speed = new_speed;
+    }
+
+    pub fn get_camera_movement_speed(&mut self) -> f32 {
+        self.state.camera_movement_speed
     }
 }
 

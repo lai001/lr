@@ -1,6 +1,6 @@
 use crate::enviroment::Enviroment;
 use crate::error::Result;
-use crate::motion_event;
+use crate::motion_event::{self, EActionType, Geometry};
 use rs_artifact::artifact::{ArtifactFileHeader, ArtifactReader};
 use rs_artifact::java_input_stream::JavaInputStream;
 use rs_artifact::{
@@ -16,6 +16,7 @@ pub struct Application {
     enviroment: Option<Enviroment>,
     engine: rs_engine::engine::Engine,
     gui_context: egui::Context,
+    geometries: Vec<Geometry>,
 }
 
 impl Application {
@@ -44,7 +45,7 @@ impl Application {
         let width = native_window.get_width();
         let height = native_window.get_height();
         let gui_context = egui::Context::default();
-        let engine = rs_engine::engine::Engine::new(
+        let mut engine = rs_engine::engine::Engine::new(
             &native_window,
             width,
             height,
@@ -54,6 +55,7 @@ impl Application {
             std::collections::HashMap::new(),
         )
         .map_err(|err| crate::error::Error::Engine(err))?;
+        engine.init_level();
         Ok(Application {
             native_window,
             raw_input,
@@ -61,6 +63,7 @@ impl Application {
             enviroment: None,
             engine,
             gui_context,
+            geometries: vec![],
         })
     }
 
@@ -83,7 +86,9 @@ impl Application {
             clipped_primitives: context
                 .tessellate(full_output.shapes, full_output.pixels_per_point),
         };
+        self.engine.tick();
         self.engine.redraw(gui_render_output);
+        self.engine.present();
     }
 
     pub fn get_status_bar_height(&self) -> i32 {
@@ -99,13 +104,14 @@ impl Application {
 
     pub fn set_new_window(
         &mut self,
-        native_window: &crate::native_window::NativeWindow,
+        native_window: crate::native_window::NativeWindow,
     ) -> Result<()> {
         let surface_width = native_window.get_width();
         let surface_height = native_window.get_height();
         self.engine
-            .set_new_window(native_window, surface_width, surface_height)
+            .set_new_window(&native_window, surface_width, surface_height)
             .map_err(|err| crate::error::Error::Engine(err))?;
+        self.native_window = native_window;
         Ok(())
     }
 }
@@ -158,7 +164,7 @@ pub fn Application_setNewSurface(
     let native_window = crate::native_window::NativeWindow::new(&mut env, surface);
     if let Some(native_window) = native_window {
         let mut application: Box<Application> = unsafe { Box::from_raw(application) };
-        application.set_new_window(&native_window);
+        application.set_new_window(native_window);
         Box::into_raw(Box::new(application));
         jni::sys::JNI_TRUE
     } else {
@@ -178,6 +184,85 @@ pub fn Application_drop(_: jni::JNIEnv, _: jni::objects::JClass, application: *m
 pub fn Application_redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: *mut Application) {
     debug_assert_ne!(application, std::ptr::null_mut());
     let mut application: Box<Application> = unsafe { Box::from_raw(application) };
+
+    for pair in application.geometries.windows(2) {
+        let old_geometry = &pair[0];
+        let new_geometry = &pair[1];
+        let status_bar_height = application.get_status_bar_height();
+
+        if old_geometry.action == EActionType::ActionMove
+            && new_geometry.action == EActionType::ActionMove
+        {
+            let delta_x = new_geometry.x - old_geometry.x;
+            let delta_y = new_geometry.y - old_geometry.y;
+
+            let camera = application.engine.get_camera_mut();
+            if new_geometry.x <= (application.native_window.get_width() / 2) as f32 {
+                let motion_speed = 0.1;
+                camera.add_world_location(glam::vec3(
+                    delta_x * motion_speed,
+                    0.0,
+                    delta_y * motion_speed,
+                ));
+            } else {
+                let motion_speed = 0.1;
+                let speed_x = motion_speed as f64;
+                let speed_y = motion_speed as f64;
+                let yaw: f64 = (delta_x as f64 * speed_x).to_radians();
+                let pitch: f64 = (-delta_y as f64 * speed_y).to_radians();
+                camera.add_world_rotation_relative(&rs_engine::rotator::Rotator {
+                    yaw: yaw as f32,
+                    roll: 0.0,
+                    pitch: pitch as f32,
+                });
+            }
+        }
+
+        let raw_input = &mut application.raw_input;
+
+        let phase: egui::TouchPhase = {
+            match old_geometry.action {
+                EActionType::ActionUp => egui::TouchPhase::End,
+                EActionType::ActionMove => egui::TouchPhase::Move,
+                EActionType::ActionDown => egui::TouchPhase::Start,
+                EActionType::ActionCancel => egui::TouchPhase::Cancel,
+                EActionType::ActionOutside => egui::TouchPhase::End,
+            }
+        };
+        let pointer_pos = egui::pos2(
+            (old_geometry.x) / application.scale_factor,
+            (old_geometry.y - status_bar_height as f32) / application.scale_factor,
+        );
+        match phase {
+            egui::TouchPhase::Start => {
+                raw_input.events.push(egui::Event::PointerButton {
+                    pos: pointer_pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                });
+            }
+            egui::TouchPhase::Move => {
+                raw_input
+                    .events
+                    .push(egui::Event::PointerMoved(pointer_pos));
+            }
+            egui::TouchPhase::End => {
+                raw_input.events.push(egui::Event::PointerButton {
+                    pos: pointer_pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                });
+                raw_input.events.push(egui::Event::PointerGone);
+            }
+            egui::TouchPhase::Cancel => {}
+        }
+    }
+    if application.geometries.len() >= 2 {
+        application.geometries.clear();
+    }
+
     application.redraw();
     application.raw_input.events.clear();
     Box::into_raw(Box::new(application));
@@ -195,52 +280,8 @@ pub fn Application_onTouchEvent(
 
     let mut motion_event = motion_event::MotionEvent::new(env, event);
     let mut application: Box<Application> = unsafe { Box::from_raw(application) };
-    let status_bar_height = application.get_status_bar_height();
-
-    let raw_input = &mut application.raw_input;
-
-    let phase: egui::TouchPhase = {
-        if motion_event.get_action() == 3 {
-            egui::TouchPhase::Cancel
-        } else if motion_event.get_action() == 0 {
-            egui::TouchPhase::Start
-        } else if motion_event.get_action() == 2 {
-            egui::TouchPhase::Move
-        } else if motion_event.get_action() == 1 {
-            egui::TouchPhase::End
-        } else {
-            egui::TouchPhase::End
-        }
-    };
-    let pointer_pos = egui::pos2(
-        (motion_event.get_x() as f32) / application.scale_factor,
-        (motion_event.get_y() as f32 - status_bar_height as f32) / application.scale_factor,
-    );
-    match phase {
-        egui::TouchPhase::Start => {
-            raw_input.events.push(egui::Event::PointerButton {
-                pos: pointer_pos,
-                button: egui::PointerButton::Primary,
-                pressed: true,
-                modifiers: Default::default(),
-            });
-        }
-        egui::TouchPhase::Move => {
-            raw_input
-                .events
-                .push(egui::Event::PointerMoved(pointer_pos));
-        }
-        egui::TouchPhase::End => {
-            raw_input.events.push(egui::Event::PointerButton {
-                pos: pointer_pos,
-                button: egui::PointerButton::Primary,
-                pressed: false,
-                modifiers: Default::default(),
-            });
-            raw_input.events.push(egui::Event::PointerGone);
-        }
-        egui::TouchPhase::Cancel => {}
-    }
+    let new_geometry = motion_event.to_geometry();
+    application.geometries.push(new_geometry);
 
     Box::into_raw(Box::new(application));
     return jni::sys::JNI_TRUE;

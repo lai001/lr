@@ -6,7 +6,7 @@ use rs_engine::{
     logger::{Logger, LoggerConfiguration},
 };
 use std::{collections::HashMap, path::Path};
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, MouseScrollDelta, WindowEvent};
 
 struct State {
     target_fps: u64,
@@ -53,7 +53,7 @@ impl ApplicationContext {
         let artifact_filepath = Path::new("./main.rs");
         let artifact_reader =
             ArtifactReader::new(artifact_filepath, Some(EEndianType::Little)).unwrap();
-        let engine = rs_engine::engine::Engine::new(
+        let mut engine = rs_engine::engine::Engine::new(
             window,
             window_width,
             window_height,
@@ -63,6 +63,8 @@ impl ApplicationContext {
             HashMap::new(),
         )
         .unwrap();
+
+        engine.init_level();
 
         window
             .set_cursor_grab(winit::window::CursorGrabMode::Confined)
@@ -103,6 +105,15 @@ impl ApplicationContext {
                     self.engine
                         .process_keyboard_input(*device_id, event.clone(), *is_synthetic);
                 }
+                WindowEvent::MouseWheel { delta, .. } => match delta {
+                    MouseScrollDelta::LineDelta(_, up) => {
+                        let mut speed = self.engine.get_camera_movement_speed();
+                        speed += up * 0.005;
+                        speed = speed.max(0.0);
+                        self.engine.set_camera_movement_speed(speed);
+                    }
+                    MouseScrollDelta::PixelDelta(_) => todo!(),
+                },
                 WindowEvent::RedrawRequested => {
                     let full_output = self.process_ui(window, event_loop_proxy);
                     let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
@@ -112,6 +123,7 @@ impl ApplicationContext {
                             .egui_ctx()
                             .tessellate(full_output.shapes, full_output.pixels_per_point),
                     };
+                    self.engine.tick();
                     self.engine.redraw(gui_render_output);
                     self.engine.present();
                     let wait = self

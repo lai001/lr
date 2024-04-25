@@ -1,8 +1,8 @@
-use crate::level::Level;
 use anyhow::anyhow;
 use path_slash::PathBufExt;
 use rs_artifact::EEndianType;
 use rs_core_minimal::settings::Settings;
+use rs_engine::content::content_file_type::EContentFileType;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
@@ -24,7 +24,6 @@ pub struct Project {
     pub project_name: String,
     pub settings: Rc<RefCell<Settings>>,
     pub endian_type: EEndianType,
-    pub level: Rc<RefCell<Level>>,
     pub content: Rc<RefCell<crate::content_folder::ContentFolder>>,
 }
 
@@ -53,15 +52,19 @@ impl Project {
         if project_file_path.exists() {
             return Err(anyhow!("{:?} is exists", project_file_path));
         }
-
+        let content = Rc::new(RefCell::new(crate::content_folder::ContentFolder::default()));
+        content
+            .borrow_mut()
+            .files
+            .push(EContentFileType::Level(Rc::new(RefCell::new(
+                rs_engine::content::level::Level::empty_level(),
+            ))));
         let empty_project = Project {
             version_str: VERSION_STR.to_string(),
             project_name: project_name.to_string(),
-            level: Rc::new(RefCell::new(Level::empty_level())),
-            // texture_folder: Self::root_texture_folder(),
             endian_type: EEndianType::Little,
             settings: Rc::new(RefCell::new(Settings::default())),
-            content: Rc::new(RefCell::new(crate::content_folder::ContentFolder::default())),
+            content,
         };
         let json_str = serde_json::ser::to_string_pretty(&empty_project)?;
         let mut file = std::fs::File::create(project_file_path)?;

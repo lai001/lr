@@ -11,6 +11,7 @@ default = ["standalone"]
 standalone = ["rs_render/standalone", "rs_engine/standalone"]
 
 [target.'cfg(target_os = "android")'.dependencies]
+glam = { version = "0.22.0" }
 log = "0.4.17"
 env_logger = "0.10.1"
 egui = "0.27.0"

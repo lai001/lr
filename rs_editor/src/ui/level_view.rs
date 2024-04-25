@@ -1,46 +1,37 @@
 use egui::{Context, ScrollArea, Ui};
 use std::{cell::RefCell, rc::Rc};
 
-#[derive(Debug)]
 pub enum EClickEventType {
-    Node(Rc<RefCell<crate::level::Node>>),
+    Actor(Rc<RefCell<rs_engine::actor::Actor>>),
 }
 
 fn level_node(
     ui: &mut Ui,
-    node: Rc<RefCell<crate::level::Node>>,
+    actor: Rc<RefCell<rs_engine::actor::Actor>>,
     event: &mut Option<EClickEventType>,
 ) {
-    let _node = node.as_ref().borrow();
-    let id = _node.id;
-    let name = &_node.name;
-    let childs = &_node.childs;
-    let id = ui.make_persistent_id(id);
+    let _actor = actor.as_ref().borrow();
+    let name = &_actor.name;
+    let id = ui.make_persistent_id(name);
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
         .show_header(ui, |ui| {
-            if ui.button(name.clone()).clicked() {
-                *event = Some(EClickEventType::Node(node.clone()));
-            }
+            ui.label(name);
         })
-        .body(|ui| {
-            for child_node in childs {
-                level_node(ui, child_node.clone(), event);
-            }
-        });
+        .body(|ui| {});
 }
 
 pub fn draw(
     window: egui::Window,
     context: &Context,
     is_open: &mut bool,
-    level: &crate::level::Level,
+    level: &rs_engine::content::level::Level,
 ) -> Option<EClickEventType> {
     let mut event: Option<EClickEventType> = None;
     window.open(is_open).show(context, |ui| {
-        ui.label(format!("name: {}", level.name));
+        ui.label(format!("name: {}", level.get_name()));
         ScrollArea::vertical().show(ui, |ui| {
-            for node in &level.nodes {
-                level_node(ui, node.clone(), &mut event);
+            for actor in &level.actors {
+                level_node(ui, actor.clone(), &mut event);
             }
         });
     });

@@ -5,7 +5,7 @@ pub enum Error {
     CheckIdentificationFail(Option<String>),
     DataConvertFail,
     Bincode(bincode::Error, Option<String>),
-    ResourceTypeNotMatch,
+    ResourceTypeNotMatch(Option<String>),
     ValueTypeNotMatch,
     #[cfg(target_os = "android")]
     Jni(jni::errors::Error),

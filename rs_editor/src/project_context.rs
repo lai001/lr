@@ -1,15 +1,17 @@
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
-    content_folder::EContentFileType,
-    model_loader::{MeshCluster, ModelLoader},
+    model_loader::ModelLoader,
     project::{Project, ASSET_FOLDER_NAME},
 };
 use anyhow::{anyhow, Context};
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use rs_artifact::{
-    artifact::ArtifactAssetEncoder, property_value_type::EPropertyValueType,
-    shader_source_code::ShaderSourceCode, static_mesh::StaticMesh, EEndianType,
+    artifact::ArtifactAssetEncoder, shader_source_code::ShaderSourceCode, EEndianType,
+};
+use rs_engine::{
+    content::{content_file_type::EContentFileType, texture::TextureFile},
+    resource_manager::ResourceManager,
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
 use serde::{Deserialize, Serialize};
@@ -17,6 +19,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     io::Write,
+    ops::Deref,
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -202,44 +205,6 @@ impl ProjectContext {
         Ok(path)
     }
 
-    fn node_to_artifact_node(node: &crate::level::Node) -> rs_artifact::level::ENodeType {
-        let mesh_reference = &node.mesh_reference.as_ref().unwrap();
-        let url = Self::build_static_mesh_url(
-            &mesh_reference.file_path,
-            &mesh_reference.referenced_mesh_name,
-        );
-        let mut childs: Vec<rs_artifact::level::ENodeType> = vec![];
-        for x in node.childs.iter() {
-            childs.push(Self::node_to_artifact_node(&x.borrow()));
-        }
-        let mut values: HashMap<String, EPropertyValueType> = HashMap::new();
-        for (key, value) in &node.values {
-            values.insert(key.clone(), value.clone());
-        }
-        let node3d = rs_artifact::level::Node3D {
-            name: node.name.clone(),
-            id: uuid::Uuid::new_v4(),
-            url: None,
-            mesh_url: Some(url),
-            childs,
-            values,
-        };
-        rs_artifact::level::ENodeType::Node3D(node3d)
-    }
-
-    fn level_to_level(level: &crate::level::Level) -> rs_artifact::level::Level {
-        let mut nodes: Vec<rs_artifact::level::ENodeType> = vec![];
-        for x in level.nodes.iter() {
-            nodes.push(Self::node_to_artifact_node(&x.borrow()));
-        }
-        rs_artifact::level::Level {
-            name: level.name.clone(),
-            id: uuid::Uuid::new_v4(),
-            url: url::Url::parse(&format!("asset://level/{}", level.name)).unwrap(),
-            nodes,
-        }
-    }
-
     pub fn build_static_mesh_url(file_path: &Path, mesh_name: &str) -> url::Url {
         url::Url::parse(&format!(
             "asset://static_mesh/{}/{}",
@@ -273,101 +238,154 @@ impl ProjectContext {
         Ok(path)
     }
 
-    pub fn export(&mut self) -> anyhow::Result<PathBuf> {
+    pub fn export(&mut self, model_loader: &mut ModelLoader) -> anyhow::Result<PathBuf> {
         let output_folder_path = self.try_create_build_dir()?;
-        let _ = std::fs::create_dir(output_folder_path.clone());
-        // let output_filename = self.project.project_name.clone() + ".rs";
+        if !output_folder_path.exists() {
+            std::fs::create_dir(output_folder_path.clone())?;
+        }
         let output_filename = "main.rs";
+        let asset_folder_path = self.get_asset_folder_path();
 
-        let mut referenced_meshs: HashMap<PathBuf, HashSet<String>> = HashMap::new();
-        let mut static_meshs: Vec<StaticMesh> = Vec::new();
-        let mut images: Vec<rs_artifact::image::Image> = Vec::new();
         let mut artifact_asset_encoder = ArtifactAssetEncoder::new(
             Some(EEndianType::Little),
             self.project.settings.borrow().clone(),
             &output_folder_path.join(output_filename),
         );
-        for node in &self.project.level.borrow().nodes {
-            self.walk_node(&node.borrow(), &mut |child_node| {
-                Self::collect_resource(&mut referenced_meshs, child_node);
-            });
-        }
 
-        for (file_path, mesh_names) in referenced_meshs.iter() {
-            let mut mesh_clusters_map: HashMap<&String, &MeshCluster> = HashMap::new();
-            let mesh_clusters =
-                ModelLoader::load_from_file(&self.get_asset_folder_path().join(file_path), &[])?;
-            for mesh_cluster in &mesh_clusters {
-                mesh_clusters_map.insert(&mesh_cluster.name, mesh_cluster);
-            }
+        let mut images: HashMap<url::Url, rs_artifact::image::Image> = HashMap::new();
+        let mut shader_source_codes: HashMap<
+            url::Url,
+            rs_artifact::shader_source_code::ShaderSourceCode,
+        > = HashMap::new();
+        let mut static_meshes: HashMap<url::Url, rs_artifact::static_mesh::StaticMesh> =
+            HashMap::new();
+        let mut skin_meshes: HashMap<url::Url, rs_artifact::skin_mesh::SkinMesh> = HashMap::new();
+        let mut skeletons: HashMap<url::Url, rs_artifact::skeleton::Skeleton> = HashMap::new();
+        let mut skeleton_animations: HashMap<
+            url::Url,
+            rs_artifact::skeleton_animation::SkeletonAnimation,
+        > = HashMap::new();
 
-            for mesh_name in mesh_names {
-                if let Some(mesh_cluster) = mesh_clusters_map.get(mesh_name) {
-                    let static_mesh = StaticMesh {
-                        name: mesh_cluster.name.clone(),
-                        id: uuid::Uuid::new_v4(),
-                        url: Self::build_static_mesh_url(file_path, mesh_name),
-                        vertexes: mesh_cluster.vertex_buffer.clone(),
-                        indexes: mesh_cluster.index_buffer.clone(),
-                    };
-                    static_meshs.push(static_mesh);
+        for file in &self.project.content.borrow().files {
+            match file {
+                EContentFileType::StaticMesh(asset) => {
+                    artifact_asset_encoder.encode(&*asset.borrow());
+                }
+                EContentFileType::SkeletonMesh(asset) => {
+                    let file_path = asset_folder_path.join(&asset.borrow().get_relative_path());
+                    model_loader.load(&file_path).unwrap();
+                    let loaded_skin_mesh = model_loader.to_runtime_skin_mesh(
+                        asset.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                    );
+                    skin_meshes.insert(
+                        loaded_skin_mesh.url.clone(),
+                        loaded_skin_mesh.deref().clone(),
+                    );
+
+                    artifact_asset_encoder.encode(&*asset.borrow());
+                }
+                EContentFileType::SkeletonAnimation(asset) => {
+                    let file_path = asset_folder_path.join(&asset.borrow().get_relative_path());
+                    model_loader.load(&file_path).unwrap();
+                    let loaded_skeleton_animation = model_loader.to_runtime_skeleton_animation(
+                        asset.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                    );
+                    skeleton_animations.insert(
+                        loaded_skeleton_animation.url.clone(),
+                        loaded_skeleton_animation.deref().clone(),
+                    );
+
+                    artifact_asset_encoder.encode(&*asset.borrow());
+                }
+                EContentFileType::Skeleton(asset) => {
+                    let file_path = asset_folder_path.join(&asset.borrow().get_relative_path());
+                    model_loader.load(&file_path).unwrap();
+                    let loaded_skeleton = model_loader.to_runtime_skeleton(
+                        asset.clone(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                    );
+                    skeletons.insert(loaded_skeleton.url.clone(), loaded_skeleton.deref().clone());
+
+                    artifact_asset_encoder.encode(&*asset.borrow());
+                }
+                EContentFileType::Texture(asset) => {
+                    if let Some(image_file_path) = &asset.borrow().image_reference {
+                        let absolute_image_file_path =
+                            self.get_asset_folder_path().join(image_file_path.clone());
+                        let file_stem =
+                            image_file_path.file_stem().ok_or(anyhow!("No file stem"))?;
+                        let name = file_stem.to_str().ok_or(anyhow!("Fail to convert str"))?;
+                        let image_file_path = image_file_path
+                            .to_str()
+                            .ok_or(anyhow!("Fail to convert str"))?;
+                        let url = rs_engine::build_asset_url(image_file_path)?;
+                        let buffer = std::fs::read(absolute_image_file_path.clone()).context(
+                            format!("Failed to read from {:?}", absolute_image_file_path),
+                        )?;
+                        let _ = image::load_from_memory(&buffer).context(format!(
+                            "{:?} is not a valid image file.",
+                            absolute_image_file_path
+                        ))?;
+                        let format = image::guess_format(&buffer)?;
+                        let image = rs_artifact::image::Image {
+                            name: name.to_string(),
+                            url: url.clone(),
+                            image_format: rs_artifact::image::ImageFormat::from_external_format(
+                                format,
+                            ),
+                            data: buffer,
+                        };
+                        images.insert(url, image);
+                    }
+                    artifact_asset_encoder.encode(&*asset.borrow());
+                }
+                EContentFileType::Level(asset) => {
+                    artifact_asset_encoder.encode(&*asset.borrow());
                 }
             }
         }
 
-        let mut texture_files: Vec<Rc<RefCell<crate::texture::TextureFile>>> = Vec::new();
-        Self::collect_texture_files(self.project.content.clone(), &mut texture_files);
-        let image_files = Self::collect_image_files(&texture_files);
-        for image_file_path in image_files {
-            let absolute_image_file_path =
-                self.get_asset_folder_path().join(image_file_path.clone());
-            let file_stem = image_file_path.file_stem().ok_or(anyhow!("No file stem"))?;
-            let name = file_stem.to_str().ok_or(anyhow!("Fail to convert str"))?;
-            let image_file_path = image_file_path
-                .to_str()
-                .ok_or(anyhow!("Fail to convert str"))?;
-            let url = rs_engine::build_asset_url(image_file_path)?;
-            let buffer = std::fs::read(absolute_image_file_path.clone()).context(format!(
-                "Failed to read from {:?}",
-                absolute_image_file_path
-            ))?;
-            let _ = image::load_from_memory(&buffer).context(format!(
-                "{:?} is not a valid image file.",
-                absolute_image_file_path
-            ))?;
-            let format = image::guess_format(&buffer)?;
-            let image = rs_artifact::image::Image {
-                name: name.to_string(),
-                url,
-                image_format: rs_artifact::image::ImageFormat::from_external_format(format),
-                data: buffer,
-            };
-            images.push(image);
-        }
-
-        // FIXME: Out of memory
-        #[cfg(feature = "editor")]
         for (name, code) in Self::pre_process_shaders() {
+            let url = Self::build_shader_url(&name);
             let shader_source_code = ShaderSourceCode {
                 name: name.clone(),
                 id: uuid::Uuid::new_v4(),
                 url: Self::build_shader_url(&name),
                 code,
             };
-            artifact_asset_encoder.encode(&shader_source_code);
+            shader_source_codes.insert(url, shader_source_code);
         }
-        artifact_asset_encoder.encode(&Self::level_to_level(&self.project.level.borrow()));
-        for static_mesh in static_meshs.iter() {
-            artifact_asset_encoder.encode(static_mesh);
+
+        // FIXME: Out of memory
+        for asset in images.values() {
+            artifact_asset_encoder.encode(asset);
         }
-        for image in images.iter() {
-            artifact_asset_encoder.encode(image);
+        for asset in shader_source_codes.values() {
+            artifact_asset_encoder.encode(asset);
         }
+        for asset in static_meshes.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in skin_meshes.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in skeletons.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in skeleton_animations.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+
         let _ = artifact_asset_encoder.finish()?;
         Ok(output_folder_path.join(output_filename))
     }
 
-    fn collect_image_files(files: &[Rc<RefCell<crate::texture::TextureFile>>]) -> HashSet<PathBuf> {
+    fn collect_image_files(files: &[Rc<RefCell<TextureFile>>]) -> HashSet<PathBuf> {
         let mut image_paths = HashSet::new();
         for file in files {
             if let Some(image_reference) = &file.borrow().image_reference {
@@ -378,53 +396,6 @@ impl ProjectContext {
         image_paths
     }
 
-    fn collect_texture_files(
-        folder: Rc<RefCell<crate::content_folder::ContentFolder>>,
-        files: &mut Vec<Rc<RefCell<crate::texture::TextureFile>>>,
-    ) {
-        for content_file in &folder.borrow().files {
-            match content_file {
-                EContentFileType::StaticMesh(_) => todo!(),
-                EContentFileType::SkeletonMesh(_) => todo!(),
-                EContentFileType::SkeletonAnimation(_) => todo!(),
-                EContentFileType::Skeleton(_) => todo!(),
-                EContentFileType::Texture(texture_file) => {
-                    files.push(texture_file.clone());
-                }
-            }
-        }
-        for sub_folder in &folder.borrow().folders {
-            Self::collect_texture_files(sub_folder.clone(), files);
-        }
-    }
-
-    pub fn walk_node<T>(&self, node: &crate::level::Node, walk: &mut T)
-    where
-        T: FnMut(&crate::level::Node),
-    {
-        walk(node);
-        for node in node.childs.iter() {
-            self.walk_node(&node.borrow(), walk);
-        }
-    }
-
-    pub fn collect_resource(
-        referenced_meshs: &mut HashMap<PathBuf, HashSet<String>>,
-        node: &crate::level::Node,
-    ) {
-        if let Some(mesh_reference) = &node.mesh_reference {
-            if let Some(names) = referenced_meshs.get_mut(&mesh_reference.file_path) {
-                names.insert(mesh_reference.referenced_mesh_name.clone());
-            } else {
-                referenced_meshs.insert(
-                    mesh_reference.file_path.clone(),
-                    HashSet::from([mesh_reference.referenced_mesh_name.clone()]),
-                );
-            }
-        }
-    }
-
-    #[cfg(feature = "editor")]
     pub fn pre_process_shaders() -> HashMap<String, String> {
         let mut shaders = HashMap::new();
         let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();

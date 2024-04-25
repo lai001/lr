@@ -1,21 +1,8 @@
-use crate::static_mesh::StaticMesh;
-use crate::texture::TextureFile;
-use crate::{
-    skeleton::Skeleton, skeleton_animation::SkeletonAnimation, skeleton_mesh::SkeletonMesh,
-};
+use rs_engine::content::content_file_type::EContentFileType;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum EContentFileType {
-    StaticMesh(Rc<RefCell<StaticMesh>>),
-    SkeletonMesh(Rc<RefCell<SkeletonMesh>>),
-    SkeletonAnimation(Rc<RefCell<SkeletonAnimation>>),
-    Skeleton(Rc<RefCell<Skeleton>>),
-    Texture(Rc<RefCell<TextureFile>>),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ContentFolder {
     pub name: String,
     pub parent_folder: Option<Rc<RefCell<ContentFolder>>>,

@@ -1,14 +1,11 @@
-use crate::content_type::EContentType;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Deserialize, Serialize)]
-pub enum EResourceType {
-    Image,
+pub enum EContentType {
     StaticMesh,
-    SkinMesh,
+    SkeletonMesh,
     SkeletonAnimation,
-    ShaderSourceCode,
-    Binary,
     Skeleton,
-    Content(EContentType),
+    Texture,
+    Level,
 }

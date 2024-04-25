@@ -1,7 +1,9 @@
+pub mod actor;
 pub mod camera;
 #[cfg(not(target_os = "android"))]
 pub mod camera_input_event_handle;
 pub mod console_cmd;
+pub mod content;
 pub mod drawable;
 pub mod engine;
 pub mod error;
@@ -14,9 +16,11 @@ pub mod mesh_buffer;
 pub mod mipmap_generator;
 pub mod plugin;
 pub mod plugin_context;
+pub mod property;
 pub mod render_thread_mode;
 pub mod resource_manager;
 pub mod rotator;
+pub mod scene_node;
 pub mod static_virtual_texture_source;
 pub mod sync;
 pub mod thread_pool;

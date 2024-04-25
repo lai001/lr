@@ -1,5 +1,6 @@
-use crate::content_folder::{ContentFolder, EContentFileType};
+use crate::content_folder::ContentFolder;
 use egui::{Color32, Context, RichText, Ui};
+use rs_engine::content::content_file_type::EContentFileType;
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 pub struct DataSource {
@@ -20,7 +21,6 @@ impl DataSource {
     }
 }
 
-#[derive(Debug)]
 pub enum EClickEventType {
     CreateFolder,
     OpenFolder(Rc<RefCell<ContentFolder>>),
@@ -150,7 +150,7 @@ fn draw_content(
                                 ui.image(egui::include_image!(
                                     "../../../Resource/Editor/animation.svg"
                                 ));
-                                ui.label(node_animation.borrow().name.clone());
+                                ui.label(node_animation.borrow().get_name().clone());
                             });
                         }
                         EContentFileType::Skeleton(skeleton) => {
@@ -190,6 +190,13 @@ fn draw_content(
                                         click = Some(EClickEventType::OpenFile(file.clone()));
                                     }
                                 });
+                            });
+                        }
+                        EContentFileType::Level(level) => {
+                            ui.vertical(|ui| {
+                                ui.set_max_height(50.0);
+                                ui.set_max_width(50.0);
+                                ui.label(level.borrow().get_name().clone());
                             });
                         }
                     },

@@ -1,5 +1,6 @@
 use crate::error::Result;
-use crate::level::Level;
+use crate::skeleton::Skeleton;
+use crate::skin_mesh::SkinMesh;
 use crate::{
     asset::{self, Asset},
     file_header::{
@@ -95,6 +96,11 @@ where
     for task in tasks.iter_mut() {
         std::io::copy(&mut task.reader, &mut buf_writer)
             .map_err(|err| crate::error::Error::IO(err, Some(format!("Failed to copy data."))))?;
+        log::trace!(
+            "Url: {}, Resource type: {:?}",
+            task.url.to_string(),
+            task.resource_type
+        );
     }
     Ok(())
 }
@@ -254,7 +260,10 @@ impl ArtifactReader {
             crate::error::Error::NotFound(Some(format!("Resource does not contain {}.", url))),
         )?;
         if Some(resource_info.resource_type) != expected_resource_type {
-            return Err(crate::error::Error::ResourceTypeNotMatch);
+            return Err(crate::error::Error::ResourceTypeNotMatch(Some(format!(
+                "{:?} != expected resource type: {:?}",
+                resource_info.resource_type, expected_resource_type
+            ))));
         }
         let offset = resource_info.offset;
         let length = resource_info.length;
@@ -290,6 +299,11 @@ impl ArtifactReader {
                 let msg = format!("Failed to read the exact number of bytes.");
                 crate::error::Error::IO(err, Some(msg))
             })?;
+            log::trace!(
+                "url: {}, type: {:?}",
+                resource_info.url,
+                resource_info.resource_type
+            );
             match resource_info.resource_type {
                 EResourceType::Image => {
                     let asset = asset::decode_asset::<Image>(
@@ -297,11 +311,7 @@ impl ArtifactReader {
                         self.endian_type,
                         Some(resource_info.resource_type),
                     )?;
-                    log::trace!(
-                        "url: {}, type: {:?}",
-                        asset.url,
-                        resource_info.resource_type
-                    );
+                    log::trace!("{}", "Check image asset");
                 }
                 EResourceType::StaticMesh => {
                     let asset = asset::decode_asset::<StaticMesh>(
@@ -309,11 +319,7 @@ impl ArtifactReader {
                         self.endian_type,
                         Some(resource_info.resource_type),
                     )?;
-                    log::trace!(
-                        "url: {}, type: {:?}",
-                        asset.url,
-                        resource_info.resource_type
-                    );
+                    log::trace!("{}", "Check static_mesh asset");
                 }
                 EResourceType::ShaderSourceCode => {
                     let asset = asset::decode_asset::<ShaderSourceCode>(
@@ -321,23 +327,15 @@ impl ArtifactReader {
                         self.endian_type,
                         Some(resource_info.resource_type),
                     )?;
-                    log::trace!(
-                        "url: {}, type: {:?}",
-                        asset.url,
-                        resource_info.resource_type
-                    );
+                    log::trace!("{}", "Check shader_source_code asset");
                 }
-                EResourceType::Level => {
-                    let asset = asset::decode_asset::<Level>(
+                EResourceType::Skeleton => {
+                    let asset = asset::decode_asset::<Skeleton>(
                         &buf,
                         self.endian_type,
                         Some(resource_info.resource_type),
                     )?;
-                    log::trace!(
-                        "url: {}, type: {:?}",
-                        asset.url,
-                        resource_info.resource_type
-                    );
+                    log::trace!("{}", "Check skeleton asset");
                 }
                 _ => {}
             }

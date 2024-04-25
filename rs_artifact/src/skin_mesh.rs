@@ -31,6 +31,6 @@ impl Asset for SkinMesh {
     }
 
     fn get_resource_type(&self) -> EResourceType {
-        EResourceType::StaticMesh
+        EResourceType::SkinMesh
     }
 }
