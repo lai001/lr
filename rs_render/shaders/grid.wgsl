@@ -57,5 +57,19 @@ fn grid_texture(p: vec2<f32>) -> f32 {
     var uv = 1.0 * pos.xz;
     let mask = grid_texture_grad_box(uv, dpdx(uv), dpdy(uv));
     fragment_output.color = vec4<f32>(vec3<f32>(mask), 1.0 - mask);
+    if (pos.z < (1.0 / N) && pos.z > -(1.0 / N)) {
+        if (pos.x < 0.0 && pos.x > -N) {
+            fragment_output.color = vec4<f32>(0.5, 0.0, 0.0, 1.0);
+        } else if (pos.x > 0.0 && pos.x < N) {
+            fragment_output.color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+        }
+    }
+    if (pos.x < (1.0 / N) && pos.x > -(1.0 / N)) {
+        if (pos.z < 0.0 && pos.z > -N) {
+            fragment_output.color = vec4<f32>(0.0, 0.0, 0.5, 1.0);
+        } else if (pos.z > 0.0 && pos.z < N) {
+            fragment_output.color = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+        }
+    }
     return fragment_output;
 }

@@ -37,11 +37,7 @@ impl Camera {
             z_far,
             projection_matrix,
             view_matrix,
-            rotator: Rotator {
-                yaw: 0.0,
-                roll: 0.0,
-                pitch: 0.0,
-            },
+            rotator: Rotator::from_forward_vector(forward_vector),
         }
     }
 

@@ -33,4 +33,23 @@ impl Rotator {
             pitch: self.pitch.to_degrees(),
         }
     }
+
+    pub fn to_forward_vector(&self) -> glam::Vec3 {
+        let mut forward_vector = glam::Vec3::ZERO;
+        let pitch = self.pitch;
+        forward_vector.x = pitch.cos() * self.yaw.cos();
+        forward_vector.y = pitch.sin();
+        forward_vector.z = pitch.cos() * self.yaw.sin();
+        forward_vector
+    }
+
+    pub fn from_forward_vector(forward_vector: glam::Vec3) -> Rotator {
+        let pitch = (-forward_vector.y).asin();
+        let yaw = forward_vector.z.atan2(forward_vector.x);
+        Rotator {
+            yaw,
+            roll: 0.0,
+            pitch,
+        }
+    }
 }
