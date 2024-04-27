@@ -1,12 +1,18 @@
 use crate::error::Result;
+use std::collections::HashMap;
+
+pub struct RSurface {
+    pub window_id: isize,
+    pub surface: wgpu::Surface<'static>,
+    pub surface_config: wgpu::SurfaceConfiguration,
+}
 
 pub struct WGPUContext {
     instance: wgpu::Instance,
-    surface: wgpu::Surface<'static>,
+    surfaces: HashMap<isize, RSurface>,
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    surface_config: wgpu::SurfaceConfiguration,
 }
 
 impl WGPUContext {
@@ -53,6 +59,7 @@ impl WGPUContext {
     }
 
     pub fn new<W>(
+        window_id: isize,
         window: &W,
         surface_width: u32,
         surface_height: u32,
@@ -103,16 +110,35 @@ impl WGPUContext {
 
         Ok(WGPUContext {
             instance,
-            surface,
             adapter,
             device,
             queue,
-            surface_config,
+            surfaces: HashMap::from([(
+                window_id,
+                RSurface {
+                    window_id,
+                    surface,
+                    surface_config,
+                },
+            )]),
         })
+    }
+
+    pub fn get_device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    pub fn get_queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
+    pub fn remove_window(&mut self, window_id: isize) {
+        self.surfaces.remove(&window_id);
     }
 
     pub fn set_new_window<W>(
         &mut self,
+        window_id: isize,
         window: &W,
         surface_width: u32,
         surface_height: u32,
@@ -129,47 +155,67 @@ impl WGPUContext {
                 &self.adapter,
                 &self.device,
             );
+            let surface_texture_formats = self.surfaces.values().map(|x| &x.surface_config.format);
+            for format in surface_texture_formats {
+                if format != &surface_config.format {
+                    return Err(crate::error::Error::SurfaceNotSupported);
+                }
+            }
             surface.configure(&self.device, &surface_config);
+            self.surfaces.insert(
+                window_id,
+                RSurface {
+                    window_id,
+                    surface,
+                    surface_config,
+                },
+            );
             Ok(())
         } else {
             Err(crate::error::Error::SurfaceNotSupported)
         }
     }
 
-    pub fn window_resized(&mut self, width: u32, height: u32) -> bool {
-        if width > 0 && height > 0 {
-            self.surface_config.width = width;
-            self.surface_config.height = height;
-            self.surface.configure(&self.device, &self.surface_config);
+    pub fn window_resized(&mut self, window_id: isize, width: u32, height: u32) -> bool {
+        if width <= 0 || height <= 0 {
+            return false;
+        }
+        if let Some(surface) = self.surfaces.get_mut(&window_id) {
+            surface.surface_config.width = width;
+            surface.surface_config.height = height;
+            surface
+                .surface
+                .configure(&self.device, &surface.surface_config);
             true
         } else {
             false
         }
     }
 
-    pub fn get_surface_capabilities(&self) -> wgpu::SurfaceCapabilities {
-        self.surface.get_capabilities(&self.adapter)
+    pub fn get_surface_capabilities(&self, window_id: isize) -> wgpu::SurfaceCapabilities {
+        let surface = self.surfaces.get(&window_id).expect("Not null");
+        surface.surface.get_capabilities(&self.adapter)
     }
 
-    pub fn get_current_swapchain_format(&self) -> wgpu::TextureFormat {
-        self.surface_config.format
+    pub fn get_current_swapchain_format(&self, window_id: isize) -> wgpu::TextureFormat {
+        let surface = self.surfaces.get(&window_id).expect("Not null");
+        surface.surface_config.format
     }
 
     pub fn get_current_surface_texture(
         &self,
+        window_id: isize,
     ) -> std::result::Result<wgpu::SurfaceTexture, wgpu::SurfaceError> {
-        self.surface.get_current_texture()
+        let surface = self.surfaces.get(&window_id).expect("Not null");
+        surface.surface.get_current_texture()
     }
 
-    pub fn get_device(&self) -> &wgpu::Device {
-        &self.device
+    pub fn get_surface_config(&self, window_id: isize) -> &wgpu::SurfaceConfiguration {
+        let surface = self.surfaces.get(&window_id).expect("Not null");
+        &surface.surface_config
     }
 
-    pub fn get_queue(&self) -> &wgpu::Queue {
-        &self.queue
-    }
-
-    pub fn get_surface_config(&self) -> &wgpu::SurfaceConfiguration {
-        &self.surface_config
+    pub fn get_window_ids(&self) -> Vec<isize> {
+        self.surfaces.keys().map(|x| *x).collect()
     }
 }

@@ -88,6 +88,7 @@ impl ERenderThreadMode {
 
     pub fn set_new_window<W>(
         &mut self,
+        window_id: isize,
         window: &W,
         surface_width: u32,
         surface_height: u32,
@@ -98,13 +99,13 @@ impl ERenderThreadMode {
         match self {
             ERenderThreadMode::Single(renderer) => Ok(renderer
                 .renderer
-                .set_new_window(window, surface_width, surface_height)
+                .set_new_window(window_id, window, surface_width, surface_height)
                 .map_err(|err| crate::error::Error::RendererError(err))?),
             ERenderThreadMode::Multiple(renderer) => Ok(renderer
                 .renderer
                 .lock()
                 .unwrap()
-                .set_new_window(window, surface_width, surface_height)
+                .set_new_window(window_id, window, surface_width, surface_height)
                 .map_err(|err| crate::error::Error::RendererError(err))?),
         }
     }

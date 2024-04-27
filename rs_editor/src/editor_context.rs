@@ -3,6 +3,7 @@ use crate::{
     content_folder::ContentFolder,
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource, MeshItem, ModelViewData},
+    editor::WindowsManager,
     editor_ui::EditorUI,
     model_loader::ModelLoader,
     project::Project,
@@ -70,6 +71,12 @@ lazy_static! {
     };
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EWindowType {
+    Main,
+    Material,
+}
+
 pub struct EditorContext {
     event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     engine: rs_engine::engine::Engine,
@@ -83,6 +90,7 @@ pub struct EditorContext {
     plugins: Vec<Box<dyn Plugin>>,
     frame_sync: FrameSync,
     model_loader: ModelLoader,
+    window_manager: Rc<RefCell<WindowsManager>>,
 }
 
 impl EditorContext {
@@ -119,6 +127,7 @@ impl EditorContext {
     pub fn new(
         window: &winit::window::Window,
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
+        window_manager: Rc<RefCell<WindowsManager>>,
     ) -> Self {
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
@@ -148,6 +157,7 @@ impl EditorContext {
         );
         let artifact_reader = None;
         let mut engine = rs_engine::engine::Engine::new(
+            u64::from(window.id()) as isize,
             window,
             window_width,
             window_height,
@@ -168,7 +178,9 @@ impl EditorContext {
         )));
 
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
-
+        let main_window_id = u64::from(window.id()) as isize;
+        let mut window_types = HashMap::new();
+        window_types.insert(main_window_id, EWindowType::Main);
         Self {
             event_loop_proxy,
             engine,
@@ -182,6 +194,7 @@ impl EditorContext {
             plugins: vec![],
             frame_sync,
             model_loader: ModelLoader::new(),
+            window_manager: window_manager.clone(),
         }
     }
 
@@ -195,9 +208,138 @@ impl EditorContext {
         );
     }
 
+    pub fn main_window_event_process(
+        &mut self,
+        window_id: isize,
+        window: &mut winit::window::Window,
+        event: &WindowEvent,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+    ) {
+        if let Some(egui_winit_state) = &mut self.egui_winit_state {
+            let _ = Some(egui_winit_state.on_window_event(window, event));
+        }
+        match event {
+            WindowEvent::CloseRequested => {
+                if let Some(egui_winit_state) = &mut self.egui_winit_state {
+                    self.plugins.clear();
+                    egui_winit_state.egui_ctx().memory_mut(|writer| {
+                        writer.data.clear();
+                    });
+                    if let Some(ctx) = &mut self.project_context {
+                        ctx.hot_reload.get_library_reload().lock().unwrap().clear();
+                    }
+                }
+                event_loop_window_target.exit();
+            }
+            WindowEvent::Resized(size) => {
+                log::trace!("Main window resized: {:?}", size);
+                self.engine
+                    .get_camera_mut()
+                    .set_window_size(size.width, size.height);
+                self.engine.resize(window_id, size.width, size.height);
+            }
+            WindowEvent::MouseWheel { delta, .. } => match delta {
+                MouseScrollDelta::LineDelta(_, up) => {
+                    self.data_source.camera_movement_speed += up * 0.005;
+                    self.data_source.camera_movement_speed =
+                        self.data_source.camera_movement_speed.max(0.0);
+                }
+                MouseScrollDelta::PixelDelta(_) => todo!(),
+            },
+            WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                self.process_keyboard_input(
+                    device_id,
+                    event,
+                    *is_synthetic,
+                    event_loop_window_target,
+                );
+            }
+            WindowEvent::DroppedFile(file_path) => {
+                if let Some(project_context) = &self.project_context {
+                    let target = project_context.get_asset_folder_path();
+                    let result =
+                        std::fs::copy(file_path, target.join(file_path.file_name().unwrap()));
+                    log::trace!("{:?}", result);
+                }
+            }
+            WindowEvent::RedrawRequested => {
+                let (is_minimized, is_visible) = {
+                    let is_minimized = window.is_minimized().unwrap_or(false);
+                    let is_visible = window.is_visible().unwrap_or(true);
+                    (is_minimized, is_visible)
+                };
+
+                self.engine.tick();
+                if !is_visible || is_minimized {
+                    return;
+                }
+                if let Some(project_context) = &mut self.project_context {
+                    if project_context.is_need_reload_plugin() {
+                        self.try_load_plugin();
+                    }
+                }
+                if let Some(project_context) = &mut self.project_context {
+                    if let Some(folder_update_type) = project_context.check_folder_notification() {
+                        match folder_update_type {
+                            EFolderUpdateType::Asset => {
+                                let asset_folder = Self::build_asset_folder(
+                                    &project_context.get_asset_folder_path(),
+                                );
+                                log::trace!("Update asset folder. {:?}", asset_folder);
+                                self.data_source.asset_folder = Some(asset_folder.clone());
+                                self.data_source.current_asset_folder = Some(asset_folder);
+                            }
+                        }
+                    }
+                }
+
+                for (virtual_key_code, element_state) in &self.virtual_key_code_states {
+                    let input_mode = self.engine.get_input_mode();
+                    DefaultCameraInputEventHandle::keyboard_input_handle(
+                        &mut self.engine.get_camera_mut(),
+                        virtual_key_code,
+                        element_state,
+                        input_mode,
+                        self.data_source.camera_movement_speed,
+                    );
+                }
+
+                self.process_redraw_request(window_id, window, event_loop_window_target);
+                let wait = self
+                    .frame_sync
+                    .tick()
+                    .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
+                std::thread::sleep(wait);
+                window.request_redraw();
+
+                match self.engine.get_input_mode() {
+                    rs_engine::input_mode::EInputMode::Game => {
+                        window
+                            .set_cursor_grab(winit::window::CursorGrabMode::Confined)
+                            .unwrap();
+                        window.set_cursor_visible(false);
+                    }
+                    rs_engine::input_mode::EInputMode::UI => {
+                        window
+                            .set_cursor_grab(winit::window::CursorGrabMode::None)
+                            .unwrap();
+                        window.set_cursor_visible(true);
+                    }
+                    rs_engine::input_mode::EInputMode::GameUI => todo!(),
+                }
+                self.data_source.input_mode = self.engine.get_input_mode();
+            }
+            WindowEvent::Destroyed => {}
+            _ => {}
+        }
+    }
+
     pub fn handle_event(
         &mut self,
-        window: &mut winit::window::Window,
         event: &Event<ECustomEventType>,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
@@ -215,130 +357,44 @@ impl EditorContext {
                 _ => {}
             },
             Event::UserEvent(event) => {
-                self.process_custom_event(event, window);
+                let window = self.window_manager.borrow_mut().get_main_window();
+                self.process_custom_event(event, &mut *window.borrow_mut());
             }
-            Event::WindowEvent { event, .. } => {
-                if let Some(egui_winit_state) = &mut self.egui_winit_state {
-                    let _ = Some(egui_winit_state.on_window_event(window, event));
-                }
-                match event {
-                    WindowEvent::CloseRequested => {
-                        if let Some(egui_winit_state) = &mut self.egui_winit_state {
-                            self.plugins.clear();
-                            egui_winit_state.egui_ctx().memory_mut(|writer| {
-                                writer.data.clear();
-                            });
-                            if let Some(ctx) = &mut self.project_context {
-                                ctx.hot_reload.get_library_reload().lock().unwrap().clear();
-                            }
-                        }
-                        event_loop_window_target.exit();
-                    }
-                    WindowEvent::Resized(size) => {
-                        log::trace!("Window resized: {:?}", size);
-                        self.engine
-                            .get_camera_mut()
-                            .set_window_size(size.width, size.height);
-                        self.engine.resize(size.width, size.height);
-                    }
-                    WindowEvent::MouseWheel { delta, .. } => match delta {
-                        MouseScrollDelta::LineDelta(_, up) => {
-                            self.data_source.camera_movement_speed += up * 0.005;
-                            self.data_source.camera_movement_speed =
-                                self.data_source.camera_movement_speed.max(0.0);
-                        }
-                        MouseScrollDelta::PixelDelta(_) => todo!(),
-                    },
-                    WindowEvent::KeyboardInput {
-                        device_id,
-                        event,
-                        is_synthetic,
-                    } => {
-                        self.process_keyboard_input(
-                            window,
-                            device_id,
+            Event::WindowEvent { event, window_id } => {
+                let window_id = u64::from(*window_id) as isize;
+                let Some(window) = self.window_manager.borrow_mut().get_window_by_id(window_id)
+                else {
+                    return;
+                };
+                let Some(window_type) = self
+                    .window_manager
+                    .borrow_mut()
+                    .get_window_type_by_id(window_id)
+                else {
+                    return;
+                };
+
+                match window_type {
+                    EWindowType::Main => {
+                        self.main_window_event_process(
+                            window_id,
+                            &mut *window.borrow_mut(),
                             event,
-                            *is_synthetic,
                             event_loop_window_target,
                         );
                     }
-                    WindowEvent::DroppedFile(file_path) => {
-                        if let Some(project_context) = &self.project_context {
-                            let target = project_context.get_asset_folder_path();
-                            let result = std::fs::copy(
-                                file_path,
-                                target.join(file_path.file_name().unwrap()),
-                            );
-                            log::trace!("{:?}", result);
+                    EWindowType::Material => match event {
+                        WindowEvent::Resized(size) => {
+                            log::trace!("Material window resized: {:?}", size);
+                            self.engine.resize(window_id, size.width, size.height);
                         }
-                    }
-                    WindowEvent::RedrawRequested => {
-                        self.engine.tick();
-                        let is_minimized = window.is_minimized().unwrap_or(false);
-                        let is_visible = window.is_visible().unwrap_or(true);
-                        if !is_visible || is_minimized {
-                            return;
+                        WindowEvent::CloseRequested => {
+                            self.window_manager.borrow_mut().remove_window(window_type);
+                            self.engine.remove_window(window_id);
                         }
-                        if let Some(project_context) = &mut self.project_context {
-                            if project_context.is_need_reload_plugin() {
-                                self.try_load_plugin();
-                            }
-                        }
-                        if let Some(project_context) = &mut self.project_context {
-                            if let Some(folder_update_type) =
-                                project_context.check_folder_notification()
-                            {
-                                match folder_update_type {
-                                    EFolderUpdateType::Asset => {
-                                        let asset_folder = Self::build_asset_folder(
-                                            &project_context.get_asset_folder_path(),
-                                        );
-                                        log::trace!("Update asset folder. {:?}", asset_folder);
-                                        self.data_source.asset_folder = Some(asset_folder.clone());
-                                        self.data_source.current_asset_folder = Some(asset_folder);
-                                    }
-                                }
-                            }
-                        }
-
-                        for (virtual_key_code, element_state) in &self.virtual_key_code_states {
-                            let input_mode = self.engine.get_input_mode();
-                            DefaultCameraInputEventHandle::keyboard_input_handle(
-                                &mut self.engine.get_camera_mut(),
-                                virtual_key_code,
-                                element_state,
-                                input_mode,
-                                self.data_source.camera_movement_speed,
-                            );
-                        }
-
-                        self.process_redraw_request(window);
-                        let wait = self
-                            .frame_sync
-                            .tick()
-                            .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-                        std::thread::sleep(wait);
-                        window.request_redraw();
-
-                        match self.engine.get_input_mode() {
-                            rs_engine::input_mode::EInputMode::Game => {
-                                window
-                                    .set_cursor_grab(winit::window::CursorGrabMode::Confined)
-                                    .unwrap();
-                                window.set_cursor_visible(false);
-                            }
-                            rs_engine::input_mode::EInputMode::UI => {
-                                window
-                                    .set_cursor_grab(winit::window::CursorGrabMode::None)
-                                    .unwrap();
-                                window.set_cursor_visible(true);
-                            }
-                            rs_engine::input_mode::EInputMode::GameUI => todo!(),
-                        }
-                        self.data_source.input_mode = self.engine.get_input_mode();
-                    }
-                    WindowEvent::Destroyed => {}
-                    _ => {}
+                        WindowEvent::RedrawRequested => {}
+                        _ => {}
+                    },
                 }
             }
             Event::NewEvents(_) => {}
@@ -405,7 +461,6 @@ impl EditorContext {
 
     fn process_keyboard_input(
         &mut self,
-        window: &mut winit::window::Window,
         _: &winit::event::DeviceId,
         event: &winit::event::KeyEvent,
         _: bool,
@@ -800,7 +855,12 @@ impl EditorContext {
         Ok(())
     }
 
-    fn process_redraw_request(&mut self, window: &mut winit::window::Window) {
+    fn process_redraw_request(
+        &mut self,
+        window_id: isize,
+        window: &mut winit::window::Window,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+    ) {
         if let Some(project_context) = &mut self.project_context {
             if let Some(active_level) = self.data_source.level.clone() {
                 for actor in active_level.borrow().actors.clone() {
@@ -827,7 +887,7 @@ impl EditorContext {
             self.engine.update_draw_object(draw_object);
             self.engine.draw2(draw_object);
         }
-        self.process_ui(window);
+        self.process_ui(window, event_loop_window_target);
 
         if let Some(plugin) = self.plugins.last_mut() {
             plugin.tick();
@@ -846,6 +906,7 @@ impl EditorContext {
                 clipped_primitives: egui_winit_state
                     .egui_ctx()
                     .tessellate(full_output.shapes, full_output.pixels_per_point),
+                window_id,
             };
             Some(gui_render_output)
         })();
@@ -854,7 +915,7 @@ impl EditorContext {
             self.engine.redraw(gui_render_output);
         }
 
-        self.engine.present();
+        self.engine.present(window_id);
     }
 
     pub fn prepreocess_shader() -> anyhow::Result<()> {
@@ -896,7 +957,11 @@ impl EditorContext {
         Ok(())
     }
 
-    fn process_ui(&mut self, window: &mut winit::window::Window) {
+    fn process_ui(
+        &mut self,
+        window: &mut winit::window::Window,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+    ) {
         let Some(egui_winit_state) = &mut self.egui_winit_state else {
             return;
         };
@@ -990,6 +1055,19 @@ impl EditorContext {
                     }
                     top_menu::EWindowType::ComsoleCmds => {
                         self.data_source.is_console_cmds_view_open = true;
+                    }
+                    top_menu::EWindowType::Material => {
+                        let mut binding = self.window_manager.borrow_mut();
+                        let material_window_context = binding
+                            .spwan_new_window(EWindowType::Material, event_loop_window_target)
+                            .expect("Create successfully");
+                        let set_new_window_status = self.engine.set_new_window(
+                            material_window_context.get_id(),
+                            &*material_window_context.window.borrow(),
+                            material_window_context.get_width(),
+                            material_window_context.get_height(),
+                        );
+                        log::trace!("{}, {:?}", "Spawn material window", set_new_window_status);
                     }
                 },
                 top_menu::EClickEventType::Tool(tool_type) => match tool_type {

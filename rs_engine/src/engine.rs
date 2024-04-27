@@ -77,6 +77,7 @@ pub struct Engine {
 
 impl Engine {
     pub fn new<W>(
+        window_id: isize,
         window: &W,
         surface_width: u32,
         surface_height: u32,
@@ -113,6 +114,7 @@ impl Engine {
         }
 
         let renderer = Renderer::from_window(
+            window_id,
             window,
             surface_width,
             surface_height,
@@ -171,7 +173,7 @@ impl Engine {
         })();
         #[cfg(not(feature = "editor"))]
         let grid_draw_object = None;
-        
+
         #[cfg(feature = "editor")]
         let input_mode = EInputMode::UI;
         #[cfg(not(feature = "editor"))]
@@ -404,21 +406,29 @@ impl Engine {
             .send_command(RenderCommand::UiOutput(gui_render_output));
     }
 
-    pub fn present(&mut self) {
-        self.render_thread_mode.send_command(RenderCommand::Present);
+    pub fn present(&mut self, window_id: isize) {
+        self.render_thread_mode
+            .send_command(RenderCommand::Present(window_id));
     }
 
-    pub fn resize(&mut self, surface_width: u32, surface_height: u32) {
+    pub fn resize(&mut self, window_id: isize, surface_width: u32, surface_height: u32) {
         self.render_thread_mode.send_command(RenderCommand::Resize(
             rs_render::command::ResizeInfo {
                 width: surface_width,
                 height: surface_height,
+                window_id,
             },
         ));
     }
 
+    pub fn remove_window(&mut self, window_id: isize) {
+        self.render_thread_mode
+            .send_command(RenderCommand::RemoveWindow(window_id));
+    }
+
     pub fn set_new_window<W>(
         &mut self,
+        window_id: isize,
         window: &W,
         surface_width: u32,
         surface_height: u32,
@@ -427,7 +437,7 @@ impl Engine {
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         self.render_thread_mode
-            .set_new_window(window, surface_width, surface_height)
+            .set_new_window(window_id, window, surface_width, surface_height)
     }
 
     fn create_draw_object_from_mesh_internal(

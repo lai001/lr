@@ -9,6 +9,8 @@ use rs_artifact::{
 };
 use rs_engine::logger::{Logger, LoggerConfiguration};
 
+const WINDOW_ID: isize = 0;
+
 pub struct Application {
     native_window: crate::native_window::NativeWindow,
     raw_input: egui::RawInput,
@@ -46,6 +48,7 @@ impl Application {
         let height = native_window.get_height();
         let gui_context = egui::Context::default();
         let mut engine = rs_engine::engine::Engine::new(
+            WINDOW_ID,
             &native_window,
             width,
             height,
@@ -85,10 +88,11 @@ impl Application {
             textures_delta: full_output.textures_delta,
             clipped_primitives: context
                 .tessellate(full_output.shapes, full_output.pixels_per_point),
+            window_id: WINDOW_ID,
         };
         self.engine.tick();
         self.engine.redraw(gui_render_output);
-        self.engine.present();
+        self.engine.present(WINDOW_ID);
     }
 
     pub fn get_status_bar_height(&self) -> i32 {
@@ -109,7 +113,7 @@ impl Application {
         let surface_width = native_window.get_width();
         let surface_height = native_window.get_height();
         self.engine
-            .set_new_window(&native_window, surface_width, surface_height)
+            .set_new_window(WINDOW_ID, &native_window, surface_width, surface_height)
             .map_err(|err| crate::error::Error::Engine(err))?;
         self.native_window = native_window;
         Ok(())

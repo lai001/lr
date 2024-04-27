@@ -130,6 +130,7 @@ pub struct DrawObject {
 
 #[derive(Clone)]
 pub struct ResizeInfo {
+    pub window_id: isize,
     pub width: u32,
     pub height: u32,
 }
@@ -188,7 +189,8 @@ pub enum RenderCommand {
     CreateVirtualTextureSource(CreateVirtualTexture),
     Task(TaskType),
     Settings(RenderSettings),
-    Present,
+    Present(isize),
+    RemoveWindow(isize),
     ChangeViewMode(EViewModeType),
     CreateSampler(CreateSampler),
     #[cfg(feature = "renderdoc")]

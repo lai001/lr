@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
 pub struct EGUIRenderer {
     egui_wgpu_renderer: egui_wgpu::Renderer,
+    screen_descriptors: HashMap<isize, egui_wgpu::ScreenDescriptor>,
 }
 
 #[derive(Clone)]
 pub struct EGUIRenderOutput {
+    pub window_id: isize,
     pub textures_delta: egui::TexturesDelta,
     pub clipped_primitives: Vec<egui::ClippedPrimitive>,
 }
@@ -13,24 +17,41 @@ impl EGUIRenderer {
         device: &wgpu::Device,
         output_format: wgpu::TextureFormat,
         msaa_samples: u32,
+        screen_descriptors: HashMap<isize, egui_wgpu::ScreenDescriptor>,
     ) -> EGUIRenderer {
         let egui_wgpu_renderer =
             egui_wgpu::Renderer::new(device, output_format, None, msaa_samples);
 
-        EGUIRenderer { egui_wgpu_renderer }
+        EGUIRenderer {
+            egui_wgpu_renderer,
+            screen_descriptors,
+        }
+    }
+
+    pub fn get_screen_descriptors_mut(
+        &mut self,
+    ) -> &mut HashMap<isize, egui_wgpu::ScreenDescriptor> {
+        &mut self.screen_descriptors
+    }
+
+    pub fn change_size(&mut self, window_id: isize, width: u32, height: u32) {
+        if let Some(screen_descriptor) = self.screen_descriptors.get_mut(&window_id) {
+            screen_descriptor.size_in_pixels[0] = width;
+            screen_descriptor.size_in_pixels[1] = height;
+        }
     }
 
     pub fn render(
         &mut self,
-        gui_render_output: EGUIRenderOutput,
+        gui_render_output: &EGUIRenderOutput,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
-        screen_descriptor: &egui_wgpu::ScreenDescriptor,
         output_view: &wgpu::TextureView,
     ) {
         let EGUIRenderOutput {
             textures_delta,
             clipped_primitives,
+            window_id,
         } = gui_render_output;
         for (id, image_delta) in &textures_delta.set {
             self.egui_wgpu_renderer
@@ -40,7 +61,9 @@ impl EGUIRenderer {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("EGUIRenderer.CommandEncoder"),
         });
-
+        let Some(screen_descriptor) = self.screen_descriptors.get(&window_id) else {
+            return;
+        };
         let mut command_buffers = self.egui_wgpu_renderer.update_buffers(
             &device,
             &queue,

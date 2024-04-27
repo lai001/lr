@@ -31,6 +31,7 @@ pub struct ApplicationContext {
 
 impl ApplicationContext {
     pub fn new(window: &winit::window::Window) -> ApplicationContext {
+        let window_id = u64::from(window.id()) as isize;
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
@@ -52,14 +53,15 @@ impl ApplicationContext {
         );
         let artifact_filepath = Path::new("./main.rs");
         let artifact_reader =
-            ArtifactReader::new(artifact_filepath, Some(EEndianType::Little)).unwrap();
+            ArtifactReader::new(artifact_filepath, Some(EEndianType::Little)).ok();
         let mut engine = rs_engine::engine::Engine::new(
+            window_id,
             window,
             window_width,
             window_height,
             scale_factor,
             logger,
-            Some(artifact_reader),
+            artifact_reader,
             HashMap::new(),
         )
         .unwrap();
@@ -115,6 +117,7 @@ impl ApplicationContext {
                     MouseScrollDelta::PixelDelta(_) => todo!(),
                 },
                 WindowEvent::RedrawRequested => {
+                    let window_id = u64::from(window.id()) as isize;
                     let full_output = self.process_ui(window, event_loop_proxy);
                     let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
                         textures_delta: full_output.textures_delta,
@@ -122,10 +125,11 @@ impl ApplicationContext {
                             .egui_winit_state
                             .egui_ctx()
                             .tessellate(full_output.shapes, full_output.pixels_per_point),
+                        window_id,
                     };
                     self.engine.tick();
                     self.engine.redraw(gui_render_output);
-                    self.engine.present();
+                    self.engine.present(window_id);
                     let wait = self
                         .frame_sync
                         .tick()

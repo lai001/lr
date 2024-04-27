@@ -30,7 +30,6 @@ pub const GRID_RENDER_PIPELINE: &str = "GRID_RENDER_PIPELINE";
 pub struct Renderer {
     wgpu_context: WGPUContext,
     gui_renderer: EGUIRenderer,
-    screen_descriptor: egui_wgpu::ScreenDescriptor,
     shader_library: ShaderLibrary,
     create_iblbake_commands: VecDeque<CreateIBLBake>,
     create_texture_commands: Vec<CreateTexture>,
@@ -54,7 +53,7 @@ pub struct Renderer {
     grid_render_pipeline: GridPipeline,
     attachment_pipeline: AttachmentPipeline,
 
-    depth_texture: DepthTexture,
+    depth_textures: HashMap<isize, DepthTexture>,
     default_textures: DefaultTextures,
 
     texture_descriptors: HashMap<u64, TextureDescriptorCreateInfo>,
@@ -68,6 +67,8 @@ pub struct Renderer {
     settings: RenderSettings,
 
     base_render_pipeline_pool: BaseRenderPipelinePool,
+
+    main_window_id: isize,
 }
 
 impl Renderer {
@@ -79,15 +80,22 @@ impl Renderer {
         shaders: HashMap<String, String>,
         settings: RenderSettings,
     ) -> Renderer {
-        let egui_render_pass = EGUIRenderer::new(
-            wgpu_context.get_device(),
-            wgpu_context.get_current_swapchain_format(),
-            1,
-        );
+        let main_window_id = {
+            let binding = wgpu_context.get_window_ids();
+            *binding.first().expect("Not null")
+        };
+        let current_swapchain_format = wgpu_context.get_current_swapchain_format(main_window_id);
         let screen_descriptor = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [surface_width, surface_height],
             pixels_per_point: scale_factor,
         };
+        let egui_render_pass = EGUIRenderer::new(
+            wgpu_context.get_device(),
+            current_swapchain_format,
+            1,
+            HashMap::from([(main_window_id, screen_descriptor)]),
+        );
+
         let mut shader_library = ShaderLibrary::new();
         shader_library.load_shader_from(shaders, wgpu_context.get_device());
         let mut sampler_cache = SamplerCache::new();
@@ -95,13 +103,13 @@ impl Renderer {
         let shading_pipeline = ShadingPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
-            &wgpu_context.get_current_swapchain_format(),
+            &current_swapchain_format,
             false,
         );
         let skin_mesh_shading_pipeline = SkinMeshShadingPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
-            &wgpu_context.get_current_swapchain_format(),
+            &current_swapchain_format,
             &mut base_render_pipeline_pool,
         );
         let depth_texture = DepthTexture::new(
@@ -115,7 +123,7 @@ impl Renderer {
         let attachment_pipeline = AttachmentPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
-            &wgpu_context.get_current_swapchain_format(),
+            &current_swapchain_format,
         );
 
         let virtual_texture_pass: Option<VirtualTexturePass>;
@@ -134,14 +142,14 @@ impl Renderer {
         let grid_render_pipeline = GridPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
-            &wgpu_context.get_current_swapchain_format(),
+            &current_swapchain_format,
             &mut base_render_pipeline_pool,
         );
 
         Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
-            screen_descriptor,
+            // screen_descriptor,
             shader_library,
             create_iblbake_commands: VecDeque::new(),
             create_texture_commands: Vec::new(),
@@ -157,7 +165,7 @@ impl Renderer {
             ui_textures: HashMap::new(),
             shading_pipeline,
             attachment_pipeline,
-            depth_texture,
+            depth_textures: HashMap::from([(main_window_id, depth_texture)]),
             default_textures,
             texture_descriptors: HashMap::new(),
             buffer_infos: HashMap::new(),
@@ -171,10 +179,12 @@ impl Renderer {
             base_render_pipeline_pool,
             samplers: HashMap::new(),
             grid_render_pipeline,
+            main_window_id,
         }
     }
 
     pub fn from_window<W>(
+        window_id: isize,
         window: &W,
         surface_width: u32,
         surface_height: u32,
@@ -186,6 +196,7 @@ impl Renderer {
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         let wgpu_context = WGPUContext::new(
+            window_id,
             window,
             surface_width,
             surface_height,
@@ -218,6 +229,7 @@ impl Renderer {
 
     pub fn set_new_window<W>(
         &mut self,
+        window_id: isize,
         window: &W,
         surface_width: u32,
         surface_height: u32,
@@ -225,11 +237,19 @@ impl Renderer {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
+        let device = self.wgpu_context.get_device();
+        let depth_texture = DepthTexture::new(
+            surface_width,
+            surface_height,
+            device,
+            Some(&format!("Base.DepthTexture.{}", window_id)),
+        );
+        self.depth_textures.insert(window_id, depth_texture);
         self.wgpu_context
-            .set_new_window(window, surface_width, surface_height)
+            .set_new_window(window_id, window, surface_width, surface_height)
     }
 
-    pub fn present(&mut self) -> Option<RenderOutput> {
+    pub fn present(&mut self, window_id: isize) -> Option<RenderOutput> {
         #[cfg(feature = "renderdoc")]
         let mut is_capture_frame = false;
         #[cfg(feature = "renderdoc")]
@@ -251,7 +271,10 @@ impl Renderer {
             if resize_command.width <= 0 || resize_command.height <= 0 {
                 continue;
             }
-            self.surface_size_will_change(glam::uvec2(resize_command.width, resize_command.height));
+            self.surface_size_will_change(
+                resize_command.window_id,
+                glam::uvec2(resize_command.width, resize_command.height),
+            );
         }
 
         while let Some(task_command) = self.task_commands.pop_front() {
@@ -500,7 +523,7 @@ impl Renderer {
             self.ibl_bakes.insert(create_iblbake_command.handle, baker);
         }
 
-        let texture = match self.wgpu_context.get_current_surface_texture() {
+        let texture = match self.wgpu_context.get_current_surface_texture(window_id) {
             Ok(texture) => texture,
             Err(err) => {
                 if err != wgpu::SurfaceError::Outdated {
@@ -513,19 +536,29 @@ impl Renderer {
         let output_view = texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let depth_texture_view = &self.depth_texture.get_view();
+        let depth_texture_view = &self
+            .depth_textures
+            .get(&window_id)
+            .expect("Not null")
+            .get_view();
         self.clear_buffer(&output_view, depth_texture_view);
         self.vt_pass();
         self.draw_objects(&output_view);
 
         self.draw_object_commands.clear();
 
-        while let Some(output) = self.ui_output_commands.pop_front() {
+        for output in self
+            .ui_output_commands
+            .iter()
+            .filter(|x| x.window_id == window_id)
+        {
             let device = self.wgpu_context.get_device();
             let queue = self.wgpu_context.get_queue();
             self.gui_renderer
-                .render(output, queue, device, &self.screen_descriptor, &output_view)
+                .render(output, queue, device, &output_view)
         }
+        self.ui_output_commands.retain(|x| x.window_id != window_id);
+
         texture.present();
         #[cfg(feature = "renderdoc")]
         {
@@ -582,8 +615,8 @@ impl Renderer {
             RenderCommand::DrawObject(command) => self.draw_object_commands.push(command),
             RenderCommand::UiOutput(command) => self.ui_output_commands.push_back(command),
             RenderCommand::Resize(command) => self.resize_commands.push_back(command),
-            RenderCommand::Present => {
-                return self.present();
+            RenderCommand::Present(window_id) => {
+                return self.present(window_id);
             }
             RenderCommand::Task(command) => self.task_commands.push_back(command),
             #[cfg(feature = "renderdoc")]
@@ -616,6 +649,10 @@ impl Renderer {
                     .get_device()
                     .create_sampler(&create_sampler.sampler_descriptor);
                 self.samplers.insert(create_sampler.handle, sampler);
+            }
+            RenderCommand::RemoveWindow(window_id) => {
+                self.wgpu_context.remove_window(window_id);
+                self.depth_textures.remove(&window_id);
             }
         }
         return None;
@@ -885,14 +922,18 @@ impl Renderer {
                 }
                 group_binding_resource.push(binding_resource);
             }
-
+            let depth_texture_view = self
+                .depth_textures
+                .get(&self.main_window_id)
+                .unwrap()
+                .get_view();
             match draw_object_command.render_pipeline.as_str() {
                 SKIN_MESH_RENDER_PIPELINE => {
                     self.skin_mesh_shading_pipeline.draw(
                         device,
                         queue,
                         surface_texture_view,
-                        &self.depth_texture.get_view(),
+                        &depth_texture_view,
                         &[mesh_buffer],
                         group_binding_resource,
                     );
@@ -902,7 +943,7 @@ impl Renderer {
                         device,
                         queue,
                         surface_texture_view,
-                        &self.depth_texture.get_view(),
+                        &depth_texture_view,
                         &[mesh_buffer],
                         group_binding_resource,
                     );
@@ -912,7 +953,7 @@ impl Renderer {
                         device,
                         queue,
                         surface_texture_view,
-                        &self.depth_texture.get_view(),
+                        &depth_texture_view,
                         &[mesh_buffer],
                         vec![vec![group_binding_resource[0][0].clone()]],
                     );
@@ -926,8 +967,14 @@ impl Renderer {
         if settings.virtual_texture_setting.is_enable {
             if let Some(_) = &mut self.virtual_texture_pass {
             } else {
-                let surface_width = self.wgpu_context.get_surface_config().width;
-                let surface_height = self.wgpu_context.get_surface_config().height;
+                let surface_width = self
+                    .wgpu_context
+                    .get_surface_config(self.main_window_id)
+                    .width;
+                let surface_height = self
+                    .wgpu_context
+                    .get_surface_config(self.main_window_id)
+                    .height;
                 self.virtual_texture_pass = VirtualTexturePass::new(
                     self.wgpu_context.get_device(),
                     &self.shader_library,
@@ -943,15 +990,19 @@ impl Renderer {
         self.settings = settings;
     }
 
-    fn surface_size_will_change(&mut self, new_size: glam::UVec2) {
+    fn surface_size_will_change(&mut self, window_id: isize, new_size: glam::UVec2) {
         let width = new_size.x;
         let height = new_size.y;
-        self.screen_descriptor.size_in_pixels[0] = width;
-        self.screen_descriptor.size_in_pixels[1] = height;
-        self.wgpu_context.window_resized(width, height);
+        self.gui_renderer.change_size(window_id, width, height);
+        self.wgpu_context.window_resized(window_id, width, height);
         let device = self.wgpu_context.get_device();
-        self.depth_texture = DepthTexture::new(width, height, device, Some("Base.DepthTexture"));
-
+        let depth_texture = DepthTexture::new(
+            width,
+            height,
+            device,
+            Some(&format!("Base.DepthTexture.{}", window_id)),
+        );
+        self.depth_textures.insert(window_id, depth_texture);
         if let Some(virtual_texture_pass) = &mut self.virtual_texture_pass {
             virtual_texture_pass.change_surface_size(device, new_size);
         }
