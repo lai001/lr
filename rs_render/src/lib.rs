@@ -18,6 +18,7 @@ pub mod global_uniform;
 pub mod gpu_buffer;
 pub mod gpu_vertex_buffer;
 pub mod ibl_readback;
+pub mod prebake_ibl;
 pub mod reflection;
 pub mod render_pipeline;
 #[cfg(feature = "renderdoc")]

@@ -11,5 +11,6 @@ pub enum EResourceType {
     ShaderSourceCode,
     Binary,
     Skeleton,
+    Material,
     Content(EContentType),
 }

@@ -259,11 +259,13 @@ impl ArtifactReader {
         let resource_info = self.artifact_file_header.resource_map.get(url).ok_or(
             crate::error::Error::NotFound(Some(format!("Resource does not contain {}.", url))),
         )?;
-        if Some(resource_info.resource_type) != expected_resource_type {
-            return Err(crate::error::Error::ResourceTypeNotMatch(Some(format!(
-                "{:?} != expected resource type: {:?}",
-                resource_info.resource_type, expected_resource_type
-            ))));
+        if expected_resource_type.is_some() {
+            if Some(resource_info.resource_type) != expected_resource_type {
+                return Err(crate::error::Error::ResourceTypeNotMatch(Some(format!(
+                    "{:?} != expected resource type: {:?}",
+                    resource_info.resource_type, expected_resource_type
+                ))));
+            }
         }
         let offset = resource_info.offset;
         let length = resource_info.length;

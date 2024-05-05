@@ -24,7 +24,7 @@ use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
     BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline, CreateSampler,
     CreateTexture, CreateVirtualTexture, DrawObject, EBindingResource, ETextureType,
-    InitTextureData, RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer,
+    InitTextureData, RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer, UploadPrebakeIBL,
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::global_uniform;
@@ -77,6 +77,7 @@ pub struct Engine {
         HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
     console_cmds: SingleThreadMutType<HashMap<String, SingleThreadMutType<ConsoleCmd>>>,
     grid_draw_object: Option<DrawObject>,
+    content_files: HashMap<url::Url, EContentFileType>,
 }
 
 impl Engine {
@@ -202,9 +203,65 @@ impl Engine {
             virtual_texture_source_infos: HashMap::new(),
             console_cmds: SingleThreadMut::new(HashMap::new()),
             grid_draw_object,
+            content_files: Self::collect_content_files(),
         };
 
         Ok(engine)
+    }
+
+    fn collect_content_files() -> HashMap<url::Url, EContentFileType> {
+        let resource_manager = ResourceManager::default();
+        let mut files: HashMap<url::Url, EContentFileType> = HashMap::new();
+        if let Ok(resource_map) = resource_manager.get_resource_map() {
+            for (url, v) in resource_map.iter() {
+                match v.resource_type {
+                    EResourceType::Content(content_ty) => match content_ty {
+                        EContentType::StaticMesh => {}
+                        EContentType::SkeletonMesh => {}
+                        EContentType::SkeletonAnimation => {}
+                        EContentType::Skeleton => {
+                            match resource_manager
+                                .get_resource::<crate::content::skeleton::Skeleton>(
+                                    url,
+                                    Some(EResourceType::Content(EContentType::Skeleton)),
+                                ) {
+                                Ok(content_skeleton) => {
+                                    files.insert(
+                                        url.clone(),
+                                        EContentFileType::Skeleton(SingleThreadMut::new(
+                                            content_skeleton,
+                                        )),
+                                    );
+                                }
+                                Err(err) => {
+                                    log::warn!("{err}");
+                                }
+                            }
+                        }
+                        EContentType::Texture => {}
+                        EContentType::Level => {}
+                        EContentType::Material => {
+                            match resource_manager
+                                .get_resource::<crate::content::material::Material>(url, None)
+                            {
+                                Ok(f) => {
+                                    files.insert(
+                                        url.clone(),
+                                        EContentFileType::Material(SingleThreadMut::new(f)),
+                                    );
+                                }
+                                Err(err) => {
+                                    log::warn!("{}", err);
+                                }
+                            }
+                        }
+                        EContentType::IBL => {}
+                    },
+                    _ => {}
+                }
+            }
+        }
+        files
     }
 
     pub fn init_level(&mut self) {
@@ -245,6 +302,44 @@ impl Engine {
                         {
                             self.resource_manager
                                 .add_skeleton(url.clone(), Arc::new(skeleton));
+                        }
+                    }
+                    rs_artifact::resource_type::EResourceType::IBLBaking => {
+                        if let Ok(ibl_baking) = self
+                            .resource_manager
+                            .get_resource::<rs_artifact::ibl_baking::IBLBaking>(
+                            &url,
+                            Some(resource_info.resource_type),
+                        ) {
+                            self.upload_prebake_ibl(ibl_baking.url.clone(), ibl_baking);
+                        }
+                    }
+                    rs_artifact::resource_type::EResourceType::Material => {
+                        if let Ok(material) = self
+                            .resource_manager
+                            .get_resource::<rs_artifact::material::Material>(
+                                &url,
+                                Some(resource_info.resource_type),
+                            )
+                        {
+                            let material_content =
+                                self.content_files.values().find_map(|x| match x {
+                                    EContentFileType::Material(material_content) => {
+                                        if material_content.borrow().asset_url == material.url {
+                                            Some(material_content.clone())
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    _ => None,
+                                });
+
+                            if let Some(material_content) = material_content {
+                                let pipeline_handle = self.create_material(material.code);
+                                material_content
+                                    .borrow_mut()
+                                    .set_pipeline_handle(pipeline_handle);
+                            }
                         }
                     }
                     _ => {}
@@ -316,7 +411,12 @@ impl Engine {
                             }
                         }
                     }
-
+                    files.extend(
+                        self.content_files
+                            .values()
+                            .cloned()
+                            .collect::<Vec<EContentFileType>>(),
+                    );
                     skeleton_mesh_component.initialize(ResourceManager::default(), self, &files);
                 }
             }
@@ -1120,6 +1220,21 @@ impl Engine {
             file_path: path.as_ref().to_path_buf(),
             bake_info,
             save_dir: save_dir.map_or(None, |x| Some(x.as_ref().to_path_buf())),
+        });
+        self.render_thread_mode.send_command(render_command);
+    }
+
+    pub fn upload_prebake_ibl(
+        &mut self,
+        url: url::Url,
+        ibl_baking: rs_artifact::ibl_baking::IBLBaking,
+    ) {
+        let handle = self.resource_manager.next_texture(url.clone());
+        let render_command = RenderCommand::UploadPrebakeIBL(UploadPrebakeIBL {
+            handle: *handle,
+            brdf_data: ibl_baking.brdf_data,
+            pre_filter_data: ibl_baking.pre_filter_data,
+            irradiance_data: ibl_baking.irradiance_data,
         });
         self.render_thread_mode.send_command(render_command);
     }

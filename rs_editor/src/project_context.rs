@@ -232,8 +232,10 @@ impl ProjectContext {
         self.project_folder_path.join("build/cache/virtual_texture")
     }
 
-    pub fn get_ibl_bake_cache_dir(&self) -> PathBuf {
-        self.project_folder_path.join("build/cache/ibl")
+    pub fn get_ibl_bake_cache_dir(&self, sub_folder: &Path) -> PathBuf {
+        self.project_folder_path
+            .join("build/cache/ibl")
+            .join(sub_folder)
     }
 
     pub fn try_create_virtual_texture_cache_dir(&self) -> anyhow::Result<PathBuf> {
@@ -242,9 +244,8 @@ impl ProjectContext {
         Ok(path)
     }
 
-    pub fn try_create_ibl_bake_cache_dir(&self, sub_folder: &str) -> anyhow::Result<PathBuf> {
-        let path = self.get_ibl_bake_cache_dir();
-        let path = path.join(sub_folder);
+    pub fn try_create_ibl_bake_cache_dir(&self, sub_folder: &Path) -> anyhow::Result<PathBuf> {
+        let path = self.get_ibl_bake_cache_dir(sub_folder);
         let _ = std::fs::create_dir_all(path.clone())
             .context(anyhow!("Can not create {:?}", path.clone()))?;
         Ok(path)
@@ -277,6 +278,10 @@ impl ProjectContext {
             url::Url,
             rs_artifact::skeleton_animation::SkeletonAnimation,
         > = HashMap::new();
+        let mut ibl_bakings: HashMap<url::Url, rs_artifact::ibl_baking::IBLBaking> = HashMap::new();
+        let mut materials: HashMap<url::Url, rs_artifact::material::Material> = HashMap::new();
+        let mut material_contents: HashMap<url::Url, rs_engine::content::material::Material> =
+            HashMap::new();
 
         for file in &self.project.content.borrow().files {
             match file {
@@ -359,8 +364,71 @@ impl ProjectContext {
                 EContentFileType::Level(asset) => {
                     artifact_asset_encoder.encode(&*asset.borrow());
                 }
-                EContentFileType::Material(_) => todo!(),
-                EContentFileType::IBL(_) => todo!(),
+                EContentFileType::Material(material_content) => {
+                    let find = self
+                        .project
+                        .materials
+                        .iter()
+                        .find(|x| x.borrow().url == material_content.borrow().asset_url)
+                        .cloned();
+                    if let Some(material_editor) = find {
+                        if let Ok(shader_code) =
+                            crate::material_resolve::resolve(&material_editor.borrow().snarl)
+                        {
+                            materials.insert(
+                                material_content.borrow().asset_url.clone(),
+                                rs_artifact::material::Material {
+                                    url: material_content.borrow().asset_url.clone(),
+                                    code: shader_code,
+                                },
+                            );
+                            material_contents.insert(
+                                material_content.borrow().url.clone(),
+                                rs_engine::content::material::Material::new(
+                                    material_content.borrow().url.clone(),
+                                    material_content.borrow().asset_url.clone(),
+                                ),
+                            );
+                        }
+                    }
+                }
+                EContentFileType::IBL(ibl) => {
+                    let ibl_baking = (|| {
+                        let url = ibl.borrow().url.clone();
+                        let image_reference = &ibl.borrow().image_reference;
+                        let Some(image_reference) = image_reference.as_ref() else {
+                            return Ok(None);
+                        };
+                        let file_path = self.get_asset_folder_path().join(image_reference);
+                        if !file_path.exists() {
+                            return Err(anyhow!("The file is not exist"));
+                        }
+                        if !self.get_ibl_bake_cache_dir(image_reference).exists() {
+                            return Err(anyhow!("The file is not exist"));
+                        }
+                        let name = rs_engine::url_extension::UrlExtension::get_name_in_editor(&url);
+                        let ibl_baking = rs_artifact::ibl_baking::IBLBaking {
+                            name,
+                            url: url.clone(),
+                            brdf_data: std::fs::read(
+                                self.get_ibl_bake_cache_dir(image_reference)
+                                    .join("brdf.dds"),
+                            )?,
+                            pre_filter_data: std::fs::read(
+                                self.get_ibl_bake_cache_dir(image_reference)
+                                    .join("pre_filter.dds"),
+                            )?,
+                            irradiance_data: std::fs::read(
+                                self.get_ibl_bake_cache_dir(image_reference)
+                                    .join("irradiance.dds"),
+                            )?,
+                        };
+                        Ok(Some(ibl_baking))
+                    })()?;
+                    if let Some(ibl_baking) = ibl_baking {
+                        ibl_bakings.insert(ibl_baking.url.clone(), ibl_baking);
+                    }
+                }
             }
         }
 
@@ -392,6 +460,15 @@ impl ProjectContext {
             artifact_asset_encoder.encode(asset);
         }
         for asset in skeleton_animations.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in ibl_bakings.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in materials.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in material_contents.values() {
             artifact_asset_encoder.encode(asset);
         }
 

@@ -176,6 +176,14 @@ pub struct CreateIBLBake {
     pub save_dir: Option<PathBuf>,
 }
 
+#[derive(Clone)]
+pub struct UploadPrebakeIBL {
+    pub handle: TextureHandle,
+    pub brdf_data: Vec<u8>,
+    pub pre_filter_data: Vec<u8>,
+    pub irradiance_data: Vec<u8>,
+}
+
 pub trait RenderTask {
     fn exec(&mut self);
 }
@@ -201,6 +209,7 @@ pub enum RenderCommand {
     ChangeViewMode(EViewModeType),
     CreateSampler(CreateSampler),
     CreateMaterialRenderPipeline(CreateMaterialRenderPipeline),
+    UploadPrebakeIBL(UploadPrebakeIBL),
     #[cfg(feature = "renderdoc")]
     CaptureFrame,
 }

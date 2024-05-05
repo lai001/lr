@@ -754,7 +754,59 @@ impl EditorContext {
                             .set_associated_material(material_content.clone());
                     }
                 }
-                EContentFileType::IBL(_) => {}
+                EContentFileType::IBL(ibl) => {
+                    let result = (|| {
+                        let url = ibl.borrow().url.clone();
+                        let image_reference = &ibl.borrow().image_reference;
+                        let Some(image_reference) = image_reference.as_ref() else {
+                            return Ok(());
+                        };
+                        let file_path = project_context
+                            .get_asset_folder_path()
+                            .join(image_reference);
+                        if !file_path.exists() {
+                            return Err(anyhow!("The file is not exist"));
+                        }
+                        if project_context
+                            .get_ibl_bake_cache_dir(image_reference)
+                            .exists()
+                        {
+                            let name =
+                                rs_engine::url_extension::UrlExtension::get_name_in_editor(&url);
+                            let ibl_baking = rs_artifact::ibl_baking::IBLBaking {
+                                name,
+                                url: url.clone(),
+                                brdf_data: std::fs::read(
+                                    project_context
+                                        .get_ibl_bake_cache_dir(image_reference)
+                                        .join("brdf.dds"),
+                                )?,
+                                pre_filter_data: std::fs::read(
+                                    project_context
+                                        .get_ibl_bake_cache_dir(image_reference)
+                                        .join("pre_filter.dds"),
+                                )?,
+                                irradiance_data: std::fs::read(
+                                    project_context
+                                        .get_ibl_bake_cache_dir(image_reference)
+                                        .join("irradiance.dds"),
+                                )?,
+                            };
+                            engine.upload_prebake_ibl(url.clone(), ibl_baking);
+                            return Ok(());
+                        }
+                        let save_dir =
+                            project_context.try_create_ibl_bake_cache_dir(image_reference)?;
+
+                        engine.ibl_bake(
+                            &file_path,
+                            url,
+                            ibl.borrow().bake_info.clone(),
+                            Some(&save_dir),
+                        );
+                        Ok(())
+                    })();
+                }
             }
         }
     }
@@ -1314,6 +1366,7 @@ impl EditorContext {
         if let Some(click) = &self.editor_ui.content_item_property_view.click {
             match click {
                 content_item_property_view::EClickType::IBL(ibl, old, new) => {
+                    let url = ibl.borrow().url.clone();
                     let Some(new) = new.as_ref() else {
                         return;
                     };
@@ -1323,14 +1376,10 @@ impl EditorContext {
                         if !file_path.exists() {
                             return Err(anyhow!("The file is not exist"));
                         }
-                        let url = url::Url::parse(&format!(
-                            "ibl://{}",
-                            uuid::Uuid::new_v4().to_string()
-                        ))?;
-
-                        let save_dir = project_context.try_create_ibl_bake_cache_dir(
-                            &get_md5_from_string(&new.to_str().context(anyhow!(""))?),
-                        )?;
+                        if project_context.get_ibl_bake_cache_dir(new).exists() {
+                            return Ok(());
+                        }
+                        let save_dir = project_context.try_create_ibl_bake_cache_dir(new)?;
 
                         self.engine.ibl_bake(
                             &file_path,

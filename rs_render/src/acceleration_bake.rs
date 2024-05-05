@@ -8,6 +8,7 @@ use crate::{
     global_shaders::pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader,
     shader_library::ShaderLibrary,
     texture_loader::TextureLoader,
+    texture_readback,
 };
 use rs_core_minimal::misc::calculate_max_mips;
 use std::{path::Path, sync::Arc};
@@ -203,6 +204,15 @@ impl AccelerationBaker {
     ) -> Vec<wgpu::Texture> {
         let max_mipmap_level = calculate_max_mips(self.bake_info.pre_filter_cube_map_length)
             .min(self.bake_info.pre_filter_cube_map_max_mipmap_level);
+        let min_length =
+            wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+                / texture_readback::get_bytes_per_pixel(
+                    PreFilterEnvironmentCubeMapShader::get_format(),
+                )
+                .unwrap();
+
+        let max_mipmap_level =
+            max_mipmap_level - rs_core_minimal::misc::calculate_max_mips(min_length) + 1;
         assert!(max_mipmap_level > 0);
         let roughness_delta: f32;
         if max_mipmap_level == 1 {

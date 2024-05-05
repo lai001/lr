@@ -5,6 +5,7 @@ use crate::default_textures::DefaultTextures;
 use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
+use crate::prebake_ibl::PrebakeIBL;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
@@ -72,6 +73,8 @@ pub struct Renderer {
     main_window_id: isize,
 
     material_render_pipelines: HashMap<MaterialRenderPipelineHandle, MaterialRenderPipeline>,
+
+    prebake_ibls: HashMap<u64, PrebakeIBL>,
 }
 
 impl Renderer {
@@ -184,6 +187,7 @@ impl Renderer {
             grid_render_pipeline,
             main_window_id,
             material_render_pipelines: HashMap::new(),
+            prebake_ibls: HashMap::new(),
         }
     }
 
@@ -419,12 +423,18 @@ impl Renderer {
                 }
                 crate::error::Result::Ok(merge_image)
             };
-            let save_face = |data: Vec<f32>, mipmaps: u32, save_dir: &Path, name: &str| {
+            let save_data_as_dds = |data: &[f32],
+                                    width: u32,
+                                    height: u32,
+                                    layers: u32,
+                                    mipmaps: u32,
+                                    save_dir: &Path,
+                                    name: &str| {
                 let surface = image_dds::SurfaceRgba32Float {
-                    width: baker.get_bake_info().pre_filter_cube_map_length,
-                    height: baker.get_bake_info().pre_filter_cube_map_length,
+                    width,
+                    height,
                     depth: 1,
-                    layers: 1,
+                    layers,
                     mipmaps,
                     data,
                 }
@@ -437,7 +447,7 @@ impl Renderer {
                 let dds = surface
                     .to_dds()
                     .map_err(|err| crate::error::Error::ImageDdsCreateDds(err))?;
-                let path = save_dir.join(format!("pre_filter_{}.dds", name));
+                let path = save_dir.join(format!("{}.dds", name));
                 let file = std::fs::File::create(&path)
                     .map_err(|err| crate::error::Error::IO(err, None))?;
                 let mut writer = std::io::BufWriter::new(file);
@@ -445,6 +455,7 @@ impl Renderer {
                     .map_err(|err| crate::error::Error::DdsFile(err))?;
                 crate::error::Result::Ok(())
             };
+
             let result = (|| {
                 let save_dir = create_iblbake_command
                     .save_dir
@@ -452,76 +463,66 @@ impl Renderer {
                 if !save_dir.exists() {
                     return Err(crate::error::Error::Other(None));
                 }
+
                 let brdflut_image =
                     ibl_readback::IBLReadBack::read_brdflut_texture(&baker, device, queue)?;
-                let image = brdflut_image
+                let brdflut_image = brdflut_image
                     .as_rgba32f()
                     .ok_or(crate::error::Error::Other(None))?;
-
-                let surface = image_dds::SurfaceRgba32Float::from_image_layers(&image, 1)
-                    .encode(
-                        image_dds::ImageFormat::BC6hRgbUfloat,
-                        image_dds::Quality::Slow,
-                        image_dds::Mipmaps::Disabled,
-                    )
-                    .map_err(|err| crate::error::Error::ImageDdsSurface(err))?;
-
-                let dds = surface
-                    .to_dds()
-                    .map_err(|err| crate::error::Error::ImageDdsCreateDds(err))?;
-                let path = save_dir.join("brdf.dds");
-                let file = std::fs::File::create(&path)
-                    .map_err(|err| crate::error::Error::IO(err, None))?;
-                let mut writer = std::io::BufWriter::new(file);
-                dds.write(&mut writer)
-                    .map_err(|err| crate::error::Error::DdsFile(err))?;
+                save_data_as_dds(
+                    brdflut_image.as_ref(),
+                    brdflut_image.width(),
+                    brdflut_image.height(),
+                    1,
+                    1,
+                    &save_dir,
+                    "brdf",
+                )?;
 
                 let irradiance_image = ibl_readback::IBLReadBack::read_irradiance_cube_map_texture(
                     &baker, device, queue,
                 )?;
-                let dds_image = merge_cube_map(&irradiance_image)?;
-
-                let surface = image_dds::SurfaceRgba32Float::from_image_layers(&dds_image, 6)
-                    .encode(
-                        image_dds::ImageFormat::BC6hRgbUfloat,
-                        image_dds::Quality::Slow,
-                        image_dds::Mipmaps::Disabled,
-                    )
-                    .map_err(|err| crate::error::Error::ImageDdsSurface(err))?;
-                let dds = surface
-                    .to_dds()
-                    .map_err(|err| crate::error::Error::ImageDdsCreateDds(err))?;
-                let path = save_dir.join("irradiance.dds");
-                let file = std::fs::File::create(&path)
-                    .map_err(|err| crate::error::Error::IO(err, None))?;
-                let mut writer = std::io::BufWriter::new(file);
-                dds.write(&mut writer)
-                    .map_err(|err| crate::error::Error::DdsFile(err))?;
+                let irradiance_image = merge_cube_map(&irradiance_image)?;
+                save_data_as_dds(
+                    irradiance_image.as_ref(),
+                    irradiance_image.width(),
+                    irradiance_image.height() / 6,
+                    6,
+                    1,
+                    &save_dir,
+                    "irradiance",
+                )?;
 
                 let pre_filter_images =
                     ibl_readback::IBLReadBack::read_pre_filter_cube_map_textures(
                         &baker, device, queue,
                     )?;
-
-                macro_rules! save_face {
+                let mut data: Vec<f32> = vec![];
+                macro_rules! merge_face_layer_data {
                     ($face:ident) => {
-                        save_face(
-                            pre_filter_images.iter().fold(vec![], |mut acc, x| {
-                                acc.extend_from_slice(&x.$face.as_raw());
-                                acc
-                            }),
-                            pre_filter_images.len() as u32,
-                            &save_dir,
-                            stringify!($face),
-                        )?
+                        let mut layer_data: Vec<f32> = vec![];
+                        for cube_map_mipmap in pre_filter_images.iter() {
+                            let data = cube_map_mipmap.$face.as_ref();
+                            layer_data.extend_from_slice(data);
+                        }
+                        data.extend(layer_data);
                     };
                 }
-                save_face!(negative_x);
-                save_face!(negative_y);
-                save_face!(negative_z);
-                save_face!(positive_x);
-                save_face!(positive_y);
-                save_face!(positive_z);
+                merge_face_layer_data!(negative_x);
+                merge_face_layer_data!(negative_y);
+                merge_face_layer_data!(negative_z);
+                merge_face_layer_data!(positive_x);
+                merge_face_layer_data!(positive_y);
+                merge_face_layer_data!(positive_z);
+                save_data_as_dds(
+                    data.as_ref(),
+                    baker.get_bake_info().pre_filter_cube_map_length,
+                    baker.get_bake_info().pre_filter_cube_map_length,
+                    6,
+                    pre_filter_images.len() as u32,
+                    &save_dir,
+                    "pre_filter",
+                )?;
                 Ok(())
             })();
             match result {
@@ -703,6 +704,49 @@ impl Renderer {
                     self.material_render_pipelines
                         .insert(create_render_pipeline.handle, material_render_pipeline);
                     log::trace!("Create material render pipeline: {}", name);
+                }
+            }
+            RenderCommand::UploadPrebakeIBL(upload_prebake_ibl) => {
+                macro_rules! get_surface {
+                    ($name:ident, $name1:ident) => {
+                        let $name = (|| {
+                            let reader = std::io::Cursor::new(&upload_prebake_ibl.$name1);
+                            let dds = ddsfile::Dds::read(reader)
+                                .map_err(|err| crate::error::Error::DdsFile(err))?;
+                            let surface = image_dds::Surface::from_dds(&dds)
+                                .map_err(|err| crate::error::Error::ImageDdsSurface(err))?;
+                            surface
+                                .decode_rgbaf32()
+                                .map_err(|err| crate::error::Error::ImageDdsSurface(err))
+                        })();
+                    };
+                }
+                get_surface!(brdf_surface, brdf_data);
+                get_surface!(irradiance_surface, irradiance_data);
+                get_surface!(pre_filter_surface, pre_filter_data);
+                let prebake_ibl = (|| {
+                    let device = self.wgpu_context.get_device();
+                    let queue = self.wgpu_context.get_queue();
+                    let brdf_surface = brdf_surface?;
+                    let irradiance_surface = irradiance_surface?;
+                    let pre_filter_surface = pre_filter_surface?;
+                    let prebake = PrebakeIBL::from_surfaces(
+                        device,
+                        queue,
+                        brdf_surface,
+                        irradiance_surface,
+                        pre_filter_surface,
+                    );
+                    prebake
+                })();
+                match prebake_ibl {
+                    Ok(prebake_ibl) => {
+                        self.prebake_ibls
+                            .insert(upload_prebake_ibl.handle, prebake_ibl);
+                    }
+                    Err(err) => {
+                        log::trace!("{}", err);
+                    }
                 }
             }
         }
@@ -1011,41 +1055,74 @@ impl Renderer {
                 }
                 _ => {
                     let any_first = self.ibl_bakes.iter().find(|_| true);
-                    if let Some((_, acceleration_baker)) = any_first {
-                        let view = acceleration_baker.get_brdflut_texture_view();
-                        let brdf_binding_resource = BindingResource::TextureView(&view);
-
-                        let view = acceleration_baker.get_pre_filter_cube_map_texture_view();
-                        let pre_filter_binding_resource = BindingResource::TextureView(&view);
-
-                        let view = acceleration_baker.get_irradiance_texture_view();
-                        let irradiance_binding_resource = BindingResource::TextureView(&view);
+                    let any_first1 = self.prebake_ibls.iter().find(|_| true);
+                    let brdflut_texture_view = if let Some((_, acceleration_baker)) = any_first {
+                        Some(acceleration_baker.get_brdflut_texture_view())
+                    } else if let Some((_, prebake_ibl)) = any_first1 {
+                        Some(prebake_ibl.get_brdflut_texture_view())
+                    } else {
+                        None
+                    };
+                    let pre_filter_texture_view = if let Some((_, acceleration_baker)) = any_first {
+                        Some(acceleration_baker.get_pre_filter_cube_map_texture_view())
+                    } else if let Some((_, prebake_ibl)) = any_first1 {
+                        Some(prebake_ibl.get_pre_filter_cube_map_texture_view())
+                    } else {
+                        None
+                    };
+                    let irradiance_texture_view = if let Some((_, acceleration_baker)) = any_first {
+                        Some(acceleration_baker.get_irradiance_texture_view())
+                    } else if let Some((_, prebake_ibl)) = any_first1 {
+                        Some(prebake_ibl.get_irradiance_texture_view())
+                    } else {
+                        None
+                    };
+                    if let (
+                        Some(brdflut_texture_view),
+                        Some(pre_filter_texture_view),
+                        Some(irradiance_texture_view),
+                    ) = (
+                        brdflut_texture_view,
+                        pre_filter_texture_view,
+                        irradiance_texture_view,
+                    ) {
+                        let brdf_binding_resource =
+                            BindingResource::TextureView(&brdflut_texture_view);
+                        let pre_filter_binding_resource =
+                            BindingResource::TextureView(&pre_filter_texture_view);
+                        let irradiance_binding_resource =
+                            BindingResource::TextureView(&irradiance_texture_view);
 
                         group_binding_resource[0].push(brdf_binding_resource);
                         group_binding_resource[0].push(pre_filter_binding_resource);
                         group_binding_resource[0].push(irradiance_binding_resource);
 
-                        if draw_object_command.render_pipeline.starts_with("material_") {
+                        (|| {
+                            if !draw_object_command.render_pipeline.starts_with("material_") {
+                                return;
+                            }
                             let handle = draw_object_command
                                 .render_pipeline
                                 .strip_prefix("material_")
                                 .unwrap()
                                 .parse::<MaterialRenderPipelineHandle>();
-                            if let Ok(handle) = handle {
-                                let material_render_pipeline =
-                                    self.material_render_pipelines.get(&handle);
-                                if let Some(material_render_pipeline) = material_render_pipeline {
-                                    material_render_pipeline.draw(
-                                        device,
-                                        queue,
-                                        surface_texture_view,
-                                        &depth_texture_view,
-                                        &[mesh_buffer],
-                                        group_binding_resource,
-                                    );
-                                }
-                            }
-                        }
+                            let Ok(handle) = handle else {
+                                return;
+                            };
+                            let material_render_pipeline =
+                                self.material_render_pipelines.get(&handle);
+                            let Some(material_render_pipeline) = material_render_pipeline else {
+                                return;
+                            };
+                            material_render_pipeline.draw(
+                                device,
+                                queue,
+                                surface_texture_view,
+                                &depth_texture_view,
+                                &[mesh_buffer],
+                                group_binding_resource,
+                            );
+                        })();
                     }
                 }
             }

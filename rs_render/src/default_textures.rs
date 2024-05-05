@@ -96,7 +96,7 @@ impl DefaultTextures {
             rs_foundation::cast_to_raw_buffer(image.as_flat_samples().samples),
             ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * image.width()),
+                bytes_per_row: Some(4 * 4 * image.width()),
                 rows_per_image: None,
             },
             texture_extent,

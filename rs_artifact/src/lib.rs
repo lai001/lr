@@ -18,6 +18,7 @@ pub mod shader_source_code;
 pub mod skeleton;
 pub mod skeleton_animation;
 pub mod skin_mesh;
+pub mod material;
 pub mod static_mesh;
 pub mod type_expected;
 pub mod virtual_texture;
