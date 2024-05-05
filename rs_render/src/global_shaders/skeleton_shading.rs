@@ -1,6 +1,6 @@
 use super::global_shader::GlobalShader;
 use crate::get_buildin_shader_dir;
-use rs_shader_compiler::pre_process::{Definition, ShaderDescription};
+use rs_shader_compiler::pre_process::ShaderDescription;
 
 pub const NUM_MAX_BONE: usize = 255;
 
@@ -11,10 +11,7 @@ impl GlobalShader for SkeletonShadingShader {
         let shader_description = ShaderDescription {
             shader_path: get_buildin_shader_dir().join("phong_shading.wgsl"),
             include_dirs: vec![],
-            definitions: vec![Definition {
-                name: "SKELETON_MAX_BONES".to_string(),
-                value: Some(NUM_MAX_BONE.to_string()),
-            }],
+            definitions: vec![format!("SKELETON_MAX_BONES={NUM_MAX_BONE}")],
         };
         shader_description
     }

@@ -1,4 +1,4 @@
-use egui::{Color32, Ui};
+use egui::*;
 use egui_snarl::{
     ui::{Grid, PinInfo, SnarlStyle, SnarlViewer},
     InPin, NodeId, OutPin, Snarl,
@@ -7,7 +7,7 @@ use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
 
-use crate::material_resolve;
+use crate::{editor_ui, material_resolve};
 
 const NODE_IO_COLOR: Color32 = Color32::WHITE;
 
@@ -480,6 +480,7 @@ pub struct MaterialView {
     pub viewer: GraphViewer,
     pub attribute_node_id: NodeId,
     pub event: Option<EEventType>,
+    pub current_shader_code: Option<String>,
 }
 
 impl MaterialView {
@@ -507,6 +508,7 @@ impl MaterialView {
             viewer,
             attribute_node_id,
             event: None,
+            current_shader_code: None,
         }
     }
 
@@ -514,19 +516,57 @@ impl MaterialView {
         &mut self,
         current_open_material: Option<SingleThreadMutType<crate::material::Material>>,
         context: &egui::Context,
+        data_source: &mut crate::data_source::DataSource,
     ) {
-        self.event = None;
-        if let Some(material) = current_open_material {
-            let snarl = &mut material.borrow_mut().snarl;
-            let result = Self::do_draw(&mut self.viewer, &self.style, snarl, context);
-            if let Some(result) = result {
-                if let Ok(result) = result {
-                    self.event = Some(EEventType::Update(material.clone(), result));
-                }
-            }
-        } else {
-            Self::do_draw(&mut self.viewer, &self.style, &mut self.snarl, context);
+        let Some(material) = current_open_material else {
+            return;
         };
+
+        self.event = None;
+
+        TopBottomPanel::top("material_menu_bar").show(context, |ui| {
+            menu::bar(ui, |ui| {
+                ui.menu_button("Tool", |ui| {
+                    if ui.add(Button::new("Debug Shader Code")).clicked() {
+                        data_source.is_shader_code_window_open = true;
+                    }
+                });
+                if ui.button("Apply").clicked() {
+                    if let Some(current_shader_code) = self.current_shader_code.as_ref() {
+                        self.event = Some(EEventType::Update(
+                            material.clone(),
+                            current_shader_code.clone(),
+                        ));
+                    }
+                }
+            });
+        });
+
+        editor_ui::EditorUI::new_window("Shader Code", data_source.input_mode)
+            .open(&mut data_source.is_shader_code_window_open)
+            .vscroll(true)
+            .hscroll(true)
+            .resizable(true)
+            .show(context, |ui| {
+                let current_shader_code = &mut self.current_shader_code;
+                if let Some(current_shader_code) = current_shader_code {
+                    let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx());
+                    egui_extras::syntax_highlighting::code_view_ui(
+                        ui,
+                        &theme,
+                        current_shader_code,
+                        "wgsl",
+                    );
+                }
+            });
+
+        let snarl = &mut material.borrow_mut().snarl;
+        let result = Self::do_draw(&mut self.viewer, &self.style, snarl, context);
+        if let Some(result) = result {
+            if let Ok(result) = result {
+                self.current_shader_code = Some(result.clone());
+            }
+        }
         self.viewer.is_updated = false;
     }
 
@@ -548,13 +588,6 @@ impl MaterialView {
             return None;
         }
         let shader_code = material_resolve::resolve(snarl);
-
-        match &shader_code {
-            Ok(_) => {}
-            Err(err) => {
-                log::warn!("{}", err)
-            }
-        }
         Some(shader_code)
     }
 }

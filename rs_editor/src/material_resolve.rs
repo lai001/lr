@@ -72,7 +72,7 @@ pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<String> {
             rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE
         ),
     ];
-    let shader_code = rs_shader_compiler::pre_process::pre_process2(
+    let shader_code = rs_shader_compiler::pre_process::pre_process(
         &shader_path,
         include_dirs.iter(),
         definitions.iter(),
@@ -197,7 +197,7 @@ fn resolve_node(node_id: NodeId, node: &MaterialNode, resolve_context: &ResolveC
                 .get(&1)
                 .and_then(|out_pin_id| Some(node_var_name(out_pin_id.node)))
                 .unwrap_or_else(|| v2.literal());
-            format!("var {} = {} + {}", var_name, part_1, part_2)
+            format!("var {} = {} + {};", var_name, part_1, part_2)
         }
         EMaterialNodeType::Texture(texture_url) => {
             if let Some(_) = texture_url {

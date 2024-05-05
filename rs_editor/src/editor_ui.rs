@@ -148,8 +148,11 @@ impl EditorUI {
     }
 
     pub fn draw_material_view(&mut self, context: &Context, data_source: &mut DataSource) {
-        self.material_view
-            .draw(data_source.current_open_material.clone(), context);
+        self.material_view.draw(
+            data_source.current_open_material.clone(),
+            context,
+            data_source,
+        );
     }
 
     fn model_hierarchy_window(
@@ -195,7 +198,7 @@ impl EditorUI {
         }
     }
 
-    fn new_window(name: &str, input_mode: EInputMode) -> egui::Window<'static> {
+    pub fn new_window(name: &str, input_mode: EInputMode) -> egui::Window<'static> {
         Window::new(name)
             .enabled(input_mode.is_interact_ui())
             .interactable(input_mode.is_interact_ui())

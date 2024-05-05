@@ -15,7 +15,7 @@ pub trait GlobalShader {
             arguments.push(format!("-I{}", include_dir));
         }
         for definition in &shader_description.definitions {
-            arguments.push(definition.to_arg());
+            arguments.push(format!("-D{definition}"));
         }
         CompileCommand {
             arguments,

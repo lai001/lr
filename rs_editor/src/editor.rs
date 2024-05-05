@@ -174,7 +174,7 @@ impl Editor {
                     let include_dirs = args.include_dirs.unwrap_or(vec![]);
                     let definitions = args.definitions.unwrap_or(vec![]);
 
-                    let result = rs_shader_compiler::pre_process::pre_process2(
+                    let result = rs_shader_compiler::pre_process::pre_process(
                         &input_file,
                         include_dirs.iter(),
                         definitions.iter(),
