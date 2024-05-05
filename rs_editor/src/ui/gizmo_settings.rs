@@ -1,5 +1,5 @@
 use egui::{color_picker::Alpha, Context, Widget};
-use egui_gizmo::{GizmoMode, GizmoOrientation, GizmoVisuals};
+use transform_gizmo_egui::*;
 
 pub fn draw(
     window: egui::Window,
@@ -35,16 +35,8 @@ pub fn draw(
             egui::ComboBox::from_label("Orientation")
                 .selected_text(format!("{gizmo_orientation:?}"))
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        gizmo_orientation,
-                        egui_gizmo::GizmoOrientation::Global,
-                        "Global",
-                    );
-                    ui.selectable_value(
-                        gizmo_orientation,
-                        egui_gizmo::GizmoOrientation::Local,
-                        "Local",
-                    );
+                    ui.selectable_value(gizmo_orientation, GizmoOrientation::Global, "Global");
+                    ui.selectable_value(gizmo_orientation, GizmoOrientation::Local, "Local");
                 });
             ui.end_row();
 

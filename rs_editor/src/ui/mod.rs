@@ -1,10 +1,10 @@
 pub mod asset_view;
 pub mod console_cmds_view;
 pub mod content_browser;
+pub mod content_item_property_view;
 pub mod gizmo_settings;
 pub mod gizmo_view;
 pub mod level_view;
+pub mod material_view;
 pub mod project_settings;
-pub mod property_view;
-pub mod texture_property_view;
 pub mod top_menu;

@@ -1,7 +1,7 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
-    global_shaders::grid::GridShader,
+    global_shaders::{global_shader::GlobalShader, grid::GridShader},
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::MeshVertex0,
@@ -28,37 +28,31 @@ impl GridPipeline {
         texture_format: &TextureFormat,
         pool: &mut BaseRenderPipelinePool,
     ) -> GridPipeline {
-        let builder = BaseRenderPipelineBuilder::default()
-            .set_shader(&GridShader {})
-            .set_targets(vec![Some(ColorTargetState {
-                format: texture_format.clone(),
-                blend: Some(BlendState {
-                    color: BlendComponent {
-                        src_factor: wgpu::BlendFactor::SrcAlpha,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Add,
-                    },
-                    alpha: BlendComponent::OVER,
-                }),
-                write_mask: ColorWrites::ALL,
-            })])
-            .set_depth_stencil(Some(DepthStencilState {
-                depth_compare: CompareFunction::Less,
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }))
-            .set_vertex_buffer_type(Some(VertexBufferType::Interleaved(vec![
-                MeshVertex0::type_layout(),
-            ])))
-            .set_primitive(Some(PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                polygon_mode: PolygonMode::Fill,
-                ..Default::default()
-            }));
-        let base_render_pipeline = pool.get(device, shader_library, &GridShader {}, &builder);
+        let mut builder = BaseRenderPipelineBuilder::default();
+        builder.targets = vec![Some(ColorTargetState {
+            format: texture_format.clone(),
+            blend: Some(BlendState::ALPHA_BLENDING),
+            write_mask: ColorWrites::ALL,
+        })];
+        builder.shader_name = GridShader {}.get_name();
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Less,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
+        builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
+            MeshVertex0::type_layout(),
+        ]));
+        builder.primitive = Some(PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            polygon_mode: PolygonMode::Fill,
+            ..Default::default()
+        });
+
+        let base_render_pipeline = pool.get(device, shader_library, &builder);
 
         GridPipeline {
             base_render_pipeline,

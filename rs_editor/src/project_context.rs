@@ -232,9 +232,21 @@ impl ProjectContext {
         self.project_folder_path.join("build/cache/virtual_texture")
     }
 
+    pub fn get_ibl_bake_cache_dir(&self) -> PathBuf {
+        self.project_folder_path.join("build/cache/ibl")
+    }
+
     pub fn try_create_virtual_texture_cache_dir(&self) -> anyhow::Result<PathBuf> {
         let path = self.get_virtual_texture_cache_dir();
         let _ = std::fs::create_dir_all(path.clone())?;
+        Ok(path)
+    }
+
+    pub fn try_create_ibl_bake_cache_dir(&self, sub_folder: &str) -> anyhow::Result<PathBuf> {
+        let path = self.get_ibl_bake_cache_dir();
+        let path = path.join(sub_folder);
+        let _ = std::fs::create_dir_all(path.clone())
+            .context(anyhow!("Can not create {:?}", path.clone()))?;
         Ok(path)
     }
 
@@ -347,6 +359,8 @@ impl ProjectContext {
                 EContentFileType::Level(asset) => {
                     artifact_asset_encoder.encode(&*asset.borrow());
                 }
+                EContentFileType::Material(_) => todo!(),
+                EContentFileType::IBL(_) => todo!(),
             }
         }
 

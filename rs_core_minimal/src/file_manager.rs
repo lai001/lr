@@ -21,3 +21,23 @@ pub fn get_engine_resource_dir() -> PathBuf {
 pub fn get_engine_resource(name: &str) -> PathBuf {
     get_engine_resource_dir().join(name)
 }
+
+#[cfg(feature = "editor")]
+pub fn get_editor_tmp_folder() -> PathBuf {
+    std::env::current_dir()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("tmp")
+}
+
+#[cfg(feature = "editor")]
+pub fn create_editor_tmp_folder() -> PathBuf {
+    let path = get_editor_tmp_folder();
+    if path.exists() {
+        path
+    } else {
+        std::fs::create_dir_all(path.clone()).unwrap();
+        path
+    }
+}

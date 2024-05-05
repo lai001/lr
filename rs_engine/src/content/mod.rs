@@ -1,5 +1,7 @@
 pub mod content_file_type;
+pub mod ibl;
 pub mod level;
+pub mod material;
 pub mod skeleton;
 pub mod skeleton_animation;
 pub mod skeleton_mesh;

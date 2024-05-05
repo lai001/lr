@@ -1,6 +1,9 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
-    global_shaders::virtual_texture_clean::VirtualTextureCleanShader,
+    base_render_pipeline_pool::BaseRenderPipelineBuilder,
+    global_shaders::{
+        global_shader::GlobalShader, virtual_texture_clean::VirtualTextureCleanShader,
+    },
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
 };
@@ -16,27 +19,21 @@ impl VirtualTextureFeedBackClearPipeline {
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
     ) -> VirtualTextureFeedBackClearPipeline {
-        let base_render_pipeline = BaseRenderPipeline::new(
-            device,
-            shader_library,
-            &VirtualTextureCleanShader {},
-            &[Some(texture_format.clone().into())],
-            Some(DepthStencilState {
-                depth_compare: CompareFunction::Always,
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }),
-            None,
-            None,
-            Some(PrimitiveState {
-                cull_mode: None,
-                ..Default::default()
-            }),
-            None,
-            None,
-        );
+        let mut builder = BaseRenderPipelineBuilder::default();
+        builder.targets = vec![Some(texture_format.clone().into())];
+        builder.shader_name = VirtualTextureCleanShader {}.get_name();
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Always,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
+        builder.primitive = Some(PrimitiveState {
+            cull_mode: None,
+            ..Default::default()
+        });
+        let base_render_pipeline = BaseRenderPipeline::new(device, shader_library, builder);
 
         VirtualTextureFeedBackClearPipeline {
             base_render_pipeline,

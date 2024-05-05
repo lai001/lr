@@ -1,6 +1,10 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
-    global_shaders::virtual_texture_feed_back::StaticMeshVirtualTextureFeedBackShader,
+    base_render_pipeline_pool::BaseRenderPipelineBuilder,
+    global_shaders::{
+        global_shader::GlobalShader,
+        virtual_texture_feed_back::StaticMeshVirtualTextureFeedBackShader,
+    },
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::MeshVertex0,
@@ -20,33 +24,28 @@ impl StaticMeshVirtualTextureFeedBackPipeline {
         texture_format: &TextureFormat,
         is_noninterleaved: bool,
     ) -> StaticMeshVirtualTextureFeedBackPipeline {
-        let base_render_pipeline = BaseRenderPipeline::new(
-            device,
-            shader_library,
-            &StaticMeshVirtualTextureFeedBackShader {},
-            &[Some(texture_format.clone().into())],
-            Some(DepthStencilState {
-                depth_compare: CompareFunction::Less,
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }),
-            None,
-            None,
-            Some(PrimitiveState {
-                cull_mode: None,
-                ..Default::default()
-            }),
-            if is_noninterleaved {
-                Some(VertexBufferType::Noninterleaved)
-            } else {
-                Some(VertexBufferType::Interleaved(vec![
-                    MeshVertex0::type_layout(),
-                ]))
-            },
-            None,
-        );
+        let mut builder = BaseRenderPipelineBuilder::default();
+        builder.targets = vec![Some(texture_format.clone().into())];
+        builder.shader_name = StaticMeshVirtualTextureFeedBackShader {}.get_name();
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Less,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
+        builder.vertex_buffer_type = if is_noninterleaved {
+            Some(VertexBufferType::Noninterleaved)
+        } else {
+            Some(VertexBufferType::Interleaved(vec![
+                MeshVertex0::type_layout(),
+            ]))
+        };
+        builder.primitive = Some(PrimitiveState {
+            cull_mode: None,
+            ..Default::default()
+        });
+        let base_render_pipeline = BaseRenderPipeline::new(device, shader_library, builder);
 
         StaticMeshVirtualTextureFeedBackPipeline {
             base_render_pipeline,

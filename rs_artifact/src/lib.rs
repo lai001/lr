@@ -4,6 +4,7 @@ pub mod content_type;
 pub mod endian;
 pub mod error;
 pub mod file_header;
+pub mod ibl_baking;
 pub mod image;
 #[cfg(target_os = "android")]
 pub mod java_input_stream;

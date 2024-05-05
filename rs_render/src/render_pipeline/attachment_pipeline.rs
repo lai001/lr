@@ -1,6 +1,7 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
-    global_shaders::attachment::AttachmentShader,
+    base_render_pipeline_pool::BaseRenderPipelineBuilder,
+    global_shaders::{attachment::AttachmentShader, global_shader::GlobalShader},
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
 };
@@ -16,28 +17,21 @@ impl AttachmentPipeline {
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
     ) -> AttachmentPipeline {
-        let base_render_pipeline = BaseRenderPipeline::new(
-            device,
-            shader_library,
-            &AttachmentShader {},
-            &[Some(texture_format.clone().into())],
-            Some(DepthStencilState {
-                depth_compare: CompareFunction::Never,
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }),
-            None,
-            None,
-            Some(PrimitiveState {
-                cull_mode: None,
-                ..Default::default()
-            }),
-            None,
-            None,
-        );
-
+        let mut builder = BaseRenderPipelineBuilder::default();
+        builder.shader_name = AttachmentShader {}.get_name();
+        builder.targets = vec![Some(texture_format.clone().into())];
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Never,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
+        builder.primitive = Some(PrimitiveState {
+            cull_mode: None,
+            ..Default::default()
+        });
+        let base_render_pipeline = BaseRenderPipeline::new(device, shader_library, builder);
         AttachmentPipeline {
             base_render_pipeline,
         }

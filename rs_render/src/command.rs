@@ -14,6 +14,7 @@ pub type BufferHandle = u64;
 pub type EGUITextureHandle = u64;
 pub type TextureHandle = u64;
 pub type SamplerHandle = u64;
+pub type MaterialRenderPipelineHandle = u64;
 
 #[derive(Clone)]
 pub struct TextureDescriptorCreateInfo {
@@ -80,6 +81,12 @@ pub struct CreateBuffer {
 pub struct CreateSampler {
     pub handle: SamplerHandle,
     pub sampler_descriptor: SamplerDescriptor<'static>,
+}
+
+#[derive(Clone)]
+pub struct CreateMaterialRenderPipeline {
+    pub handle: MaterialRenderPipelineHandle,
+    pub shader_code: String,
 }
 
 #[derive(Clone)]
@@ -193,6 +200,7 @@ pub enum RenderCommand {
     RemoveWindow(isize),
     ChangeViewMode(EViewModeType),
     CreateSampler(CreateSampler),
+    CreateMaterialRenderPipeline(CreateMaterialRenderPipeline),
     #[cfg(feature = "renderdoc")]
     CaptureFrame,
 }

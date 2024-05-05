@@ -8,4 +8,6 @@ pub enum EContentType {
     Skeleton,
     Texture,
     Level,
+    Material,
+    IBL,
 }

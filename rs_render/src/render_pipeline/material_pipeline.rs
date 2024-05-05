@@ -1,50 +1,54 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::BaseRenderPipelineBuilder,
-    global_shaders::{global_shader::GlobalShader, shading::ShadingShader},
+    command::MaterialRenderPipelineHandle,
+    global_shaders::skeleton_shading::NUM_MAX_BONE,
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::*,
+    vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2},
     VertexBufferType,
 };
 use type_layout::TypeLayout;
 use wgpu::*;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct Constants {
     pub model: glam::Mat4,
-
-    pub diffuse_texture_size: glam::Vec2,
-    pub diffuse_texture_max_lod: u32,
-    pub is_virtual_diffuse_texture: u32,
-    pub specular_texture_size: glam::Vec2,
-    pub specular_texture_max_lod: u32,
-    pub is_virtual_specular_texture: u32,
     pub id: u32,
-    _pad8_0: u32,
-    _pad8_1: u32,
-    _pad8_2: u32,
+    pub bones: [glam::Mat4; NUM_MAX_BONE],
 }
 
-pub struct ShadingPipeline {
+impl Default for Constants {
+    fn default() -> Self {
+        Self {
+            model: Default::default(),
+            id: Default::default(),
+            bones: [glam::Mat4::IDENTITY; NUM_MAX_BONE],
+        }
+    }
+}
+
+pub struct MaterialRenderPipeline {
     base_render_pipeline: BaseRenderPipeline,
 }
 
-impl ShadingPipeline {
+impl MaterialRenderPipeline {
     pub fn new(
+        material_render_pipeline_handle: MaterialRenderPipelineHandle,
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
-        is_noninterleaved: bool,
-    ) -> ShadingPipeline {
+    ) -> crate::error::Result<MaterialRenderPipeline> {
+        let shader_name = ShaderLibrary::get_material_shader_name(material_render_pipeline_handle);
+
         let mut builder = BaseRenderPipelineBuilder::default();
         builder.targets = vec![Some(ColorTargetState {
             format: texture_format.clone(),
             blend: Some(BlendState::ALPHA_BLENDING),
             write_mask: ColorWrites::ALL,
         })];
-        builder.shader_name = ShadingShader {}.get_name();
+        builder.shader_name = shader_name;
         builder.depth_stencil = Some(DepthStencilState {
             depth_compare: CompareFunction::Less,
             format: TextureFormat::Depth32Float,
@@ -52,14 +56,11 @@ impl ShadingPipeline {
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });
-        builder.vertex_buffer_type = if is_noninterleaved {
-            Some(VertexBufferType::Noninterleaved)
-        } else {
-            Some(VertexBufferType::Interleaved(vec![
-                MeshVertex0::type_layout(),
-                MeshVertex1::type_layout(),
-            ]))
-        };
+        builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
+            MeshVertex0::type_layout(),
+            MeshVertex1::type_layout(),
+            MeshVertex2::type_layout(),
+        ]));
         builder.primitive = Some(PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             cull_mode: None,
@@ -68,10 +69,9 @@ impl ShadingPipeline {
         });
 
         let base_render_pipeline = BaseRenderPipeline::new(device, shader_library, builder);
-
-        ShadingPipeline {
+        Ok(MaterialRenderPipeline {
             base_render_pipeline,
-        }
+        })
     }
 
     pub fn draw(

@@ -66,6 +66,44 @@ impl DefaultTextures {
         }
     }
 
+    fn texture2d_from_rgba32f_image(
+        device: &Device,
+        queue: &Queue,
+        image: &image::Rgba32FImage,
+        label: Option<&str>,
+    ) -> Texture {
+        let texture_extent = Extent3d {
+            depth_or_array_layers: 1,
+            width: image.width(),
+            height: image.height(),
+        };
+
+        let texture = device.create_texture(&TextureDescriptor {
+            label,
+            size: texture_extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba32Float,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+
+        queue.write_texture(
+            texture.as_image_copy(),
+            rs_foundation::cast_to_raw_buffer(image.as_flat_samples().samples),
+            ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * image.width()),
+                rows_per_image: None,
+            },
+            texture_extent,
+        );
+        texture
+    }
+
     fn texture2d_from_rgba_image(
         device: &Device,
         queue: &Queue,
@@ -121,6 +159,37 @@ impl DefaultTextures {
             }
         }
         image
+    }
+
+    fn create_pure_color_rgbaf32_image(
+        width: u32,
+        height: u32,
+        color: &Color,
+    ) -> image::DynamicImage {
+        let mut image = image::DynamicImage::new_rgba32f(width, height);
+        {
+            let image = image.as_mut_rgba32f().unwrap();
+            for pixel in image.pixels_mut() {
+                let pixel = &mut pixel.0;
+                pixel[0] = color.r.clamp(0.0, 1.0) as f32;
+                pixel[1] = color.g.clamp(0.0, 1.0) as f32;
+                pixel[2] = color.b.clamp(0.0, 1.0) as f32;
+                pixel[3] = color.a.clamp(0.0, 1.0) as f32;
+            }
+        }
+        image
+    }
+
+    fn create_pure_color_rgbaf32_texture(
+        device: &Device,
+        queue: &Queue,
+        width: u32,
+        height: u32,
+        color: &Color,
+        label: Option<&str>,
+    ) -> Texture {
+        let image = Self::create_pure_color_rgbaf32_image(width, height, color);
+        Self::texture2d_from_rgba32f_image(device, queue, image.as_rgba32f().unwrap(), label)
     }
 
     fn create_pure_color_rgba8_texture(

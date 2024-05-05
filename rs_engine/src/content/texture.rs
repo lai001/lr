@@ -1,4 +1,4 @@
-use crate::mipmap_generator::MipmapGenerator;
+use crate::{mipmap_generator::MipmapGenerator, url_extension::UrlExtension};
 #[cfg(feature = "editor")]
 use anyhow::{anyhow, Context, Result};
 use image::GenericImage;
@@ -43,6 +43,10 @@ impl TextureFile {
             is_virtual_texture: false,
             virtual_image_reference: None,
         }
+    }
+
+    pub fn get_name(&self) -> String {
+        self.url.get_name_in_editor()
     }
 
     #[cfg(feature = "editor")]

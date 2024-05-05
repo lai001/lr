@@ -7,6 +7,7 @@ use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
+use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::sampler_cache::SamplerCache;
@@ -69,6 +70,8 @@ pub struct Renderer {
     base_render_pipeline_pool: BaseRenderPipelinePool,
 
     main_window_id: isize,
+
+    material_render_pipelines: HashMap<MaterialRenderPipelineHandle, MaterialRenderPipeline>,
 }
 
 impl Renderer {
@@ -97,7 +100,7 @@ impl Renderer {
         );
 
         let mut shader_library = ShaderLibrary::new();
-        shader_library.load_shader_from(shaders, wgpu_context.get_device());
+        shader_library.load_shaders_from(shaders, wgpu_context.get_device());
         let mut sampler_cache = SamplerCache::new();
         let mut base_render_pipeline_pool = BaseRenderPipelinePool::default();
         let shading_pipeline = ShadingPipeline::new(
@@ -180,6 +183,7 @@ impl Renderer {
             samplers: HashMap::new(),
             grid_render_pipeline,
             main_window_id,
+            material_render_pipelines: HashMap::new(),
         }
     }
 
@@ -245,6 +249,13 @@ impl Renderer {
             Some(&format!("Base.DepthTexture.{}", window_id)),
         );
         self.depth_textures.insert(window_id, depth_texture);
+        let scale_factor = 1.0;
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [surface_width, surface_height],
+            pixels_per_point: scale_factor,
+        };
+        self.gui_renderer
+            .add_screen_descriptor(window_id, screen_descriptor);
         self.wgpu_context
             .set_new_window(window_id, window, surface_width, surface_height)
     }
@@ -555,7 +566,7 @@ impl Renderer {
             let device = self.wgpu_context.get_device();
             let queue = self.wgpu_context.get_queue();
             self.gui_renderer
-                .render(output, queue, device, &output_view)
+                .render(output, queue, device, &output_view);
         }
         self.ui_output_commands.retain(|x| x.window_id != window_id);
 
@@ -596,10 +607,10 @@ impl Renderer {
 
     pub fn load_shader<K>(&mut self, shaders: HashMap<K, String>)
     where
-        K: ToString,
+        K: AsRef<str>,
     {
         self.shader_library
-            .load_shader_from(shaders, self.wgpu_context.get_device());
+            .load_shaders_from(shaders, self.wgpu_context.get_device());
     }
 
     pub fn send_command(&mut self, command: RenderCommand) -> Option<RenderOutput> {
@@ -653,6 +664,46 @@ impl Renderer {
             RenderCommand::RemoveWindow(window_id) => {
                 self.wgpu_context.remove_window(window_id);
                 self.depth_textures.remove(&window_id);
+                self.gui_renderer.remove_screen_descriptor(window_id);
+            }
+            RenderCommand::CreateMaterialRenderPipeline(create_render_pipeline) => {
+                let device = self.wgpu_context.get_device();
+                let name = ShaderLibrary::get_material_shader_name(create_render_pipeline.handle);
+                let create_shader_result = self.shader_library.load_shader_from(
+                    name.clone(),
+                    create_render_pipeline.shader_code,
+                    device,
+                );
+                match create_shader_result {
+                    Ok(_) => {}
+                    Err(err) => match err {
+                        crate::error::Error::ShaderReflection(_, _) => {}
+                        crate::error::Error::Wgpu(err) => match err {
+                            Error::OutOfMemory { .. } => {
+                                todo!()
+                            }
+                            Error::Validation { description, .. } => {
+                                log::trace!("Failed to create shader, {}", description);
+                            }
+                        },
+                        _ => unreachable!(),
+                    },
+                }
+                let current_swapchain_format = self
+                    .wgpu_context
+                    .get_current_swapchain_format(self.main_window_id);
+
+                let material_render_pipeline = MaterialRenderPipeline::new(
+                    create_render_pipeline.handle,
+                    device,
+                    &self.shader_library,
+                    &current_swapchain_format,
+                );
+                if let Ok(material_render_pipeline) = material_render_pipeline {
+                    self.material_render_pipelines
+                        .insert(create_render_pipeline.handle, material_render_pipeline);
+                    log::trace!("Create material render pipeline: {}", name);
+                }
             }
         }
         return None;
@@ -958,7 +1009,45 @@ impl Renderer {
                         vec![vec![group_binding_resource[0][0].clone()]],
                     );
                 }
-                _ => todo!(),
+                _ => {
+                    let any_first = self.ibl_bakes.iter().find(|_| true);
+                    if let Some((_, acceleration_baker)) = any_first {
+                        let view = acceleration_baker.get_brdflut_texture_view();
+                        let brdf_binding_resource = BindingResource::TextureView(&view);
+
+                        let view = acceleration_baker.get_pre_filter_cube_map_texture_view();
+                        let pre_filter_binding_resource = BindingResource::TextureView(&view);
+
+                        let view = acceleration_baker.get_irradiance_texture_view();
+                        let irradiance_binding_resource = BindingResource::TextureView(&view);
+
+                        group_binding_resource[0].push(brdf_binding_resource);
+                        group_binding_resource[0].push(pre_filter_binding_resource);
+                        group_binding_resource[0].push(irradiance_binding_resource);
+
+                        if draw_object_command.render_pipeline.starts_with("material_") {
+                            let handle = draw_object_command
+                                .render_pipeline
+                                .strip_prefix("material_")
+                                .unwrap()
+                                .parse::<MaterialRenderPipelineHandle>();
+                            if let Ok(handle) = handle {
+                                let material_render_pipeline =
+                                    self.material_render_pipelines.get(&handle);
+                                if let Some(material_render_pipeline) = material_render_pipeline {
+                                    material_render_pipeline.draw(
+                                        device,
+                                        queue,
+                                        surface_texture_view,
+                                        &depth_texture_view,
+                                        &[mesh_buffer],
+                                        group_binding_resource,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

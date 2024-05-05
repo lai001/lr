@@ -3,7 +3,9 @@ use crate::camera::Camera;
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::console_cmd::ConsoleCmd;
 use crate::content::content_file_type::EContentFileType;
-use crate::drawable::{EDrawObjectType, SkinMeshDrawObject, StaticMeshDrawObject};
+use crate::drawable::{
+    EDrawObjectType, MaterialDrawObject, SkinMeshDrawObject, StaticMeshDrawObject,
+};
 use crate::error::Result;
 use crate::input_mode::EInputMode;
 use crate::render_thread_mode::ERenderThreadMode;
@@ -20,9 +22,9 @@ use rs_foundation::new::{
 };
 use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateSampler, CreateTexture,
-    CreateVirtualTexture, DrawObject, EBindingResource, ETextureType, InitTextureData,
-    RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer,
+    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline, CreateSampler,
+    CreateTexture, CreateVirtualTexture, DrawObject, EBindingResource, ETextureType,
+    InitTextureData, RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer,
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::global_uniform;
@@ -30,9 +32,11 @@ use rs_render::renderer::Renderer;
 use rs_render::vertex_data_type::mesh_vertex::MeshVertex0;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::zip;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::Arc;
 
 struct State {
@@ -362,6 +366,7 @@ impl Engine {
         self.camera_did_update(
             self.camera.get_view_matrix(),
             self.camera.get_projection_matrix(),
+            self.camera.get_world_location(),
         );
 
         let virtual_texture_setting = &self.settings.render_setting.virtual_texture_setting;
@@ -750,6 +755,95 @@ impl Engine {
         EDrawObjectType::Skin(object)
     }
 
+    pub fn create_material_draw_object_from_skin_mesh(
+        &mut self,
+        vertexes: &[rs_artifact::skin_mesh::SkinMeshVertex],
+        indexes: &[u32],
+        name: Option<String>,
+        material: Rc<RefCell<crate::content::material::Material>>,
+    ) -> EDrawObjectType {
+        let name = name.unwrap_or("".to_string());
+        let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
+        let id = self.next_draw_object_id();
+        let index_buffer_handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("rs.IndexBuffer.{}", name.clone())),
+            contents: rs_foundation::cast_to_raw_buffer(&indexes).to_vec(),
+            usage: wgpu::BufferUsages::INDEX,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *index_buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+        let vertex_buffers = vec![
+            (
+                format!("rs.{name}.MeshVertex0"),
+                rs_foundation::cast_to_raw_buffer(&vertexes0),
+            ),
+            (
+                format!("rs.{name}.MeshVertex1"),
+                rs_foundation::cast_to_raw_buffer(&vertexes1),
+            ),
+            (
+                format!("rs.{name}.MeshVertex2"),
+                rs_foundation::cast_to_raw_buffer(&vertexes2),
+            ),
+        ];
+        let mut vertex_buffer_handles: Vec<crate::handle::BufferHandle> =
+            Vec::with_capacity(vertex_buffers.len());
+        for (name, vertex_buffer) in vertex_buffers {
+            let vertex_buffer_handle = self.resource_manager.next_buffer();
+            let buffer_create_info = BufferCreateInfo {
+                label: Some(format!("rs.{}.VertexBuffer", name)),
+                contents: vertex_buffer.to_vec(),
+                usage: wgpu::BufferUsages::VERTEX,
+            };
+            let create_buffer = CreateBuffer {
+                handle: *vertex_buffer_handle,
+                buffer_create_info,
+            };
+            let message = RenderCommand::CreateBuffer(create_buffer);
+            self.render_thread_mode.send_command(message);
+            vertex_buffer_handles.push(vertex_buffer_handle);
+        }
+
+        let constants_buffer_handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("rs.{}.Constants", name.clone())),
+            contents: rs_foundation::cast_any_as_u8_slice(
+                &rs_render::render_pipeline::material_pipeline::Constants::default(),
+            )
+            .to_vec(),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::MAP_WRITE,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *constants_buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+
+        let object = MaterialDrawObject {
+            id,
+            vertex_buffers: vertex_buffer_handles,
+            vertex_count: vertexes0.len() as u32,
+            index_buffer: Some(index_buffer_handle),
+            index_count: Some(indexes.len() as u32),
+            global_binding_resources: vec![
+                EBindingResource::Constants(*self.global_constants_handle),
+                EBindingResource::Sampler(*self.global_sampler_handle),
+            ],
+            vt_binding_resources: vec![EBindingResource::Constants(*constants_buffer_handle)],
+            binding_resources: vec![vec![EBindingResource::Constants(*constants_buffer_handle)]],
+            material,
+            constants: Default::default(),
+            constants_buffer_handle,
+        };
+        EDrawObjectType::SkinMaterial(object)
+    }
+
     pub fn update_draw_object(&mut self, object: &mut EDrawObjectType) {
         match object {
             EDrawObjectType::Static(object) => {
@@ -832,6 +926,12 @@ impl Engine {
                     }
                 }
             }
+            EDrawObjectType::SkinMaterial(object) => {
+                self.update_buffer(
+                    object.constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.constants),
+                );
+            }
         }
     }
 
@@ -872,6 +972,27 @@ impl Engine {
                 self.render_thread_mode
                     .send_command(RenderCommand::DrawObject(draw_object));
             }
+            EDrawObjectType::SkinMaterial(skin_objcet) => {
+                if let Some(pipeline_handle) = skin_objcet.material.borrow().get_pipeline_handle() {
+                    let render_pipeline =
+                        rs_render::shader_library::ShaderLibrary::get_material_shader_name(
+                            *pipeline_handle,
+                        );
+                    let draw_object = DrawObject {
+                        id: skin_objcet.id,
+                        vertex_buffers: skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                        vertex_count: skin_objcet.vertex_count,
+                        index_buffer: skin_objcet.index_buffer.clone().map(|x| *x),
+                        index_count: skin_objcet.index_count,
+                        global_binding_resources: skin_objcet.global_binding_resources.clone(),
+                        vt_binding_resources: skin_objcet.vt_binding_resources.clone(),
+                        binding_resources: skin_objcet.binding_resources.clone(),
+                        render_pipeline,
+                    };
+                    self.render_thread_mode
+                        .send_command(RenderCommand::DrawObject(draw_object));
+                }
+            }
         }
     }
 
@@ -905,11 +1026,17 @@ impl Engine {
             .insert(virtual_keycode, event.state);
     }
 
-    pub fn camera_did_update(&mut self, view: glam::Mat4, projection: glam::Mat4) {
+    pub fn camera_did_update(
+        &mut self,
+        view: glam::Mat4,
+        projection: glam::Mat4,
+        world_location: glam::Vec3,
+    ) {
         self.global_constants.view = view;
         self.global_constants.projection = projection;
         self.global_constants.view_projection =
             self.global_constants.projection * self.global_constants.view;
+        self.global_constants.view_position = world_location;
     }
 
     fn update_global_constants(&mut self) {
@@ -1156,6 +1283,21 @@ impl Engine {
 
     pub fn get_camera_movement_speed(&mut self) -> f32 {
         self.state.camera_movement_speed
+    }
+
+    pub fn create_material(
+        &mut self,
+        shader_code: String,
+    ) -> crate::handle::MaterialRenderPipelineHandle {
+        let shader_handle = self.resource_manager.next_material_render_pipeline();
+        self.render_thread_mode
+            .send_command(RenderCommand::CreateMaterialRenderPipeline(
+                CreateMaterialRenderPipeline {
+                    handle: *shader_handle,
+                    shader_code,
+                },
+            ));
+        shader_handle.clone()
     }
 }
 

@@ -38,3 +38,14 @@ pub fn is_dev_mode() -> bool {
     let is_vscode_exist = get_engine_root_dir().join(".vscode").exists();
     is_run_from_ide() || is_cargo_exist || is_xmake_exist || is_vscode_exist
 }
+
+pub fn get_md5_from_string(text: &str) -> String {
+    let mut hasher = <md5::Md5 as md5::Digest>::new();
+    md5::digest::Update::update(&mut hasher, text.as_bytes());
+    let result = md5::Digest::finalize(hasher);
+    let result = result.to_ascii_lowercase();
+    let result = result
+        .iter()
+        .fold("".to_string(), |acc, x| format!("{acc}{:x?}", x));
+    result
+}

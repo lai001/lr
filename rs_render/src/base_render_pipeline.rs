@@ -1,11 +1,8 @@
+use crate::base_render_pipeline_pool::BaseRenderPipelineBuilder;
 use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
-use crate::global_shaders::global_shader::GlobalShader;
 use crate::gpu_vertex_buffer::{GpuVertexBufferImp, TGpuVertexBuffer};
 use crate::reflection::{EPipelineType, VertexBufferLayoutBuilder};
 use crate::shader_library::ShaderLibrary;
-use crate::VertexBufferType;
-use std::collections::HashMap;
-use std::num::NonZeroU32;
 use wgpu::*;
 
 pub struct ColorAttachment<'a> {
@@ -25,16 +22,20 @@ impl BaseRenderPipeline {
     pub fn new(
         device: &Device,
         shader_library: &ShaderLibrary,
-        global_shader: &impl GlobalShader,
-        targets: &[Option<ColorTargetState>],
-        depth_stencil: Option<DepthStencilState>,
-        multisample: Option<MultisampleState>,
-        multiview: Option<NonZeroU32>,
-        primitive: Option<PrimitiveState>,
-        vertex_buffer_type: Option<VertexBufferType>,
-        hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
+        base_render_pipeline_builder: BaseRenderPipelineBuilder,
     ) -> BaseRenderPipeline {
-        let tag = &global_shader.get_name();
+        let BaseRenderPipelineBuilder {
+            shader_name,
+            targets,
+            depth_stencil,
+            multisample,
+            multiview,
+            primitive,
+            vertex_buffer_type,
+            hooks,
+        } = base_render_pipeline_builder;
+
+        let tag = shader_name.as_ref();
         let shader = shader_library.get_shader(tag);
         let reflection = shader_library.get_shader_reflection(tag);
         let EPipelineType::Render(vs, fs) = reflection.get_pipeline_type() else {
@@ -140,7 +141,7 @@ impl BaseRenderPipeline {
             fragment: Some(FragmentState {
                 module: &shader,
                 entry_point: &fs.name,
-                targets,
+                targets: &targets,
             }),
             primitive: primitive.unwrap_or_default(),
             depth_stencil,

@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct BakeInfo {
     pub is_bake_environment: bool,
     pub is_bake_irradiance: bool,

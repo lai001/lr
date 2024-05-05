@@ -5,18 +5,19 @@ use crate::{
     data_source::{AssetFile, AssetFolder, DataSource, MeshItem, ModelViewData},
     editor::WindowsManager,
     editor_ui::EditorUI,
+    material_resolve,
     model_loader::ModelLoader,
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
     ui::{
-        asset_view, content_browser, level_view,
-        property_view::{self, ESelectedObject},
-        texture_property_view, top_menu,
+        asset_view, content_browser, content_item_property_view,
+        material_view::{self, EMaterialNodeType, MaterialNode},
+        top_menu,
     },
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
-use rs_core_minimal::path_ext::CanonicalizeSlashExt;
+use rs_core_minimal::{misc::get_md5_from_string, path_ext::CanonicalizeSlashExt};
 use rs_engine::{
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
     content::{content_file_type::EContentFileType, texture::TextureFile},
@@ -31,6 +32,8 @@ use rs_engine::{
     resource_manager::ResourceManager,
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
+use rs_foundation::new::SingleThreadMut;
+use rs_render::bake_info::BakeInfo;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -80,7 +83,7 @@ pub enum EWindowType {
 pub struct EditorContext {
     event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     engine: rs_engine::engine::Engine,
-    egui_winit_state: Option<egui_winit::State>,
+    egui_winit_states: HashMap<EWindowType, egui_winit::State>,
     data_source: DataSource,
     project_context: Option<ProjectContext>,
     draw_objects: HashMap<uuid::Uuid, EDrawObjectType>,
@@ -132,6 +135,7 @@ impl EditorContext {
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
+            is_flush_before_drop: false,
         });
         log::trace!(
             "Engine Root Dir: {:?}",
@@ -184,7 +188,7 @@ impl EditorContext {
         Self {
             event_loop_proxy,
             engine,
-            egui_winit_state: Some(egui_winit_state),
+            egui_winit_states: HashMap::from([(EWindowType::Main, egui_winit_state)]),
             data_source,
             project_context: None,
             draw_objects: HashMap::new(),
@@ -210,17 +214,19 @@ impl EditorContext {
 
     pub fn main_window_event_process(
         &mut self,
-        window_id: isize,
-        window: &mut winit::window::Window,
         event: &WindowEvent,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
-        if let Some(egui_winit_state) = &mut self.egui_winit_state {
+        let window_id =
+            u64::from(self.window_manager.borrow().get_main_window().borrow().id()) as isize;
+        let binding = self.window_manager.borrow().get_main_window();
+        let window = &mut *binding.borrow_mut();
+        if let Some(egui_winit_state) = self.egui_winit_states.get_mut(&EWindowType::Main) {
             let _ = Some(egui_winit_state.on_window_event(window, event));
         }
         match event {
             WindowEvent::CloseRequested => {
-                if let Some(egui_winit_state) = &mut self.egui_winit_state {
+                if let Some(egui_winit_state) = self.egui_winit_states.get_mut(&EWindowType::Main) {
                     self.plugins.clear();
                     egui_winit_state.egui_ctx().memory_mut(|writer| {
                         writer.data.clear();
@@ -292,6 +298,7 @@ impl EditorContext {
                                 log::trace!("Update asset folder. {:?}", asset_folder);
                                 self.data_source.asset_folder = Some(asset_folder.clone());
                                 self.data_source.current_asset_folder = Some(asset_folder);
+                                self.post_build_asset_folder();
                             }
                         }
                     }
@@ -338,6 +345,109 @@ impl EditorContext {
         }
     }
 
+    pub fn material_window_event_process(
+        &mut self,
+        event: &WindowEvent,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+    ) {
+        let window_id = {
+            let binding = self.window_manager.borrow_mut();
+            let Some(window_context) = binding.window_contexts.get(&EWindowType::Material) else {
+                return;
+            };
+            let window_id = window_context.get_id();
+            window_id
+        };
+        if let Some(egui_winit_state) = self.egui_winit_states.get_mut(&EWindowType::Material) {
+            let binding = self.window_manager.borrow_mut();
+            let Some(window_context) = binding.window_contexts.get(&EWindowType::Material) else {
+                return;
+            };
+            let window = &mut *window_context.window.borrow_mut();
+            let _ = Some(egui_winit_state.on_window_event(window, event));
+        }
+
+        match event {
+            WindowEvent::Resized(size) => {
+                log::trace!("Material window resized: {:?}", size);
+                self.engine.resize(window_id, size.width, size.height);
+            }
+            WindowEvent::CloseRequested => {
+                self.window_manager
+                    .borrow_mut()
+                    .remove_window(EWindowType::Material);
+                self.engine.remove_window(window_id);
+            }
+            WindowEvent::RedrawRequested => {
+                let binding = self.window_manager.borrow_mut();
+                let Some(window_context) = binding.window_contexts.get(&EWindowType::Material)
+                else {
+                    return;
+                };
+                let window = &mut *window_context.window.borrow_mut();
+                let gui_render_output = (|| {
+                    let Some(egui_winit_state) =
+                        self.egui_winit_states.get_mut(&EWindowType::Material)
+                    else {
+                        return None;
+                    };
+
+                    {
+                        let ctx = egui_winit_state.egui_ctx().clone();
+                        let viewport_id = egui_winit_state.egui_input().viewport_id;
+                        let viewport_info: &mut egui::ViewportInfo = egui_winit_state
+                            .egui_input_mut()
+                            .viewports
+                            .get_mut(&viewport_id)
+                            .unwrap();
+                        egui_winit::update_viewport_info(viewport_info, &ctx, window);
+                    }
+
+                    let new_input = egui_winit_state.take_egui_input(window);
+
+                    egui_winit_state.egui_ctx().begin_frame(new_input);
+
+                    self.editor_ui
+                        .draw_material_view(egui_winit_state.egui_ctx(), &mut self.data_source);
+                    egui_winit_state.egui_ctx().clear_animations();
+
+                    let full_output = egui_winit_state.egui_ctx().end_frame();
+
+                    egui_winit_state
+                        .handle_platform_output(window, full_output.platform_output.clone());
+
+                    let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+                        textures_delta: full_output.textures_delta,
+                        clipped_primitives: egui_winit_state
+                            .egui_ctx()
+                            .tessellate(full_output.shapes, full_output.pixels_per_point),
+                        window_id,
+                    };
+                    Some(gui_render_output)
+                })();
+
+                if let Some(gui_render_output) = gui_render_output {
+                    self.engine.redraw(gui_render_output);
+                    self.engine.present(window_id);
+                    window.request_redraw();
+                }
+
+                if let Some(event) = &self.editor_ui.material_view.event {
+                    match event {
+                        material_view::EEventType::Update(material, shader_code) => {
+                            let handle = self.engine.create_material(shader_code.to_string());
+                            let material_content = material.borrow().get_associated_material();
+                            if let Some(material_content) = material_content {
+                                material_content.borrow_mut().set_pipeline_handle(handle);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub fn handle_event(
         &mut self,
         event: &Event<ECustomEventType>,
@@ -362,10 +472,6 @@ impl EditorContext {
             }
             Event::WindowEvent { event, window_id } => {
                 let window_id = u64::from(*window_id) as isize;
-                let Some(window) = self.window_manager.borrow_mut().get_window_by_id(window_id)
-                else {
-                    return;
-                };
                 let Some(window_type) = self
                     .window_manager
                     .borrow_mut()
@@ -373,28 +479,11 @@ impl EditorContext {
                 else {
                     return;
                 };
-
-                match window_type {
-                    EWindowType::Main => {
-                        self.main_window_event_process(
-                            window_id,
-                            &mut *window.borrow_mut(),
-                            event,
-                            event_loop_window_target,
-                        );
-                    }
-                    EWindowType::Material => match event {
-                        WindowEvent::Resized(size) => {
-                            log::trace!("Material window resized: {:?}", size);
-                            self.engine.resize(window_id, size.width, size.height);
-                        }
-                        WindowEvent::CloseRequested => {
-                            self.window_manager.borrow_mut().remove_window(window_type);
-                            self.engine.remove_window(window_id);
-                        }
-                        WindowEvent::RedrawRequested => {}
-                        _ => {}
-                    },
+                if window_type == EWindowType::Material {
+                    self.material_window_event_process(event, event_loop_window_target);
+                } else {
+                    self.main_window_event_process(event, event_loop_window_target);
+                    self.material_window_event_process(event, event_loop_window_target);
                 }
             }
             Event::NewEvents(_) => {}
@@ -416,6 +505,33 @@ impl EditorContext {
             log::trace!("Load plugin.");
         }
         Ok(())
+    }
+
+    fn post_build_asset_folder(&mut self) {
+        let Some(project_context) = &self.project_context else {
+            return;
+        };
+        let Some(asset_folder) = &self.data_source.asset_folder else {
+            return;
+        };
+        self.editor_ui
+            .content_item_property_view
+            .image_asset_files
+            .clear();
+        let base = project_context.get_asset_folder_path();
+        for file in &asset_folder.files {
+            match file.get_file_type() {
+                EFileType::Exr | EFileType::Hdr => {
+                    if let Ok(path) = file.path.strip_prefix(base.clone()) {
+                        self.editor_ui
+                            .content_item_property_view
+                            .image_asset_files
+                            .push(path.to_path_buf());
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     fn build_asset_folder(path: &std::path::Path) -> AssetFolder {
@@ -617,6 +733,28 @@ impl EditorContext {
                     }
                 }
                 EContentFileType::Level(_) => {}
+                EContentFileType::Material(material_content) => {
+                    let find = project_context
+                        .project
+                        .materials
+                        .iter()
+                        .find(|x| x.borrow().url == material_content.borrow().asset_url)
+                        .cloned();
+                    if let Some(material_editor) = find {
+                        if let Ok(shader_code) =
+                            material_resolve::resolve(&material_editor.borrow().snarl)
+                        {
+                            let pipeline_handle = engine.create_material(shader_code);
+                            material_content
+                                .borrow_mut()
+                                .set_pipeline_handle(pipeline_handle);
+                        }
+                        material_editor
+                            .borrow_mut()
+                            .set_associated_material(material_content.clone());
+                    }
+                }
+                EContentFileType::IBL(_) => {}
             }
         }
     }
@@ -655,7 +793,6 @@ impl EditorContext {
         self.data_source.asset_folder = Some(asset_folder.clone());
         self.data_source.current_asset_folder = Some(asset_folder);
 
-        let mut texture_files: Vec<Rc<RefCell<TextureFile>>> = vec![];
         self.data_source.content_data_source.current_folder =
             Some(project_context.project.content.clone());
         Self::content_load_resources(
@@ -664,14 +801,6 @@ impl EditorContext {
             &project_context,
             project_context.project.content.borrow().files.clone(),
         );
-        for file in &project_context.project.content.borrow().files.clone() {
-            match file {
-                EContentFileType::Texture(texture_file) => {
-                    texture_files.push(texture_file.clone());
-                }
-                _ => {}
-            }
-        }
 
         self.engine
             .set_settings(project_context.project.settings.borrow().clone());
@@ -712,6 +841,7 @@ impl EditorContext {
             .paths
             .insert(file_path.to_path_buf());
         self.data_source.recent_projects.save()?;
+        self.post_build_asset_folder();
         Ok(())
     }
 
@@ -745,27 +875,6 @@ impl EditorContext {
                     log::trace!("Selected file: {:?}", file_path);
                     let result = self.open_project(&file_path, window);
                     log::trace!("{:?}", result);
-                }
-
-                EFileDialogType::IBL => {
-                    let filter = [EFileType::Exr, EFileType::Hdr];
-                    let dialog = rfd::FileDialog::new().add_filter("Image", &filter);
-                    let Some(file_path) = dialog.pick_file() else {
-                        return;
-                    };
-                    let url =
-                        url::Url::parse(&format!("ibl://{}", uuid::Uuid::new_v4().to_string()))
-                            .unwrap();
-                    let save_dir = std::env::current_dir().unwrap().join("bake");
-                    if !save_dir.exists() {
-                        let _ = std::fs::create_dir(save_dir.clone());
-                    }
-                    self.engine.ibl_bake(
-                        &file_path,
-                        url,
-                        self.data_source.ibl_bake_info.clone(),
-                        Some(&save_dir),
-                    );
                 }
             },
         }
@@ -894,7 +1003,7 @@ impl EditorContext {
         }
 
         let gui_render_output = (|| {
-            let Some(egui_winit_state) = &mut self.egui_winit_state else {
+            let Some(egui_winit_state) = self.egui_winit_states.get_mut(&EWindowType::Main) else {
                 return None;
             };
             let full_output = egui_winit_state.egui_ctx().end_frame();
@@ -957,14 +1066,96 @@ impl EditorContext {
         Ok(())
     }
 
+    fn open_material_window(
+        &mut self,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        open_material: Option<Rc<RefCell<rs_engine::content::material::Material>>>,
+    ) {
+        if let Some(open_material) = open_material {
+            let url = &open_material.borrow().asset_url;
+            if let Some(project_context) = &self.project_context {
+                if let Some(asset) = project_context
+                    .project
+                    .materials
+                    .iter()
+                    .find(|x| &x.borrow().url == url)
+                {
+                    asset
+                        .borrow_mut()
+                        .set_associated_material(open_material.clone());
+                    self.data_source.current_open_material = Some(asset.clone());
+                };
+            }
+        }
+        let mut binding = self.window_manager.borrow_mut();
+        let material_window_context = binding
+            .spwan_new_window(EWindowType::Material, event_loop_window_target)
+            .expect("Create successfully");
+        let material_window = &*material_window_context.window.borrow();
+
+        let _ = self.engine.set_new_window(
+            material_window_context.get_id(),
+            material_window,
+            material_window_context.get_width(),
+            material_window_context.get_height(),
+        );
+        let viewport_id = egui::ViewportId::from_hash_of(material_window_context.get_id());
+
+        let mut egui_winit_state = egui_winit::State::new(
+            self.editor_ui.egui_context.clone(),
+            viewport_id,
+            material_window,
+            Some(material_window.scale_factor() as f32),
+            None,
+        );
+
+        egui_winit_state.egui_input_mut().viewport_id = viewport_id;
+        egui_winit_state.egui_input_mut().viewports =
+            std::iter::once((viewport_id, Default::default())).collect();
+
+        self.egui_winit_states
+            .insert(EWindowType::Material, egui_winit_state);
+
+        self.editor_ui.material_view.viewer.texture_urls = self.collect_textures();
+        self.editor_ui.material_view.viewer.is_updated = true;
+        log::trace!("{}", "Spawn material window");
+    }
+
+    fn collect_textures(&self) -> Vec<url::Url> {
+        let Some(project_context) = &self.project_context else {
+            return vec![];
+        };
+        project_context
+            .project
+            .content
+            .borrow()
+            .files
+            .iter()
+            .filter_map(|x| match x {
+                EContentFileType::Texture(_) => Some(x.get_url()),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn process_ui(
         &mut self,
         window: &mut winit::window::Window,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
-        let Some(egui_winit_state) = &mut self.egui_winit_state else {
+        let Some(egui_winit_state) = self.egui_winit_states.get_mut(&EWindowType::Main) else {
             return;
         };
+
+        let ctx = egui_winit_state.egui_ctx().clone();
+        let viewport_id = egui_winit_state.egui_input().viewport_id.clone();
+        let viewport_info: &mut egui::ViewportInfo = egui_winit_state
+            .egui_input_mut()
+            .viewports
+            .get_mut(&viewport_id)
+            .unwrap();
+        egui_winit::update_viewport_info(viewport_info, &ctx, window);
+
         let new_input = egui_winit_state.take_egui_input(window);
         egui_winit_state.egui_ctx().begin_frame(new_input);
         egui_winit_state.egui_ctx().clear_animations();
@@ -1048,7 +1239,7 @@ impl EditorContext {
                         self.data_source.content_data_source.is_open = true;
                     }
                     top_menu::EWindowType::Property => {
-                        self.data_source.property_view_data_source.is_open = true;
+                        self.data_source.is_content_item_property_view_open = true;
                     }
                     top_menu::EWindowType::Level => {
                         self.data_source.is_level_view_open = true;
@@ -1057,25 +1248,10 @@ impl EditorContext {
                         self.data_source.is_console_cmds_view_open = true;
                     }
                     top_menu::EWindowType::Material => {
-                        let mut binding = self.window_manager.borrow_mut();
-                        let material_window_context = binding
-                            .spwan_new_window(EWindowType::Material, event_loop_window_target)
-                            .expect("Create successfully");
-                        let set_new_window_status = self.engine.set_new_window(
-                            material_window_context.get_id(),
-                            &*material_window_context.window.borrow(),
-                            material_window_context.get_width(),
-                            material_window_context.get_height(),
-                        );
-                        log::trace!("{}, {:?}", "Spawn material window", set_new_window_status);
+                        self.open_material_window(event_loop_window_target, None);
                     }
                 },
                 top_menu::EClickEventType::Tool(tool_type) => match tool_type {
-                    top_menu::EToolType::IBL => {
-                        let _ = self
-                            .event_loop_proxy
-                            .send_event(ECustomEventType::OpenFileDialog(EFileDialogType::IBL));
-                    }
                     top_menu::EToolType::DebugShader => {
                         Self::prepreocess_shader();
                     }
@@ -1135,65 +1311,79 @@ impl EditorContext {
                 }
             }
         }
+        if let Some(click) = &self.editor_ui.content_item_property_view.click {
+            match click {
+                content_item_property_view::EClickType::IBL(ibl, old, new) => {
+                    let Some(new) = new.as_ref() else {
+                        return;
+                    };
+                    let result = (|| {
+                        let project_context = self.project_context.as_ref().ok_or(anyhow!(""))?;
+                        let file_path = project_context.get_asset_folder_path().join(new);
+                        if !file_path.exists() {
+                            return Err(anyhow!("The file is not exist"));
+                        }
+                        let url = url::Url::parse(&format!(
+                            "ibl://{}",
+                            uuid::Uuid::new_v4().to_string()
+                        ))?;
 
-        if let Some(click_actor) = click_event.click_actor {
-            match click_actor {
-                level_view::EClickEventType::Actor(actor) => {
-                    self.data_source.property_view_data_source.is_open = true;
-                    self.data_source.property_view_data_source.selected_actor = Some(actor.clone());
-                    self.data_source.property_view_data_source.selected_object =
-                        Some(ESelectedObject::Actor(actor.clone()));
-                }
-            }
-        }
-        if let Some(property_event) = click_event.property_event {
-            match property_event {
-                property_view::EClickEventType::Node(property_event) => {}
-                property_view::EClickEventType::TextureFile(event) => match event {
-                    texture_property_view::EClickEventType::IsVirtualTexture(
-                        is_virtual_texture,
-                    ) => {
-                        (|| {
-                            if !is_virtual_texture {
-                                return;
-                            }
-                            let Some(selected_object) =
-                                &self.data_source.property_view_data_source.selected_object
-                            else {
-                                return;
-                            };
-                            let ESelectedObject::TextureFile(texture_file) = selected_object else {
-                                return;
-                            };
-                            let Some(project_context) = &self.project_context else {
-                                return;
-                            };
-                            let Ok(virtual_texture_cache_dir) =
-                                project_context.try_create_virtual_texture_cache_dir()
-                            else {
-                                return;
-                            };
-                            let asset_folder = &project_context.get_asset_folder_path();
-                            let Ok(virtual_cache_name) = texture_file
-                                .borrow()
-                                .get_pref_virtual_cache_name(asset_folder)
-                            else {
-                                return;
-                            };
-                            let result = texture_file.borrow_mut().create_virtual_texture_cache(
-                                asset_folder,
-                                &virtual_texture_cache_dir.join(virtual_cache_name.clone()),
-                                Some(rs_artifact::EEndianType::Little),
-                                256,
-                            );
-                            if result.is_ok() {
-                                log::trace!("virtual_cache_name: {}", virtual_cache_name);
-                                texture_file.borrow_mut().virtual_image_reference =
-                                    Some(virtual_cache_name);
-                            }
-                        })();
+                        let save_dir = project_context.try_create_ibl_bake_cache_dir(
+                            &get_md5_from_string(&new.to_str().context(anyhow!(""))?),
+                        )?;
+
+                        self.engine.ibl_bake(
+                            &file_path,
+                            url,
+                            ibl.borrow().bake_info.clone(),
+                            Some(&save_dir),
+                        );
+                        Ok(())
+                    })();
+                    match result {
+                        Ok(_) => {}
+                        Err(err) => {
+                            log::warn!("{}", err);
+                            ibl.borrow_mut().image_reference = old.clone();
+                        }
                     }
-                },
+                }
+                content_item_property_view::EClickType::IsVirtualTexture(
+                    texture_file,
+                    is_virtual_texture,
+                ) => {
+                    (|| {
+                        if !is_virtual_texture {
+                            return;
+                        }
+                        let Some(project_context) = &self.project_context else {
+                            return;
+                        };
+                        let Ok(virtual_texture_cache_dir) =
+                            project_context.try_create_virtual_texture_cache_dir()
+                        else {
+                            return;
+                        };
+                        let asset_folder = &project_context.get_asset_folder_path();
+                        let Ok(virtual_cache_name) = texture_file
+                            .borrow()
+                            .get_pref_virtual_cache_name(asset_folder)
+                        else {
+                            return;
+                        };
+                        let result = texture_file.borrow_mut().create_virtual_texture_cache(
+                            asset_folder,
+                            &virtual_texture_cache_dir.join(virtual_cache_name.clone()),
+                            Some(rs_artifact::EEndianType::Little),
+                            256,
+                        );
+                        if result.is_ok() {
+                            log::trace!("virtual_cache_name: {}", virtual_cache_name);
+                            texture_file.borrow_mut().virtual_image_reference =
+                                Some(virtual_cache_name);
+                        }
+                    })();
+                }
             }
         }
 
@@ -1228,31 +1418,112 @@ impl EditorContext {
                     content_browser::EClickEventType::OpenFolder(folder) => {
                         self.data_source.content_data_source.current_folder = Some(folder);
                     }
-                    content_browser::EClickEventType::OpenFile(file) => match file {
-                        EContentFileType::StaticMesh(_) => todo!(),
-                        EContentFileType::SkeletonMesh(_) => todo!(),
-                        EContentFileType::SkeletonAnimation(_) => todo!(),
-                        EContentFileType::Skeleton(_) => todo!(),
-                        EContentFileType::Texture(_) => todo!(),
-                        EContentFileType::Level(_) => todo!(),
-                    },
+                    content_browser::EClickEventType::OpenFile(file) => {
+                        self.editor_ui.content_item_property_view.content = Some(file.clone());
+                        self.data_source.is_content_item_property_view_open = true;
+                        match file {
+                            EContentFileType::StaticMesh(_) => {}
+                            EContentFileType::SkeletonMesh(_) => {}
+                            EContentFileType::SkeletonAnimation(_) => {}
+                            EContentFileType::Skeleton(_) => {}
+                            EContentFileType::Texture(_) => {}
+                            EContentFileType::Level(_) => {}
+                            EContentFileType::Material(material) => {
+                                self.open_material_window(event_loop_window_target, Some(material));
+                            }
+                            EContentFileType::IBL(_) => {}
+                        }
+                    }
                     content_browser::EClickEventType::SingleClickFile(file) => {
                         self.data_source.content_data_source.highlight_file = Some(file.clone());
-                        match file {
-                            EContentFileType::StaticMesh(_) => todo!(),
-                            EContentFileType::SkeletonMesh(_) => todo!(),
-                            EContentFileType::SkeletonAnimation(_) => todo!(),
-                            EContentFileType::Skeleton(_) => todo!(),
-                            EContentFileType::Texture(texture_file) => {
-                                self.data_source.property_view_data_source.selected_object =
-                                    Some(ESelectedObject::TextureFile(texture_file));
-                            }
-                            EContentFileType::Level(_) => todo!(),
+                    }
+                    content_browser::EClickEventType::CreateMaterial => {
+                        let is_new_content_name_avaliable = self.is_new_content_name_avaliable(
+                            &self.data_source.content_data_source.new_material_name,
+                        );
+                        let content_data_source = &mut self.data_source.content_data_source;
+                        let Some(project_context) = &mut self.project_context else {
+                            return;
+                        };
+                        if is_new_content_name_avaliable {
+                            let material = rs_engine::content::material::Material::new(
+                                url::Url::parse(&format!(
+                                    "content://content/{}",
+                                    &content_data_source.new_material_name
+                                ))
+                                .unwrap(),
+                                url::Url::parse(&format!(
+                                    "asset://material/{}",
+                                    &content_data_source.new_material_name
+                                ))
+                                .unwrap(),
+                            );
+
+                            let material_editor =
+                                crate::material::Material::new(material.asset_url.clone(), {
+                                    let mut snarl = egui_snarl::Snarl::new();
+                                    let node = MaterialNode {
+                                        node_type: EMaterialNodeType::Sink(Default::default()),
+                                    };
+                                    snarl.insert_node(egui::pos2(0.0, 0.0), node);
+                                    snarl
+                                });
+
+                            project_context
+                                .project
+                                .materials
+                                .push(Rc::new(RefCell::new(material_editor)));
+                            project_context
+                                .project
+                                .content
+                                .borrow_mut()
+                                .files
+                                .push(EContentFileType::Material(Rc::new(RefCell::new(material))));
+                        }
+                    }
+                    content_browser::EClickEventType::CreateIBL => {
+                        let is_new_content_name_avaliable = self.is_new_content_name_avaliable(
+                            &self.data_source.content_data_source.new_ibl_name,
+                        );
+                        if is_new_content_name_avaliable {
+                            let new_ibl = rs_engine::content::ibl::IBL::new(
+                                url::Url::parse(&format!(
+                                    "content://content/{}",
+                                    &self.data_source.content_data_source.new_ibl_name
+                                ))
+                                .unwrap(),
+                            );
+                            let new_ibl = SingleThreadMut::new(new_ibl);
+                            let Some(project_context) = &mut self.project_context else {
+                                return;
+                            };
+                            project_context
+                                .project
+                                .content
+                                .borrow_mut()
+                                .files
+                                .push(EContentFileType::IBL(new_ibl));
                         }
                     }
                 }
             }
         }
+    }
+
+    fn is_new_content_name_avaliable(&self, new_name: &str) -> bool {
+        let content_data_source = &self.data_source.content_data_source;
+        let Some(current_folder) = &content_data_source.current_folder else {
+            return false;
+        };
+        let names = {
+            let current_folder = current_folder.borrow();
+            current_folder
+                .files
+                .iter()
+                .map(|x| x.get_name())
+                .collect::<Vec<String>>()
+        };
+        names.contains(&new_name.to_string()) == false
     }
 
     pub fn copy_file_and_log<P: AsRef<Path> + Clone + Debug>(

@@ -4,13 +4,15 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LoggerConfiguration {
     pub is_write_to_file: bool,
+    pub is_flush_before_drop: bool,
 }
 
 pub struct Logger {
     world_file: Arc<RwLock<Option<BufWriter<File>>>>,
+    cfg: LoggerConfiguration,
 }
 
 impl Logger {
@@ -95,7 +97,7 @@ impl Logger {
                 }
             })
             .init();
-        Logger { world_file }
+        Logger { world_file, cfg }
     }
 
     pub fn flush(&self) {
@@ -106,6 +108,14 @@ impl Logger {
                 }
             }
             Err(_) => {}
+        }
+    }
+}
+
+impl Drop for Logger {
+    fn drop(&mut self) {
+        if self.cfg.is_flush_before_drop {
+            self.flush();
         }
     }
 }

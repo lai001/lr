@@ -1,7 +1,10 @@
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
-    global_shaders::skeleton_shading::{SkeletonShadingShader, NUM_MAX_BONE},
+    global_shaders::{
+        global_shader::GlobalShader,
+        skeleton_shading::{SkeletonShadingShader, NUM_MAX_BONE},
+    },
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2},
@@ -60,29 +63,33 @@ impl SkinMeshShadingPipeline {
         texture_format: &TextureFormat,
         pool: &mut BaseRenderPipelinePool,
     ) -> SkinMeshShadingPipeline {
-        let builder = BaseRenderPipelineBuilder::default()
-            .set_shader(&SkeletonShadingShader {})
-            .set_targets(vec![Some(texture_format.clone().into())])
-            .set_depth_stencil(Some(DepthStencilState {
-                depth_compare: CompareFunction::Less,
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }))
-            .set_vertex_buffer_type(Some(VertexBufferType::Interleaved(vec![
-                MeshVertex0::type_layout(),
-                MeshVertex1::type_layout(),
-                MeshVertex2::type_layout(),
-            ])))
-            .set_primitive(Some(PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                polygon_mode: PolygonMode::Fill,
-                ..Default::default()
-            }));
-        let base_render_pipeline =
-            pool.get(device, shader_library, &SkeletonShadingShader {}, &builder);
+        let mut builder = BaseRenderPipelineBuilder::default();
+        builder.targets = vec![Some(ColorTargetState {
+            format: texture_format.clone(),
+            blend: Some(BlendState::ALPHA_BLENDING),
+            write_mask: ColorWrites::ALL,
+        })];
+        builder.shader_name = SkeletonShadingShader {}.get_name();
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Less,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
+        builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
+            MeshVertex0::type_layout(),
+            MeshVertex1::type_layout(),
+            MeshVertex2::type_layout(),
+        ]));
+        builder.primitive = Some(PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            polygon_mode: PolygonMode::Fill,
+            ..Default::default()
+        });
+
+        let base_render_pipeline = pool.get(device, shader_library, &builder);
 
         SkinMeshShadingPipeline {
             base_render_pipeline,
@@ -124,29 +131,24 @@ impl SkinMeshShadingPipeline {
     ) {
         match view_mode {
             EViewModeType::Wireframe => {
-                self.builder = self.builder.clone().set_primitive(Some(PrimitiveState {
+                self.builder.primitive = Some(PrimitiveState {
                     topology: PrimitiveTopology::TriangleList,
                     cull_mode: None,
                     polygon_mode: PolygonMode::Line,
                     ..Default::default()
-                }));
+                });
             }
             EViewModeType::Lit => {
-                self.builder = self.builder.clone().set_primitive(Some(PrimitiveState {
+                self.builder.primitive = Some(PrimitiveState {
                     topology: PrimitiveTopology::TriangleList,
                     cull_mode: None,
                     polygon_mode: PolygonMode::Fill,
                     ..Default::default()
-                }));
+                });
             }
             EViewModeType::Unlit => todo!(),
         }
 
-        self.base_render_pipeline = pool.get(
-            device,
-            shader_library,
-            &SkeletonShadingShader {},
-            &self.builder,
-        );
+        self.base_render_pipeline = pool.get(device, shader_library, &self.builder);
     }
 }

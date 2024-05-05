@@ -7,6 +7,7 @@ pub struct HandleManager {
     buffer_idgenerator: IDGenerator,
     gui_texture_idgenerator: IDGenerator,
     sampler_idgenerator: IDGenerator,
+    material_render_pipeline_idgenerator: IDGenerator,
 }
 
 impl HandleManager {
@@ -17,6 +18,14 @@ impl HandleManager {
             buffer_idgenerator: IDGenerator::new(),
             gui_texture_idgenerator: IDGenerator::new(),
             sampler_idgenerator: IDGenerator::new(),
+            material_render_pipeline_idgenerator: IDGenerator::new(),
+        }
+    }
+
+    pub fn next_material_render_pipeline(&mut self) -> MaterialRenderPipelineHandle {
+        let new_id = self.material_render_pipeline_idgenerator.get_next_id();
+        MaterialRenderPipelineHandle {
+            inner: Arc::new(new_id),
         }
     }
 
@@ -101,6 +110,19 @@ pub struct SamplerHandle {
 }
 
 impl Deref for SamplerHandle {
+    type Target = u64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+#[derive(Eq, Hash, PartialEq, Clone, Debug)]
+pub struct MaterialRenderPipelineHandle {
+    inner: Arc<u64>,
+}
+
+impl Deref for MaterialRenderPipelineHandle {
     type Target = u64;
 
     fn deref(&self) -> &Self::Target {

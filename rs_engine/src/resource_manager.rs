@@ -30,6 +30,7 @@ struct STResourceManager {
     skeleton_animations: HashMap<url::Url, Arc<rs_artifact::skeleton_animation::SkeletonAnimation>>,
     skeletons: HashMap<url::Url, Arc<rs_artifact::skeleton::Skeleton>>,
     mesh_buffers: HashMap<url::Url, Arc<MeshBuffer>>,
+    material_render_pipelines: HashMap<url::Url, crate::handle::MaterialRenderPipelineHandle>,
 }
 
 impl STResourceManager {
@@ -45,6 +46,7 @@ impl STResourceManager {
             skin_meshes: HashMap::new(),
             skeleton_animations: HashMap::new(),
             skeletons: HashMap::new(),
+            material_render_pipelines: HashMap::new(),
         }
     }
 
@@ -295,6 +297,10 @@ impl STResourceManager {
 
     fn next_sampler(&mut self) -> crate::handle::SamplerHandle {
         self.handle_manager.next_sampler()
+    }
+
+    fn next_material_render_pipeline(&mut self) -> crate::handle::MaterialRenderPipelineHandle {
+        self.handle_manager.next_material_render_pipeline()
     }
 
     fn get_texture_by_url(&self, url: &url::Url) -> Option<crate::handle::TextureHandle> {

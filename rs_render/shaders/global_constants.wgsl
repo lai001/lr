@@ -5,6 +5,7 @@ struct GlobalConstants {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
     view_projection: mat4x4<f32>,
+    view_position: vec3<f32>,
     physical_texture_size: f32,
     tile_size: f32,
     is_enable_virtual_texture: i32,

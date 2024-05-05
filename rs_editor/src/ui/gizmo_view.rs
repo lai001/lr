@@ -1,5 +1,5 @@
 use egui::Ui;
-use egui_gizmo::{GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals};
+use transform_gizmo_egui::{math::Transform, *};
 
 pub struct GizmoView {
     pub visuals: GizmoVisuals,
@@ -76,36 +76,74 @@ impl GizmoView {
         visuals
     }
 
-    pub fn interact(&mut self, ui: &mut Ui) -> Option<GizmoResult> {
-        let gizmo = egui_gizmo::Gizmo::new("Gizmo")
-            .view_matrix(self.view_matrix.to_cols_array_2d().into())
-            .projection_matrix(self.projection_matrix.to_cols_array_2d().into())
-            .model_matrix(self.model_matrix.to_cols_array_2d().into())
-            .mode(self.gizmo_mode)
-            .orientation(self.gizmo_orientation)
-            .snapping(false)
-            .snap_angle(0.0f32)
-            .snap_distance(0.0f32)
-            .visuals(self.visuals);
-        let last_gizmo_response = gizmo.interact(ui);
-        if let Some(gizmo_response) = last_gizmo_response {
-            Self::show_gizmo_status(ui, &gizmo_response);
-            Some(gizmo_response)
+    fn interact(&mut self, ui: &mut Ui) -> Option<GizmoResult> {
+        let viewport = ui.clip_rect();
+        let snapping = ui.input(|input| input.modifiers.ctrl);
+        let mut gizmo = Gizmo::default();
+        gizmo.update_config(GizmoConfig {
+            view_matrix: self.view_matrix.as_dmat4().into(),
+            projection_matrix: self.projection_matrix.as_dmat4().into(),
+            viewport,
+            modes: self.gizmo_mode.into(),
+            orientation: self.gizmo_orientation,
+            snapping,
+            ..Default::default()
+        });
+
+        let (scale, rotation, translation) = self.model_matrix.to_scale_rotation_translation();
+        let (scale, rotation, translation) = (
+            scale.as_dvec3(),
+            rotation.as_dquat(),
+            translation.as_dvec3(),
+        );
+        let mut transform =
+            Transform::from_scale_rotation_translation(scale, rotation, translation);
+
+        let last_gizmo_response = gizmo.interact(ui, &[transform]);
+        if let Some((gizmo_result, r_transform)) = last_gizmo_response {
+            Self::show_gizmo_status(ui, &gizmo_result);
+            Some(gizmo_result)
         } else {
             None
         }
     }
 
-    fn show_gizmo_status(ui: &egui::Ui, response: &egui_gizmo::GizmoResult) {
-        let length = glam::Vec3::from(response.value).length();
-
-        let text = match response.mode {
-            GizmoMode::Rotate => format!("{:.1}°, {:.2} rad", length.to_degrees(), length),
-
-            GizmoMode::Translate | GizmoMode::Scale => format!(
-                "dX: {:.2}, dY: {:.2}, dZ: {:.2}",
-                response.value[0], response.value[1], response.value[2]
-            ),
+    fn show_gizmo_status(ui: &egui::Ui, result: &GizmoResult) {
+        let text = match result {
+            GizmoResult::Rotation {
+                axis,
+                delta: _,
+                total,
+                is_view_axis: _,
+            } => {
+                format!(
+                    "Rotation axis: ({:.2}, {:.2}, {:.2}), Angle: {:.2} deg",
+                    axis.x,
+                    axis.y,
+                    axis.z,
+                    total.to_degrees()
+                )
+            }
+            GizmoResult::Translation { delta: _, total } => {
+                format!(
+                    "Translation: ({:.2}, {:.2}, {:.2})",
+                    total.x, total.y, total.z,
+                )
+            }
+            GizmoResult::Scale { total } => {
+                format!("Scale: ({:.2}, {:.2}, {:.2})", total.x, total.y, total.z,)
+            }
+            GizmoResult::Arcball { delta: _, total } => {
+                let (axis, angle) =
+                    glam::dquat(total.v.x, total.v.y, total.v.z, total.s).to_axis_angle();
+                format!(
+                    "Rotation axis: ({:.2}, {:.2}, {:.2}), Angle: {:.2} deg",
+                    axis.x,
+                    axis.y,
+                    axis.z,
+                    angle.to_degrees()
+                )
+            }
         };
 
         let rect = ui.clip_rect();

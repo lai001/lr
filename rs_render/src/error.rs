@@ -17,6 +17,8 @@ pub enum Error {
     ImageDdsCreateDds(image_dds::CreateDdsError),
     DdsFile(ddsfile::Error),
     IO(std::io::Error, Option<String>),
+    Wgpu(wgpu::Error),
+    ValidationError(naga::WithSpan<naga::valid::ValidationError>),
     Other(Option<String>),
 }
 

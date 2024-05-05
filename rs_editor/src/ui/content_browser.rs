@@ -1,5 +1,5 @@
 use crate::content_folder::ContentFolder;
-use egui::{Color32, Context, RichText, Ui};
+use egui::{Color32, Context, RichText, Sense, Ui};
 use rs_engine::content::content_file_type::EContentFileType;
 use std::{cell::RefCell, path::Path, rc::Rc};
 
@@ -8,6 +8,8 @@ pub struct DataSource {
     pub current_folder: Option<Rc<RefCell<ContentFolder>>>,
     pub highlight_file: Option<EContentFileType>,
     pub new_folder_name: String,
+    pub new_material_name: String,
+    pub new_ibl_name: String,
 }
 
 impl DataSource {
@@ -17,12 +19,16 @@ impl DataSource {
             current_folder: None,
             new_folder_name: "Untitled".to_string(),
             highlight_file: None,
+            new_material_name: "Untitled".to_string(),
+            new_ibl_name: "Untitled".to_string(),
         }
     }
 }
 
 pub enum EClickEventType {
     CreateFolder,
+    CreateMaterial,
+    CreateIBL,
     OpenFolder(Rc<RefCell<ContentFolder>>),
     OpenFile(EContentFileType),
     SingleClickFile(EContentFileType),
@@ -45,6 +51,7 @@ pub fn draw(
     let mut click_item: Option<EClickEventType> = None;
     let open = &mut data_source.is_open;
     let current_folder = data_source.current_folder.clone();
+    let highlight = data_source.highlight_file.clone();
     window
         .open(open)
         .vscroll(true)
@@ -71,10 +78,24 @@ pub fn draw(
                                 ui.close_menu();
                             }
                         });
+                        ui.menu_button("Material", |ui| {
+                            ui.text_edit_singleline(&mut data_source.new_material_name);
+                            if ui.button("Ok").clicked() {
+                                click = Some(EClickEventType::CreateMaterial);
+                                ui.close_menu();
+                            }
+                        });
+                        ui.menu_button("IBL", |ui| {
+                            ui.text_edit_singleline(&mut data_source.new_ibl_name);
+                            if ui.button("Ok").clicked() {
+                                click = Some(EClickEventType::CreateIBL);
+                                ui.close_menu();
+                            }
+                        });
                     });
                 });
                 if let Some(current_folder) = current_folder {
-                    click_item = draw_content(ui, asset_folder_path, current_folder);
+                    click_item = draw_content(ui, asset_folder_path, current_folder, highlight);
                 }
                 ui.allocate_space(ui.available_size());
             });
@@ -87,6 +108,7 @@ fn draw_content(
     ui: &mut Ui,
     asset_folder_path: &Path,
     current_folder: Rc<RefCell<ContentFolder>>,
+    highlight_file: Option<EContentFileType>,
 ) -> Option<EClickEventType> {
     let folders = current_folder.borrow().folders.clone();
     let files = current_folder.borrow().files.clone();
@@ -122,84 +144,81 @@ fn draw_content(
                             }
                         });
                     }
-                    EItemType::File(file) => match file {
-                        EContentFileType::StaticMesh(static_mesh) => {
-                            ui.vertical(|ui| {
-                                ui.set_max_height(50.0);
-                                ui.set_max_width(50.0);
-                                ui.image(egui::include_image!(
-                                    "../../../Resource/Editor/static_mesh.svg"
-                                ));
-                                ui.label(static_mesh.borrow().asset_reference_name.clone());
-                            });
-                        }
-                        EContentFileType::SkeletonMesh(skeleton_mesh) => {
-                            ui.vertical(|ui| {
-                                ui.set_max_height(50.0);
-                                ui.set_max_width(50.0);
-                                ui.image(egui::include_image!(
-                                    "../../../Resource/Editor/skeleton_mesh.svg"
-                                ));
-                                ui.label(skeleton_mesh.borrow().get_name().clone());
-                            });
-                        }
-                        EContentFileType::SkeletonAnimation(node_animation) => {
-                            ui.vertical(|ui| {
-                                ui.set_max_height(50.0);
-                                ui.set_max_width(50.0);
-                                ui.image(egui::include_image!(
-                                    "../../../Resource/Editor/animation.svg"
-                                ));
-                                ui.label(node_animation.borrow().get_name().clone());
-                            });
-                        }
-                        EContentFileType::Skeleton(skeleton) => {
-                            ui.vertical(|ui| {
-                                ui.set_max_height(50.0);
-                                ui.set_max_width(50.0);
-                                ui.image(egui::include_image!(
-                                    "../../../Resource/Editor/skeleton.svg"
-                                ));
-                                ui.label(skeleton.borrow().get_name().clone());
-                            });
-                        }
-                        EContentFileType::Texture(texture_file) => {
-                            let id = texture_file.borrow().name.clone();
-                            ui.push_id(id, |ui| {
+                    EItemType::File(file) => {
+                        let name = file.get_name().clone();
+                        let response = ui
+                            .push_id(name.clone(), |ui| {
                                 ui.vertical(|ui| {
                                     ui.set_max_height(50.0);
                                     ui.set_max_width(50.0);
-                                    if let Some(image_reference) =
-                                        texture_file.borrow().image_reference.as_ref()
-                                    {
-                                        let url = format!(
-                                            "file://{}",
-                                            asset_folder_path
-                                                .join(image_reference)
-                                                .to_str()
-                                                .unwrap()
-                                        );
-                                        ui.image(url);
+                                    if let Some(highlight_file) = highlight_file.as_ref() {
+                                        if highlight_file.get_url() == file.get_url() {
+                                            ui.painter().rect_filled(
+                                                ui.available_rect_before_wrap(),
+                                                0.0,
+                                                Color32::LIGHT_BLUE,
+                                            );
+                                        }
                                     }
-                                    let response = ui.button(texture_file.borrow().name.clone());
-                                    if response.clicked() {
-                                        click =
-                                            Some(EClickEventType::SingleClickFile(file.clone()));
+                                    match file {
+                                        EContentFileType::StaticMesh(static_mesh) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/static_mesh.svg"
+                                            ));
+                                        }
+                                        EContentFileType::SkeletonMesh(skeleton_mesh) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/skeleton_mesh.svg"
+                                            ));
+                                        }
+                                        EContentFileType::SkeletonAnimation(skeleton_animation) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/animation.svg"
+                                            ));
+                                        }
+                                        EContentFileType::Skeleton(skeleton) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/skeleton.svg"
+                                            ));
+                                        }
+                                        EContentFileType::Texture(texture) => {
+                                            if let Some(image_reference) =
+                                                texture.borrow().image_reference.as_ref()
+                                            {
+                                                let url = format!(
+                                                    "file://{}",
+                                                    asset_folder_path
+                                                        .join(image_reference)
+                                                        .to_str()
+                                                        .unwrap()
+                                                );
+                                                ui.image(url);
+                                            }
+                                        }
+                                        EContentFileType::Level(Level) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/level.svg"
+                                            ));
+                                        }
+                                        EContentFileType::Material(material) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/material.svg"
+                                            ));
+                                        }
+                                        EContentFileType::IBL(ibl) => {}
                                     }
-                                    if response.double_clicked() {
-                                        click = Some(EClickEventType::OpenFile(file.clone()));
-                                    }
-                                });
-                            });
+                                    let _ = ui.button(name.clone());
+                                })
+                            })
+                            .response;
+                        let response = response.interact(Sense::click_and_drag());
+                        if response.clicked() {
+                            click = Some(EClickEventType::SingleClickFile(file.clone()));
                         }
-                        EContentFileType::Level(level) => {
-                            ui.vertical(|ui| {
-                                ui.set_max_height(50.0);
-                                ui.set_max_width(50.0);
-                                ui.label(level.borrow().get_name().clone());
-                            });
+                        if response.double_clicked() {
+                            click = Some(EClickEventType::OpenFile(file.clone()));
                         }
-                    },
+                    }
                 }
             }
         });

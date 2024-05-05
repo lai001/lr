@@ -1,16 +1,17 @@
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
+use crate::ui::content_item_property_view::ContentItemPropertyView;
 use crate::ui::gizmo_view::GizmoView;
+use crate::ui::material_view::MaterialView;
 use crate::ui::top_menu::TopMenu;
 use crate::ui::{
-    asset_view, console_cmds_view, content_browser, gizmo_settings, level_view, property_view,
-    top_menu,
+    asset_view, console_cmds_view, content_browser, gizmo_settings, level_view, top_menu,
 };
 use egui::*;
-use egui_gizmo::GizmoResult;
 use rs_engine::input_mode::EInputMode;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
+use transform_gizmo_egui::GizmoResult;
 
 #[derive(Debug)]
 pub struct ClickMeshItem {
@@ -24,7 +25,6 @@ pub struct ClickEvent {
     pub mesh_item: Option<ClickMeshItem>,
     pub click_aseet: Option<asset_view::EClickItemType>,
     pub menu_event: Option<top_menu::EClickEventType>,
-    pub property_event: Option<crate::ui::property_view::EClickEventType>, //HashMap<String, EValueModifierType>,
     pub content_browser_event: Option<content_browser::EClickEventType>,
     pub gizmo_result: Option<GizmoResult>,
 }
@@ -35,6 +35,9 @@ pub struct EditorUI {
     asset_folder_path: Option<PathBuf>,
     top_menu: TopMenu,
     gizmo_view: GizmoView,
+    pub material_view: MaterialView,
+    pub egui_context: Context,
+    pub content_item_property_view: ContentItemPropertyView,
 }
 
 impl EditorUI {
@@ -60,6 +63,9 @@ impl EditorUI {
                 new_project_name: String::new(),
             },
             gizmo_view: GizmoView::default(),
+            material_view: MaterialView::new(),
+            egui_context: context.clone(),
+            content_item_property_view: ContentItemPropertyView::new(),
         }
     }
 
@@ -89,50 +95,7 @@ impl EditorUI {
             data_source.current_asset_folder.as_ref(),
             data_source.highlight_asset_file.as_ref(),
         );
-        let window = Self::new_window("Property", data_source.input_mode);
-        click.property_event = property_view::draw(
-            window,
-            context,
-            &mut data_source.property_view_data_source.is_open,
-            &mut data_source.property_view_data_source.selected_object,
-        );
-        if let Some(selected_actor) = &data_source.property_view_data_source.selected_actor {
-            let mut selected_actor = selected_actor.as_ref().borrow_mut();
-            match &mut selected_actor.scene_node.component {
-                rs_engine::scene_node::EComponentType::SceneComponent(component) => {
-                    click.gizmo_result = self.gizmo_view.draw(
-                        context,
-                        data_source.camera_view_matrix,
-                        data_source.camera_projection_matrix,
-                        component.transformation,
-                    );
-                }
-                rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
-                    click.gizmo_result = self.gizmo_view.draw(
-                        context,
-                        data_source.camera_view_matrix,
-                        data_source.camera_projection_matrix,
-                        component.transformation,
-                    );
-                }
-                rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                    click.gizmo_result = self.gizmo_view.draw(
-                        context,
-                        data_source.camera_view_matrix,
-                        data_source.camera_projection_matrix,
-                        component.transformation,
-                    );
-                }
-            }
-            // if let Some(model_matrix) = node.get_model_matrix() {
-            //     click.gizmo_result = self.gizmo_view.draw(
-            //         context,
-            //         data_source.camera_view_matrix,
-            //         data_source.camera_projection_matrix,
-            //         model_matrix,
-            //     );
-            // }
-        }
+
         let window = Self::new_window("Gizmo Settings", data_source.input_mode);
         gizmo_settings::draw(
             window,
@@ -170,7 +133,23 @@ impl EditorUI {
                 &mut console_cmds.borrow_mut(),
             );
         }
+
+        Self::new_window("Property", data_source.input_mode)
+            .open(&mut data_source.is_content_item_property_view_open)
+            .vscroll(true)
+            .hscroll(true)
+            .resizable(true)
+            .default_size([250.0, 500.0])
+            .show(context, |ui| {
+                self.content_item_property_view.draw(ui);
+            });
+
         click
+    }
+
+    pub fn draw_material_view(&mut self, context: &Context, data_source: &mut DataSource) {
+        self.material_view
+            .draw(data_source.current_open_material.clone(), context);
     }
 
     fn model_hierarchy_window(

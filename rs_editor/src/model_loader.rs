@@ -682,6 +682,7 @@ impl ModelLoader {
                     .map(|x| x.borrow().url.clone())
                     .collect(),
                 animation_url,
+                None,
                 glam::Mat4::IDENTITY,
             );
 

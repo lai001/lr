@@ -7,6 +7,7 @@ use rs_artifact::{
     skeleton_animation::SkeletonAnimation,
     skin_mesh::SkinMesh,
 };
+use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
@@ -31,6 +32,7 @@ struct SkeletonMeshComponentRuntime {
     skeleton: Option<Arc<Skeleton>>,
     skeleton_animation: Option<Arc<SkeletonAnimation>>,
     skin_meshes: Vec<Arc<SkinMesh>>,
+    material: Option<SingleThreadMutType<crate::content::material::Material>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -39,6 +41,7 @@ pub struct SkeletonMeshComponent {
     pub skeleton_url: Option<url::Url>,
     pub skeleton_mesh_urls: Vec<url::Url>,
     pub animation_url: Option<url::Url>,
+    pub material_url: Option<url::Url>,
     pub transformation: glam::Mat4,
     #[serde(skip)]
     run_time: Option<SkeletonMeshComponentRuntime>,
@@ -50,6 +53,7 @@ impl SkeletonMeshComponent {
         skeleton_url: Option<url::Url>,
         skeleton_mesh_urls: Vec<url::Url>,
         animation_url: Option<url::Url>,
+        material_url: Option<url::Url>,
         transformation: glam::Mat4,
     ) -> SkeletonMeshComponent {
         SkeletonMeshComponent {
@@ -58,6 +62,7 @@ impl SkeletonMeshComponent {
             skeleton_mesh_urls,
             animation_url,
             transformation,
+            material_url,
             run_time: None,
         }
     }
@@ -73,7 +78,6 @@ impl SkeletonMeshComponent {
 
         if let Some(skeleton_url) = &self.skeleton_url {
             for file in files.iter() {
-                log::trace!("{:?}", file);
                 if let EContentFileType::Skeleton(content_skeleton) = file {
                     if &content_skeleton.borrow().url == skeleton_url {
                         skeleton =
@@ -96,11 +100,25 @@ impl SkeletonMeshComponent {
             }
         }
 
+        let material = if let Some(material_url) = &self.material_url {
+            files.iter().find_map(|x| {
+                if let EContentFileType::Material(content_material) = x {
+                    if &content_material.borrow().url == material_url {
+                        return Some(content_material.clone());
+                    }
+                }
+                None
+            })
+        } else {
+            None
+        };
+
         self.run_time = Some(SkeletonMeshComponentRuntime {
             draw_objects: HashMap::new(),
             skeleton: skeleton.clone(),
             skeleton_animation,
             skin_meshes: vec![],
+            material: material.clone(),
         });
 
         for skeleton_mesh in &self.skeleton_mesh_urls {
@@ -132,14 +150,28 @@ impl SkeletonMeshComponent {
                 model = skeleton_mesh_hierarchy_node.transformation;
             }
 
-            let mut draw_object = engine.create_draw_object_from_skin_mesh(
-                &skin_mesh.vertexes,
-                &skin_mesh.indexes,
-                Some(skin_mesh.name.clone()),
-            );
+            let mut draw_object;
+            if let Some(material) = material.clone() {
+                draw_object = engine.create_material_draw_object_from_skin_mesh(
+                    &skin_mesh.vertexes,
+                    &skin_mesh.indexes,
+                    Some(skin_mesh.name.clone()),
+                    material,
+                );
+            } else {
+                draw_object = engine.create_draw_object_from_skin_mesh(
+                    &skin_mesh.vertexes,
+                    &skin_mesh.indexes,
+                    Some(skin_mesh.name.clone()),
+                );
+            }
+
             match &mut draw_object {
                 EDrawObjectType::Static(_) => panic!(),
                 EDrawObjectType::Skin(draw_object) => {
+                    draw_object.constants.model = model;
+                }
+                EDrawObjectType::SkinMaterial(draw_object) => {
                     draw_object.constants.model = model;
                 }
             }
@@ -300,6 +332,9 @@ impl SkeletonMeshComponent {
             match draw_object {
                 EDrawObjectType::Static(_) => panic!(),
                 EDrawObjectType::Skin(draw_object) => {
+                    draw_object.constants.bones.copy_from_slice(&bones);
+                }
+                EDrawObjectType::SkinMaterial(draw_object) => {
                     draw_object.constants.bones.copy_from_slice(&bones);
                 }
             }

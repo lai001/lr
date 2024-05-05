@@ -24,6 +24,7 @@ pub struct Project {
     pub project_name: String,
     pub settings: Rc<RefCell<Settings>>,
     pub endian_type: EEndianType,
+    pub materials: Vec<Rc<RefCell<crate::material::Material>>>,
     pub content: Rc<RefCell<crate::content_folder::ContentFolder>>,
 }
 
@@ -65,6 +66,7 @@ impl Project {
             endian_type: EEndianType::Little,
             settings: Rc::new(RefCell::new(Settings::default())),
             content,
+            materials: vec![],
         };
         let json_str = serde_json::ser::to_string_pretty(&empty_project)?;
         let mut file = std::fs::File::create(project_file_path)?;
@@ -120,7 +122,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-egui = { version = "0.27.0" }
+egui = { version = "0.27.2" }
 rs_engine = { path = "@engine_path@/rs_engine" }
 
 [lib]

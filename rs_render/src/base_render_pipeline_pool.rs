@@ -1,9 +1,7 @@
 use crate::base_render_pipeline::BaseRenderPipeline;
 use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
-use crate::global_shaders::global_shader::GlobalShader;
 use crate::shader_library::ShaderLibrary;
 use crate::VertexBufferType;
-use rs_shader_compiler::pre_process::ShaderDescription;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::{collections::HashMap, hash::Hash};
@@ -11,59 +9,14 @@ use wgpu::{ColorTargetState, DepthStencilState, Device, MultisampleState, Primit
 
 #[derive(PartialEq, Clone, Default)]
 pub struct BaseRenderPipelineBuilder {
-    shader: ShaderDescription,
-    targets: Vec<Option<ColorTargetState>>,
-    depth_stencil: Option<DepthStencilState>,
-    multisample: Option<MultisampleState>,
-    multiview: Option<NonZeroU32>,
-    primitive: Option<PrimitiveState>,
-    vertex_buffer_type: Option<VertexBufferType>,
-    hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
-}
-
-impl BaseRenderPipelineBuilder {
-    pub fn set_targets(mut self, targets: Vec<Option<ColorTargetState>>) -> Self {
-        self.targets = targets;
-        self
-    }
-
-    pub fn set_depth_stencil(mut self, depth_stencil: Option<DepthStencilState>) -> Self {
-        self.depth_stencil = depth_stencil;
-        self
-    }
-
-    pub fn set_multisample(mut self, multisample: Option<MultisampleState>) -> Self {
-        self.multisample = multisample;
-        self
-    }
-
-    pub fn set_multiview(mut self, multiview: Option<NonZeroU32>) -> Self {
-        self.multiview = multiview;
-        self
-    }
-
-    pub fn set_primitive(mut self, primitive: Option<PrimitiveState>) -> Self {
-        self.primitive = primitive;
-        self
-    }
-
-    pub fn set_vertex_buffer_type(mut self, vertex_buffer_type: Option<VertexBufferType>) -> Self {
-        self.vertex_buffer_type = vertex_buffer_type;
-        self
-    }
-
-    pub fn set_hooks(
-        mut self,
-        hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
-    ) -> Self {
-        self.hooks = hooks;
-        self
-    }
-
-    pub fn set_shader(mut self, global_shader: &impl GlobalShader) -> Self {
-        self.shader = global_shader.get_shader_description();
-        self
-    }
+    pub shader_name: String,
+    pub targets: Vec<Option<ColorTargetState>>,
+    pub depth_stencil: Option<DepthStencilState>,
+    pub multisample: Option<MultisampleState>,
+    pub multiview: Option<NonZeroU32>,
+    pub primitive: Option<PrimitiveState>,
+    pub vertex_buffer_type: Option<VertexBufferType>,
+    pub hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
 }
 
 impl Hash for BaseRenderPipelineBuilder {
@@ -105,23 +58,12 @@ impl BaseRenderPipelinePool {
         &mut self,
         device: &Device,
         shader_library: &ShaderLibrary,
-        global_shader: &impl GlobalShader,
         builder: &BaseRenderPipelineBuilder,
     ) -> Arc<BaseRenderPipeline> {
         if !self.base_render_pipelines.contains_key(builder) {
-            let base_render_pipeline = BaseRenderPipeline::new(
-                device,
-                shader_library,
-                global_shader,
-                &builder.targets,
-                builder.depth_stencil.clone(),
-                builder.multisample,
-                builder.multiview,
-                builder.primitive,
-                builder.vertex_buffer_type.clone(),
-                builder.hooks.clone(),
-            );
-            log::trace!("Cache render pipeline: {}", global_shader.get_name());
+            let base_render_pipeline =
+                BaseRenderPipeline::new(device, shader_library, builder.clone());
+            log::trace!("Cache render pipeline: {}", builder.shader_name);
             self.base_render_pipelines
                 .insert(builder.clone(), Arc::new(base_render_pipeline));
         }
@@ -129,5 +71,10 @@ impl BaseRenderPipelinePool {
             .get(builder)
             .expect("Not null")
             .clone()
+    }
+
+    pub fn invalid_shader(&mut self, shader_name: impl AsRef<str>) {
+        self.base_render_pipelines
+            .retain(|k, v| k.shader_name != shader_name.as_ref().to_string());
     }
 }

@@ -6,6 +6,8 @@ pub mod editor;
 pub mod editor_context;
 pub mod editor_ui;
 pub mod error;
+pub mod material;
+pub mod material_resolve;
 pub mod model_loader;
 pub mod project;
 pub mod project_context;

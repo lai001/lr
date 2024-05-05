@@ -1,7 +1,4 @@
-use crate::{
-    project_context::RecentProjects,
-    ui::{content_browser, property_view},
-};
+use crate::{project_context::RecentProjects, ui::content_browser};
 use rs_core_minimal::settings::Settings;
 use rs_engine::{console_cmd::ConsoleCmd, file_type::EFileType, input_mode::EInputMode};
 use rs_foundation::new::SingleThreadMutType;
@@ -61,7 +58,6 @@ pub struct DataSource {
     pub camera_motion_speed: f32,
     pub camera_view_matrix: glam::Mat4,
     pub camera_projection_matrix: glam::Mat4,
-    pub property_view_data_source: property_view::DataSource,
     pub content_data_source: content_browser::DataSource,
     pub project_settings: Option<Rc<RefCell<Settings>>>,
     pub project_settings_open: bool,
@@ -71,6 +67,8 @@ pub struct DataSource {
     pub view_mode: EViewModeType,
     pub console_cmds: Option<Rc<RefCell<HashMap<String, SingleThreadMutType<ConsoleCmd>>>>>,
     pub is_console_cmds_view_open: bool,
+    pub current_open_material: Option<SingleThreadMutType<crate::material::Material>>,
+    pub is_content_item_property_view_open: bool,
 }
 
 impl DataSource {
@@ -93,7 +91,6 @@ impl DataSource {
             camera_motion_speed: 0.1,
             current_asset_folder: None,
             highlight_asset_file: None,
-            property_view_data_source: property_view::DataSource::new(),
             camera_view_matrix: glam::Mat4::IDENTITY,
             camera_projection_matrix: glam::Mat4::IDENTITY,
             project_settings: None,
@@ -105,6 +102,8 @@ impl DataSource {
             view_mode: EViewModeType::Lit,
             console_cmds: None,
             is_console_cmds_view_open: false,
+            current_open_material: None,
+            is_content_item_property_view_open: false,
         }
     }
 

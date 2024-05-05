@@ -64,9 +64,20 @@ pub struct Reflection {
 }
 
 impl Reflection {
-    pub fn new(shader_code: &str) -> crate::error::Result<Reflection> {
+    pub fn new(shader_code: &str, is_enable_validation: bool) -> crate::error::Result<Reflection> {
         let module = front::wgsl::parse_str(&shader_code)
             .map_err(|err| crate::error::Error::ShaderReflection(err, None))?;
+
+        if is_enable_validation {
+            let mut validator = naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            );
+            validator
+                .validate(&module)
+                .map_err(|err| crate::error::Error::ValidationError(err))?;
+        }
+
         let render_entry_points = Self::extract_render_entry_point(&module);
         let cs_entry_point = Self::extract_compute_entry_point(&module);
         let pipeline_type: EPipelineType;

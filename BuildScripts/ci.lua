@@ -17,7 +17,7 @@ do
         os.cd(path.join(engine_root_dir, "rs_editor"))
         os.exec("cargo build --package rs_editor --bin rs_editor --features editor --features renderdoc")
         os.exec("cargo build --package rs_editor --bin rs_editor --features editor --features renderdoc --release")
-        os.exec("./target/release/rs_editor.exe -p")
+        os.exec("./target/release/rs_editor.exe -c")
         os.cd(path.join(engine_root_dir, "rs_desktop_standalone"))
         os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --features standalone")
         os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --features standalone --release")

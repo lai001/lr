@@ -13,4 +13,5 @@ editor = []
 dunce = "1.0.4"
 path-slash = "0.1.4"
 serde = { version = "1.0.193", features = ["derive", "rc"] }
-glam = { version = "0.22.0" }
+glam = { version = "0.27.0", features = ["mint", "serde"] }
+md-5 = { version = "0.10.6" }

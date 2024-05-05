@@ -11,10 +11,10 @@ default = ["standalone"]
 standalone = ["rs_render/standalone", "rs_engine/standalone"]
 
 [target.'cfg(target_os = "android")'.dependencies]
-glam = { version = "0.22.0" }
+glam = { version = "0.27.0", features = ["mint", "serde"] }
 log = "0.4.17"
 env_logger = "0.10.1"
-egui = "0.27.0"
+egui = "0.27.2"
 url = { version = "2.5.0", features = ["serde"]}
 jni = "0.21.1"
 jni_fn = "0.1.2"

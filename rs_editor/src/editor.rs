@@ -133,7 +133,15 @@ impl WindowsManager {
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long)]
-    prepreocess_shader: bool,
+    cmd: bool,
+    #[arg(long)]
+    input_file: Option<std::path::PathBuf>,
+    #[arg(short, long)]
+    definitions: Option<Vec<String>>,
+    #[arg(long)]
+    include_dirs: Option<Vec<std::path::PathBuf>>,
+    #[arg(short, long)]
+    output_file: Option<std::path::PathBuf>,
 }
 
 pub struct Editor {}
@@ -151,32 +159,64 @@ impl Editor {
     }
 
     fn parse_args(&mut self) -> bool {
-        rs_foundation::change_working_directory();
         let args = Args::parse();
-        if args.prepreocess_shader {
-            let result = EditorContext::prepreocess_shader();
-            let output_path = rs_core_minimal::file_manager::get_engine_root_dir()
-                .join("rs_editor/target/shaders");
-            for entry in walkdir::WalkDir::new(output_path) {
-                let entry = entry.unwrap();
-                if entry.path().is_file() {
+        if !args.cmd {
+            return true;
+        }
+        rs_foundation::change_working_directory();
+        let _ = rs_engine::logger::Logger::new(rs_engine::logger::LoggerConfiguration {
+            is_write_to_file: false,
+            is_flush_before_drop: true,
+        });
+        match args.input_file {
+            Some(input_file) => {
+                let result: anyhow::Result<String> = (|| {
+                    let include_dirs = args.include_dirs.unwrap_or(vec![]);
+                    let definitions = args.definitions.unwrap_or(vec![]);
+
+                    let result = rs_shader_compiler::pre_process::pre_process2(
+                        &input_file,
+                        include_dirs.iter(),
+                        definitions.iter(),
+                    )?;
+                    let _ = naga::front::wgsl::parse_str(&result)?;
+                    match args.output_file {
+                        Some(output_file) => {
+                            let _ = std::fs::write(output_file, result.clone())?;
+                        }
+                        None => {}
+                    }
+                    Ok(result)
+                })();
+                match result {
+                    Ok(result) => log::trace!("{}", result),
+                    Err(err) => log::error!("{}", err),
+                }
+            }
+            None => {
+                let result = EditorContext::prepreocess_shader();
+                let output_path = rs_core_minimal::file_manager::get_engine_root_dir()
+                    .join("rs_editor/target/shaders");
+                for entry in walkdir::WalkDir::new(output_path) {
+                    let entry = entry.unwrap();
+                    if !entry.path().is_file() {
+                        continue;
+                    }
                     let path = entry.path();
-                    println!(
-                        "{:?}",
-                        std::env::current_dir()
-                            .unwrap()
-                            .join(path)
-                            .canonicalize_slash()
-                    );
+                    let path = std::env::current_dir()
+                        .unwrap()
+                        .join(path)
+                        .canonicalize_slash()
+                        .unwrap();
+                    log::trace!("{:?}", &path);
                     let shader_source = std::fs::read_to_string(path).unwrap();
                     let result = naga::front::wgsl::parse_str(&shader_source);
                     let _ = result.unwrap();
                 }
+                let _ = result.unwrap();
             }
-            let _ = result.unwrap();
-            return false;
         }
-        true
+        return false;
     }
 
     fn run_app(self) {

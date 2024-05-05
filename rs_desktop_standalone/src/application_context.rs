@@ -35,6 +35,7 @@ impl ApplicationContext {
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
+            is_flush_before_drop: false,
         });
         let window_size = window.inner_size();
         let scale_factor = 1.0f32;

@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
-pub struct EGUIRenderer {
-    egui_wgpu_renderer: egui_wgpu::Renderer,
-    screen_descriptors: HashMap<isize, egui_wgpu::ScreenDescriptor>,
-}
-
 #[derive(Clone)]
 pub struct EGUIRenderOutput {
     pub window_id: isize,
     pub textures_delta: egui::TexturesDelta,
     pub clipped_primitives: Vec<egui::ClippedPrimitive>,
+}
+
+pub struct EGUIRenderer {
+    egui_wgpu_renderer: egui_wgpu::Renderer,
+    screen_descriptors: HashMap<isize, egui_wgpu::ScreenDescriptor>,
 }
 
 impl EGUIRenderer {
@@ -32,6 +32,18 @@ impl EGUIRenderer {
         &mut self,
     ) -> &mut HashMap<isize, egui_wgpu::ScreenDescriptor> {
         &mut self.screen_descriptors
+    }
+
+    pub fn add_screen_descriptor(
+        &mut self,
+        window_id: isize,
+        screen_descriptor: egui_wgpu::ScreenDescriptor,
+    ) {
+        self.screen_descriptors.insert(window_id, screen_descriptor);
+    }
+
+    pub fn remove_screen_descriptor(&mut self, window_id: isize) {
+        self.screen_descriptors.remove(&window_id);
     }
 
     pub fn change_size(&mut self, window_id: isize, width: u32, height: u32) {
