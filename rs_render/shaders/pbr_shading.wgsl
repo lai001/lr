@@ -5,7 +5,7 @@
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
-    @location(1) tex_coord: vec2<f32>,
+    @location(1) tex_coord0: vec2<f32>,
     @location(2) vertex_color: vec4<f32>,
     @location(3) normal: vec3<f32>,
     @location(4) tangent: vec3<f32>,
@@ -42,7 +42,7 @@ struct VertexOutput {
     @builtin(position) position: vec4<f32>,
 	@location(0) frag_position: vec3<f32>,
 	@location(1) normal: vec3<f32>,
-	@location(2) tex_coord: vec2<f32>,
+	@location(2) tex_coord0: vec2<f32>,
 	@location(3) vertex_color: vec4<f32>,
 	@location(4) tbn_t: vec3<f32>,
 	@location(5) tbn_b: vec3<f32>,
@@ -83,6 +83,10 @@ struct ShadingInfo {
 @group(0) @binding(6) var irradiance_texture: texture_cube<f32>;
 
 @group(1) @binding(0) var<uniform> constants: Constants;
+
+#ifdef USER_TEXTURES
+    USER_TEXTURES
+#endif
 
 fn D(N: vec3<f32>, H: vec3<f32>, a: f32) -> f32 {
     var a2 = a * a;
@@ -195,7 +199,7 @@ fn get_normal(i_normal: vec3<f32>, tbn: mat3x3<f32>) -> vec3<f32> {
     return normal_w;
 }
 
-fn get_user_attributes() -> UserAttributes {
+fn get_user_attributes(vertex_output: VertexOutput) -> UserAttributes {
     var user_attributes: UserAttributes;
 #ifdef MATERIAL_SHADER_CODE
     MATERIAL_SHADER_CODE
@@ -241,7 +245,7 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
     let mvp = global_constants.view_projection * constants.model;
     var vertex_output: VertexOutput;
     vertex_output.position = mvp * vec4<f32>(vertex_in.position, 1.0);
-    vertex_output.tex_coord = vertex_in.tex_coord;
+    vertex_output.tex_coord0 = vertex_in.tex_coord0;
     vertex_output.vertex_color = vertex_in.vertex_color;
     vertex_output.frag_position = (constants.model * vec4<f32>(vertex_in.position, 1.0)).xyz;
 
@@ -265,7 +269,7 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
 @fragment fn fs_main(vertex_output: VertexOutput) -> FragmentOutput {
     var fragment_output: FragmentOutput;
 
-    var user_attributes: UserAttributes = get_user_attributes();
+    var user_attributes: UserAttributes = get_user_attributes(vertex_output);
     var shading_info = get_shading_info(user_attributes, vertex_output);
 
     var ibl_color = ibl_light(shading_info, irradiance_texture, pre_filter_cube_map_texture, brdflut_texture);

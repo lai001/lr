@@ -1,13 +1,19 @@
 use crate::ui::material_view::{EMaterialNodeType, MaterialNode};
 use egui_snarl::{InPinId, NodeId, OutPinId, Snarl};
+use rs_artifact::material::TextureBinding;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
 };
 
-struct ResolveResult {
+struct ResolveResultInternal {
     lines: Vec<String>,
-    map_texture_names: HashMap<url::Url, String>,
+}
+
+#[derive(Clone)]
+pub struct ResolveResult {
+    pub shader_code: String,
+    pub map_textures: HashSet<TextureBinding>,
 }
 
 #[derive(Debug, Default)]
@@ -54,10 +60,16 @@ impl ResolveContext {
     }
 }
 
-pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<String> {
+pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<ResolveResult> {
+    let mut map_textures: HashSet<TextureBinding> = HashSet::new();
     let resolve_context = ResolveContext::from_snarl(snarl);
     let attribute_node_id = egui_snarl::NodeId(0);
-    let result = resolve_attribute_node(attribute_node_id, &resolve_context, snarl)?;
+    let result = resolve_attribute_node(
+        attribute_node_id,
+        &resolve_context,
+        snarl,
+        &mut map_textures,
+    )?;
     let mut lines: Vec<String> = vec![];
     for resolve_result in result.iter() {
         lines.extend_from_slice(&resolve_result.lines);
@@ -67,6 +79,7 @@ pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<String> {
     let include_dirs: Vec<PathBuf> = vec![];
     let definitions: Vec<String> = vec![
         "MATERIAL_SHADER_CODE=@MATERIAL_SHADER_CODE@".to_string(),
+        "USER_TEXTURES=@USER_TEXTURES@".to_string(),
         format!(
             "SKELETON_MAX_BONES={}",
             rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE
@@ -77,8 +90,24 @@ pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<String> {
         include_dirs.iter(),
         definitions.iter(),
     )?;
+
     let shader_code = shader_code.replace("@MATERIAL_SHADER_CODE@", &material_shader_code);
-    Ok(shader_code)
+
+    let mut texture_uniform_code = "".to_string();
+    for map_texture in map_textures.clone() {
+        let name = map_texture.get_texture_bind_name();
+        let line = format!(
+            "@group({}) @binding({}) var {}: texture_2d<f32>;\n",
+            map_texture.group, map_texture.binding, name
+        );
+        texture_uniform_code += &line;
+    }
+    let shader_code = shader_code.replace("@USER_TEXTURES@", &texture_uniform_code);
+
+    Ok(ResolveResult {
+        shader_code,
+        map_textures,
+    })
 }
 
 fn node_var_name(node_id: NodeId) -> String {
@@ -89,8 +118,9 @@ fn resolve_attribute_node(
     attribute_node_id: NodeId,
     resolve_context: &ResolveContext,
     snarl: &Snarl<MaterialNode>,
-) -> anyhow::Result<Vec<ResolveResult>> {
-    let mut result: Vec<ResolveResult> = Vec::new();
+    map_textures: &mut HashSet<TextureBinding>,
+) -> anyhow::Result<Vec<ResolveResultInternal>> {
+    let mut result: Vec<ResolveResultInternal> = Vec::new();
 
     macro_rules! resolve_attribute {
         ($name:ident, $input:literal, $convert_type:ident) => {{
@@ -109,6 +139,7 @@ fn resolve_attribute_node(
                 &attribute_value_literal,
                 resolve_context,
                 snarl,
+                map_textures,
             )?;
             result.push(value);
         }};
@@ -132,18 +163,18 @@ fn resolve_attribute(
     attribute_value_literal: &str,
     resolve_context: &ResolveContext,
     snarl: &Snarl<MaterialNode>,
-) -> anyhow::Result<ResolveResult> {
+    map_textures: &mut HashSet<TextureBinding>,
+) -> anyhow::Result<ResolveResultInternal> {
     let node_io_info = resolve_context
         .nodes
         .get(&attribute_node_id)
         .expect("This node should not be null");
-
     let mut lines = node_io_info
         .inputs
         .get(&input)
         .and_then(|x| {
             let mut lines: Vec<String> = vec![];
-            walk_resolve_node(x.node, resolve_context, snarl, &mut lines);
+            walk_resolve_node(x.node, resolve_context, snarl, &mut lines, map_textures);
             lines.reverse();
             Some(lines)
         })
@@ -159,10 +190,7 @@ fn resolve_attribute(
         .unwrap_or_else(|| attribute_value_literal.to_string());
 
     lines.push(format!("user_attributes.{} = {};", name, right));
-    Ok(ResolveResult {
-        lines,
-        map_texture_names: HashMap::new(),
-    })
+    Ok(ResolveResultInternal { lines })
 }
 
 fn walk_resolve_node(
@@ -170,17 +198,23 @@ fn walk_resolve_node(
     resolve_context: &ResolveContext,
     snarl: &Snarl<MaterialNode>,
     lines: &mut Vec<String>,
+    map_textures: &mut HashSet<TextureBinding>,
 ) {
     let node = snarl.get_node(node_id).expect("Not null");
-    let line = resolve_node(node_id, node, resolve_context);
+    let line = resolve_node(node_id, node, resolve_context, map_textures);
     lines.push(line);
     let node_io_info = resolve_context.nodes.get(&node_id).unwrap();
     for (_, out_pin_id) in &node_io_info.inputs {
-        walk_resolve_node(out_pin_id.node, resolve_context, snarl, lines);
+        walk_resolve_node(out_pin_id.node, resolve_context, snarl, lines, map_textures);
     }
 }
 
-fn resolve_node(node_id: NodeId, node: &MaterialNode, resolve_context: &ResolveContext) -> String {
+fn resolve_node(
+    node_id: NodeId,
+    node: &MaterialNode,
+    resolve_context: &ResolveContext,
+    map_textures: &mut HashSet<TextureBinding>,
+) -> String {
     let var_name = node_var_name(node_id);
     match &node.node_type {
         EMaterialNodeType::Add(v1, v2) => {
@@ -200,21 +234,33 @@ fn resolve_node(node_id: NodeId, node: &MaterialNode, resolve_context: &ResolveC
             format!("var {} = {} + {};", var_name, part_1, part_2)
         }
         EMaterialNodeType::Texture(texture_url) => {
-            if let Some(_) = texture_url {
+            if let Some(texture_url) = texture_url {
                 let inputs = &resolve_context
                     .nodes
                     .get(&node_id)
                     .expect("This node should not be null")
                     .inputs;
-
+                let binding = TextureBinding {
+                    group: 2,
+                    binding: map_textures.len(),
+                    texture_url: texture_url.clone(),
+                };
+                let texture_var_name: String;
+                if let Some(exist) = map_textures.iter().find(|x| &x.texture_url == texture_url) {
+                    texture_var_name = exist.get_texture_bind_name();
+                } else {
+                    texture_var_name = binding.get_texture_bind_name();
+                    map_textures.insert(binding);
+                }
                 inputs.get(&0).and_then(|out_pin_id| {
                     Some(format!(
-                        "var {} = textureSample(texture, base_color_sampler, {});",
+                        "var {} = textureSample({}, base_color_sampler, {}).xyz;",
                         var_name,
+                        texture_var_name,
                         node_var_name(out_pin_id.node)
                     ))
                 }).unwrap_or_else(|| {
-                    format!("var {} = textureSample(texture, base_color_sampler, vertex_output.tex_coord0);", var_name)
+                    format!("var {} = textureSample({}, base_color_sampler, vertex_output.tex_coord0).xyz;", var_name, texture_var_name)
                 })
             } else {
                 format!("var {} = vec4<f32>(0.0);", var_name)

@@ -434,11 +434,16 @@ impl EditorContext {
 
                 if let Some(event) = &self.editor_ui.material_view.event {
                     match event {
-                        material_view::EEventType::Update(material, shader_code) => {
-                            let handle = self.engine.create_material(shader_code.to_string());
+                        material_view::EEventType::Update(material, resolve_result) => {
+                            let handle = self
+                                .engine
+                                .create_material(resolve_result.shader_code.to_string());
                             let material_content = material.borrow().get_associated_material();
                             if let Some(material_content) = material_content {
-                                material_content.borrow_mut().set_pipeline_handle(handle);
+                                let mut material_content = material_content.borrow_mut();
+                                material_content.set_pipeline_handle(handle);
+                                material_content
+                                    .set_map_textures(resolve_result.map_textures.clone());
                             }
                         }
                     }
@@ -741,13 +746,14 @@ impl EditorContext {
                         .find(|x| x.borrow().url == material_content.borrow().asset_url)
                         .cloned();
                     if let Some(material_editor) = find {
-                        if let Ok(shader_code) =
+                        if let Ok(resolve_result) =
                             material_resolve::resolve(&material_editor.borrow().snarl)
                         {
-                            let pipeline_handle = engine.create_material(shader_code);
-                            material_content
-                                .borrow_mut()
-                                .set_pipeline_handle(pipeline_handle);
+                            let pipeline_handle =
+                                engine.create_material(resolve_result.shader_code);
+                            let mut material_content = material_content.borrow_mut();
+                            material_content.set_pipeline_handle(pipeline_handle);
+                            material_content.set_map_textures(resolve_result.map_textures);
                         }
                         material_editor
                             .borrow_mut()
@@ -1352,7 +1358,7 @@ impl EditorContext {
                             let mut current_folder = current_folder.borrow_mut();
                             let folder_url = current_folder.get_url();
                             let url = folder_url.join(&asset_file.name).unwrap();
-                            let mut texture_file = TextureFile::new(asset_file.name, url);
+                            let mut texture_file = TextureFile::new(url);
                             texture_file.image_reference = Some(image_reference);
                             log::trace!("Create texture: {:?}", &texture_file.url.as_str());
                             current_folder.files.push(EContentFileType::Texture(Rc::new(

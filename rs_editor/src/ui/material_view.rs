@@ -1,3 +1,7 @@
+use crate::{
+    editor_ui,
+    material_resolve::{self, ResolveResult},
+};
 use egui::*;
 use egui_snarl::{
     ui::{Grid, PinInfo, SnarlStyle, SnarlViewer},
@@ -6,8 +10,6 @@ use egui_snarl::{
 use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
-
-use crate::{editor_ui, material_resolve};
 
 const NODE_IO_COLOR: Color32 = Color32::WHITE;
 
@@ -471,7 +473,7 @@ pub struct MaterialNode {
 }
 
 pub enum EEventType {
-    Update(Rc<RefCell<crate::material::Material>>, String),
+    Update(Rc<RefCell<crate::material::Material>>, ResolveResult),
 }
 
 pub struct MaterialView {
@@ -480,7 +482,7 @@ pub struct MaterialView {
     pub viewer: GraphViewer,
     pub attribute_node_id: NodeId,
     pub event: Option<EEventType>,
-    pub current_shader_code: Option<String>,
+    pub current_resolve_result: Option<ResolveResult>,
 }
 
 impl MaterialView {
@@ -508,7 +510,7 @@ impl MaterialView {
             viewer,
             attribute_node_id,
             event: None,
-            current_shader_code: None,
+            current_resolve_result: None,
         }
     }
 
@@ -532,10 +534,10 @@ impl MaterialView {
                     }
                 });
                 if ui.button("Apply").clicked() {
-                    if let Some(current_shader_code) = self.current_shader_code.as_ref() {
+                    if let Some(current_resolve_result) = self.current_resolve_result.as_ref() {
                         self.event = Some(EEventType::Update(
                             material.clone(),
-                            current_shader_code.clone(),
+                            current_resolve_result.clone(),
                         ));
                     }
                 }
@@ -548,13 +550,13 @@ impl MaterialView {
             .hscroll(true)
             .resizable(true)
             .show(context, |ui| {
-                let current_shader_code = &mut self.current_shader_code;
-                if let Some(current_shader_code) = current_shader_code {
+                let current_resolve_result = &mut self.current_resolve_result;
+                if let Some(current_resolve_result) = current_resolve_result {
                     let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx());
                     egui_extras::syntax_highlighting::code_view_ui(
                         ui,
                         &theme,
-                        current_shader_code,
+                        &current_resolve_result.shader_code,
                         "wgsl",
                     );
                 }
@@ -564,7 +566,7 @@ impl MaterialView {
         let result = Self::do_draw(&mut self.viewer, &self.style, snarl, context);
         if let Some(result) = result {
             if let Ok(result) = result {
-                self.current_shader_code = Some(result.clone());
+                self.current_resolve_result = Some(result.clone());
             }
         }
         self.viewer.is_updated = false;
@@ -575,7 +577,7 @@ impl MaterialView {
         style: &SnarlStyle,
         snarl: &mut Snarl<MaterialNode>,
         context: &egui::Context,
-    ) -> Option<anyhow::Result<String>> {
+    ) -> Option<anyhow::Result<ResolveResult>> {
         egui::SidePanel::left("Detail").show(context, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {});
         });
@@ -587,7 +589,6 @@ impl MaterialView {
         if !viewer.is_updated {
             return None;
         }
-        let shader_code = material_resolve::resolve(snarl);
-        Some(shader_code)
+        Some(material_resolve::resolve(snarl))
     }
 }

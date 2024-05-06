@@ -1031,6 +1031,23 @@ impl Engine {
                     object.constants_buffer_handle.clone(),
                     rs_foundation::cast_any_as_u8_slice(&object.constants),
                 );
+                let map_textures = object.material.borrow().get_map_textures().clone();
+                let mut binding_resources: Vec<EBindingResource> =
+                    Vec::with_capacity(map_textures.len());
+                for map_texture in map_textures {
+                    if let Some(handle) = self
+                        .resource_manager
+                        .get_texture_by_url(&map_texture.texture_url)
+                    {
+                        binding_resources
+                            .push(EBindingResource::Texture(ETextureType::Base(*handle)));
+                    }
+                }
+                if let Some(textures) = object.binding_resources.get_mut(1) {
+                    *textures = binding_resources;
+                } else {
+                    object.binding_resources.push(binding_resources);
+                }
             }
         }
     }

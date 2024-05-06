@@ -17,7 +17,6 @@ use std::{
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TextureFile {
-    pub name: String,
     pub url: url::Url,
     pub image_reference: Option<PathBuf>,
     pub is_virtual_texture: bool,
@@ -35,11 +34,10 @@ impl Asset for TextureFile {
 }
 
 impl TextureFile {
-    pub fn new(name: String, url: url::Url) -> Self {
+    pub fn new(url: url::Url) -> Self {
         Self {
             url,
             image_reference: None,
-            name,
             is_virtual_texture: false,
             virtual_image_reference: None,
         }

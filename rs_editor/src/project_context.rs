@@ -372,14 +372,15 @@ impl ProjectContext {
                         .find(|x| x.borrow().url == material_content.borrow().asset_url)
                         .cloned();
                     if let Some(material_editor) = find {
-                        if let Ok(shader_code) =
+                        if let Ok(resolve_result) =
                             crate::material_resolve::resolve(&material_editor.borrow().snarl)
                         {
                             materials.insert(
                                 material_content.borrow().asset_url.clone(),
                                 rs_artifact::material::Material {
                                     url: material_content.borrow().asset_url.clone(),
-                                    code: shader_code,
+                                    code: resolve_result.shader_code,
+                                    map_texture_names: resolve_result.map_textures,
                                 },
                             );
                             material_contents.insert(
