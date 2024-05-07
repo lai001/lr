@@ -2,6 +2,7 @@ use egui::Ui;
 use transform_gizmo_egui::{math::Transform, *};
 
 pub struct GizmoView {
+    gizmo: Gizmo,
     pub visuals: GizmoVisuals,
     pub gizmo_mode: GizmoMode,
     pub gizmo_orientation: GizmoOrientation,
@@ -22,6 +23,7 @@ impl GizmoView {
             view_matrix: glam::Mat4::IDENTITY,
             projection_matrix: glam::Mat4::IDENTITY,
             model_matrix: glam::Mat4::IDENTITY,
+            gizmo: Gizmo::default(),
         }
     }
 
@@ -31,11 +33,11 @@ impl GizmoView {
         view_matrix: glam::Mat4,
         projection_matrix: glam::Mat4,
         model_matrix: glam::Mat4,
-    ) -> Option<GizmoResult> {
+    ) -> Option<(GizmoResult, Vec<Transform>)> {
         self.view_matrix = view_matrix;
         self.projection_matrix = projection_matrix;
         self.model_matrix = model_matrix;
-        let mut gizmo_response: Option<GizmoResult> = None;
+        let mut gizmo_response = None;
         egui::Area::new("Gizmo Viewport".into())
             .fixed_pos((0.0, 0.0))
             .show(context, |ui| {
@@ -76,17 +78,17 @@ impl GizmoView {
         visuals
     }
 
-    fn interact(&mut self, ui: &mut Ui) -> Option<GizmoResult> {
+    fn interact(&mut self, ui: &mut Ui) -> Option<(GizmoResult, Vec<Transform>)> {
         let viewport = ui.clip_rect();
         let snapping = ui.input(|input| input.modifiers.ctrl);
-        let mut gizmo = Gizmo::default();
-        gizmo.update_config(GizmoConfig {
+        self.gizmo.update_config(GizmoConfig {
             view_matrix: self.view_matrix.as_dmat4().into(),
             projection_matrix: self.projection_matrix.as_dmat4().into(),
             viewport,
             modes: self.gizmo_mode.into(),
             orientation: self.gizmo_orientation,
             snapping,
+            visuals: self.visuals,
             ..Default::default()
         });
 
@@ -96,13 +98,12 @@ impl GizmoView {
             rotation.as_dquat(),
             translation.as_dvec3(),
         );
-        let mut transform =
-            Transform::from_scale_rotation_translation(scale, rotation, translation);
+        let transform = Transform::from_scale_rotation_translation(scale, rotation, translation);
 
-        let last_gizmo_response = gizmo.interact(ui, &[transform]);
+        let last_gizmo_response = self.gizmo.interact(ui, &[transform]);
         if let Some((gizmo_result, r_transform)) = last_gizmo_response {
             Self::show_gizmo_status(ui, &gizmo_result);
-            Some(gizmo_result)
+            Some((gizmo_result, r_transform))
         } else {
             None
         }

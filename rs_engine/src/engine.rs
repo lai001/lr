@@ -351,7 +351,9 @@ impl Engine {
             return;
         };
         for actor in level.actors.clone() {
-            let root_scene_node = &mut actor.borrow_mut().scene_node;
+            let mut actor = actor.borrow_mut();
+            let root_scene_node = &mut actor.scene_node;
+            let mut root_scene_node = root_scene_node.borrow_mut();
             match &mut root_scene_node.component {
                 crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
                 crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
@@ -359,7 +361,7 @@ impl Engine {
                     skeleton_mesh_component,
                 ) => {
                     let mut files: Vec<EContentFileType> = vec![];
-                    if let Some(url) = skeleton_mesh_component.skeleton_url.as_ref() {
+                    if let Some(url) = skeleton_mesh_component.borrow().skeleton_url.as_ref() {
                         match self
                             .resource_manager
                             .get_resource::<crate::content::skeleton::Skeleton>(
@@ -376,7 +378,7 @@ impl Engine {
                             }
                         }
                     }
-                    if let Some(url) = skeleton_mesh_component.animation_url.as_ref() {
+                    if let Some(url) = skeleton_mesh_component.borrow().animation_url.as_ref() {
                         match self
                             .resource_manager
                             .get_resource::<crate::content::skeleton_animation::SkeletonAnimation>(
@@ -394,7 +396,7 @@ impl Engine {
                         }
                     }
 
-                    for url in &skeleton_mesh_component.skeleton_mesh_urls {
+                    for url in &skeleton_mesh_component.borrow().skeleton_mesh_urls {
                         match self
                             .resource_manager
                             .get_resource::<crate::content::skeleton_mesh::SkeletonMesh>(
@@ -417,7 +419,11 @@ impl Engine {
                             .cloned()
                             .collect::<Vec<EContentFileType>>(),
                     );
-                    skeleton_mesh_component.initialize(ResourceManager::default(), self, &files);
+                    skeleton_mesh_component.borrow_mut().initialize(
+                        ResourceManager::default(),
+                        self,
+                        &files,
+                    );
                 }
             }
         }
@@ -484,10 +490,11 @@ impl Engine {
 
         if let Some(level) = self.level.as_ref() {
             for actor in level.actors.clone() {
-                match &mut actor.borrow_mut().scene_node.component {
+                match &mut actor.borrow_mut().scene_node.borrow_mut().component {
                     EComponentType::SceneComponent(_) => todo!(),
                     EComponentType::StaticMeshComponent(_) => todo!(),
                     EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
+                        let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
                         skeleton_mesh_component.update(self.get_game_time(), self);
                         for draw_object in skeleton_mesh_component.get_draw_objects() {
                             self.draw2(draw_object);

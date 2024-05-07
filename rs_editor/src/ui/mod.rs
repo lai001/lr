@@ -6,5 +6,6 @@ pub mod gizmo_settings;
 pub mod gizmo_view;
 pub mod level_view;
 pub mod material_view;
+pub mod object_property_view;
 pub mod project_settings;
 pub mod top_menu;

@@ -69,6 +69,7 @@ pub struct DataSource {
     pub is_console_cmds_view_open: bool,
     pub current_open_material: Option<SingleThreadMutType<crate::material::Material>>,
     pub is_content_item_property_view_open: bool,
+    pub is_object_property_view_open: bool,
     pub is_shader_code_window_open: bool,
 }
 
@@ -106,6 +107,7 @@ impl DataSource {
             current_open_material: None,
             is_content_item_property_view_open: false,
             is_shader_code_window_open: false,
+            is_object_property_view_open: false,
         }
     }
 

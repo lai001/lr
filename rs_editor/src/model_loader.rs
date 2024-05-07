@@ -688,12 +688,12 @@ impl ModelLoader {
 
             actor = rs_engine::actor::Actor {
                 name: scene.name.clone(),
-                scene_node: rs_engine::scene_node::SceneNode {
+                scene_node: SingleThreadMut::new(rs_engine::scene_node::SceneNode {
                     component: rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
-                        skeleton_mesh_component,
+                        SingleThreadMut::new(skeleton_mesh_component),
                     ),
                     childs: vec![],
-                },
+                }),
             };
         } else {
             todo!()

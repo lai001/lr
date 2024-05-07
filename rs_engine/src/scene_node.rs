@@ -141,13 +141,13 @@ impl SkeletonMeshComponent {
             let Some(run_time) = self.run_time.as_mut() else {
                 continue;
             };
-            let mut model = glam::Mat4::IDENTITY;
+            let mut model = self.transformation;
             if let Some((_, skeleton_mesh_hierarchy_node)) = skeleton
                 .skeleton_mesh_hierarchy
                 .iter()
                 .find(|x| x.0.ends_with(&skin_mesh.name))
             {
-                model = skeleton_mesh_hierarchy_node.transformation;
+                model = self.transformation * skeleton_mesh_hierarchy_node.transformation;
             }
 
             let mut draw_object;
@@ -333,9 +333,27 @@ impl SkeletonMeshComponent {
                 EDrawObjectType::Static(_) => panic!(),
                 EDrawObjectType::Skin(draw_object) => {
                     draw_object.constants.bones.copy_from_slice(&bones);
+                    let mut model = self.transformation;
+                    if let Some((_, skeleton_mesh_hierarchy_node)) = skeleton
+                        .skeleton_mesh_hierarchy
+                        .iter()
+                        .find(|x| x.0.ends_with(&skin_mesh.name))
+                    {
+                        model = self.transformation * skeleton_mesh_hierarchy_node.transformation;
+                    }
+                    draw_object.constants.model = model;
                 }
                 EDrawObjectType::SkinMaterial(draw_object) => {
                     draw_object.constants.bones.copy_from_slice(&bones);
+                    let mut model = self.transformation;
+                    if let Some((_, skeleton_mesh_hierarchy_node)) = skeleton
+                        .skeleton_mesh_hierarchy
+                        .iter()
+                        .find(|x| x.0.ends_with(&skin_mesh.name))
+                    {
+                        model = self.transformation * skeleton_mesh_hierarchy_node.transformation;
+                    }
+                    draw_object.constants.model = model;
                 }
             }
             engine.update_draw_object(draw_object);
@@ -352,13 +370,13 @@ impl SkeletonMeshComponent {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum EComponentType {
-    SceneComponent(SceneComponent),
-    StaticMeshComponent(StaticMeshComponent),
-    SkeletonMeshComponent(SkeletonMeshComponent),
+    SceneComponent(SingleThreadMutType<SceneComponent>),
+    StaticMeshComponent(SingleThreadMutType<StaticMeshComponent>),
+    SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SceneNode {
     pub component: EComponentType,
-    pub childs: Vec<SceneNode>,
+    pub childs: Vec<SingleThreadMutType<SceneNode>>,
 }

@@ -3,6 +3,7 @@ use crate::editor_ui::load::ImageLoader;
 use crate::ui::content_item_property_view::ContentItemPropertyView;
 use crate::ui::gizmo_view::GizmoView;
 use crate::ui::material_view::MaterialView;
+use crate::ui::object_property_view::{ESelectedObjectType, ObjectPropertyView};
 use crate::ui::top_menu::TopMenu;
 use crate::ui::{
     asset_view, console_cmds_view, content_browser, gizmo_settings, level_view, top_menu,
@@ -38,6 +39,7 @@ pub struct EditorUI {
     pub material_view: MaterialView,
     pub egui_context: Context,
     pub content_item_property_view: ContentItemPropertyView,
+    pub object_property_view: ObjectPropertyView,
 }
 
 impl EditorUI {
@@ -66,6 +68,7 @@ impl EditorUI {
             material_view: MaterialView::new(),
             egui_context: context.clone(),
             content_item_property_view: ContentItemPropertyView::new(),
+            object_property_view: ObjectPropertyView::new(),
         }
     }
 
@@ -96,6 +99,40 @@ impl EditorUI {
             data_source.highlight_asset_file.as_ref(),
         );
 
+        if let Some(selected_object) = self.object_property_view.selected_object.as_ref() {
+            macro_rules! gizmo {
+                ($component:ident) => {
+                    let model_matrix = &mut $component.borrow_mut().transformation;
+                    let gizmo_result = self.gizmo_view.draw(
+                        context,
+                        data_source.camera_view_matrix,
+                        data_source.camera_projection_matrix,
+                        *model_matrix,
+                    );
+                    if let Some((_, transforms)) = gizmo_result {
+                        let transform = transforms[0];
+                        *model_matrix = glam::DMat4::from_scale_rotation_translation(
+                            transform.scale.into(),
+                            transform.rotation.into(),
+                            transform.translation.into(),
+                        )
+                        .as_mat4();
+                    }
+                };
+            }
+            match selected_object {
+                ESelectedObjectType::Actor(_) => {}
+                ESelectedObjectType::SceneComponent(component) => {
+                    gizmo!(component);
+                }
+                ESelectedObjectType::StaticMeshComponent(component) => {
+                    gizmo!(component);
+                }
+                ESelectedObjectType::SkeletonMeshComponent(component) => {
+                    gizmo!(component);
+                }
+            }
+        }
         let window = Self::new_window("Gizmo Settings", data_source.input_mode);
         gizmo_settings::draw(
             window,
@@ -134,7 +171,7 @@ impl EditorUI {
             );
         }
 
-        Self::new_window("Property", data_source.input_mode)
+        Self::new_window("Content Property", data_source.input_mode)
             .open(&mut data_source.is_content_item_property_view_open)
             .vscroll(true)
             .hscroll(true)
@@ -142,6 +179,16 @@ impl EditorUI {
             .default_size([250.0, 500.0])
             .show(context, |ui| {
                 self.content_item_property_view.draw(ui);
+            });
+
+        Self::new_window("Object Property", data_source.input_mode)
+            .open(&mut data_source.is_object_property_view_open)
+            .vscroll(true)
+            .hscroll(true)
+            .resizable(true)
+            .default_size([250.0, 500.0])
+            .show(context, |ui| {
+                self.object_property_view.draw(ui);
             });
 
         click

@@ -16,6 +16,9 @@ use wgpu::*;
 pub struct Constants {
     pub model: glam::Mat4,
     pub id: u32,
+    _pad2_0: i32,
+    _pad2_1: i32,
+    _pad2_2: i32,
     pub bones: [glam::Mat4; NUM_MAX_BONE],
 }
 
@@ -25,6 +28,9 @@ impl Default for Constants {
             model: Default::default(),
             id: Default::default(),
             bones: [glam::Mat4::IDENTITY; NUM_MAX_BONE],
+            _pad2_0: Default::default(),
+            _pad2_1: Default::default(),
+            _pad2_2: Default::default(),
         }
     }
 }

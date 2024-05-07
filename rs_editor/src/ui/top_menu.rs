@@ -11,6 +11,7 @@ pub enum EWindowType {
     Asset,
     Content,
     Property,
+    ObjectProperty,
     Level,
     ComsoleCmds,
     Material,
@@ -141,6 +142,10 @@ impl TopMenu {
                     }
                     if ui.add(Button::new("Material")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Material));
+                        ui.close_menu();
+                    }
+                    if ui.add(Button::new("Object Property")).clicked() {
+                        click = Some(EClickEventType::OpenWindow(EWindowType::ObjectProperty));
                         ui.close_menu();
                     }
                 });

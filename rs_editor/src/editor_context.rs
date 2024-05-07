@@ -12,6 +12,7 @@ use crate::{
     ui::{
         asset_view, content_browser, content_item_property_view,
         material_view::{self, EMaterialNodeType, MaterialNode},
+        object_property_view::ESelectedObjectType,
         top_menu,
     },
 };
@@ -314,6 +315,10 @@ impl EditorContext {
                         self.data_source.camera_movement_speed,
                     );
                 }
+                self.data_source.camera_view_matrix =
+                    self.engine.get_camera_mut().get_view_matrix();
+                self.data_source.camera_projection_matrix =
+                    self.engine.get_camera_mut().get_projection_matrix();
 
                 self.process_redraw_request(window_id, window, event_loop_window_target);
                 let wait = self
@@ -823,14 +828,19 @@ impl EditorContext {
         files: &[EContentFileType],
     ) {
         for actor in actors {
-            let root_scene_node = &mut actor.borrow_mut().scene_node;
+            let actor = actor.borrow_mut();
+            let mut root_scene_node = actor.scene_node.borrow_mut();
             match &mut root_scene_node.component {
                 rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
                 rs_engine::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
                 rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                     skeleton_mesh_component,
                 ) => {
-                    skeleton_mesh_component.initialize(ResourceManager::default(), engine, files);
+                    skeleton_mesh_component.borrow_mut().initialize(
+                        ResourceManager::default(),
+                        engine,
+                        files,
+                    );
                 }
             }
         }
@@ -1031,13 +1041,15 @@ impl EditorContext {
         if let Some(project_context) = &mut self.project_context {
             if let Some(active_level) = self.data_source.level.clone() {
                 for actor in active_level.borrow().actors.clone() {
-                    let root_scene_node = &mut actor.borrow_mut().scene_node;
+                    let actor = actor.borrow_mut();
+                    let mut root_scene_node = actor.scene_node.borrow_mut();
                     match &mut root_scene_node.component {
                         rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
                         rs_engine::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
                         rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                             skeleton_mesh_component,
                         ) => {
+                            let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
                             skeleton_mesh_component
                                 .update(self.engine.get_game_time(), &mut self.engine);
 
@@ -1308,6 +1320,9 @@ impl EditorContext {
                     top_menu::EWindowType::Material => {
                         self.open_material_window(event_loop_window_target, None);
                     }
+                    top_menu::EWindowType::ObjectProperty => {
+                        self.data_source.is_object_property_view_open = true;
+                    }
                 },
                 top_menu::EClickEventType::Tool(tool_type) => match tool_type {
                     top_menu::EToolType::DebugShader => {
@@ -1558,6 +1573,31 @@ impl EditorContext {
                                 .borrow_mut()
                                 .files
                                 .push(EContentFileType::IBL(new_ibl));
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(event) = click_event.click_actor {
+            match event {
+                crate::ui::level_view::EClickEventType::Actor(actor) => {
+                    self.editor_ui.object_property_view.selected_object =
+                        Some(ESelectedObjectType::Actor(actor));
+                }
+                crate::ui::level_view::EClickEventType::SceneNode(scene_node) => {
+                    match &scene_node.borrow().component {
+                        rs_engine::scene_node::EComponentType::SceneComponent(component) => {
+                            self.editor_ui.object_property_view.selected_object =
+                                Some(ESelectedObjectType::SceneComponent(component.clone()));
+                        }
+                        rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
+                            self.editor_ui.object_property_view.selected_object =
+                                Some(ESelectedObjectType::StaticMeshComponent(component.clone()));
+                        }
+                        rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                            self.editor_ui.object_property_view.selected_object = Some(
+                                ESelectedObjectType::SkeletonMeshComponent(component.clone()),
+                            );
                         }
                     }
                 }
