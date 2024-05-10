@@ -7,6 +7,7 @@ pub enum Error {
     ArtifactReaderNotSet,
     RendererError(rs_render::error::Error),
     RecvError(std::sync::mpsc::RecvError),
+    Other(Option<String>),
 }
 
 impl std::fmt::Display for Error {

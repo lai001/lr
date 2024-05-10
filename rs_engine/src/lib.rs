@@ -27,7 +27,12 @@ pub mod thread_pool;
 pub mod url_extension;
 
 pub const ASSET_SCHEME: &str = "asset";
+pub const CONTENT_SCHEME: &str = "content";
 
-pub fn build_asset_url(name: &str) -> Result<url::Url, url::ParseError> {
-    url::Url::parse(&format!("{}://{}", ASSET_SCHEME, name))
+pub fn build_asset_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
+    url::Url::parse(&format!("{}://asset/{}", ASSET_SCHEME, name.as_ref()))
+}
+
+pub fn build_content_file_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
+    url::Url::parse(&format!("{}://Content/{}", CONTENT_SCHEME, name.as_ref()))
 }

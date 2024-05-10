@@ -1,4 +1,4 @@
-use crate::{property, url_extension::UrlExtension};
+use crate::{build_content_file_url, property, url_extension::UrlExtension};
 use rs_artifact::{
     asset::Asset, property_value_type::EPropertyValueType, resource_type::EResourceType,
 };
@@ -25,7 +25,7 @@ impl Level {
     pub fn empty_level() -> Self {
         Self {
             actors: vec![],
-            url: url::Url::parse("content://level/Empty").unwrap(),
+            url: build_content_file_url("Empty").unwrap(),
         }
     }
 

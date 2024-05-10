@@ -2,7 +2,7 @@ use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
     data_source::DataSource,
 };
-use egui::{menu, Button, Context, TopBottomPanel};
+use egui::{menu, Button, Context, Sense, TopBottomPanel};
 use rs_render::view_mode::EViewModeType;
 use std::path::PathBuf;
 
@@ -31,6 +31,7 @@ pub enum EClickEventType {
     SaveProject,
     Export,
     OpenVisualStudioCode,
+    Run,
     Build(BuildConfig),
     OpenWindow(EWindowType),
     Tool(EToolType),
@@ -173,6 +174,10 @@ impl TopMenu {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Unlit));
                         }
                     });
+                    if ui.add(Button::new("Run")).clicked() {
+                        click = Some(EClickEventType::Run);
+                        ui.close_menu();
+                    }
                 });
             });
         });

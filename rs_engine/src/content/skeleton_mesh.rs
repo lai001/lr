@@ -1,4 +1,6 @@
-use crate::url_extension::UrlExtension;
+use std::fmt::format;
+
+use crate::{build_asset_url, url_extension::UrlExtension};
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
@@ -32,8 +34,8 @@ impl SkeletonMesh {
     }
 
     pub fn make_asset_url(relative_path: &str, skeleton_mesh_name: &str) -> url::Url {
-        url::Url::parse(&format!(
-            "asset://{}?skeleton_mesh_name={}",
+        build_asset_url(format!(
+            "{}?skeleton_mesh_name={}",
             relative_path, skeleton_mesh_name
         ))
         .unwrap()

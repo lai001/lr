@@ -31,7 +31,17 @@ pub enum Backends {
 pub struct RenderSettings {
     pub power_preference: PowerPreference,
     pub backends: Backends,
+    pub android_backends: Backends,
     pub virtual_texture_setting: VirtualTextureSetting,
+}
+
+impl RenderSettings {
+    pub fn get_backends_platform(&self) -> Backends {
+        #[cfg(not(target_os = "android"))]
+        return self.backends.clone();
+        #[cfg(target_os = "android")]
+        return self.android_backends.clone();
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -58,6 +68,7 @@ impl Default for Settings {
                 backends: Backends::DX12,
                 #[cfg(not(target_os = "windows"))]
                 backends: Backends::Primary,
+                android_backends: Backends::Primary,
             },
         }
     }

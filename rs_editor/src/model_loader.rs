@@ -4,7 +4,7 @@ use rs_artifact::{
     mesh_vertex::MeshVertex,
     skin_mesh::{SkinMesh, SkinMeshVertex},
 };
-use rs_engine::resource_manager::ResourceManager;
+use rs_engine::{build_content_file_url, resource_manager::ResourceManager};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_render::vertex_data_type::skin_mesh_vertex::INVALID_BONE;
 use russimp::material::TextureType;
@@ -613,8 +613,7 @@ impl ModelLoader {
         if let Some(armature) = scene.armatures.values().next() {
             let armature = armature.borrow();
             let name = armature.name.clone().replace("|", "_");
-            let url =
-                url::Url::parse(&format!("content://{}", name)).context(armature.name.clone())?;
+            let url = build_content_file_url(name).context(armature.name.clone())?;
 
             let asset_url = rs_engine::content::skeleton::Skeleton::make_asset_url(
                 &asset_reference,
@@ -627,8 +626,8 @@ impl ModelLoader {
 
         for animation in &scene.animations {
             let animation_name = animation.name.clone();
-            let url = url::Url::parse(&format!("content://{}", animation_name))
-                .context(animation_name.clone())?;
+            let name = animation_name.clone().replace("|", "_");
+            let url = build_content_file_url(&name).context(animation_name.clone())?;
             let asset_url =
                 rs_engine::content::skeleton_animation::SkeletonAnimation::make_asset_url(
                     &asset_reference,
@@ -643,8 +642,7 @@ impl ModelLoader {
             let imported_mesh = imported_mesh.clone();
             let imported_mesh = imported_mesh.borrow();
             let name = imported_mesh.name.clone().replace("|", "_");
-            let url = url::Url::parse(&format!("content://{}", name))
-                .context(imported_mesh.name.clone())?;
+            let url = build_content_file_url(&name).context(imported_mesh.name.clone())?;
             if imported_mesh.bones.is_empty() {
                 let static_mesh = rs_engine::content::static_mesh::StaticMesh {
                     asset_reference_name: imported_mesh.name.clone(),

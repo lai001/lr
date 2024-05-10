@@ -217,7 +217,7 @@ impl Renderer {
                 dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
                 flags: wgpu::InstanceFlags::default(),
                 gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
-                backends: match settings.backends {
+                backends: match settings.get_backends_platform() {
                     settings::Backends::Primary => Backends::PRIMARY,
                     settings::Backends::Vulkan => Backends::VULKAN,
                     settings::Backends::GL => Backends::GL,

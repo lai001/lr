@@ -5,7 +5,10 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     logger::{Logger, LoggerConfiguration},
 };
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use winit::event::{Event, MouseScrollDelta, WindowEvent};
 
 struct State {
@@ -30,7 +33,10 @@ pub struct ApplicationContext {
 }
 
 impl ApplicationContext {
-    pub fn new(window: &winit::window::Window) -> ApplicationContext {
+    pub fn new(
+        window: &winit::window::Window,
+        input_file: Option<impl AsRef<Path>>,
+    ) -> ApplicationContext {
         let window_id = u64::from(window.id()) as isize;
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
@@ -52,9 +58,12 @@ impl ApplicationContext {
             Some(window.scale_factor() as f32),
             None,
         );
-        let artifact_filepath = Path::new("./main.rs");
+        let artifact_filepath = match input_file {
+            Some(input_file) => input_file.as_ref().to_path_buf(),
+            None => Path::new("main.rs").to_path_buf(),
+        };
         let artifact_reader =
-            ArtifactReader::new(artifact_filepath, Some(EEndianType::Little)).ok();
+            ArtifactReader::new(&artifact_filepath, Some(EEndianType::Little)).ok();
         let mut engine = rs_engine::engine::Engine::new(
             window_id,
             window,

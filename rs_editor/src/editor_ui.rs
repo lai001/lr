@@ -33,7 +33,7 @@ pub struct ClickEvent {
 pub struct EditorUI {
     image_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
     svg_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
-    asset_folder_path: Option<PathBuf>,
+    project_folder_path: Option<PathBuf>,
     top_menu: TopMenu,
     gizmo_view: GizmoView,
     pub material_view: MaterialView,
@@ -60,7 +60,7 @@ impl EditorUI {
         Self {
             image_loader,
             svg_loader,
-            asset_folder_path: None,
+            project_folder_path: None,
             top_menu: TopMenu {
                 new_project_name: String::new(),
             },
@@ -72,8 +72,8 @@ impl EditorUI {
         }
     }
 
-    pub fn set_asset_folder_path(&mut self, asset_folder_path: Option<PathBuf>) {
-        self.asset_folder_path = asset_folder_path;
+    pub fn set_project_folder_path(&mut self, project_folder_path: Option<PathBuf>) {
+        self.project_folder_path = project_folder_path;
     }
 
     pub fn build(&mut self, context: &Context, data_source: &mut DataSource) -> ClickEvent {
@@ -151,12 +151,12 @@ impl EditorUI {
                 project_settings,
             );
         }
-        if let Some(asset_folder_path) = self.asset_folder_path.as_ref() {
+        if let Some(project_folder_path) = self.project_folder_path.as_ref() {
             let window = Self::new_window("Content Browser", data_source.input_mode);
             click.content_browser_event = content_browser::draw(
                 window,
                 context,
-                asset_folder_path,
+                project_folder_path,
                 &mut data_source.content_data_source,
                 // data_source.input_mode,
             );

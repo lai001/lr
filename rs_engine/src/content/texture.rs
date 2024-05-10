@@ -1,4 +1,6 @@
-use crate::{mipmap_generator::MipmapGenerator, url_extension::UrlExtension};
+use crate::{
+    build_asset_url, mipmap_generator::MipmapGenerator, url_extension::UrlExtension, ASSET_SCHEME,
+};
 #[cfg(feature = "editor")]
 use anyhow::{anyhow, Context, Result};
 use image::GenericImage;
@@ -13,12 +15,13 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TextureFile {
     pub url: url::Url,
-    pub image_reference: Option<PathBuf>,
+    pub image_reference: Option<url::Url>,
     pub is_virtual_texture: bool,
     pub virtual_image_reference: Option<String>,
 }
@@ -41,6 +44,22 @@ impl TextureFile {
             is_virtual_texture: false,
             virtual_image_reference: None,
         }
+    }
+
+    pub fn get_image_reference_path(&self) -> Option<PathBuf> {
+        self.image_reference.clone().map(|x| {
+            PathBuf::from_str(
+                x.to_string()
+                    .strip_prefix(&format!("{}://", ASSET_SCHEME))
+                    .unwrap(),
+            )
+            .unwrap()
+        })
+    }
+
+    pub fn set_image_reference_path(&mut self, image_reference_path: impl AsRef<Path>) {
+        let path = image_reference_path.as_ref();
+        self.image_reference = build_asset_url(path.to_str().unwrap()).ok();
     }
 
     pub fn get_name(&self) -> String {
@@ -84,7 +103,7 @@ impl TextureFile {
     ) -> anyhow::Result<()> {
         // self.is_virtual_image_cache_vaild(endian_type)?;
         let image_reference = self
-            .image_reference
+            .get_image_reference_path()
             .clone()
             .ok_or(anyhow!("image_reference is null."))?;
         let create_result = create_virtual_texture_cache_file(
@@ -102,7 +121,7 @@ impl TextureFile {
 
     #[cfg(feature = "editor")]
     pub fn get_pref_virtual_cache_name<P: AsRef<Path>>(&self, asset_folder: P) -> Result<String> {
-        let Some(image_reference) = &self.image_reference else {
+        let Some(image_reference) = &self.get_image_reference_path() else {
             return Err(anyhow!("image_reference is null."));
         };
         let mut hasher = md5::Md5::new();

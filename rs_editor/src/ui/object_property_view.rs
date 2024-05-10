@@ -1,5 +1,5 @@
-use rs_engine::{actor::Actor, scene_node::*};
-use rs_foundation::new::SingleThreadMutType;
+use rs_engine::{actor::Actor, content::material::Material, scene_node::*};
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
 #[derive(Clone)]
 pub enum ESelectedObjectType {
@@ -11,12 +11,14 @@ pub enum ESelectedObjectType {
 
 pub struct ObjectPropertyView {
     pub selected_object: Option<ESelectedObjectType>,
+    pub materials: SingleThreadMutType<Vec<url::Url>>,
 }
 
 impl ObjectPropertyView {
     pub fn new() -> ObjectPropertyView {
         ObjectPropertyView {
             selected_object: None,
+            materials: SingleThreadMut::new(vec![]),
         }
     }
 
@@ -64,6 +66,20 @@ impl ObjectPropertyView {
                     glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
                 component.transformation =
                     glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+
+                egui::ComboBox::from_label("material")
+                    .selected_text(format!("{}", {
+                        match &component.material_url {
+                            Some(material_url) => material_url.to_string(),
+                            None => "None".to_string(),
+                        }
+                    }))
+                    .show_ui(ui, |ui| {
+                        for material in self.materials.borrow_mut().clone() {
+                            let text = material.to_string();
+                            ui.selectable_value(&mut component.material_url, Some(material), text);
+                        }
+                    });
             }
         }
     }

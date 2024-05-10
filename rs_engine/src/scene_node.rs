@@ -293,40 +293,41 @@ impl SkeletonMeshComponent {
         let Some(skeleton) = run_time.skeleton.as_ref() else {
             return;
         };
-        let Some(skeleton_animation) = run_time.skeleton_animation.as_ref() else {
-            return;
-        };
-        let duration = skeleton_animation.duration / skeleton_animation.ticks_per_second;
-        let animation_time = time % duration as f32;
         let mut node_anim_transforms: HashMap<String, glam::Mat4> = HashMap::new();
-        let root_bone = skeleton.bones.get(&skeleton.root_bone).unwrap();
-        let global_inverse_transform = skeleton
-            .skeleton_mesh_hierarchy
-            .get(&skeleton.root_node)
-            .unwrap()
-            .transformation
-            .inverse();
 
-        Self::walk_skeleton_bone(
-            &mut node_anim_transforms,
-            root_bone,
-            &skeleton.bones,
-            skeleton_animation.clone(),
-            animation_time,
-            &skeleton.skeleton_mesh_hierarchy,
-            skeleton
+        if let Some(skeleton_animation) = run_time.skeleton_animation.as_ref() {
+            let duration = skeleton_animation.duration / skeleton_animation.ticks_per_second;
+            let animation_time = time % duration as f32;
+            let root_bone = skeleton.bones.get(&skeleton.root_bone).unwrap();
+            let global_inverse_transform = skeleton
                 .skeleton_mesh_hierarchy
-                .get(&root_bone.path)
+                .get(&skeleton.root_node)
                 .unwrap()
-                .transformation,
-            global_inverse_transform,
-        );
+                .transformation
+                .inverse();
+
+            Self::walk_skeleton_bone(
+                &mut node_anim_transforms,
+                root_bone,
+                &skeleton.bones,
+                skeleton_animation.clone(),
+                animation_time,
+                &skeleton.skeleton_mesh_hierarchy,
+                skeleton
+                    .skeleton_mesh_hierarchy
+                    .get(&root_bone.path)
+                    .unwrap()
+                    .transformation,
+                global_inverse_transform,
+            );
+        }
 
         for skin_mesh in run_time.skin_meshes.clone() {
             let mut bones: [glam::Mat4; NUM_MAX_BONE] = [glam::Mat4::IDENTITY; NUM_MAX_BONE];
             for (index, bone_path) in skin_mesh.bone_paths.iter().enumerate() {
-                let node_anim_transform = node_anim_transforms.get(bone_path).unwrap();
-                bones[index] = *node_anim_transform;
+                if let Some(node_anim_transform) = node_anim_transforms.get(bone_path) {
+                    bones[index] = *node_anim_transform;
+                }
             }
             let draw_object = run_time.draw_objects.get_mut(&skin_mesh.name).unwrap();
             match draw_object {

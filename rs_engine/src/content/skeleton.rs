@@ -1,4 +1,4 @@
-use crate::url_extension::UrlExtension;
+use crate::{build_asset_url, url_extension::UrlExtension};
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
@@ -33,11 +33,7 @@ impl Skeleton {
     }
 
     pub fn make_asset_url(relative_path: &str, root_bone: &str) -> url::Url {
-        url::Url::parse(&format!(
-            "asset://{}?root_bone={}",
-            relative_path, root_bone
-        ))
-        .unwrap()
+        build_asset_url(format!("{}?root_bone={}", relative_path, root_bone)).unwrap()
     }
 }
 
@@ -53,7 +49,7 @@ impl Asset for Skeleton {
 
 #[test]
 fn test() {
-    let url = url::Url::parse("asset://model/b/test.glb?root_bone=/root/armature").unwrap();
+    let url = url::Url::parse("asset://asset/model/b/test.glb?root_bone=/root/armature").unwrap();
     println!("domain: {:?}", url.domain());
     println!("host: {:?}", url.host());
     println!("query: {:?}", url.query());

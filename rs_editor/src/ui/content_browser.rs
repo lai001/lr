@@ -43,7 +43,7 @@ enum EItemType {
 pub fn draw(
     window: egui::Window,
     context: &Context,
-    asset_folder_path: &Path,
+    project_folder_path: &Path,
     data_source: &mut DataSource,
 ) -> Option<EClickEventType> {
     let mut click: Option<EClickEventType> = None;
@@ -95,7 +95,7 @@ pub fn draw(
                     });
                 });
                 if let Some(current_folder) = current_folder {
-                    click_item = draw_content(ui, asset_folder_path, current_folder, highlight);
+                    click_item = draw_content(ui, project_folder_path, current_folder, highlight);
                 }
                 ui.allocate_space(ui.available_size());
             });
@@ -106,7 +106,7 @@ pub fn draw(
 
 fn draw_content(
     ui: &mut Ui,
-    asset_folder_path: &Path,
+    project_folder_path: &Path,
     current_folder: Rc<RefCell<ContentFolder>>,
     highlight_file: Option<EContentFileType>,
 ) -> Option<EClickEventType> {
@@ -183,11 +183,11 @@ fn draw_content(
                                         }
                                         EContentFileType::Texture(texture) => {
                                             if let Some(image_reference) =
-                                                texture.borrow().image_reference.as_ref()
+                                                texture.borrow().get_image_reference_path().as_ref()
                                             {
                                                 let url = format!(
                                                     "file://{}",
-                                                    asset_folder_path
+                                                    project_folder_path
                                                         .join(image_reference)
                                                         .to_str()
                                                         .unwrap()

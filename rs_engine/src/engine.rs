@@ -97,19 +97,22 @@ impl Engine {
         let settings: Settings;
         if let Some(artifact_reader) = &mut artifact_reader {
             settings = artifact_reader.get_artifact_file_header().settings.clone();
+            log::trace!("Load settings: {:?}", settings);
             artifact_reader.check_assets().expect("Valid");
         } else {
             settings = Settings::default();
+            log::trace!("Use default settings: {:?}", settings);
         }
 
         #[cfg(target_os = "android")]
         (|| {
-            if settings.render_setting.backends == rs_core_minimal::settings::Backends::DX12 {
+            if settings.render_setting.get_backends_platform()
+                == rs_core_minimal::settings::Backends::DX12
+            {
                 panic!("Not supported render backend on android platform.");
             }
         })();
 
-        log::trace!("{:?}", settings);
         let mut resource_manager = ResourceManager::default();
         resource_manager.set_artifact_reader(artifact_reader);
         resource_manager.load_static_meshs();
@@ -163,6 +166,7 @@ impl Engine {
             let Ok(_level) = resource_manager.get_level(&url) else {
                 return;
             };
+            log::trace!("Load level: {}", _level.url.to_string());
             level = Some(_level);
         })();
 
@@ -336,10 +340,52 @@ impl Engine {
 
                             if let Some(material_content) = material_content {
                                 let pipeline_handle = self.create_material(material.code);
-                                material_content
-                                    .borrow_mut()
-                                    .set_pipeline_handle(pipeline_handle);
+                                let mut material_content = material_content.borrow_mut();
+                                material_content.set_pipeline_handle(pipeline_handle);
+                                material_content.set_map_textures(material.map_texture_names);
                             }
+                        }
+                    }
+                    rs_artifact::resource_type::EResourceType::Content(content_type) => {
+                        match content_type {
+                            EContentType::Texture => {
+                                let result: crate::error::Result<()> = (|| {
+                                    let texture = self
+                                        .resource_manager
+                                        .get_resource::<crate::content::texture::TextureFile>(
+                                        &url,
+                                        Some(resource_info.resource_type),
+                                    )?;
+
+                                    let image_reference = texture.image_reference.ok_or(
+                                        crate::error::Error::Other(Some(
+                                            "No image reference".to_string(),
+                                        )),
+                                    )?;
+                                    log::trace!("Image reference: {}", image_reference.to_string());
+                                    let image = self
+                                        .resource_manager
+                                        .get_resource::<rs_artifact::image::Image>(
+                                            &image_reference,
+                                            Some(EResourceType::Image),
+                                        )?;
+
+                                    let dyn_image =
+                                        image::load_from_memory(&image.data).map_err(|err| {
+                                            crate::error::Error::ImageError(err, None)
+                                        })?;
+                                    let rgba_image = match dyn_image.as_rgba8() {
+                                        Some(_) => dyn_image.as_rgba8().unwrap().clone(),
+                                        None => dyn_image.to_rgba8(),
+                                    };
+                                    log::trace!("{:?}", image.image_format);
+                                    self.create_texture_from_image(&url, &rgba_image);
+                                    Ok(())
+                                })(
+                                );
+                                log::trace!("Laod texture: {}, {:?}", url.to_string(), result);
+                            }
+                            _ => {}
                         }
                     }
                     _ => {}
@@ -348,6 +394,7 @@ impl Engine {
         }
 
         let Some(level) = self.level.as_mut() else {
+            log::warn!("{}", "No level found.");
             return;
         };
         for actor in level.actors.clone() {
@@ -433,20 +480,19 @@ impl Engine {
         let Ok(resource_map) = resource_manager.get_resource_map() else {
             return None;
         };
-        for (k, v) in resource_map {
-            if k.scheme() != "content" {
-                continue;
-            }
-            let Some(host) = k.host() else {
-                continue;
-            };
-            match host {
-                url::Host::Domain(host) => {
-                    if host == "level" {
+        for (_, v) in resource_map {
+            match v.resource_type {
+                EResourceType::Content(content_type) => match content_type {
+                    EContentType::Level => {
                         return Some(v.url);
                     }
+                    _ => {
+                        continue;
+                    }
+                },
+                _ => {
+                    continue;
                 }
-                _ => {}
             }
         }
         return None;
@@ -1041,19 +1087,22 @@ impl Engine {
                 let map_textures = object.material.borrow().get_map_textures().clone();
                 let mut binding_resources: Vec<EBindingResource> =
                     Vec::with_capacity(map_textures.len());
-                for map_texture in map_textures {
+                for map_texture in &map_textures {
                     if let Some(handle) = self
                         .resource_manager
                         .get_texture_by_url(&map_texture.texture_url)
                     {
                         binding_resources
                             .push(EBindingResource::Texture(ETextureType::Base(*handle)));
+                    } else {
+                        log::trace!("Can not find {}", map_texture.texture_url.to_string());
                     }
                 }
+                assert_eq!(binding_resources.len(), map_textures.len());
                 if let Some(textures) = object.binding_resources.get_mut(1) {
-                    *textures = binding_resources;
+                    *textures = binding_resources.clone();
                 } else {
-                    object.binding_resources.push(binding_resources);
+                    object.binding_resources.push(binding_resources.clone());
                 }
             }
         }
@@ -1175,17 +1224,11 @@ impl Engine {
         &mut self.resource_manager
     }
 
-    pub fn create_texture_from_path(
+    pub fn create_texture_from_image(
         &mut self,
-        path: &Path,
-        url: url::Url,
+        url: &url::Url,
+        image: &image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     ) -> Result<crate::handle::TextureHandle> {
-        let dynamic_image =
-            image::open(path).map_err(|err| crate::error::Error::ImageError(err, None))?;
-        let image = match dynamic_image {
-            image::DynamicImage::ImageRgba8(image) => image,
-            x => x.to_rgba8(),
-        };
         let handle = self.resource_manager.next_texture(url.clone());
         let create_texture = CreateTexture {
             handle: *handle,
@@ -1207,6 +1250,20 @@ impl Engine {
         let render_command = RenderCommand::CreateTexture(create_texture);
         self.render_thread_mode.send_command(render_command);
         Ok(handle)
+    }
+
+    pub fn create_texture_from_path(
+        &mut self,
+        path: &Path,
+        url: &url::Url,
+    ) -> Result<crate::handle::TextureHandle> {
+        let dynamic_image =
+            image::open(path).map_err(|err| crate::error::Error::ImageError(err, None))?;
+        let image = match dynamic_image {
+            image::DynamicImage::ImageRgba8(image) => image,
+            x => x.to_rgba8(),
+        };
+        self.create_texture_from_image(url, &image)
     }
 
     pub fn create_virtual_texture_source(
@@ -1361,7 +1418,7 @@ impl Engine {
         let name = "Grid";
         let index_buffer_handle = resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
-            label: Some(format!("rs.IndexBuffer.{}", name.clone())),
+            label: Some(format!("rs.IndexBuffer.{}", name)),
             contents: rs_foundation::cast_to_raw_buffer(&grid_data.indices).to_vec(),
             usage: wgpu::BufferUsages::INDEX,
         };

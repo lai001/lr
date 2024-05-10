@@ -1,5 +1,13 @@
 use crate::{application_context::ApplicationContext, custom_event::ECustomEventType};
+use clap::Parser;
 use winit::event_loop::EventLoopBuilder;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    input_file: Option<std::path::PathBuf>,
+}
 
 pub struct Application {
     event_loop: winit::event_loop::EventLoop<ECustomEventType>,
@@ -10,6 +18,7 @@ pub struct Application {
 
 impl Application {
     pub fn new() -> Self {
+        let args = Args::parse();
         let window_width = 1280;
         let window_height = 720;
         let event_loop = EventLoopBuilder::with_user_event().build().unwrap();
@@ -26,7 +35,7 @@ impl Application {
             .build(&event_loop)
             .unwrap();
         window.set_ime_allowed(true);
-        let application_context = ApplicationContext::new(&window);
+        let application_context = ApplicationContext::new(&window, args.input_file);
 
         Self {
             application_context,

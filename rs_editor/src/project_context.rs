@@ -12,6 +12,7 @@ use rs_artifact::{
 use rs_engine::{
     content::{content_file_type::EContentFileType, texture::TextureFile},
     resource_manager::ResourceManager,
+    ASSET_SCHEME,
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
 use serde::{Deserialize, Serialize};
@@ -157,6 +158,17 @@ impl ProjectContext {
         self.project_folder_path.join(ASSET_FOLDER_NAME)
     }
 
+    pub fn get_asset_path_by_url(&self, url: &url::Url) -> PathBuf {
+        if url.scheme() != ASSET_SCHEME {
+            panic!()
+        }
+        self.project_folder_path.join(
+            url.to_string()
+                .strip_prefix(&format!("{}://", ASSET_SCHEME))
+                .unwrap(),
+        )
+    }
+
     pub fn copy_file_to_asset_folder(&self, path: &Path) -> anyhow::Result<()> {
         let file_name = path.file_name().ok_or(anyhow!("No file name"))?;
         let to = self.get_asset_folder_path().join(file_name);
@@ -257,7 +269,7 @@ impl ProjectContext {
             std::fs::create_dir(output_folder_path.clone())?;
         }
         let output_filename = "main.rs";
-        let asset_folder_path = self.get_asset_folder_path();
+        let project_folder_path = self.get_project_folder_path();
 
         let mut artifact_asset_encoder = ArtifactAssetEncoder::new(
             Some(EEndianType::Little),
@@ -289,11 +301,11 @@ impl ProjectContext {
                     artifact_asset_encoder.encode(&*asset.borrow());
                 }
                 EContentFileType::SkeletonMesh(asset) => {
-                    let file_path = asset_folder_path.join(&asset.borrow().get_relative_path());
+                    let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     let loaded_skin_mesh = model_loader.to_runtime_skin_mesh(
                         asset.clone(),
-                        &asset_folder_path,
+                        &project_folder_path,
                         ResourceManager::default(),
                     );
                     skin_meshes.insert(
@@ -304,11 +316,11 @@ impl ProjectContext {
                     artifact_asset_encoder.encode(&*asset.borrow());
                 }
                 EContentFileType::SkeletonAnimation(asset) => {
-                    let file_path = asset_folder_path.join(&asset.borrow().get_relative_path());
+                    let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     let loaded_skeleton_animation = model_loader.to_runtime_skeleton_animation(
                         asset.clone(),
-                        &asset_folder_path,
+                        &project_folder_path,
                         ResourceManager::default(),
                     );
                     skeleton_animations.insert(
@@ -319,11 +331,11 @@ impl ProjectContext {
                     artifact_asset_encoder.encode(&*asset.borrow());
                 }
                 EContentFileType::Skeleton(asset) => {
-                    let file_path = asset_folder_path.join(&asset.borrow().get_relative_path());
+                    let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     let loaded_skeleton = model_loader.to_runtime_skeleton(
                         asset.clone(),
-                        &asset_folder_path,
+                        &project_folder_path,
                         ResourceManager::default(),
                     );
                     skeletons.insert(loaded_skeleton.url.clone(), loaded_skeleton.deref().clone());
@@ -331,16 +343,10 @@ impl ProjectContext {
                     artifact_asset_encoder.encode(&*asset.borrow());
                 }
                 EContentFileType::Texture(asset) => {
-                    if let Some(image_file_path) = &asset.borrow().image_reference {
-                        let absolute_image_file_path =
-                            self.get_asset_folder_path().join(image_file_path.clone());
-                        let file_stem =
-                            image_file_path.file_stem().ok_or(anyhow!("No file stem"))?;
-                        let name = file_stem.to_str().ok_or(anyhow!("Fail to convert str"))?;
-                        let image_file_path = image_file_path
-                            .to_str()
-                            .ok_or(anyhow!("Fail to convert str"))?;
-                        let url = rs_engine::build_asset_url(image_file_path)?;
+                    let asset = asset.borrow();
+                    if let Some(image_reference) = &asset.image_reference {
+                        let absolute_image_file_path = self.get_asset_path_by_url(image_reference);
+
                         let buffer = std::fs::read(absolute_image_file_path.clone()).context(
                             format!("Failed to read from {:?}", absolute_image_file_path),
                         )?;
@@ -350,16 +356,15 @@ impl ProjectContext {
                         ))?;
                         let format = image::guess_format(&buffer)?;
                         let image = rs_artifact::image::Image {
-                            name: name.to_string(),
-                            url: url.clone(),
+                            url: image_reference.clone(),
                             image_format: rs_artifact::image::ImageFormat::from_external_format(
                                 format,
                             ),
                             data: buffer,
                         };
-                        images.insert(url, image);
+                        images.insert(image_reference.clone(), image);
                     }
-                    artifact_asset_encoder.encode(&*asset.borrow());
+                    artifact_asset_encoder.encode(&*asset);
                 }
                 EContentFileType::Level(asset) => {
                     artifact_asset_encoder.encode(&*asset.borrow());
@@ -400,7 +405,7 @@ impl ProjectContext {
                         let Some(image_reference) = image_reference.as_ref() else {
                             return Ok(None);
                         };
-                        let file_path = self.get_asset_folder_path().join(image_reference);
+                        let file_path = project_folder_path.join(image_reference);
                         if !file_path.exists() {
                             return Err(anyhow!("The file is not exist"));
                         }
@@ -480,7 +485,7 @@ impl ProjectContext {
     fn collect_image_files(files: &[Rc<RefCell<TextureFile>>]) -> HashSet<PathBuf> {
         let mut image_paths = HashSet::new();
         for file in files {
-            if let Some(image_reference) = &file.borrow().image_reference {
+            if let Some(image_reference) = &file.borrow().get_image_reference_path() {
                 let value = image_reference;
                 image_paths.insert(value.clone());
             }

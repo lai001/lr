@@ -114,7 +114,6 @@ impl ColorType {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Image {
-    pub name: String,
     pub url: url::Url,
     pub image_format: ImageFormat,
     pub data: Vec<u8>,
@@ -137,7 +136,7 @@ impl Image {
         reader.decode()
     }
 
-    pub fn from_file(name: &str, path: &str) -> Result<Image> {
+    pub fn from_file(path: &str) -> Result<Image> {
         let file = std::fs::File::open(path).map_err(|err| {
             crate::error::Error::IO(err, Some(format!("Can not open file {}", path)))
         })?;
@@ -151,7 +150,6 @@ impl Image {
             .format()
             .ok_or(crate::error::Error::File(Some("Unknow format".to_string())))?;
         let image = Image {
-            name: name.to_string(),
             image_format: ImageFormat::from_external_format(format),
             data,
             url: url::Url::from_str("").unwrap(),

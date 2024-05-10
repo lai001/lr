@@ -20,6 +20,7 @@ use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use rs_core_minimal::{misc::get_md5_from_string, path_ext::CanonicalizeSlashExt};
 use rs_engine::{
+    build_asset_url, build_content_file_url,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
     content::{content_file_type::EContentFileType, texture::TextureFile},
     frame_sync::{EOptions, FrameSync},
@@ -528,7 +529,7 @@ impl EditorContext {
             .content_item_property_view
             .image_asset_files
             .clear();
-        let base = project_context.get_asset_folder_path();
+        let base = project_context.get_project_folder_path();
         for file in &asset_folder.files {
             match file.get_file_type() {
                 EFileType::Exr | EFileType::Hdr => {
@@ -675,52 +676,51 @@ impl EditorContext {
         project_context: &ProjectContext,
         files: Vec<EContentFileType>,
     ) {
-        let asset_folder_path = project_context.get_asset_folder_path();
+        let project_folder_path = project_context.get_project_folder_path();
         for file in files {
             match file {
                 EContentFileType::StaticMesh(static_mesh) => {
-                    let file_path =
-                        asset_folder_path.join(&static_mesh.borrow().asset_reference_relative_path);
+                    let file_path = project_folder_path
+                        .join(&static_mesh.borrow().asset_reference_relative_path);
                     model_loader.load(&file_path).unwrap();
                 }
                 EContentFileType::SkeletonMesh(skeleton_mesh) => {
                     let file_path =
-                        asset_folder_path.join(&skeleton_mesh.borrow().get_relative_path());
+                        project_folder_path.join(&skeleton_mesh.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     model_loader.to_runtime_skin_mesh(
                         skeleton_mesh.clone(),
-                        &asset_folder_path,
+                        &project_folder_path,
                         ResourceManager::default(),
                     );
                 }
                 EContentFileType::SkeletonAnimation(node_animation) => {
                     let file_path =
-                        asset_folder_path.join(&node_animation.borrow().get_relative_path());
+                        project_folder_path.join(&node_animation.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     model_loader.to_runtime_skeleton_animation(
                         node_animation.clone(),
-                        &asset_folder_path,
+                        &project_folder_path,
                         ResourceManager::default(),
                     );
                 }
                 EContentFileType::Skeleton(skeleton) => {
-                    let file_path = asset_folder_path.join(&skeleton.borrow().get_relative_path());
+                    let file_path =
+                        project_folder_path.join(&skeleton.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     let skeleton = model_loader.to_runtime_skeleton(
                         skeleton.clone(),
-                        &asset_folder_path,
+                        &project_folder_path,
                         ResourceManager::default(),
                     );
                 }
                 EContentFileType::Texture(texture_file) => {
                     let texture_file = texture_file.borrow_mut();
-                    let Some(image_reference) = &texture_file.image_reference else {
+                    let Some(image_reference) = &texture_file.get_image_reference_path() else {
                         continue;
                     };
-                    let abs_path = project_context
-                        .get_asset_folder_path()
-                        .join(image_reference);
-                    let _ = engine.create_texture_from_path(&abs_path, texture_file.url.clone());
+                    let abs_path = project_folder_path.join(image_reference);
+                    let _ = engine.create_texture_from_path(&abs_path, &texture_file.url);
 
                     {
                         let url = texture_file.url.clone();
@@ -773,7 +773,7 @@ impl EditorContext {
                             return Ok(());
                         };
                         let file_path = project_context
-                            .get_asset_folder_path()
+                            .get_project_folder_path()
                             .join(image_reference);
                         if !file_path.exists() {
                             return Err(anyhow!("The file is not exist"));
@@ -817,6 +817,7 @@ impl EditorContext {
                         );
                         Ok(())
                     })();
+                    log::trace!("{:?}", result);
                 }
             }
         }
@@ -856,7 +857,7 @@ impl EditorContext {
         let asset_folder_path = project_context.get_asset_folder_path();
         let asset_folder = Self::build_asset_folder(&asset_folder_path);
         self.editor_ui
-            .set_asset_folder_path(Some(asset_folder_path.clone()));
+            .set_project_folder_path(Some(project_context.get_project_folder_path()));
         log::trace!("Update asset folder. {:?}", asset_folder);
         self.data_source.asset_folder = Some(asset_folder.clone());
         self.data_source.current_asset_folder = Some(asset_folder);
@@ -901,7 +902,20 @@ impl EditorContext {
                 }
             }
         }
-
+        {
+            let mut materials = self.editor_ui.object_property_view.materials.borrow_mut();
+            materials.clear();
+            let files = &project_context.project.content.borrow().files;
+            for file in files {
+                match file {
+                    EContentFileType::Material(material) => {
+                        let url = material.borrow().url.clone();
+                        materials.push(url);
+                    }
+                    _ => {}
+                }
+            }
+        }
         self.project_context = Some(project_context);
         self.try_load_plugin();
         self.data_source
@@ -1337,6 +1351,24 @@ impl EditorContext {
                 top_menu::EClickEventType::ViewMode(mode) => {
                     self.engine.set_view_mode(mode);
                 }
+                top_menu::EClickEventType::Run => {
+                    let Some(project_context) = self.project_context.as_ref() else {
+                        return;
+                    };
+                    let debug_exe_path = project_context
+                        .get_build_dir()
+                        .join("windows/debug/x64/rs_desktop_standalone.exe");
+                    let release_exe_path = project_context
+                        .get_build_dir()
+                        .join("windows/release/x64/rs_desktop_standalone.exe");
+                    if release_exe_path.exists() {
+                        let mut cmd = std::process::Command::new(release_exe_path);
+                        let output = cmd.output();
+                    } else if debug_exe_path.exists() {
+                        let mut cmd = std::process::Command::new(debug_exe_path);
+                        let output = cmd.output();
+                    }
+                }
             }
         }
         if let Some(click_aseet) = click_event.click_aseet {
@@ -1374,7 +1406,8 @@ impl EditorContext {
                             let folder_url = current_folder.get_url();
                             let url = folder_url.join(&asset_file.name).unwrap();
                             let mut texture_file = TextureFile::new(url);
-                            texture_file.image_reference = Some(image_reference);
+                            // texture_file.image_reference = Some(image_reference);
+                            texture_file.set_image_reference_path(image_reference);
                             log::trace!("Create texture: {:?}", &texture_file.url.as_str());
                             current_folder.files.push(EContentFileType::Texture(Rc::new(
                                 RefCell::new(texture_file),
@@ -1393,7 +1426,8 @@ impl EditorContext {
                     };
                     let result = (|| {
                         let project_context = self.project_context.as_ref().ok_or(anyhow!(""))?;
-                        let file_path = project_context.get_asset_folder_path().join(new);
+                        log::trace!("{:?}", new);
+                        let file_path = project_context.get_project_folder_path().join(new);
                         if !file_path.exists() {
                             return Err(anyhow!("The file is not exist"));
                         }
@@ -1517,13 +1551,10 @@ impl EditorContext {
                         };
                         if is_new_content_name_avaliable {
                             let material = rs_engine::content::material::Material::new(
-                                url::Url::parse(&format!(
-                                    "content://content/{}",
-                                    &content_data_source.new_material_name
-                                ))
-                                .unwrap(),
-                                url::Url::parse(&format!(
-                                    "asset://material/{}",
+                                build_content_file_url(&content_data_source.new_material_name)
+                                    .unwrap(),
+                                build_asset_url(format!(
+                                    "material/{}",
                                     &content_data_source.new_material_name
                                 ))
                                 .unwrap(),
@@ -1557,10 +1588,9 @@ impl EditorContext {
                         );
                         if is_new_content_name_avaliable {
                             let new_ibl = rs_engine::content::ibl::IBL::new(
-                                url::Url::parse(&format!(
-                                    "content://content/{}",
-                                    &self.data_source.content_data_source.new_ibl_name
-                                ))
+                                build_content_file_url(
+                                    &self.data_source.content_data_source.new_ibl_name,
+                                )
                                 .unwrap(),
                             );
                             let new_ibl = SingleThreadMut::new(new_ibl);

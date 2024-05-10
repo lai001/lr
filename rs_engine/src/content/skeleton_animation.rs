@@ -1,7 +1,7 @@
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
-use crate::url_extension::UrlExtension;
+use crate::{build_asset_url, url_extension::UrlExtension};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SkeletonAnimation {
@@ -32,8 +32,8 @@ impl SkeletonAnimation {
     }
 
     pub fn make_asset_url(relative_path: &str, animation_name: &str) -> url::Url {
-        url::Url::parse(&format!(
-            "asset://{}?animation_name={}",
+        build_asset_url(format!(
+            "{}?animation_name={}",
             relative_path, animation_name
         ))
         .unwrap()
