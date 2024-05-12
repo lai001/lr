@@ -1,4 +1,4 @@
-use rs_proc_macros::{GlobalShader, MultipleThreadFunctionsGenerator};
+use rs_proc_macros::{shader_uniform, GlobalShader, MultipleThreadFunctionsGenerator};
 use std::sync::{Arc, Mutex};
 
 struct STResourceManager {}
@@ -45,6 +45,13 @@ impl ResourceManager {
 #[include_dirs("rs_render/shaders")]
 #[defines("A=1", "B=2")]
 pub struct TestShader {}
+
+shader_uniform!(
+    struct Constants {
+        model: mat4x4<f32>,
+        id: u32,
+    };
+);
 
 #[cfg(test)]
 mod test {

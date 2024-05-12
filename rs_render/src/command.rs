@@ -132,6 +132,7 @@ pub struct DrawObject {
     pub global_binding_resources: Vec<EBindingResource>,
     pub vt_binding_resources: Vec<EBindingResource>,
     pub binding_resources: Vec<Vec<EBindingResource>>,
+    pub is_use_virtual_texture: bool,
     pub render_pipeline: String,
 }
 

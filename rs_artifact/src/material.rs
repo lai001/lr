@@ -15,11 +15,17 @@ impl TextureBinding {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+pub struct MaterialInfo {
+    pub map_textures: HashSet<TextureBinding>,
+    pub virtual_textures: HashSet<url::Url>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Material {
     pub url: url::Url,
     pub code: String,
-    pub map_texture_names: HashSet<TextureBinding>,
+    pub material_info: MaterialInfo,
 }
 
 impl Asset for Material {

@@ -1,4 +1,4 @@
-use crate::VertexBufferType;
+use crate::{shader_library::ShaderLibrary, VertexBufferType};
 use naga::*;
 use std::collections::HashMap;
 use wgpu::*;
@@ -69,13 +69,7 @@ impl Reflection {
             .map_err(|err| crate::error::Error::ShaderReflection(err, None))?;
 
         if is_enable_validation {
-            let mut validator = naga::valid::Validator::new(
-                naga::valid::ValidationFlags::all(),
-                naga::valid::Capabilities::all(),
-            );
-            validator
-                .validate(&module)
-                .map_err(|err| crate::error::Error::ValidationError(err))?;
+            ShaderLibrary::validate_shader_module(&module)?
         }
 
         let render_entry_points = Self::extract_render_entry_point(&module);

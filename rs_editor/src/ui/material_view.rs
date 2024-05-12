@@ -15,6 +15,7 @@ const NODE_IO_COLOR: Color32 = Color32::WHITE;
 
 pub struct GraphViewer {
     pub texture_urls: Vec<url::Url>,
+    pub virtual_texture_urls: Vec<url::Url>,
     pub is_updated: bool,
 }
 
@@ -101,6 +102,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::Sink(..) => format!("Attribute"),
             EMaterialNodeType::Texture(_) => format!("Texture"),
             EMaterialNodeType::TexCoord(_) => format!("TexCoord"),
+            EMaterialNodeType::VirtualTexture(_) => format!("VirtualTexture"),
         }
     }
 
@@ -110,6 +112,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::Sink(..) => 0,
             EMaterialNodeType::Texture(_) => 1,
             EMaterialNodeType::TexCoord(_) => 1,
+            EMaterialNodeType::VirtualTexture(_) => 1,
         }
     }
 
@@ -119,6 +122,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::Sink(..) => 7,
             EMaterialNodeType::Texture(_) => 2,
             EMaterialNodeType::TexCoord(_) => 0,
+            EMaterialNodeType::VirtualTexture(_) => 1,
         }
     }
 
@@ -243,6 +247,36 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 _ => unreachable!(),
             },
             EMaterialNodeType::TexCoord(_) => PinInfo::default(),
+            EMaterialNodeType::VirtualTexture(current_value) => {
+                let text = if let Some(current_value) = current_value.as_ref() {
+                    current_value.to_string()
+                } else {
+                    "None".to_string()
+                };
+
+                egui::ComboBox::from_label("")
+                    .selected_text(format!("{}", text))
+                    .show_ui(ui, |ui| {
+                        if ui.selectable_value(current_value, None, "None").clicked() {
+                            self.is_updated = true;
+                        }
+                        for selectable_texture_url in self.virtual_texture_urls.iter_mut() {
+                            let des = selectable_texture_url.to_string();
+                            if ui
+                                .selectable_value(
+                                    current_value,
+                                    Some(selectable_texture_url.clone()),
+                                    des.clone(),
+                                )
+                                .clicked()
+                            {
+                                self.is_updated = true;
+                            }
+                        }
+                    });
+
+                PinInfo::default()
+            }
         }
     }
 
@@ -279,6 +313,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 }
                 PinInfo::square().with_fill(NODE_IO_COLOR)
             }
+            EMaterialNodeType::VirtualTexture(_) => PinInfo::square().with_fill(NODE_IO_COLOR),
         }
     }
 
@@ -364,9 +399,20 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             snarl.insert_node(pos, node);
             ui.close_menu();
         }
+
+        if ui.button("VirtualTexture").clicked() {
+            let node = MaterialNode {
+                node_type: EMaterialNodeType::VirtualTexture(None),
+            };
+            snarl.insert_node(pos, node);
+            ui.close_menu();
+        }
     }
 
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<MaterialNode>) {
+        for remote in &to.remotes {
+            snarl.disconnect(*remote, to.id);
+        }
         snarl.connect(from.id, to.id);
         self.is_updated = true;
     }
@@ -463,6 +509,7 @@ impl EValueType {
 pub enum EMaterialNodeType {
     Add(EValueType, EValueType),
     Texture(Option<url::Url>),
+    VirtualTexture(Option<url::Url>),
     TexCoord(i32),
     Sink(Attribute),
 }
@@ -483,6 +530,7 @@ pub struct MaterialView {
     pub attribute_node_id: NodeId,
     pub event: Option<EEventType>,
     pub current_resolve_result: Option<ResolveResult>,
+    pub validate: Option<rs_render::error::Result<()>>,
 }
 
 impl MaterialView {
@@ -496,6 +544,7 @@ impl MaterialView {
         style._wire_style = Some(egui_snarl::ui::WireStyle::AxisAligned { corner_radius: 5.0 });
         let viewer = GraphViewer {
             texture_urls: vec![],
+            virtual_texture_urls: vec![],
             is_updated: false,
         };
 
@@ -511,6 +560,7 @@ impl MaterialView {
             attribute_node_id,
             event: None,
             current_resolve_result: None,
+            validate: None,
         }
     }
 
@@ -552,13 +602,48 @@ impl MaterialView {
             .show(context, |ui| {
                 let current_resolve_result = &mut self.current_resolve_result;
                 if let Some(current_resolve_result) = current_resolve_result {
+                    if ui.button(format!("Validate")).clicked() {
+                        self.validate = Some(
+                            rs_render::shader_library::ShaderLibrary::validate_shader_code(
+                                &current_resolve_result.shader_code,
+                            ),
+                        );
+                    }
+                    match &self.validate {
+                        Some(validate) => match validate {
+                            Ok(_) => {
+                                ui.label(format!("Ok"));
+                            }
+                            Err(err) => {
+                                let theme =
+                                    egui_extras::syntax_highlighting::CodeTheme::from_memory(
+                                        ui.ctx(),
+                                    );
+                                egui_extras::syntax_highlighting::code_view_ui(
+                                    ui,
+                                    &theme,
+                                    &err.to_string(),
+                                    "wgsl",
+                                );
+                            }
+                        },
+                        None => {
+                            ui.label(format!("None"));
+                        }
+                    }
+                    ui.separator();
                     let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx());
-                    egui_extras::syntax_highlighting::code_view_ui(
+                    let clicked = egui_extras::syntax_highlighting::code_view_ui(
                         ui,
                         &theme,
                         &current_resolve_result.shader_code,
                         "wgsl",
-                    );
+                    )
+                    .clicked_by(PointerButton::Secondary);
+                    if clicked {
+                        ui.ctx()
+                            .copy_text(current_resolve_result.shader_code.clone());
+                    }
                 }
             });
 

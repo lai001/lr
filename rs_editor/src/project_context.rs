@@ -385,7 +385,7 @@ impl ProjectContext {
                                 rs_artifact::material::Material {
                                     url: material_content.borrow().asset_url.clone(),
                                     code: resolve_result.shader_code,
-                                    map_texture_names: resolve_result.map_textures,
+                                    material_info: resolve_result.material_info,
                                 },
                             );
                             material_contents.insert(

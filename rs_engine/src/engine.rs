@@ -342,7 +342,7 @@ impl Engine {
                                 let pipeline_handle = self.create_material(material.code);
                                 let mut material_content = material_content.borrow_mut();
                                 material_content.set_pipeline_handle(pipeline_handle);
-                                material_content.set_map_textures(material.map_texture_names);
+                                material_content.set_material_info(material.material_info);
                             }
                         }
                     }
@@ -651,6 +651,7 @@ impl Engine {
             binding_resources: vec![],
             global_binding_resources,
             vt_binding_resources: vec![],
+            is_use_virtual_texture: false,
         };
         draw_object
     }
@@ -962,21 +963,38 @@ impl Engine {
             vertex_buffer_handles.push(vertex_buffer_handle);
         }
 
-        let constants_buffer_handle = self.resource_manager.next_buffer();
-        let buffer_create_info = BufferCreateInfo {
-            label: Some(format!("rs.{}.Constants", name.clone())),
-            contents: rs_foundation::cast_any_as_u8_slice(
-                &rs_render::render_pipeline::material_pipeline::Constants::default(),
+        let mut fn_create_buffer = |label: String, contents: Vec<u8>| {
+            let constants_buffer_handle = self.resource_manager.next_buffer();
+            let buffer_create_info = BufferCreateInfo {
+                label: Some(label),
+                contents,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::MAP_WRITE,
+            };
+            let create_buffer = CreateBuffer {
+                handle: *constants_buffer_handle,
+                buffer_create_info,
+            };
+            let message = RenderCommand::CreateBuffer(create_buffer);
+            self.render_thread_mode.send_command(message);
+            constants_buffer_handle
+        };
+        let constants_buffer_handle = fn_create_buffer(
+            format!("rs.{}.Constants", name.clone()),
+            rs_foundation::cast_any_as_u8_slice(&rs_render::constants::Constants::default())
+                .to_vec(),
+        );
+        let skin_constants_buffer_handle = fn_create_buffer(
+            format!("rs.{}.SkinConstants", name.clone()),
+            rs_foundation::cast_any_as_u8_slice(&rs_render::constants::SkinConstants::default())
+                .to_vec(),
+        );
+        let virtual_texture_constants_buffer_handle = fn_create_buffer(
+            format!("rs.{}.VirtualTextureConstants", name.clone()),
+            rs_foundation::cast_any_as_u8_slice(
+                &rs_render::constants::VirtualTextureConstants::default(),
             )
             .to_vec(),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::MAP_WRITE,
-        };
-        let create_buffer = CreateBuffer {
-            handle: *constants_buffer_handle,
-            buffer_create_info,
-        };
-        let message = RenderCommand::CreateBuffer(create_buffer);
-        self.render_thread_mode.send_command(message);
+        );
 
         let object = MaterialDrawObject {
             id,
@@ -988,11 +1006,22 @@ impl Engine {
                 EBindingResource::Constants(*self.global_constants_handle),
                 EBindingResource::Sampler(*self.global_sampler_handle),
             ],
-            vt_binding_resources: vec![EBindingResource::Constants(*constants_buffer_handle)],
-            binding_resources: vec![vec![EBindingResource::Constants(*constants_buffer_handle)]],
+            vt_binding_resources: vec![
+                EBindingResource::Constants(*constants_buffer_handle),
+                EBindingResource::Constants(*skin_constants_buffer_handle),
+            ],
+            binding_resources: vec![vec![
+                EBindingResource::Constants(*constants_buffer_handle),
+                EBindingResource::Constants(*skin_constants_buffer_handle),
+                EBindingResource::Constants(*virtual_texture_constants_buffer_handle),
+            ]],
             material,
-            constants: Default::default(),
             constants_buffer_handle,
+            skin_constants_buffer_handle,
+            virtual_texture_constants_buffer_handle,
+            constants: Default::default(),
+            skin_constants: Default::default(),
+            virtual_texture_constants: Default::default(),
         };
         EDrawObjectType::SkinMaterial(object)
     }
@@ -1084,7 +1113,40 @@ impl Engine {
                     object.constants_buffer_handle.clone(),
                     rs_foundation::cast_any_as_u8_slice(&object.constants),
                 );
-                let map_textures = object.material.borrow().get_map_textures().clone();
+                let material_info = object.material.borrow().get_material_info().clone();
+                let map_textures = material_info.map_textures;
+                for virtual_texture_url in &material_info.virtual_textures {
+                    let source = self
+                        .virtual_texture_source_infos
+                        .get(virtual_texture_url)
+                        .unwrap();
+                    {
+                        let source = source.lock().unwrap();
+                        let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                            source.get_size().min_element(),
+                        );
+                        let max_lod = max_mips
+                            - self
+                                .settings
+                                .render_setting
+                                .virtual_texture_setting
+                                .tile_size
+                                .ilog2()
+                            - 1;
+                        object.virtual_texture_constants.virtual_texture_max_lod = max_lod;
+                        object.virtual_texture_constants.virtual_texture_size =
+                            source.get_size().as_vec2();
+                    }
+                }
+                self.update_buffer(
+                    object.skin_constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.skin_constants),
+                );
+                self.update_buffer(
+                    object.virtual_texture_constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.virtual_texture_constants),
+                );
+
                 let mut binding_resources: Vec<EBindingResource> =
                     Vec::with_capacity(map_textures.len());
                 for map_texture in &map_textures {
@@ -1126,6 +1188,7 @@ impl Engine {
                     vt_binding_resources: static_objcet.vt_binding_resources.clone(),
                     binding_resources: static_objcet.binding_resources.clone(),
                     render_pipeline: static_objcet.render_pipeline.clone(),
+                    is_use_virtual_texture: false,
                 };
                 self.render_thread_mode
                     .send_command(RenderCommand::DrawObject(draw_object));
@@ -1141,6 +1204,7 @@ impl Engine {
                     vt_binding_resources: skin_objcet.vt_binding_resources.clone(),
                     binding_resources: skin_objcet.binding_resources.clone(),
                     render_pipeline: skin_objcet.render_pipeline.clone(),
+                    is_use_virtual_texture: false,
                 };
                 self.render_thread_mode
                     .send_command(RenderCommand::DrawObject(draw_object));
@@ -1151,6 +1215,12 @@ impl Engine {
                         rs_render::shader_library::ShaderLibrary::get_material_shader_name(
                             *pipeline_handle,
                         );
+                    let is_use_virtual_texture = !skin_objcet
+                        .material
+                        .borrow()
+                        .get_material_info()
+                        .virtual_textures
+                        .is_empty();
                     let draw_object = DrawObject {
                         id: skin_objcet.id,
                         vertex_buffers: skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
@@ -1160,6 +1230,7 @@ impl Engine {
                         global_binding_resources: skin_objcet.global_binding_resources.clone(),
                         vt_binding_resources: skin_objcet.vt_binding_resources.clone(),
                         binding_resources: skin_objcet.binding_resources.clone(),
+                        is_use_virtual_texture,
                         render_pipeline,
                     };
                     self.render_thread_mode
@@ -1470,6 +1541,7 @@ impl Engine {
             vt_binding_resources: vec![],
             binding_resources: vec![],
             render_pipeline: rs_render::renderer::GRID_RENDER_PIPELINE.to_string(),
+            is_use_virtual_texture: false,
         }
     }
 

@@ -55,5 +55,9 @@ pub struct MaterialDrawObject {
     pub(crate) binding_resources: Vec<Vec<EBindingResource>>,
     pub(crate) material: Rc<RefCell<crate::content::material::Material>>,
     pub(crate) constants_buffer_handle: BufferHandle,
-    pub constants: rs_render::render_pipeline::material_pipeline::Constants,
+    pub(crate) skin_constants_buffer_handle: BufferHandle,
+    pub(crate) virtual_texture_constants_buffer_handle: BufferHandle,
+    pub constants: rs_render::constants::Constants,
+    pub skin_constants: rs_render::constants::SkinConstants,
+    pub virtual_texture_constants: rs_render::constants::VirtualTextureConstants,
 }

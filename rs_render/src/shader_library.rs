@@ -121,9 +121,7 @@ impl ShaderLibrary {
             .clone()
     }
 
-    pub fn validate_shader_code(shader_code: impl AsRef<str>) -> crate::error::Result<()> {
-        let module = naga::front::wgsl::parse_str(&shader_code.as_ref())
-            .map_err(|err| crate::error::Error::ShaderReflection(err, None))?;
+    pub fn validate_shader_module(module: &naga::Module) -> crate::error::Result<()> {
         let mut validator = naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
             naga::valid::Capabilities::all(),
@@ -132,5 +130,11 @@ impl ShaderLibrary {
             .validate(&module)
             .map_err(|err| crate::error::Error::ValidationError(err))?;
         Ok(())
+    }
+
+    pub fn validate_shader_code(shader_code: impl AsRef<str>) -> crate::error::Result<()> {
+        let module = naga::front::wgsl::parse_str(&shader_code.as_ref())
+            .map_err(|err| crate::error::Error::ShaderReflection(err, None))?;
+        Self::validate_shader_module(&module)
     }
 }

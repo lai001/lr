@@ -1,6 +1,6 @@
 use crate::ui::material_view::{EMaterialNodeType, MaterialNode};
 use egui_snarl::{InPinId, NodeId, OutPinId, Snarl};
-use rs_artifact::material::TextureBinding;
+use rs_artifact::material::{MaterialInfo, TextureBinding};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -13,7 +13,7 @@ struct ResolveResultInternal {
 #[derive(Clone)]
 pub struct ResolveResult {
     pub shader_code: String,
-    pub map_textures: HashSet<TextureBinding>,
+    pub material_info: MaterialInfo,
 }
 
 #[derive(Debug, Default)]
@@ -61,14 +61,17 @@ impl ResolveContext {
 }
 
 pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<ResolveResult> {
-    let mut map_textures: HashSet<TextureBinding> = HashSet::new();
+    let mut material_info = MaterialInfo {
+        map_textures: HashSet::new(),
+        virtual_textures: HashSet::new(),
+    };
     let resolve_context = ResolveContext::from_snarl(snarl);
     let attribute_node_id = egui_snarl::NodeId(0);
     let result = resolve_attribute_node(
         attribute_node_id,
         &resolve_context,
         snarl,
-        &mut map_textures,
+        &mut material_info,
     )?;
     let mut lines: Vec<String> = vec![];
     for resolve_result in result.iter() {
@@ -78,6 +81,7 @@ pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<ResolveResult> {
     let shader_path = rs_render::get_buildin_shader_dir().join("pbr_shading.wgsl");
     let include_dirs: Vec<PathBuf> = vec![];
     let definitions: Vec<String> = vec![
+        "VIRTUAL_TEXTURE=1".to_string(),
         "MATERIAL_SHADER_CODE=@MATERIAL_SHADER_CODE@".to_string(),
         "USER_TEXTURES=@USER_TEXTURES@".to_string(),
         format!(
@@ -94,7 +98,7 @@ pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<ResolveResult> {
     let shader_code = shader_code.replace("@MATERIAL_SHADER_CODE@", &material_shader_code);
 
     let mut texture_uniform_code = "".to_string();
-    for map_texture in map_textures.clone() {
+    for map_texture in material_info.map_textures.clone() {
         let name = map_texture.get_texture_bind_name();
         let line = format!(
             "@group({}) @binding({}) var {}: texture_2d<f32>;\n",
@@ -106,7 +110,7 @@ pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<ResolveResult> {
 
     Ok(ResolveResult {
         shader_code,
-        map_textures,
+        material_info,
     })
 }
 
@@ -118,7 +122,7 @@ fn resolve_attribute_node(
     attribute_node_id: NodeId,
     resolve_context: &ResolveContext,
     snarl: &Snarl<MaterialNode>,
-    map_textures: &mut HashSet<TextureBinding>,
+    material_info: &mut MaterialInfo,
 ) -> anyhow::Result<Vec<ResolveResultInternal>> {
     let mut result: Vec<ResolveResultInternal> = Vec::new();
 
@@ -139,7 +143,7 @@ fn resolve_attribute_node(
                 &attribute_value_literal,
                 resolve_context,
                 snarl,
-                map_textures,
+                material_info,
             )?;
             result.push(value);
         }};
@@ -163,7 +167,7 @@ fn resolve_attribute(
     attribute_value_literal: &str,
     resolve_context: &ResolveContext,
     snarl: &Snarl<MaterialNode>,
-    map_textures: &mut HashSet<TextureBinding>,
+    material_info: &mut MaterialInfo,
 ) -> anyhow::Result<ResolveResultInternal> {
     let node_io_info = resolve_context
         .nodes
@@ -174,7 +178,7 @@ fn resolve_attribute(
         .get(&input)
         .and_then(|x| {
             let mut lines: Vec<String> = vec![];
-            walk_resolve_node(x.node, resolve_context, snarl, &mut lines, map_textures);
+            walk_resolve_node(x.node, resolve_context, snarl, &mut lines, material_info);
             lines.reverse();
             Some(lines)
         })
@@ -198,14 +202,20 @@ fn walk_resolve_node(
     resolve_context: &ResolveContext,
     snarl: &Snarl<MaterialNode>,
     lines: &mut Vec<String>,
-    map_textures: &mut HashSet<TextureBinding>,
+    material_info: &mut MaterialInfo,
 ) {
     let node = snarl.get_node(node_id).expect("Not null");
-    let line = resolve_node(node_id, node, resolve_context, map_textures);
+    let line = resolve_node(node_id, node, resolve_context, material_info);
     lines.push(line);
     let node_io_info = resolve_context.nodes.get(&node_id).unwrap();
     for (_, out_pin_id) in &node_io_info.inputs {
-        walk_resolve_node(out_pin_id.node, resolve_context, snarl, lines, map_textures);
+        walk_resolve_node(
+            out_pin_id.node,
+            resolve_context,
+            snarl,
+            lines,
+            material_info,
+        );
     }
 }
 
@@ -213,7 +223,7 @@ fn resolve_node(
     node_id: NodeId,
     node: &MaterialNode,
     resolve_context: &ResolveContext,
-    map_textures: &mut HashSet<TextureBinding>,
+    material_info: &mut MaterialInfo,
 ) -> String {
     let var_name = node_var_name(node_id);
     match &node.node_type {
@@ -242,15 +252,19 @@ fn resolve_node(
                     .inputs;
                 let binding = TextureBinding {
                     group: 2,
-                    binding: map_textures.len(),
+                    binding: material_info.map_textures.len(),
                     texture_url: texture_url.clone(),
                 };
                 let texture_var_name: String;
-                if let Some(exist) = map_textures.iter().find(|x| &x.texture_url == texture_url) {
+                if let Some(exist) = material_info
+                    .map_textures
+                    .iter()
+                    .find(|x| &x.texture_url == texture_url)
+                {
                     texture_var_name = exist.get_texture_bind_name();
                 } else {
                     texture_var_name = binding.get_texture_bind_name();
-                    map_textures.insert(binding);
+                    material_info.map_textures.insert(binding);
                 }
                 inputs.get(&0).and_then(|out_pin_id| {
                     Some(format!(
@@ -273,5 +287,16 @@ fn resolve_node(
             )
         }
         EMaterialNodeType::Sink(_) => unreachable!(),
+        EMaterialNodeType::VirtualTexture(texture_url) => {
+            if let Some(texture_url) = texture_url {
+                material_info.virtual_textures.insert(texture_url.clone());
+                format!(
+                    "var {} = virtual_texture_sample(vertex_output.tex_coord0, virtual_texture_constants.virtual_texture_max_lod, virtual_texture_constants.virtual_texture_size).xyz;",
+                    var_name,
+                )
+            } else {
+                format!("var {} = vec3<f32>(0.0);", var_name)
+            }
+        }
     }
 }

@@ -449,7 +449,7 @@ impl EditorContext {
                                 let mut material_content = material_content.borrow_mut();
                                 material_content.set_pipeline_handle(handle);
                                 material_content
-                                    .set_map_textures(resolve_result.map_textures.clone());
+                                    .set_material_info(resolve_result.material_info.clone());
                             }
                         }
                     }
@@ -758,7 +758,7 @@ impl EditorContext {
                                 engine.create_material(resolve_result.shader_code);
                             let mut material_content = material_content.borrow_mut();
                             material_content.set_pipeline_handle(pipeline_handle);
-                            material_content.set_map_textures(resolve_result.map_textures);
+                            material_content.set_material_info(resolve_result.material_info);
                         }
                         material_editor
                             .borrow_mut()
@@ -1201,6 +1201,7 @@ impl EditorContext {
             .insert(EWindowType::Material, egui_winit_state);
 
         self.editor_ui.material_view.viewer.texture_urls = self.collect_textures();
+        self.editor_ui.material_view.viewer.virtual_texture_urls = self.collect_virtual_textures();
         self.editor_ui.material_view.viewer.is_updated = true;
         log::trace!("{}", "Spawn material window");
     }
@@ -1217,6 +1218,29 @@ impl EditorContext {
             .iter()
             .filter_map(|x| match x {
                 EContentFileType::Texture(_) => Some(x.get_url()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn collect_virtual_textures(&self) -> Vec<url::Url> {
+        let Some(project_context) = &self.project_context else {
+            return vec![];
+        };
+        project_context
+            .project
+            .content
+            .borrow()
+            .files
+            .iter()
+            .filter_map(|x| match x {
+                EContentFileType::Texture(texture) => {
+                    if texture.borrow().is_virtual_texture {
+                        Some(x.get_url())
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             })
             .collect()
@@ -1456,37 +1480,33 @@ impl EditorContext {
                     texture_file,
                     is_virtual_texture,
                 ) => {
-                    (|| {
+                    let result: anyhow::Result<()> = (|| {
                         if !is_virtual_texture {
-                            return;
+                            return Ok(());
                         }
-                        let Some(project_context) = &self.project_context else {
-                            return;
-                        };
-                        let Ok(virtual_texture_cache_dir) =
-                            project_context.try_create_virtual_texture_cache_dir()
-                        else {
-                            return;
-                        };
-                        let asset_folder = &project_context.get_asset_folder_path();
-                        let Ok(virtual_cache_name) = texture_file
+                        let project_context = self
+                            .project_context
+                            .as_ref()
+                            .ok_or(anyhow!("No project context"))?;
+                        let virtual_texture_cache_dir =
+                            project_context.try_create_virtual_texture_cache_dir()?;
+                        let project_folder_path = &project_context.get_project_folder_path();
+
+                        let virtual_cache_name = texture_file
                             .borrow()
-                            .get_pref_virtual_cache_name(asset_folder)
-                        else {
-                            return;
-                        };
-                        let result = texture_file.borrow_mut().create_virtual_texture_cache(
-                            asset_folder,
+                            .get_pref_virtual_cache_name(project_folder_path)?;
+                        texture_file.borrow_mut().create_virtual_texture_cache(
+                            project_folder_path,
                             &virtual_texture_cache_dir.join(virtual_cache_name.clone()),
                             Some(rs_artifact::EEndianType::Little),
                             256,
-                        );
-                        if result.is_ok() {
-                            log::trace!("virtual_cache_name: {}", virtual_cache_name);
-                            texture_file.borrow_mut().virtual_image_reference =
-                                Some(virtual_cache_name);
-                        }
+                        )?;
+                        log::trace!("virtual_cache_name: {}", virtual_cache_name);
+                        texture_file.borrow_mut().virtual_image_reference =
+                            Some(virtual_cache_name);
+                        Ok(())
                     })();
+                    log::trace!("{:?}", result);
                 }
             }
         }

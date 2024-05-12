@@ -2,7 +2,6 @@ use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::BaseRenderPipelineBuilder,
     command::MaterialRenderPipelineHandle,
-    global_shaders::skeleton_shading::NUM_MAX_BONE,
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2},
@@ -10,30 +9,6 @@ use crate::{
 };
 use type_layout::TypeLayout;
 use wgpu::*;
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct Constants {
-    pub model: glam::Mat4,
-    pub id: u32,
-    _pad2_0: i32,
-    _pad2_1: i32,
-    _pad2_2: i32,
-    pub bones: [glam::Mat4; NUM_MAX_BONE],
-}
-
-impl Default for Constants {
-    fn default() -> Self {
-        Self {
-            model: Default::default(),
-            id: Default::default(),
-            bones: [glam::Mat4::IDENTITY; NUM_MAX_BONE],
-            _pad2_0: Default::default(),
-            _pad2_1: Default::default(),
-            _pad2_2: Default::default(),
-        }
-    }
-}
 
 pub struct MaterialRenderPipeline {
     base_render_pipeline: BaseRenderPipeline,

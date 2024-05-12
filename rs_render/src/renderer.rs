@@ -772,7 +772,8 @@ impl Renderer {
                     },
                     _ => false,
                 })
-                .is_some();
+                .is_some()
+                || draw_object_command.is_use_virtual_texture;
             if !is_virtual {
                 continue;
             }
@@ -799,7 +800,18 @@ impl Renderer {
                             .unwrap(),
                     );
                 }
-                _ => {}
+                _ => {
+                    vertex_buffers.push(
+                        self.buffers
+                            .get(&draw_object_command.vertex_buffers[0])
+                            .unwrap(),
+                    );
+                    vertex_buffers.push(
+                        self.buffers
+                            .get(&draw_object_command.vertex_buffers[2])
+                            .unwrap(),
+                    );
+                }
             }
 
             if vertex_buffers.is_empty() {
@@ -862,7 +874,17 @@ impl Renderer {
                         true,
                     );
                 }
-                _ => {}
+                _ => {
+                    if draw_object_command.render_pipeline.starts_with("material_") {
+                        virtual_texture_pass.render(
+                            device,
+                            queue,
+                            &[mesh_buffer.clone()],
+                            group_binding_resource,
+                            false,
+                        );
+                    }
+                }
             }
         }
         let result = virtual_texture_pass.parse_feed_back(

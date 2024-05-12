@@ -345,7 +345,7 @@ impl SkeletonMeshComponent {
                     draw_object.constants.model = model;
                 }
                 EDrawObjectType::SkinMaterial(draw_object) => {
-                    draw_object.constants.bones.copy_from_slice(&bones);
+                    draw_object.skin_constants.bones.copy_from_slice(&bones);
                     let mut model = self.transformation;
                     if let Some((_, skeleton_mesh_hierarchy_node)) = skeleton
                         .skeleton_mesh_hierarchy

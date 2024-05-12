@@ -1,13 +1,12 @@
 use crate::{handle::MaterialRenderPipelineHandle, url_extension::UrlExtension};
-use rs_artifact::material::TextureBinding;
+use rs_artifact::material::MaterialInfo;
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 #[derive(Clone, Debug)]
 struct MaterialRuntime {
     pipeline_handle: MaterialRenderPipelineHandle,
-    map_textures: HashSet<TextureBinding>,
+    material_info: MaterialInfo,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -47,7 +46,7 @@ impl Material {
         } else {
             self.run_time = Some(MaterialRuntime {
                 pipeline_handle,
-                map_textures: HashSet::new(),
+                material_info: MaterialInfo::default(),
             });
         }
     }
@@ -60,15 +59,15 @@ impl Material {
         }
     }
 
-    pub fn set_map_textures(&mut self, map_texture_names: HashSet<TextureBinding>) {
+    pub fn set_material_info(&mut self, material_info: MaterialInfo) {
         if let Some(runtime) = self.run_time.as_mut() {
-            runtime.map_textures = map_texture_names;
+            runtime.material_info = material_info;
         }
     }
 
-    pub fn get_map_textures(&self) -> &HashSet<TextureBinding> {
+    pub fn get_material_info(&self) -> &MaterialInfo {
         if let Some(runtime) = self.run_time.as_ref() {
-            &runtime.map_textures
+            &runtime.material_info
         } else {
             panic!()
         }

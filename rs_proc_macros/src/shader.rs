@@ -147,7 +147,7 @@ pub(crate) fn global_shader_macro_derive_impl(input: TokenStream) -> TokenStream
     let module = naga::front::wgsl::parse_str(&shader_source).unwrap();
 
     let output_stream = quote! {};
-    debug_log(format!("module: \n{:#?}", module));
+    debug_log("shader_module", &format!("module: \n{:#?}", module));
     {
         let pretty_string = output_stream.to_pretty_string();
         let path =

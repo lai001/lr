@@ -7,6 +7,7 @@ pub mod bind_group_layout_entry_hook;
 pub mod buffer_dimensions;
 pub mod command;
 pub mod compute_pipeline;
+pub mod constants;
 pub mod cube_map;
 pub mod default_textures;
 pub mod depth_texture;

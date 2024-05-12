@@ -16,20 +16,16 @@ struct VertexOutput {
     @location(0) tex_coord: vec2<f32>,
 };
 
-struct Constants
-{
+struct Constants {
     model: mat4x4<f32>,
-    diffuse_texture_size: vec2<f32>,
-    diffuse_texture_max_lod: u32,
-    is_virtual_diffuse_texture: u32,
-    specular_texture_size: vec2<f32>,
-    specular_texture_max_lod: u32,
-    is_virtual_specular_texture: u32,
     id: u32,
-#ifdef SKELETON_MAX_BONES
-    bones: array<mat4x4<f32>, SKELETON_MAX_BONES>,
-#endif
 };
+
+#ifdef SKELETON_MAX_BONES
+struct SkinConstants {
+    bones: array<mat4x4<f32>, SKELETON_MAX_BONES>,
+}
+#endif
 
 fn mipmap_level(uv: vec2<f32>, texture_size: vec2<f32>) -> f32 {
     let s = dpdx(uv) * texture_size;
@@ -42,13 +38,17 @@ fn mipmap_level(uv: vec2<f32>, texture_size: vec2<f32>) -> f32 {
 
 @group(1) @binding(0) var<uniform> constants: Constants;
 
+#ifdef SKELETON_MAX_BONES
+@group(1) @binding(1) var<uniform> skin_constants: SkinConstants;
+#endif
+
 @vertex
 fn vs_main(vertex_in: VertexIn) -> VertexOutput {
 #ifdef SKELETON_MAX_BONES
-    var bone_transform = constants.bones[vertex_in.bone_ids[0]] * vertex_in.bone_weights[0];
-    bone_transform += constants.bones[vertex_in.bone_ids[1]] * vertex_in.bone_weights[1];
-    bone_transform += constants.bones[vertex_in.bone_ids[2]] * vertex_in.bone_weights[2];
-    bone_transform += constants.bones[vertex_in.bone_ids[3]] * vertex_in.bone_weights[3];
+    var bone_transform = skin_constants.bones[vertex_in.bone_ids[0]] * vertex_in.bone_weights[0];
+    bone_transform += skin_constants.bones[vertex_in.bone_ids[1]] * vertex_in.bone_weights[1];
+    bone_transform += skin_constants.bones[vertex_in.bone_ids[2]] * vertex_in.bone_weights[2];
+    bone_transform += skin_constants.bones[vertex_in.bone_ids[3]] * vertex_in.bone_weights[3];
 #endif
 
     let mvp = global_constants.view_projection * constants.model;

@@ -23,10 +23,20 @@ struct FragmentOutput {
 struct Constants {
     model: mat4x4<f32>,
     id: u32,
-#ifdef SKELETON_MAX_BONES
-    bones: array<mat4x4<f32>, SKELETON_MAX_BONES>,
-#endif
 };
+
+#ifdef SKELETON_MAX_BONES
+struct SkinConstants {
+    bones: array<mat4x4<f32>, SKELETON_MAX_BONES>,
+};
+#endif
+
+#ifdef VIRTUAL_TEXTURE
+struct VirtualTextureConstants {
+    virtual_texture_size: vec2<f32>,
+    virtual_texture_max_lod: u32,
+};
+#endif
 
 struct UserAttributes {
     base_color: vec3<f32>,
@@ -83,6 +93,14 @@ struct ShadingInfo {
 @group(0) @binding(6) var irradiance_texture: texture_cube<f32>;
 
 @group(1) @binding(0) var<uniform> constants: Constants;
+
+#ifdef SKELETON_MAX_BONES
+@group(1) @binding(1) var<uniform> skin_constants: SkinConstants;
+#endif
+
+#ifdef VIRTUAL_TEXTURE
+@group(1) @binding(2) var<uniform> virtual_texture_constants: VirtualTextureConstants;
+#endif
 
 #ifdef USER_TEXTURES
     USER_TEXTURES
@@ -237,10 +255,10 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
 
 @vertex fn vs_main(vertex_in: VertexIn) -> VertexOutput {
 #ifdef SKELETON_MAX_BONES
-    var bone_transform = constants.bones[vertex_in.bone_ids[0]] * vertex_in.bone_weights[0];
-    bone_transform += constants.bones[vertex_in.bone_ids[1]] * vertex_in.bone_weights[1];
-    bone_transform += constants.bones[vertex_in.bone_ids[2]] * vertex_in.bone_weights[2];
-    bone_transform += constants.bones[vertex_in.bone_ids[3]] * vertex_in.bone_weights[3];
+    var bone_transform = skin_constants.bones[vertex_in.bone_ids[0]] * vertex_in.bone_weights[0];
+    bone_transform += skin_constants.bones[vertex_in.bone_ids[1]] * vertex_in.bone_weights[1];
+    bone_transform += skin_constants.bones[vertex_in.bone_ids[2]] * vertex_in.bone_weights[2];
+    bone_transform += skin_constants.bones[vertex_in.bone_ids[3]] * vertex_in.bone_weights[3];
 #endif
     let mvp = global_constants.view_projection * constants.model;
     var vertex_output: VertexOutput;
