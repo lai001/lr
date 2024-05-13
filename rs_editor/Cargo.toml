@@ -66,3 +66,4 @@ rs_hotreload_plugin = { path = "../rs_hotreload_plugin" }
 rs_shader_compiler = { path = "../rs_shader_compiler" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 rs_assimp = { path = "../rs_assimp" }
+rs_proc_macros = { path = "../rs_proc_macros" }

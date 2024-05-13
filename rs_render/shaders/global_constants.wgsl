@@ -1,6 +1,12 @@
 #ifndef GLOBAL_CONSTANTS
 #define GLOBAL_CONSTANTS
 
+const DEBUG_SHADING_TYPE_NONE: i32 = 0;
+const DEBUG_SHADING_TYPE_BASE_COLOR: i32 = 1;
+const DEBUG_SHADING_TYPE_METALLIC: i32 = 2;
+const DEBUG_SHADING_TYPE_ROUGHNESS: i32 = 3;
+const DEBUG_SHADING_TYPE_NORMAL: i32 = 4;
+
 struct GlobalConstants {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
@@ -11,6 +17,7 @@ struct GlobalConstants {
     is_enable_virtual_texture: i32,
     scene_factor: f32,
     feedback_bias: f32,
+    debug_shading: i32,
 };
 
 #endif

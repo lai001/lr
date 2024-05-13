@@ -6,7 +6,8 @@ use rs_core_minimal::settings::RenderSettings;
 use std::{
     collections::HashSet,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
 };
 use wgpu::*;
 
@@ -220,4 +221,29 @@ pub struct RenderOutput {
     pub create_texture_handles: HashSet<TextureHandle>,
     pub create_buffer_handles: HashSet<BufferHandle>,
     pub create_ibl_handles: HashSet<TextureHandle>,
+}
+
+// #[derive(Clone)]
+pub enum ERenderOutputType {
+    CreateIBLBake(TextureHandle),
+    CreateTexture(TextureHandle),
+    CreateUITexture(EGUITextureHandle),
+    CreateBuffer(BufferHandle),
+    UpdateBuffer(BufferHandle),
+    UpdateTexture(TextureHandle),
+    DrawObject(u32),
+    UiOutput(isize),
+    Resize(isize),
+    CreateVirtualTextureSource(TextureHandle),
+    Present(isize),
+    RemoveWindow(isize),
+    CreateSampler(SamplerHandle),
+    CreateMaterialRenderPipeline(MaterialRenderPipelineHandle),
+    UploadPrebakeIBL(TextureHandle),
+}
+
+// #[derive(Clone)]
+pub struct RenderOutput2 {
+    pub ty: ERenderOutputType,
+    pub error: Option<RwLock<crate::error::Error>>,
 }

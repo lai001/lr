@@ -1,3 +1,25 @@
+#[repr(i32)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum EDebugShadingType {
+    None = 0,
+    BaseColor = 1,
+    Metallic = 2,
+    Roughness = 3,
+    Normal = 4,
+}
+
+impl EDebugShadingType {
+    pub fn all_types() -> Vec<EDebugShadingType> {
+        vec![
+            EDebugShadingType::None,
+            EDebugShadingType::BaseColor,
+            EDebugShadingType::Metallic,
+            EDebugShadingType::Roughness,
+            EDebugShadingType::Normal,
+        ]
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Constants {
@@ -10,4 +32,16 @@ pub struct Constants {
     pub is_enable_virtual_texture: i32,
     pub scene_factor: f32,
     pub feedback_bias: f32,
+    debug_shading: i32,
+    _pad_0: [i32; 3],
+}
+
+impl Constants {
+    pub fn set_shading_type(&mut self, ty: EDebugShadingType) {
+        self.debug_shading = ty as i32;
+    }
+
+    pub fn get_shading_type(&mut self) -> EDebugShadingType {
+        unsafe { ::std::mem::transmute(self.debug_shading) }
+    }
 }

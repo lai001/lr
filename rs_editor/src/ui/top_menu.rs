@@ -2,8 +2,8 @@ use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
     data_source::DataSource,
 };
-use egui::{menu, Button, Context, Sense, TopBottomPanel};
-use rs_render::view_mode::EViewModeType;
+use egui::{menu, Button, Context, TopBottomPanel};
+use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -36,6 +36,7 @@ pub enum EClickEventType {
     OpenWindow(EWindowType),
     Tool(EToolType),
     ViewMode(EViewModeType),
+    DebugShading(EDebugShadingType),
 }
 
 pub struct TopMenu {
@@ -172,6 +173,13 @@ impl TopMenu {
                             "Unlit",
                         ).clicked() {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Unlit));
+                        }
+                    });
+                    ui.menu_button("Debug Shading", |ui| {
+                        for ty in rs_render::global_uniform::EDebugShadingType::all_types() {
+                            if ui.radio_value(&mut datasource.debug_shading_type, ty.clone(), format!("{:?}", ty)).clicked() {
+                                click = Some(EClickEventType::DebugShading(ty.clone()));
+                            }
                         }
                     });
                     if ui.add(Button::new("Run")).clicked() {

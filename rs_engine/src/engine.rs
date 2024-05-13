@@ -27,7 +27,7 @@ use rs_render::command::{
     InitTextureData, RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer, UploadPrebakeIBL,
 };
 use rs_render::egui_render::EGUIRenderOutput;
-use rs_render::global_uniform;
+use rs_render::global_uniform::{self, EDebugShadingType};
 use rs_render::renderer::Renderer;
 use rs_render::vertex_data_type::mesh_vertex::MeshVertex0;
 use rs_render::view_mode::EViewModeType;
@@ -1566,6 +1566,10 @@ impl Engine {
                 },
             ));
         shader_handle.clone()
+    }
+
+    pub fn set_debug_shading(&mut self, ty: EDebugShadingType) {
+        self.global_constants.set_shading_type(ty);
     }
 }
 

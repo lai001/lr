@@ -34,7 +34,6 @@ pub struct Renderer {
     gui_renderer: EGUIRenderer,
     shader_library: ShaderLibrary,
     create_iblbake_commands: VecDeque<CreateIBLBake>,
-    create_texture_commands: Vec<CreateTexture>,
     create_uitexture_commands: Vec<CreateUITexture>,
     create_buffer_commands: Vec<CreateBuffer>,
     update_buffer_commands: Vec<UpdateBuffer>,
@@ -158,7 +157,6 @@ impl Renderer {
             // screen_descriptor,
             shader_library,
             create_iblbake_commands: VecDeque::new(),
-            create_texture_commands: Vec::new(),
             create_uitexture_commands: Vec::new(),
             create_buffer_commands: Vec::new(),
             update_buffer_commands: Vec::new(),
@@ -298,31 +296,6 @@ impl Renderer {
         }
 
         let mut render_output = RenderOutput::default();
-
-        for create_texture_command in &self.create_texture_commands {
-            let device = self.wgpu_context.get_device();
-            let queue = self.wgpu_context.get_queue();
-            let texture =
-                device.create_texture(&create_texture_command.texture_descriptor_create_info.get());
-            if let Some(init_data) = &create_texture_command.init_data {
-                queue.write_texture(
-                    texture.as_image_copy(),
-                    &init_data.data,
-                    init_data.data_layout,
-                    create_texture_command.texture_descriptor_create_info.size,
-                );
-            }
-            let handle = create_texture_command.handle;
-            render_output.create_texture_handles.insert(handle);
-            self.textures.insert(handle, texture);
-            self.texture_descriptors.insert(
-                handle,
-                create_texture_command
-                    .texture_descriptor_create_info
-                    .clone(),
-            );
-        }
-        self.create_texture_commands.clear();
 
         for create_buffer_command in &self.create_buffer_commands {
             let device = self.wgpu_context.get_device();
@@ -614,12 +587,37 @@ impl Renderer {
             .load_shaders_from(shaders, self.wgpu_context.get_device());
     }
 
-    pub fn send_command(&mut self, command: RenderCommand) -> Option<RenderOutput> {
+    pub fn send_command(&mut self, command: RenderCommand) -> Option<RenderOutput2> {
         match command {
             RenderCommand::CreateIBLBake(command) => {
-                self.create_iblbake_commands.push_back(command)
+                self.create_iblbake_commands.push_back(command);
             }
-            RenderCommand::CreateTexture(command) => self.create_texture_commands.push(command),
+            RenderCommand::CreateTexture(create_texture_command) => {
+                let device = self.wgpu_context.get_device();
+                let queue = self.wgpu_context.get_queue();
+                let texture = device
+                    .create_texture(&create_texture_command.texture_descriptor_create_info.get());
+                if let Some(init_data) = &create_texture_command.init_data {
+                    queue.write_texture(
+                        texture.as_image_copy(),
+                        &init_data.data,
+                        init_data.data_layout,
+                        create_texture_command.texture_descriptor_create_info.size,
+                    );
+                }
+                let handle = create_texture_command.handle;
+                self.textures.insert(handle, texture);
+                self.texture_descriptors.insert(
+                    handle,
+                    create_texture_command
+                        .texture_descriptor_create_info
+                        .clone(),
+                );
+                return Some(RenderOutput2 {
+                    ty: ERenderOutputType::CreateTexture(handle),
+                    error: None,
+                });
+            }
             RenderCommand::CreateUITexture(command) => self.create_uitexture_commands.push(command),
             RenderCommand::CreateBuffer(command) => self.create_buffer_commands.push(command),
             RenderCommand::UpdateBuffer(command) => self.update_buffer_commands.push(command),
@@ -628,7 +626,7 @@ impl Renderer {
             RenderCommand::UiOutput(command) => self.ui_output_commands.push_back(command),
             RenderCommand::Resize(command) => self.resize_commands.push_back(command),
             RenderCommand::Present(window_id) => {
-                return self.present(window_id);
+                self.present(window_id);
             }
             RenderCommand::Task(command) => self.task_commands.push_back(command),
             #[cfg(feature = "renderdoc")]

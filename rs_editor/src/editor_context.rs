@@ -1028,21 +1028,21 @@ impl EditorContext {
 
         active_level.borrow_mut().actors.push(load_result.actor);
 
-        let mesh_clusters = ModelLoader::load_from_file(&file_path, &[])?;
-        self.data_source.is_model_hierarchy_open = true;
-        let mut items: Vec<Rc<MeshItem>> = vec![];
-        for mesh_cluster in mesh_clusters {
-            let item = MeshItem {
-                name: mesh_cluster.name,
-                childs: vec![],
-            };
-            items.push(Rc::new(item));
-        }
-        let model_view_data = ModelViewData {
-            mesh_items: items,
-            file_path,
-        };
-        self.data_source.model_view_data = Some(model_view_data);
+        // let mesh_clusters = ModelLoader::load_from_file(&file_path, &[])?;
+        // self.data_source.is_model_hierarchy_open = true;
+        // let mut items: Vec<Rc<MeshItem>> = vec![];
+        // for mesh_cluster in mesh_clusters {
+        //     let item = MeshItem {
+        //         name: mesh_cluster.name,
+        //         childs: vec![],
+        //     };
+        //     items.push(Rc::new(item));
+        // }
+        // let model_view_data = ModelViewData {
+        //     mesh_items: items,
+        //     file_path,
+        // };
+        // self.data_source.model_view_data = Some(model_view_data);
         Ok(())
     }
 
@@ -1393,6 +1393,7 @@ impl EditorContext {
                         let output = cmd.output();
                     }
                 }
+                top_menu::EClickEventType::DebugShading(ty) => self.engine.set_debug_shading(ty),
             }
         }
         if let Some(click_aseet) = click_event.click_aseet {

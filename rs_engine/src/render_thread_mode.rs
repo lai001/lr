@@ -1,16 +1,16 @@
 use crate::error::Result;
 use crate::thread_pool;
 use rs_foundation::channel::SingleConsumeChnnel;
-use rs_render::command::{RenderCommand, RenderOutput};
+use rs_render::command::{RenderCommand, RenderOutput2};
 use rs_render::renderer::Renderer;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct MultipleThreadRenderer {
     renderer: Arc<Mutex<Renderer>>,
-    channel: Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput>>>,
-    render_outputs: VecDeque<RenderOutput>,
+    channel: Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput2>>>,
+    render_outputs: VecDeque<RenderOutput2>,
 }
 
 impl MultipleThreadRenderer {
@@ -26,9 +26,9 @@ impl MultipleThreadRenderer {
 
     fn spawn_render_thread(
         renderer: Arc<Mutex<Renderer>>,
-    ) -> Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput>>> {
+    ) -> Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput2>>> {
         let channel =
-            SingleConsumeChnnel::<RenderCommand, Option<RenderOutput>>::shared(Some(2), None);
+            SingleConsumeChnnel::<RenderCommand, Option<RenderOutput2>>::shared(Some(2), None);
         thread_pool::ThreadPool::render().spawn({
             let renderer = renderer.clone();
             let channel = channel.clone();
@@ -46,7 +46,7 @@ impl MultipleThreadRenderer {
 
 pub struct SingleThreadRenderer {
     renderer: Renderer,
-    render_outputs: VecDeque<RenderOutput>,
+    render_outputs: VecDeque<RenderOutput2>,
 }
 
 impl SingleThreadRenderer {

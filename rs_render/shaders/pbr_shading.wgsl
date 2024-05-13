@@ -238,7 +238,7 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
     shadingInfo.base_color = user_attributes.base_color;
     shadingInfo.metallic = user_attributes.metallic;
     shadingInfo.roughness = user_attributes.roughness;
-    shadingInfo.normal = get_normal(user_attributes.normal, tbn);
+    shadingInfo.normal = normal_world_space;
     shadingInfo.view_direction = view_direction;
     shadingInfo.f0 = mix(vec3<f32>(1.0, 1.0, 1.0) * 0.04, user_attributes.base_color.xyz, user_attributes.metallic);
     shadingInfo.nov = nov;
@@ -293,5 +293,14 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
     var ibl_color = ibl_light(shading_info, irradiance_texture, pre_filter_cube_map_texture, brdflut_texture);
 
     fragment_output.color = vec4<f32>(ibl_color, 1.0);
+    if (global_constants.debug_shading == DEBUG_SHADING_TYPE_BASE_COLOR) {
+        fragment_output.color = vec4<f32>(shading_info.base_color, 1.0);
+    } else if (global_constants.debug_shading == DEBUG_SHADING_TYPE_METALLIC) {
+        fragment_output.color = vec4<f32>(vec3<f32>(shading_info.metallic), 1.0);
+    } else if (global_constants.debug_shading == DEBUG_SHADING_TYPE_ROUGHNESS) {
+        fragment_output.color = vec4<f32>(vec3<f32>(shading_info.roughness), 1.0);
+    } else if (global_constants.debug_shading == DEBUG_SHADING_TYPE_NORMAL) {
+        fragment_output.color = vec4<f32>((shading_info.normal + 1.0) / 2.0, 1.0);
+    }
     return fragment_output;
 }
