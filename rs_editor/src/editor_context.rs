@@ -1509,6 +1509,20 @@ impl EditorContext {
                     })();
                     log::trace!("{:?}", result);
                 }
+                content_item_property_view::EClickType::SDF2D(texture) => {
+                    let result: anyhow::Result<()> = (|| {
+                        let texture = texture.borrow();
+                        let image_reference =
+                            texture.image_reference.as_ref().ok_or(anyhow!(""))?;
+                        let project_context = self.project_context.as_ref().ok_or(anyhow!(""))?;
+                        let path = project_context.get_asset_path_by_url(image_reference);
+                        let image = image::open(path)?;
+                        let image = image.to_rgba8();
+                        self.engine.sdf2d(image);
+                        Ok(())
+                    })();
+                    log::trace!("{:?}", result);
+                }
             }
         }
 

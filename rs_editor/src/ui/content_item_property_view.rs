@@ -4,6 +4,7 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc};
 pub enum EClickType {
     IBL(Rc<RefCell<IBL>>, Option<PathBuf>, Option<PathBuf>),
     IsVirtualTexture(Rc<RefCell<TextureFile>>, bool),
+    SDF2D(Rc<RefCell<TextureFile>>),
 }
 
 pub struct ContentItemPropertyView {
@@ -51,9 +52,12 @@ impl ContentItemPropertyView {
                     .changed()
                 {
                     self.click = Some(EClickType::IsVirtualTexture(
-                        texture_file_clone,
+                        texture_file_clone.clone(),
                         texture_file.is_virtual_texture,
                     ));
+                }
+                if ui.button("SDF 2D").clicked() {
+                    self.click = Some(EClickType::SDF2D(texture_file_clone));
                 }
             }
             EContentFileType::Level(_) => {}

@@ -26,6 +26,7 @@ pub mod render_pipeline;
 pub mod renderdoc;
 pub mod renderer;
 pub mod sampler_cache;
+pub mod sdf2d_generator;
 pub mod shader_library;
 pub mod texture_loader;
 pub mod texture_readback;

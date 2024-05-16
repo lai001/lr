@@ -216,6 +216,14 @@ pub enum RenderCommand {
     CaptureFrame,
 }
 
+impl RenderCommand {
+    pub fn create_task(
+        task: impl FnMut(&mut crate::renderer::Renderer) + Send + 'static,
+    ) -> RenderCommand {
+        RenderCommand::Task(Arc::new(Mutex::new(Box::new(task))))
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct RenderOutput {
     pub create_texture_handles: HashSet<TextureHandle>,

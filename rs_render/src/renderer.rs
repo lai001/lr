@@ -102,7 +102,22 @@ impl Renderer {
         );
 
         let mut shader_library = ShaderLibrary::new();
-        shader_library.load_shaders_from(shaders, wgpu_context.get_device());
+        let load_shader_results =
+            shader_library.load_shaders_from(shaders, wgpu_context.get_device());
+        for (shader_name, result) in load_shader_results {
+            match result {
+                Ok(_) => {}
+                Err(err) => match err {
+                    crate::error::Error::Wgpu(err) => match err {
+                        Error::Validation { description, .. } => {
+                            log::warn!("{}", description);
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                },
+            }
+        }
         let mut sampler_cache = SamplerCache::new();
         let mut base_render_pipeline_pool = BaseRenderPipelinePool::default();
         let shading_pipeline = ShadingPipeline::new(
@@ -260,6 +275,25 @@ impl Renderer {
             .add_screen_descriptor(window_id, screen_descriptor);
         self.wgpu_context
             .set_new_window(window_id, window, surface_width, surface_height)
+    }
+
+    pub fn renderdoc_start_capture(&mut self) {
+        #[cfg(feature = "renderdoc")]
+        {
+            if let Some(render_doc_context) = &mut self.render_doc_context {
+                render_doc_context.start_capture(self.wgpu_context.get_device());
+            }
+        }
+    }
+
+    pub fn renderdoc_stop_capture(&mut self) {
+        #[cfg(feature = "renderdoc")]
+        {
+            let device = self.wgpu_context.get_device();
+            if let Some(render_doc_context) = &mut self.render_doc_context {
+                render_doc_context.stop_capture(device);
+            }
+        }
     }
 
     pub fn present(&mut self, window_id: isize) -> Option<RenderOutput> {
@@ -1192,5 +1226,17 @@ impl Renderer {
         if let Some(virtual_texture_pass) = &mut self.virtual_texture_pass {
             virtual_texture_pass.change_surface_size(device, new_size);
         }
+    }
+
+    pub fn get_device(&self) -> &wgpu::Device {
+        self.wgpu_context.get_device()
+    }
+
+    pub fn get_queue(&self) -> &wgpu::Queue {
+        self.wgpu_context.get_queue()
+    }
+
+    pub fn get_shader_library(&self) -> &ShaderLibrary {
+        &self.shader_library
     }
 }

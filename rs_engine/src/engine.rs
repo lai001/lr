@@ -26,9 +26,11 @@ use rs_render::command::{
     CreateTexture, CreateVirtualTexture, DrawObject, EBindingResource, ETextureType,
     InitTextureData, RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer, UploadPrebakeIBL,
 };
+use rs_render::compute_pipeline::jfa::JFATextures;
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::global_uniform::{self, EDebugShadingType};
 use rs_render::renderer::Renderer;
+use rs_render::sdf2d_generator;
 use rs_render::vertex_data_type::mesh_vertex::MeshVertex0;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
@@ -1570,6 +1572,17 @@ impl Engine {
 
     pub fn set_debug_shading(&mut self, ty: EDebugShadingType) {
         self.global_constants.set_shading_type(ty);
+    }
+
+    pub fn sdf2d(&mut self, image: image::RgbaImage) {
+        self.render_thread_mode
+            .send_command(RenderCommand::create_task(move |renderer| {
+                let device = renderer.get_device();
+                let queue = renderer.get_queue();
+                let mut generator =
+                    sdf2d_generator::Sdf2dGenerator::new(device, renderer.get_shader_library());
+                generator.run(device, queue, &image, 0, 0.5);
+            }));
     }
 }
 

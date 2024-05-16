@@ -3,8 +3,11 @@ pub mod brdf_lut;
 pub mod global_shader;
 pub mod grid;
 pub mod irradiance_cube_map;
+pub mod jfa;
+pub mod jfa_composition;
 pub mod panorama_to_cube;
 pub mod pre_filter_environment_cube_map;
+pub mod sdf2d_preprocess;
 pub mod shading;
 pub mod skeleton_shading;
 pub mod virtual_texture_clean;
@@ -16,8 +19,11 @@ use crate::global_shaders::{
     brdf_lut::BrdfLutShader,
     grid::GridShader,
     irradiance_cube_map::IrradianceCubeMapShader,
+    jfa::JFAShader,
+    jfa_composition::JFACompositionShader,
     panorama_to_cube::PanoramaToCubeShader,
     pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader,
+    sdf2d_preprocess::Sdf2dPreprocessShader,
     shading::ShadingShader,
     skeleton_shading::SkeletonShadingShader,
     virtual_texture_clean::VirtualTextureCleanShader,
@@ -39,5 +45,8 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(StaticMeshVirtualTextureFeedBackShader {}),
         Box::new(SkinMeshVirtualTextureFeedBackShader {}),
         Box::new(VirtualTextureCleanShader {}),
+        Box::new(Sdf2dPreprocessShader {}),
+        Box::new(JFAShader {}),
+        Box::new(JFACompositionShader {}),
     ]
 }
