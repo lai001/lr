@@ -1,13 +1,8 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline,
+    base_compute_pipeline::BaseComputePipeline, constants::PreFilterConstants,
     global_shaders::pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader, gpu_buffer,
     shader_library::ShaderLibrary,
 };
-
-struct Constants {
-    roughness: f32,
-    sample_count: u32,
-}
 
 pub struct PreFilterEnvironmentCubeMapComputePipeline {
     base_compute_pipeline: BaseComputePipeline,
@@ -82,7 +77,7 @@ impl PreFilterEnvironmentCubeMapComputePipeline {
                 array_layer_count: None,
             });
 
-        let constants = Constants {
+        let constants = PreFilterConstants {
             roughness,
             sample_count,
         };

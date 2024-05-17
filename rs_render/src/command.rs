@@ -6,7 +6,6 @@ use rs_core_minimal::settings::RenderSettings;
 use std::{
     collections::HashSet,
     path::PathBuf,
-    rc::Rc,
     sync::{Arc, Mutex, RwLock},
 };
 use wgpu::*;

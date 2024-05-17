@@ -1,12 +1,8 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline,
+    base_compute_pipeline::BaseComputePipeline, constants::IBLConstants,
     global_shaders::irradiance_cube_map::IrradianceCubeMapShader, gpu_buffer,
     shader_library::ShaderLibrary,
 };
-
-struct Constants {
-    sample_count: u32,
-}
 
 pub struct IrradianceCubeMapPipeline {
     base_compute_pipeline: BaseComputePipeline,
@@ -70,7 +66,7 @@ impl IrradianceCubeMapPipeline {
                 array_layer_count: None,
             });
 
-        let constants = Constants { sample_count };
+        let constants = IBLConstants { sample_count };
         let uniform_buf = gpu_buffer::uniform::from(device, &constants, None);
 
         self.base_compute_pipeline.execute_resources(

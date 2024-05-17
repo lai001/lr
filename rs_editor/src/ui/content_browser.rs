@@ -161,22 +161,22 @@ fn draw_content(
                                         }
                                     }
                                     match file {
-                                        EContentFileType::StaticMesh(static_mesh) => {
+                                        EContentFileType::StaticMesh(_) => {
                                             ui.image(egui::include_image!(
                                                 "../../../Resource/Editor/static_mesh.svg"
                                             ));
                                         }
-                                        EContentFileType::SkeletonMesh(skeleton_mesh) => {
+                                        EContentFileType::SkeletonMesh(_) => {
                                             ui.image(egui::include_image!(
                                                 "../../../Resource/Editor/skeleton_mesh.svg"
                                             ));
                                         }
-                                        EContentFileType::SkeletonAnimation(skeleton_animation) => {
+                                        EContentFileType::SkeletonAnimation(_) => {
                                             ui.image(egui::include_image!(
                                                 "../../../Resource/Editor/animation.svg"
                                             ));
                                         }
-                                        EContentFileType::Skeleton(skeleton) => {
+                                        EContentFileType::Skeleton(_) => {
                                             ui.image(egui::include_image!(
                                                 "../../../Resource/Editor/skeleton.svg"
                                             ));
@@ -195,17 +195,17 @@ fn draw_content(
                                                 ui.image(url);
                                             }
                                         }
-                                        EContentFileType::Level(Level) => {
+                                        EContentFileType::Level(_) => {
                                             ui.image(egui::include_image!(
                                                 "../../../Resource/Editor/level.svg"
                                             ));
                                         }
-                                        EContentFileType::Material(material) => {
+                                        EContentFileType::Material(_) => {
                                             ui.image(egui::include_image!(
                                                 "../../../Resource/Editor/material.svg"
                                             ));
                                         }
-                                        EContentFileType::IBL(ibl) => {}
+                                        EContentFileType::IBL(_) => {}
                                     }
                                     let _ = ui.button(name.clone());
                                 })

@@ -2,7 +2,7 @@ use crate::{
     build_config::EBuildType,
     content_folder::ContentFolder,
     custom_event::{ECustomEventType, EFileDialogType},
-    data_source::{AssetFile, AssetFolder, DataSource, MeshItem, ModelViewData},
+    data_source::{AssetFile, AssetFolder, DataSource},
     editor::WindowsManager,
     editor_ui::EditorUI,
     material_resolve,
@@ -18,7 +18,7 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
-use rs_core_minimal::{misc::get_md5_from_string, path_ext::CanonicalizeSlashExt};
+use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_engine::{
     build_asset_url, build_content_file_url,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
@@ -35,7 +35,6 @@ use rs_engine::{
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_foundation::new::SingleThreadMut;
-use rs_render::bake_info::BakeInfo;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -287,7 +286,7 @@ impl EditorContext {
                 }
                 if let Some(project_context) = &mut self.project_context {
                     if project_context.is_need_reload_plugin() {
-                        self.try_load_plugin();
+                        let _ = self.try_load_plugin();
                     }
                 }
                 if let Some(project_context) = &mut self.project_context {
@@ -356,6 +355,7 @@ impl EditorContext {
         event: &WindowEvent,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
+        let _ = event_loop_window_target;
         let window_id = {
             let binding = self.window_manager.borrow_mut();
             let Some(window_context) = binding.window_contexts.get(&EWindowType::Material) else {
@@ -708,7 +708,7 @@ impl EditorContext {
                     let file_path =
                         project_folder_path.join(&skeleton.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
-                    let skeleton = model_loader.to_runtime_skeleton(
+                    model_loader.to_runtime_skeleton(
                         skeleton.clone(),
                         &project_folder_path,
                         ResourceManager::default(),
@@ -917,7 +917,7 @@ impl EditorContext {
             }
         }
         self.project_context = Some(project_context);
-        self.try_load_plugin();
+        let _ = self.try_load_plugin();
         self.data_source
             .recent_projects
             .paths
@@ -1052,24 +1052,22 @@ impl EditorContext {
         window: &mut winit::window::Window,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
-        if let Some(project_context) = &mut self.project_context {
-            if let Some(active_level) = self.data_source.level.clone() {
-                for actor in active_level.borrow().actors.clone() {
-                    let actor = actor.borrow_mut();
-                    let mut root_scene_node = actor.scene_node.borrow_mut();
-                    match &mut root_scene_node.component {
-                        rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                        rs_engine::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
-                        rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
-                            skeleton_mesh_component,
-                        ) => {
-                            let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
-                            skeleton_mesh_component
-                                .update(self.engine.get_game_time(), &mut self.engine);
+        if let Some(active_level) = self.data_source.level.clone() {
+            for actor in active_level.borrow().actors.clone() {
+                let actor = actor.borrow_mut();
+                let mut root_scene_node = actor.scene_node.borrow_mut();
+                match &mut root_scene_node.component {
+                    rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                    rs_engine::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                    rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
+                        skeleton_mesh_component,
+                    ) => {
+                        let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
+                        skeleton_mesh_component
+                            .update(self.engine.get_game_time(), &mut self.engine);
 
-                            for draw_object in skeleton_mesh_component.get_draw_objects() {
-                                self.engine.draw2(draw_object);
-                            }
+                        for draw_object in skeleton_mesh_component.get_draw_objects() {
+                            self.engine.draw2(draw_object);
                         }
                     }
                 }
@@ -1364,7 +1362,8 @@ impl EditorContext {
                 },
                 top_menu::EClickEventType::Tool(tool_type) => match tool_type {
                     top_menu::EToolType::DebugShader => {
-                        Self::prepreocess_shader();
+                        let result = Self::prepreocess_shader();
+                        log::trace!("{:?}", result);
                     }
                 },
                 top_menu::EClickEventType::OpenProjectSettings => {
@@ -1387,10 +1386,10 @@ impl EditorContext {
                         .join("windows/release/x64/rs_desktop_standalone.exe");
                     if release_exe_path.exists() {
                         let mut cmd = std::process::Command::new(release_exe_path);
-                        let output = cmd.output();
+                        let _ = cmd.output();
                     } else if debug_exe_path.exists() {
                         let mut cmd = std::process::Command::new(debug_exe_path);
-                        let output = cmd.output();
+                        let _ = cmd.output();
                     }
                 }
                 top_menu::EClickEventType::DebugShading(ty) => self.engine.set_debug_shading(ty),
@@ -1526,7 +1525,6 @@ impl EditorContext {
             }
         }
 
-        if let Some(gizmo_result) = &click_event.gizmo_result {}
         if let Some(event) = click_event.content_browser_event {
             if let Some(current_folder) = &self.data_source.content_data_source.current_folder {
                 match event {

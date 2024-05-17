@@ -49,7 +49,7 @@ impl raw_window_handle::HasWindowHandle for NativeWindow {
     fn window_handle(
         &self,
     ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
-        let mut handle = raw_window_handle::AndroidNdkWindowHandle::new(
+        let handle = raw_window_handle::AndroidNdkWindowHandle::new(
             std::ptr::NonNull::new(self.a_native_window as *mut _ as *mut core::ffi::c_void)
                 .unwrap(),
         );

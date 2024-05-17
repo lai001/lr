@@ -10,19 +10,15 @@ use rs_artifact::{
     artifact::ArtifactAssetEncoder, shader_source_code::ShaderSourceCode, EEndianType,
 };
 use rs_engine::{
-    content::{content_file_type::EContentFileType, texture::TextureFile},
-    resource_manager::ResourceManager,
-    ASSET_SCHEME,
+    content::content_file_type::EContentFileType, resource_manager::ResourceManager, ASSET_SCHEME,
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
     collections::{HashMap, HashSet},
     io::Write,
     ops::Deref,
     path::{Path, PathBuf},
-    rc::Rc,
 };
 
 pub enum EFolderUpdateType {
@@ -59,7 +55,7 @@ pub struct ProjectContext {
     pub project: Project,
     project_folder_path: PathBuf,
     project_file_path: PathBuf,
-    shader_folder_path: PathBuf,
+    _shader_folder_path: PathBuf,
     pub hot_reload: rs_hotreload_plugin::hot_reload::HotReload,
     folder_receiver: Option<
         std::sync::mpsc::Receiver<std::result::Result<Vec<DebouncedEvent>, Vec<notify::Error>>>,
@@ -90,7 +86,7 @@ impl ProjectContext {
             project_file_path: project_file_path.to_path_buf(),
             project_folder_path: project_folder_path.to_path_buf(),
             hot_reload,
-            shader_folder_path: project_folder_path.join("shader"),
+            _shader_folder_path: project_folder_path.join("shader"),
             folder_receiver: None,
             folder_debouncer: None,
         };
@@ -282,8 +278,7 @@ impl ProjectContext {
             url::Url,
             rs_artifact::shader_source_code::ShaderSourceCode,
         > = HashMap::new();
-        let mut static_meshes: HashMap<url::Url, rs_artifact::static_mesh::StaticMesh> =
-            HashMap::new();
+        let static_meshes: HashMap<url::Url, rs_artifact::static_mesh::StaticMesh> = HashMap::new();
         let mut skin_meshes: HashMap<url::Url, rs_artifact::skin_mesh::SkinMesh> = HashMap::new();
         let mut skeletons: HashMap<url::Url, rs_artifact::skeleton::Skeleton> = HashMap::new();
         let mut skeleton_animations: HashMap<
@@ -480,17 +475,6 @@ impl ProjectContext {
 
         let _ = artifact_asset_encoder.finish()?;
         Ok(output_folder_path.join(output_filename))
-    }
-
-    fn collect_image_files(files: &[Rc<RefCell<TextureFile>>]) -> HashSet<PathBuf> {
-        let mut image_paths = HashSet::new();
-        for file in files {
-            if let Some(image_reference) = &file.borrow().get_image_reference_path() {
-                let value = image_reference;
-                image_paths.insert(value.clone());
-            }
-        }
-        image_paths
     }
 
     pub fn pre_process_shaders() -> HashMap<String, String> {

@@ -11,7 +11,6 @@ use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
-use crate::sampler_cache::SamplerCache;
 use crate::shader_library::ShaderLibrary;
 use crate::virtual_texture_pass::VirtualTexturePass;
 use crate::virtual_texture_source::VirtualTextureSource;
@@ -110,7 +109,7 @@ impl Renderer {
                 Err(err) => match err {
                     crate::error::Error::Wgpu(err) => match err {
                         Error::Validation { description, .. } => {
-                            log::warn!("{}", description);
+                            log::warn!("{shader_name}\n{}", description);
                         }
                         _ => {}
                     },
@@ -118,7 +117,6 @@ impl Renderer {
                 },
             }
         }
-        let mut sampler_cache = SamplerCache::new();
         let mut base_render_pipeline_pool = BaseRenderPipelinePool::default();
         let shading_pipeline = ShadingPipeline::new(
             wgpu_context.get_device(),

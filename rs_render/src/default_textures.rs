@@ -66,7 +66,7 @@ impl DefaultTextures {
         }
     }
 
-    fn texture2d_from_rgba32f_image(
+    fn _texture2d_from_rgba32f_image(
         device: &Device,
         queue: &Queue,
         image: &image::Rgba32FImage,
@@ -161,7 +161,7 @@ impl DefaultTextures {
         image
     }
 
-    fn create_pure_color_rgbaf32_image(
+    fn _create_pure_color_rgbaf32_image(
         width: u32,
         height: u32,
         color: &Color,
@@ -180,7 +180,7 @@ impl DefaultTextures {
         image
     }
 
-    fn create_pure_color_rgbaf32_texture(
+    fn _create_pure_color_rgbaf32_texture(
         device: &Device,
         queue: &Queue,
         width: u32,
@@ -188,8 +188,8 @@ impl DefaultTextures {
         color: &Color,
         label: Option<&str>,
     ) -> Texture {
-        let image = Self::create_pure_color_rgbaf32_image(width, height, color);
-        Self::texture2d_from_rgba32f_image(device, queue, image.as_rgba32f().unwrap(), label)
+        let image = Self::_create_pure_color_rgbaf32_image(width, height, color);
+        Self::_texture2d_from_rgba32f_image(device, queue, image.as_rgba32f().unwrap(), label)
     }
 
     fn create_pure_color_rgba8_texture(

@@ -9,12 +9,12 @@ use std::sync::{Arc, Mutex};
 pub struct HotReload {
     library_reload: Arc<Mutex<LibraryReload>>,
     receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, Vec<notify::Error>>>,
-    debouncer: Debouncer<ReadDirectoryChangesWatcher>,
+    _debouncer: Debouncer<ReadDirectoryChangesWatcher>,
 }
 
 impl HotReload {
     pub fn new(watch_folder_path: &Path, lib_folder: &Path, lib_name: &str) -> Result<HotReload> {
-        let mut library_reload = LibraryReload::new(&lib_folder, lib_name);
+        let library_reload = LibraryReload::new(&lib_folder, lib_name);
         library_reload.clean_cache();
         let library_reload = Arc::new(Mutex::new(library_reload));
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -32,7 +32,7 @@ impl HotReload {
         let reload = HotReload {
             library_reload,
             receiver,
-            debouncer,
+            _debouncer: debouncer,
         };
         Ok(reload)
     }

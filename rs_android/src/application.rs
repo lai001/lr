@@ -7,7 +7,7 @@ use rs_artifact::{
     file_header::{FileHeader, ARTIFACT_FILE_MAGIC_NUMBERS},
     EEndianType,
 };
-use rs_engine::logger::{Logger, LoggerConfiguration};
+use rs_engine::logger::Logger;
 
 const WINDOW_ID: isize = 0;
 
@@ -25,10 +25,8 @@ impl Application {
     pub fn from_native_window(
         native_window: crate::native_window::NativeWindow,
         artifact_input_stream: JavaInputStream,
+        logger: Logger,
     ) -> Result<Application> {
-        let logger = Logger::new(LoggerConfiguration {
-            is_write_to_file: false,
-        });
         let scale_factor = 1.0f32;
 
         let raw_input = egui::RawInput {
@@ -140,10 +138,11 @@ pub fn Application_fromSurface(
         FileHeader::check_identification(&mut artifact_input_stream, ARTIFACT_FILE_MAGIC_NUMBERS)
             .map_err(|err| crate::error::Error::CheckIdentificationFail(err))?;
 
-        let header: ArtifactFileHeader =
+        let _: ArtifactFileHeader =
             FileHeader::get_header2(&mut artifact_input_stream, Some(EEndianType::Little))
                 .map_err(|err| crate::error::Error::Artifact(err))?;
-        let application = Application::from_native_window(native_window, artifact_input_stream)?;
+        let application =
+            Application::from_native_window(native_window, artifact_input_stream, logger)?;
         Ok(Box::into_raw(Box::new(application)))
     })();
     match result {
@@ -168,9 +167,12 @@ pub fn Application_setNewSurface(
     let native_window = crate::native_window::NativeWindow::new(&mut env, surface);
     if let Some(native_window) = native_window {
         let mut application: Box<Application> = unsafe { Box::from_raw(application) };
-        application.set_new_window(native_window);
+        let result = application.set_new_window(native_window);
         Box::into_raw(Box::new(application));
-        jni::sys::JNI_TRUE
+        match result {
+            Ok(_) => jni::sys::JNI_TRUE,
+            Err(_) => jni::sys::JNI_FALSE,
+        }
     } else {
         jni::sys::JNI_FALSE
     }
@@ -275,7 +277,7 @@ pub fn Application_redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: 
 #[no_mangle]
 #[jni_fn::jni_fn("com.lai001.rs_android.Application")]
 pub fn Application_onTouchEvent(
-    mut env: jni::JNIEnv,
+    env: jni::JNIEnv,
     _: jni::objects::JClass,
     application: *mut Application,
     event: jni::objects::JClass,
@@ -323,8 +325,8 @@ pub fn Application_surfaceChanged(
 pub fn Application_surfaceDestroyed(
     _: jni::JNIEnv,
     _: jni::objects::JClass,
-    application: *mut Application,
-    surface: jni::sys::jobject,
+    _: *mut Application,
+    _surface: jni::sys::jobject,
 ) {
 }
 

@@ -1,13 +1,8 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline,
+    base_compute_pipeline::BaseComputePipeline, constants::SDF2DConstants,
     global_shaders::sdf2d_preprocess::Sdf2dPreprocessShader, gpu_buffer,
     shader_library::ShaderLibrary,
 };
-
-struct Constants {
-    channel: i32,
-    threshold: f32,
-}
 
 pub struct Sdf2dPreprocessComputePipeline {
     base_compute_pipeline: BaseComputePipeline,
@@ -59,7 +54,7 @@ impl Sdf2dPreprocessComputePipeline {
             array_layer_count: None,
         });
 
-        let constants = Constants { channel, threshold };
+        let constants = SDF2DConstants { channel, threshold };
 
         let uniform_buf = gpu_buffer::uniform::from(
             device,

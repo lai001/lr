@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use crate::{build_asset_url, url_extension::UrlExtension};
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};

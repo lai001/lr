@@ -12,7 +12,6 @@ use egui::*;
 use rs_engine::input_mode::EInputMode;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
-use transform_gizmo_egui::GizmoResult;
 
 #[derive(Debug)]
 pub struct ClickMeshItem {
@@ -27,12 +26,11 @@ pub struct ClickEvent {
     pub click_aseet: Option<asset_view::EClickItemType>,
     pub menu_event: Option<top_menu::EClickEventType>,
     pub content_browser_event: Option<content_browser::EClickEventType>,
-    pub gizmo_result: Option<GizmoResult>,
 }
 
 pub struct EditorUI {
-    image_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
-    svg_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
+    _image_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
+    _svg_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
     project_folder_path: Option<PathBuf>,
     top_menu: TopMenu,
     gizmo_view: GizmoView,
@@ -57,9 +55,9 @@ impl EditorUI {
                 svg_loader = Some(item.clone());
             }
         }
-        Self {
-            image_loader,
-            svg_loader,
+        EditorUI {
+            _image_loader: image_loader,
+            _svg_loader: svg_loader,
             project_folder_path: None,
             top_menu: TopMenu {
                 new_project_name: String::new(),

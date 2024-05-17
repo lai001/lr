@@ -1,6 +1,12 @@
-use path_slash::PathBufExt;
-use rs_core_minimal::path_ext::CanonicalizeSlashExt;
-use rs_shader_compiler::{compile_command::CompileCommand, pre_process::ShaderDescription};
+use rs_shader_compiler::pre_process::ShaderDescription;
+#[cfg(feature = "editor")]
+mod editor_mod {
+    pub use path_slash::PathBufExt;
+    pub use rs_core_minimal::path_ext::CanonicalizeSlashExt;
+    pub use rs_shader_compiler::compile_command::CompileCommand;
+}
+#[cfg(feature = "editor")]
+use editor_mod::*;
 
 pub trait GlobalShader {
     fn get_shader_description(&self) -> ShaderDescription;

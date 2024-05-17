@@ -1,5 +1,11 @@
-use path_slash::PathBufExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+#[cfg(feature = "editor")]
+mod editor_mod {
+    pub use path_slash::PathBufExt;
+    pub use std::path::Path;
+}
+#[cfg(feature = "editor")]
+use editor_mod::*;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Default)]
 pub struct ShaderDescription {

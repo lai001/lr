@@ -93,40 +93,6 @@ impl LibraryReload {
         Ok(target_file_path.to_string_lossy().to_string())
     }
 
-    fn sear_max_number(folder: &str, lib_name: &str) -> i32 {
-        let reg = regex::Regex::new(r"_\d*").unwrap();
-        let number_reg = regex::Regex::new(r"[0-9]*$").unwrap();
-
-        let mut numbers: Vec<i32> = vec![];
-        for entry in WalkDir::new(folder).max_depth(1) {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                let extension = path
-                    .extension()
-                    .unwrap_or(Default::default())
-                    .to_string_lossy()
-                    .to_string();
-                let file_stem = path
-                    .file_stem()
-                    .unwrap_or(Default::default())
-                    .to_string_lossy()
-                    .to_string();
-                if extension == Self::get_lib_name_extension()
-                    && file_stem
-                        .starts_with(&(Self::get_lib_name_prexif().to_string() + lib_name + "_"))
-                {
-                    let captures = reg.captures(&file_stem).unwrap();
-                    let number = number_reg.captures(&captures[0]).unwrap();
-
-                    numbers.push(number.get(0).unwrap().as_str().parse::<i32>().unwrap());
-                }
-            }
-        }
-        numbers.sort();
-        let max = numbers.last().unwrap_or(&0);
-        *max
-    }
-
     pub fn get_original_lib_file_path(&self) -> PathBuf {
         let path = Path::new(&self.folder).join(&Self::get_full_lib_filename(&self.lib_name, None));
         path

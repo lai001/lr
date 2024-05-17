@@ -1,7 +1,6 @@
 use crate::debug_log;
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, ToTokens};
-use syn::*;
+use quote::quote;
 
 fn get_dimension(vector_size: &naga::VectorSize) -> usize {
     match vector_size {

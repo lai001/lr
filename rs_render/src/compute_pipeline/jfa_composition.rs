@@ -1,14 +1,9 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline,
+    base_compute_pipeline::BaseComputePipeline, constants::SDF2DConstants,
     global_shaders::jfa_composition::JFACompositionShader, gpu_buffer,
     shader_library::ShaderLibrary,
 };
 use wgpu::*;
-
-struct Constants {
-    channel: i32,
-    threshold: f32,
-}
 
 pub struct JFACompositionComputePipeline {
     base_compute_pipeline: BaseComputePipeline,
@@ -84,7 +79,7 @@ impl JFACompositionComputePipeline {
             array_layer_count: None,
         });
 
-        let constants = Constants { channel, threshold };
+        let constants = SDF2DConstants { channel, threshold };
 
         let uniform_buf = gpu_buffer::uniform::from(
             device,

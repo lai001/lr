@@ -2,7 +2,7 @@ use crate::{mesh_anim::MeshAnim, mesh_morph_anim::MeshMorphAnim, node::Node, nod
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Animation<'a> {
-    c: &'a mut russimp_sys::aiAnimation,
+    _ai_animation: &'a mut russimp_sys::aiAnimation,
     pub name: String,
     pub duration: f64,
     pub ticks_per_second: f64,
@@ -14,18 +14,22 @@ pub struct Animation<'a> {
 
 impl<'a> Animation<'a> {
     pub fn borrow_from(
-        c: &'a mut russimp_sys::aiAnimation,
+        ai_animation: &'a mut russimp_sys::aiAnimation,
         map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
     ) -> Animation<'a> {
-        let name = c.mName.into();
-        let duration = c.mDuration;
-        let ticks_per_second = c.mTicksPerSecond;
+        let name = ai_animation.mName.into();
+        let duration = ai_animation.mDuration;
+        let ticks_per_second = ai_animation.mTicksPerSecond;
         let mut channels: Vec<NodeAnim<'a>> = vec![];
         let mut mesh_channels: Vec<MeshAnim<'a>> = vec![];
         let mut morph_mesh_channels: Vec<MeshMorphAnim<'a>> = vec![];
-        if !c.mChannels.is_null() {
-            let ai_channels =
-                unsafe { std::slice::from_raw_parts_mut(c.mChannels, c.mNumChannels as _) };
+        if !ai_animation.mChannels.is_null() {
+            let ai_channels = unsafe {
+                std::slice::from_raw_parts_mut(
+                    ai_animation.mChannels,
+                    ai_animation.mNumChannels as _,
+                )
+            };
             for item in ai_channels.iter_mut() {
                 channels.push(NodeAnim::borrow_from(
                     unsafe { item.as_mut().unwrap() },
@@ -33,16 +37,23 @@ impl<'a> Animation<'a> {
                 ));
             }
         }
-        if !c.mMeshChannels.is_null() {
-            let ai_channels =
-                unsafe { std::slice::from_raw_parts_mut(c.mMeshChannels, c.mNumMeshChannels as _) };
+        if !ai_animation.mMeshChannels.is_null() {
+            let ai_channels = unsafe {
+                std::slice::from_raw_parts_mut(
+                    ai_animation.mMeshChannels,
+                    ai_animation.mNumMeshChannels as _,
+                )
+            };
             for item in ai_channels.iter_mut() {
                 mesh_channels.push(MeshAnim::borrow_from(unsafe { item.as_mut().unwrap() }));
             }
         }
-        if !c.mMorphMeshChannels.is_null() {
+        if !ai_animation.mMorphMeshChannels.is_null() {
             let ai_channels = unsafe {
-                std::slice::from_raw_parts_mut(c.mMorphMeshChannels, c.mNumMorphMeshChannels as _)
+                std::slice::from_raw_parts_mut(
+                    ai_animation.mMorphMeshChannels,
+                    ai_animation.mNumMorphMeshChannels as _,
+                )
             };
             for item in ai_channels.iter_mut() {
                 morph_mesh_channels.push(MeshMorphAnim::borrow_from(unsafe {
@@ -51,7 +62,7 @@ impl<'a> Animation<'a> {
             }
         }
         Animation {
-            c,
+            _ai_animation: ai_animation,
             name,
             duration,
             ticks_per_second,

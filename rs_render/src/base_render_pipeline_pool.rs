@@ -75,6 +75,6 @@ impl BaseRenderPipelinePool {
 
     pub fn invalid_shader(&mut self, shader_name: impl AsRef<str>) {
         self.base_render_pipelines
-            .retain(|k, v| k.shader_name != shader_name.as_ref().to_string());
+            .retain(|k, _| k.shader_name != shader_name.as_ref().to_string());
     }
 }

@@ -31,3 +31,29 @@ pub struct VirtualTextureConstants {
     pub virtual_texture_max_lod: u32,
     _pad_0: u32,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IBLConstants {
+    pub sample_count: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SDF2DConstants {
+    pub channel: i32,
+    pub threshold: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct JFAConstants {
+    pub step: glam::Vec2,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PreFilterConstants {
+    pub roughness: f32,
+    pub sample_count: u32,
+}

@@ -32,7 +32,7 @@ struct SkeletonMeshComponentRuntime {
     skeleton: Option<Arc<Skeleton>>,
     skeleton_animation: Option<Arc<SkeletonAnimation>>,
     skin_meshes: Vec<Arc<SkinMesh>>,
-    material: Option<SingleThreadMutType<crate::content::material::Material>>,
+    // material: Option<SingleThreadMutType<crate::content::material::Material>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -118,7 +118,7 @@ impl SkeletonMeshComponent {
             skeleton: skeleton.clone(),
             skeleton_animation,
             skin_meshes: vec![],
-            material: material.clone(),
+            // material: material.clone(),
         });
 
         for skeleton_mesh in &self.skeleton_mesh_urls {

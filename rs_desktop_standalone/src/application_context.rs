@@ -5,29 +5,11 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     logger::{Logger, LoggerConfiguration},
 };
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::Path};
 use winit::event::{Event, MouseScrollDelta, WindowEvent};
-
-struct State {
-    target_fps: u64,
-    current_frame_start_time: std::time::Instant,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            target_fps: 60,
-            current_frame_start_time: std::time::Instant::now(),
-        }
-    }
-}
 
 pub struct ApplicationContext {
     engine: Engine,
-    state: State,
     egui_winit_state: egui_winit::State,
     frame_sync: FrameSync,
 }
@@ -86,7 +68,6 @@ impl ApplicationContext {
 
         let application_context = Self {
             engine,
-            state: State::default(),
             egui_winit_state,
             frame_sync,
         };
@@ -99,13 +80,13 @@ impl ApplicationContext {
         window: &mut winit::window::Window,
         event: &Event<ECustomEventType>,
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        _: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         match event {
-            Event::DeviceEvent { device_id, event } => {
+            Event::DeviceEvent { event, .. } => {
                 self.engine.process_device_event(event.clone());
             }
-            Event::WindowEvent { window_id, event } => match event {
+            Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
                     self.quit_app();
                 }
@@ -160,7 +141,7 @@ impl ApplicationContext {
     fn process_ui(
         &mut self,
         window: &mut winit::window::Window,
-        event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
+        _: winit::event_loop::EventLoopProxy<ECustomEventType>,
     ) -> egui::FullOutput {
         let new_input = self.egui_winit_state.take_egui_input(window);
         self.egui_winit_state.egui_ctx().begin_frame(new_input);

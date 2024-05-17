@@ -1,5 +1,4 @@
 use crate::content::level::Level;
-use crate::mesh_buffer::MeshBuffer;
 use crate::thread_pool::ThreadPool;
 use crate::{error::Result, handle::HandleManager};
 use lazy_static::lazy_static;
@@ -29,24 +28,24 @@ struct STResourceManager {
     skin_meshes: HashMap<url::Url, Arc<rs_artifact::skin_mesh::SkinMesh>>,
     skeleton_animations: HashMap<url::Url, Arc<rs_artifact::skeleton_animation::SkeletonAnimation>>,
     skeletons: HashMap<url::Url, Arc<rs_artifact::skeleton::Skeleton>>,
-    mesh_buffers: HashMap<url::Url, Arc<MeshBuffer>>,
-    material_render_pipelines: HashMap<url::Url, crate::handle::MaterialRenderPipelineHandle>,
+    // mesh_buffers: HashMap<url::Url, Arc<MeshBuffer>>,
+    // material_render_pipelines: HashMap<url::Url, crate::handle::MaterialRenderPipelineHandle>,
 }
 
 impl STResourceManager {
     fn new() -> STResourceManager {
         STResourceManager {
             image_sync_cache: moka::sync::Cache::new(1000),
+            textures: HashMap::new(),
+            virtual_textures: HashMap::new(),
             artifact_reader: None,
             handle_manager: HandleManager::new(),
             static_meshs: HashMap::new(),
-            textures: HashMap::new(),
-            virtual_textures: HashMap::new(),
-            mesh_buffers: HashMap::new(),
             skin_meshes: HashMap::new(),
             skeleton_animations: HashMap::new(),
             skeletons: HashMap::new(),
-            material_render_pipelines: HashMap::new(),
+            // mesh_buffers: HashMap::new(),
+            // material_render_pipelines: HashMap::new(),
         }
     }
 

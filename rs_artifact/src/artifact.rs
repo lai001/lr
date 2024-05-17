@@ -1,6 +1,5 @@
 use crate::error::Result;
 use crate::skeleton::Skeleton;
-use crate::skin_mesh::SkinMesh;
 use crate::{
     asset::{self, Asset},
     file_header::{
@@ -308,7 +307,7 @@ impl ArtifactReader {
             );
             match resource_info.resource_type {
                 EResourceType::Image => {
-                    let asset = asset::decode_asset::<Image>(
+                    asset::decode_asset::<Image>(
                         &buf,
                         self.endian_type,
                         Some(resource_info.resource_type),
@@ -316,7 +315,7 @@ impl ArtifactReader {
                     log::trace!("{}", "Check image asset");
                 }
                 EResourceType::StaticMesh => {
-                    let asset = asset::decode_asset::<StaticMesh>(
+                    asset::decode_asset::<StaticMesh>(
                         &buf,
                         self.endian_type,
                         Some(resource_info.resource_type),
@@ -324,7 +323,7 @@ impl ArtifactReader {
                     log::trace!("{}", "Check static_mesh asset");
                 }
                 EResourceType::ShaderSourceCode => {
-                    let asset = asset::decode_asset::<ShaderSourceCode>(
+                    asset::decode_asset::<ShaderSourceCode>(
                         &buf,
                         self.endian_type,
                         Some(resource_info.resource_type),
@@ -332,7 +331,7 @@ impl ArtifactReader {
                     log::trace!("{}", "Check shader_source_code asset");
                 }
                 EResourceType::Skeleton => {
-                    let asset = asset::decode_asset::<Skeleton>(
+                    asset::decode_asset::<Skeleton>(
                         &buf,
                         self.endian_type,
                         Some(resource_info.resource_type),

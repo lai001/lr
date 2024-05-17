@@ -1,19 +1,9 @@
-use crate::{
-    build_asset_url, mipmap_generator::MipmapGenerator, url_extension::UrlExtension, ASSET_SCHEME,
-};
+use crate::{build_asset_url, url_extension::UrlExtension, ASSET_SCHEME};
 #[cfg(feature = "editor")]
 use anyhow::{anyhow, Context, Result};
-use image::GenericImage;
-use md5::Digest;
-use rs_artifact::{
-    asset::Asset,
-    resource_type::EResourceType,
-    virtual_texture::image::{decode_from_path, TileIndex},
-    EEndianType,
-};
+use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -70,7 +60,7 @@ impl TextureFile {
     pub fn is_virtual_image_cache_vaild<P: AsRef<Path>>(
         &self,
         virtual_cache_dir: P,
-        endian_type: Option<EEndianType>,
+        endian_type: Option<rs_artifact::EEndianType>,
     ) -> anyhow::Result<()> {
         if !self.is_virtual_texture {
             return Err(anyhow!("Is not a virtual texture"));
@@ -124,11 +114,11 @@ impl TextureFile {
         let Some(image_reference) = &self.get_image_reference_path() else {
             return Err(anyhow!("image_reference is null."));
         };
-        let mut hasher = md5::Md5::new();
+        let mut hasher = <md5::Md5 as md5::Digest>::new();
         let data = std::fs::read(asset_folder.as_ref().join(image_reference))
             .context(format!("Failed to read from {:?}", image_reference))?;
-        hasher.update(data);
-        let result = hasher.finalize();
+        md5::Digest::update(&mut hasher, data);
+        let result = md5::Digest::finalize(hasher);
         let result = result.to_ascii_lowercase();
         let result = result
             .iter()
@@ -137,17 +127,18 @@ impl TextureFile {
     }
 
     #[cfg(all(debug_assertions, feature = "editor"))]
-    fn decode_virtual_texture_to_dir<P: AsRef<Path>>(
+    fn _decode_virtual_texture_to_dir<P: AsRef<Path>>(
         path: P,
         out_dir: P,
-        endian_type: Option<EEndianType>,
+        endian_type: Option<rs_artifact::EEndianType>,
     ) {
-        let mut image_file = decode_from_path(path, endian_type).unwrap();
+        let mut image_file =
+            rs_artifact::virtual_texture::image::decode_from_path(path, endian_type).unwrap();
         let tile_map = image_file.get_tile_map().to_vec();
         for (level, image_infos) in tile_map.iter().enumerate() {
             for (index, _) in image_infos.iter() {
                 let image = image_file
-                    .get_dynamic_image(&TileIndex {
+                    .get_dynamic_image(&rs_artifact::virtual_texture::image::TileIndex {
                         x: index.x,
                         y: index.y,
                         mipmap_level: level as u32,
@@ -181,20 +172,27 @@ pub fn create_virtual_texture_cache_file<P: AsRef<Path>>(
     {
         return Err(anyhow!("Size is not correct."));
     }
-    let mut tiles: Vec<HashMap<glam::UVec2, image::DynamicImage>> = Vec::new();
+    let mut tiles: Vec<std::collections::HashMap<glam::UVec2, image::DynamicImage>> = Vec::new();
 
-    let mut lod_images = MipmapGenerator::generate_from_image_cpu(image, None, None);
+    let mut lod_images =
+        crate::mipmap_generator::MipmapGenerator::generate_from_image_cpu(image, None, None);
     let mut lod_sizes: Vec<glam::UVec2> = Vec::new();
 
     for image in lod_images.iter_mut() {
         lod_sizes.push(glam::uvec2(image.width(), image.height()));
-        let mut images: HashMap<glam::UVec2, image::DynamicImage> = HashMap::new();
+        let mut images: std::collections::HashMap<glam::UVec2, image::DynamicImage> =
+            std::collections::HashMap::new();
         for x in 0..image.width() / tile_size {
             for y in 0..image.height() / tile_size {
                 let sub_image = image::DynamicImage::ImageRgba8(
-                    image
-                        .sub_image(x * tile_size, y * tile_size, tile_size, tile_size)
-                        .to_image(),
+                    image::GenericImage::sub_image(
+                        image,
+                        x * tile_size,
+                        y * tile_size,
+                        tile_size,
+                        tile_size,
+                    )
+                    .to_image(),
                 );
                 images.insert(glam::uvec2(x, y), sub_image);
             }

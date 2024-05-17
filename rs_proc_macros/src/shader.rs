@@ -4,7 +4,7 @@ use crate::{
 };
 use path_slash::PathBufExt;
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, ToTokens};
+use quote::quote;
 use syn::*;
 
 #[derive(Debug)]
@@ -74,7 +74,7 @@ fn pre_process(
     file_parameters: &FileParams,
     defines_parameters: &DefinesParams,
     include_dirs_params: &IncludeDirsParams,
-) -> String {
+) -> crate::error::Result<String> {
     let mut clang = std::process::Command::new("clang");
     clang.arg("-E");
     clang.arg("-P");
@@ -97,17 +97,20 @@ fn pre_process(
     let path_arg = file_parameters.file.to_slash_lossy();
     clang.arg(path_arg);
     let output = clang.output();
-    let output = output.unwrap();
+    let output = output.map_err(|err| crate::error::Error::IO(err, None))?;
     let stderr = String::from_utf8(output.stderr);
     let stdout = String::from_utf8(output.stdout);
-    let stdout = stdout.unwrap();
-    let stderr = stderr.unwrap();
-    stdout
+    let stdout = stdout.map_err(|err| crate::error::Error::FromUtf8Error(err))?;
+    let stderr = stderr.map_err(|err| crate::error::Error::FromUtf8Error(err))?;
+    if output.status.success() {
+        Ok(stdout.to_string())
+    } else {
+        Err(crate::error::Error::ProcessFail(Some(stderr)))
+    }
 }
 
 pub(crate) fn global_shader_macro_derive_impl(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
-    let self_struct_name = &ast.ident;
     let file_attribute = ast
         .attrs
         .iter()
@@ -143,7 +146,8 @@ pub(crate) fn global_shader_macro_derive_impl(input: TokenStream) -> TokenStream
         None => IncludeDirsParams { dirs: vec![] },
     };
 
-    let shader_source = pre_process(&file_parameters, &defines_parameters, &include_dirs_params);
+    let shader_source =
+        pre_process(&file_parameters, &defines_parameters, &include_dirs_params).unwrap();
     let module = naga::front::wgsl::parse_str(&shader_source).unwrap();
 
     let output_stream = quote! {};

@@ -84,7 +84,7 @@ impl Seek for JavaInputStream {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         match pos {
             std::io::SeekFrom::Start(pos) => self.seek_start(pos),
-            std::io::SeekFrom::End(pos) => {
+            std::io::SeekFrom::End(_) => {
                 todo!()
             }
             std::io::SeekFrom::Current(pos) => self.seek_start((self.position + pos) as u64),

@@ -2,7 +2,6 @@ use crate::{
     base_compute_pipeline::BaseComputePipeline,
     global_shaders::panorama_to_cube::PanoramaToCubeShader, shader_library::ShaderLibrary,
 };
-use wgpu::TextureFormat;
 
 pub struct PanoramaToCubePipeline {
     base_compute_pipeline: BaseComputePipeline,

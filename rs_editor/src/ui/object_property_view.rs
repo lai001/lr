@@ -1,4 +1,4 @@
-use rs_engine::{actor::Actor, content::material::Material, scene_node::*};
+use rs_engine::{actor::Actor, scene_node::*};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
 #[derive(Clone)]

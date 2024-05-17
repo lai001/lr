@@ -25,38 +25,49 @@ pub enum EPropertyTypeValue {
 
 impl EPropertyTypeInfo {
     pub fn new(t: aiPropertyTypeInfo) -> Option<EPropertyTypeInfo> {
+        const AIPROPERTYTYPEINFO_AIPTI_FLOAT: i32 = aiPropertyTypeInfo_aiPTI_Float;
+        const AIPROPERTYTYPEINFO_AIPTI_DOUBLE: i32 = aiPropertyTypeInfo_aiPTI_Double;
+        const AIPROPERTYTYPEINFO_AIPTI_STRING: i32 = aiPropertyTypeInfo_aiPTI_String;
+        const AIPROPERTYTYPEINFO_AIPTI_INTEGER: i32 = aiPropertyTypeInfo_aiPTI_Integer;
+        const AIPROPERTYTYPEINFO_AIPTI_BUFFER: i32 = aiPropertyTypeInfo_aiPTI_Buffer;
         match t {
-            aiPropertyTypeInfo_aiPTI_Float => Some(EPropertyTypeInfo::FloatArray),
-            aiPropertyTypeInfo_aiPTI_Double => Some(EPropertyTypeInfo::DoubleArray),
-            aiPropertyTypeInfo_aiPTI_String => Some(EPropertyTypeInfo::String),
-            aiPropertyTypeInfo_aiPTI_Integer => Some(EPropertyTypeInfo::IntegerArray),
-            aiPropertyTypeInfo_aiPTI_Buffer => Some(EPropertyTypeInfo::Buffer),
+            AIPROPERTYTYPEINFO_AIPTI_FLOAT => Some(EPropertyTypeInfo::FloatArray),
+            AIPROPERTYTYPEINFO_AIPTI_DOUBLE => Some(EPropertyTypeInfo::DoubleArray),
+            AIPROPERTYTYPEINFO_AIPTI_STRING => Some(EPropertyTypeInfo::String),
+            AIPROPERTYTYPEINFO_AIPTI_INTEGER => Some(EPropertyTypeInfo::IntegerArray),
+            AIPROPERTYTYPEINFO_AIPTI_BUFFER => Some(EPropertyTypeInfo::Buffer),
             _ => None,
         }
     }
 }
 
 pub struct MaterialProperty<'a> {
-    c: &'a mut russimp_sys::aiMaterialProperty,
+    _ai_material_property: &'a mut russimp_sys::aiMaterialProperty,
     pub key: String,
-    semantic: u32,
-    index: u32,
-    property_type_info: EPropertyTypeInfo,
-    data: Vec<i8>,
+    _semantic: u32,
+    _index: u32,
+    _property_type_info: EPropertyTypeInfo,
+    _data: Vec<i8>,
     pub value: EPropertyTypeValue,
     marker: PhantomData<&'a ()>,
 }
 
 impl<'a> MaterialProperty<'a> {
     pub fn new(
-        c: &'a mut aiMaterialProperty,
+        ai_material_property: &'a mut aiMaterialProperty,
         ai_material: &russimp_sys::aiMaterial,
     ) -> MaterialProperty<'a> {
-        let key = c.mKey.to_string();
-        let semantic = c.mSemantic;
-        let index = c.mIndex;
-        let property_type_info = EPropertyTypeInfo::new(c.mType).unwrap();
-        let data = unsafe { std::slice::from_raw_parts(c.mData, c.mDataLength as _).to_vec() };
+        let key = ai_material_property.mKey.to_string();
+        let semantic = ai_material_property.mSemantic;
+        let index = ai_material_property.mIndex;
+        let property_type_info = EPropertyTypeInfo::new(ai_material_property.mType).unwrap();
+        let data = unsafe {
+            std::slice::from_raw_parts(
+                ai_material_property.mData,
+                ai_material_property.mDataLength as _,
+            )
+            .to_vec()
+        };
         let value: EPropertyTypeValue;
         match property_type_info {
             EPropertyTypeInfo::FloatArray => {
@@ -65,8 +76,8 @@ impl<'a> MaterialProperty<'a> {
                 unsafe {
                     let status = aiGetMaterialFloatArray(
                         ai_material,
-                        c.mKey.data.as_ptr(),
-                        c.mSemantic as _,
+                        ai_material_property.mKey.data.as_ptr(),
+                        ai_material_property.mSemantic as _,
                         index,
                         out_vec.as_mut_ptr(),
                         p_max.as_mut_ptr(),
@@ -87,8 +98,8 @@ impl<'a> MaterialProperty<'a> {
                 unsafe {
                     let status = aiGetMaterialString(
                         ai_material,
-                        c.mKey.data.as_ptr(),
-                        c.mSemantic as _,
+                        ai_material_property.mKey.data.as_ptr(),
+                        ai_material_property.mSemantic as _,
                         index,
                         out_string.as_mut_ptr(),
                     );
@@ -103,8 +114,8 @@ impl<'a> MaterialProperty<'a> {
                 unsafe {
                     let status = aiGetMaterialIntegerArray(
                         ai_material,
-                        c.mKey.data.as_ptr(),
-                        c.mSemantic as _,
+                        ai_material_property.mKey.data.as_ptr(),
+                        ai_material_property.mSemantic as _,
                         index,
                         out_vec.as_mut_ptr(),
                         p_max.as_mut_ptr(),
@@ -124,12 +135,12 @@ impl<'a> MaterialProperty<'a> {
             }
         }
         MaterialProperty {
-            c,
+            _ai_material_property: ai_material_property,
             key,
-            semantic,
-            index,
-            property_type_info,
-            data,
+            _semantic: semantic,
+            _index: index,
+            _property_type_info: property_type_info,
+            _data: data,
             value,
             marker: PhantomData,
         }
@@ -137,23 +148,23 @@ impl<'a> MaterialProperty<'a> {
 }
 
 pub struct Material<'a> {
-    c: &'a mut russimp_sys::aiMaterial,
+    _ai_material: &'a mut russimp_sys::aiMaterial,
     pub num_allocated: u32,
     pub material_properties: Vec<MaterialProperty<'a>>,
     marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Material<'a> {
-    pub fn borrow_from(c: &'a mut russimp_sys::aiMaterial) -> Material<'a> {
+    pub fn borrow_from(ai_material: &'a mut russimp_sys::aiMaterial) -> Material<'a> {
         for texture_type in TextureType::iter() {
             unsafe {
-                for index in 0..aiGetMaterialTextureCount(c, texture_type as _) {
+                for index in 0..aiGetMaterialTextureCount(ai_material, texture_type as _) {
                     let mut path = aiString {
                         length: 0,
                         data: [0; 1024],
                     };
                     let status = aiGetMaterialTexture(
-                        c,
+                        ai_material,
                         texture_type as _,
                         index,
                         &mut path,
@@ -171,18 +182,18 @@ impl<'a> Material<'a> {
             }
         }
         let ai_properties = unsafe {
-            std::ptr::slice_from_raw_parts(c.mProperties, c.mNumProperties as _)
+            std::ptr::slice_from_raw_parts(ai_material.mProperties, ai_material.mNumProperties as _)
                 .as_ref()
                 .unwrap()
         };
-        let num_allocated: u32 = c.mNumAllocated;
+        let num_allocated: u32 = ai_material.mNumAllocated;
         let mut material_properties: Vec<MaterialProperty> = vec![];
         for property in ai_properties {
             let property = unsafe { property.as_mut().unwrap() };
-            material_properties.push(MaterialProperty::new(property, c))
+            material_properties.push(MaterialProperty::new(property, ai_material))
         }
         Material {
-            c,
+            _ai_material: ai_material,
             num_allocated,
             marker: PhantomData,
             material_properties,

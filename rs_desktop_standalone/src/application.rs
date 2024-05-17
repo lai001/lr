@@ -46,7 +46,7 @@ impl Application {
     }
 
     pub fn run(mut self) {
-        self.event_loop.run({
+        let result = self.event_loop.run({
             move |event, event_loop_window_target| {
                 self.application_context.handle_event(
                     &mut self.window,
@@ -56,5 +56,6 @@ impl Application {
                 );
             }
         });
+        log::trace!("{:?}", result);
     }
 }

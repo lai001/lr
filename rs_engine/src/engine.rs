@@ -15,7 +15,6 @@ use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::content_type::EContentType;
 use rs_artifact::resource_info::ResourceInfo;
 use rs_artifact::resource_type::EResourceType;
-use rs_core_minimal::primitive_data::PrimitiveData;
 use rs_core_minimal::settings::Settings;
 use rs_foundation::new::{
     MultipleThreadMut, MultipleThreadMutType, SingleThreadMut, SingleThreadMutType,
@@ -26,23 +25,21 @@ use rs_render::command::{
     CreateTexture, CreateVirtualTexture, DrawObject, EBindingResource, ETextureType,
     InitTextureData, RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer, UploadPrebakeIBL,
 };
-use rs_render::compute_pipeline::jfa::JFATextures;
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::global_uniform::{self, EDebugShadingType};
 use rs_render::renderer::Renderer;
 use rs_render::sdf2d_generator;
-use rs_render::vertex_data_type::mesh_vertex::MeshVertex0;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::iter::zip;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
 struct State {
     camera_movement_speed: f32,
+    #[cfg(not(target_os = "android"))]
     camera_motion_speed: f32,
     #[cfg(not(target_os = "android"))]
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
@@ -52,6 +49,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             camera_movement_speed: 0.01,
+            #[cfg(not(target_os = "android"))]
             camera_motion_speed: 0.1,
             #[cfg(not(target_os = "android"))]
             virtual_key_code_states: Default::default(),
@@ -134,8 +132,6 @@ impl Engine {
         )
         .map_err(|err| crate::error::Error::RendererError(err))?;
 
-        let mut draw_objects: Vec<DrawObject> = Vec::new();
-
         let mut render_thread_mode = ERenderThreadMode::from(renderer, true);
 
         let global_constants_handle = resource_manager.next_buffer();
@@ -160,7 +156,6 @@ impl Engine {
         let mut camera = Camera::default(surface_width, surface_height);
         camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
         let mut level: Option<crate::content::level::Level> = None;
-        let mut draw_object_id: u32 = 0;
         (|| {
             let Some(url) = Self::find_first_level(&mut resource_manager) else {
                 return;
@@ -171,6 +166,11 @@ impl Engine {
             log::trace!("Load level: {}", _level.url.to_string());
             level = Some(_level);
         })();
+
+        #[cfg(feature = "editor")]
+        let mut draw_object_id: u32 = 0;
+        #[cfg(not(feature = "editor"))]
+        let draw_object_id: u32 = 0;
 
         #[cfg(feature = "editor")]
         let grid_draw_object = (|| {
@@ -195,7 +195,7 @@ impl Engine {
             resource_manager,
             logger,
             level,
-            draw_objects,
+            draw_objects: Vec::new(),
             camera,
             state: State::default(),
             settings,
@@ -381,7 +381,7 @@ impl Engine {
                                         None => dyn_image.to_rgba8(),
                                     };
                                     log::trace!("{:?}", image.image_format);
-                                    self.create_texture_from_image(&url, &rgba_image);
+                                    self.create_texture_from_image(&url, &rgba_image)?;
                                     Ok(())
                                 })(
                                 );
@@ -598,64 +598,6 @@ impl Engine {
     {
         self.render_thread_mode
             .set_new_window(window_id, window, surface_width, surface_height)
-    }
-
-    fn create_draw_object_from_mesh_internal(
-        render_thread_mode: &mut ERenderThreadMode,
-        resource_manager: &mut ResourceManager,
-        vertex_buffers: Vec<(Option<&str>, &[u8])>,
-        vertex_count: u32,
-        indexes: &[u32],
-        id: u32,
-        name: Option<String>,
-        render_pipeline: String,
-        global_binding_resources: Vec<EBindingResource>,
-    ) -> DrawObject {
-        let index_buffer_handle = resource_manager.next_buffer();
-        let buffer_create_info = BufferCreateInfo {
-            label: Some(format!(
-                "IndexBuffer.{}",
-                name.clone().unwrap_or("".to_string())
-            )),
-            contents: rs_foundation::cast_to_raw_buffer(&indexes).to_vec(),
-            usage: wgpu::BufferUsages::INDEX,
-        };
-        let create_buffer = CreateBuffer {
-            handle: *index_buffer_handle,
-            buffer_create_info,
-        };
-        let message = RenderCommand::CreateBuffer(create_buffer);
-        render_thread_mode.send_command(message);
-        let mut vertex_buffer_handles: Vec<u64> = Vec::with_capacity(vertex_buffers.len());
-        for (name, vertex_buffer) in vertex_buffers {
-            let vertex_buffer_handle = resource_manager.next_buffer();
-            let buffer_create_info = BufferCreateInfo {
-                label: Some(format!("VertexBuffer.{}", name.unwrap_or(""))),
-                contents: vertex_buffer.to_vec(),
-                usage: wgpu::BufferUsages::VERTEX,
-            };
-            let create_buffer = CreateBuffer {
-                handle: *vertex_buffer_handle,
-                buffer_create_info,
-            };
-            let message = RenderCommand::CreateBuffer(create_buffer);
-            render_thread_mode.send_command(message);
-            vertex_buffer_handles.push(*vertex_buffer_handle);
-        }
-
-        let draw_object = DrawObject {
-            id,
-            vertex_buffers: vertex_buffer_handles,
-            vertex_count,
-            index_buffer: Some(*index_buffer_handle),
-            index_count: Some(indexes.len() as u32),
-            render_pipeline,
-            binding_resources: vec![],
-            global_binding_resources,
-            vt_binding_resources: vec![],
-            is_use_virtual_texture: false,
-        };
-        draw_object
     }
 
     fn next_draw_object_id(&mut self) -> u32 {
@@ -1260,9 +1202,9 @@ impl Engine {
     #[cfg(not(target_os = "android"))]
     pub fn process_keyboard_input(
         &mut self,
-        device_id: winit::event::DeviceId,
+        _device_id: winit::event::DeviceId,
         event: winit::event::KeyEvent,
-        is_synthetic: bool,
+        _is_synthetic: bool,
     ) {
         let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
             return;
@@ -1487,7 +1429,7 @@ impl Engine {
         render_thread_mode: &mut ERenderThreadMode,
         global_constants_handle: crate::handle::BufferHandle,
     ) -> DrawObject {
-        let grid_data = PrimitiveData::quad();
+        let grid_data = rs_core_minimal::primitive_data::PrimitiveData::quad();
         let name = "Grid";
         let index_buffer_handle = resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -1502,11 +1444,12 @@ impl Engine {
         let message = RenderCommand::CreateBuffer(create_buffer);
         render_thread_mode.send_command(message);
 
-        let mut vertexes0: Vec<MeshVertex0> = vec![];
+        let mut vertexes0: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0> = vec![];
 
-        for (position, tex_coord) in zip(&grid_data.vertex_positions, &grid_data.vertex_tex_coords)
+        for (position, tex_coord) in
+            std::iter::zip(&grid_data.vertex_positions, &grid_data.vertex_tex_coords)
         {
-            vertexes0.push(MeshVertex0 {
+            vertexes0.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex0 {
                 position: *position,
                 tex_coord: *tex_coord,
             });

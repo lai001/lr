@@ -1,11 +1,7 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline, global_shaders::brdf_lut::BrdfLutShader,
-    gpu_buffer, shader_library::ShaderLibrary,
+    base_compute_pipeline::BaseComputePipeline, constants::IBLConstants,
+    global_shaders::brdf_lut::BrdfLutShader, gpu_buffer, shader_library::ShaderLibrary,
 };
-
-struct Constants {
-    sample_count: u32,
-}
 
 pub struct BrdfLutPipeline {
     base_compute_pipeline: BaseComputePipeline,
@@ -55,7 +51,7 @@ impl BrdfLutPipeline {
             array_layer_count: None,
         });
 
-        let constants = Constants { sample_count };
+        let constants = IBLConstants { sample_count };
 
         let uniform_buf = gpu_buffer::uniform::from(device, &constants, None);
         self.base_compute_pipeline.execute_resources(

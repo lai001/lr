@@ -130,7 +130,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         &mut self,
         pin: &InPin,
         ui: &mut Ui,
-        scale: f32,
+        _: f32,
         snarl: &mut Snarl<MaterialNode>,
     ) -> PinInfo {
         let node = &mut snarl[pin.id.node];
@@ -284,7 +284,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         &mut self,
         pin: &OutPin,
         ui: &mut Ui,
-        scale: f32,
+        _: f32,
         snarl: &mut Snarl<MaterialNode>,
     ) -> PinInfo {
         let node = &mut snarl[pin.id.node];
@@ -323,7 +323,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
-        scale: f32,
+        _: f32,
         snarl: &mut Snarl<MaterialNode>,
     ) {
         ui.horizontal(|ui| {
@@ -374,7 +374,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         &mut self,
         pos: egui::Pos2,
         ui: &mut Ui,
-        scale: f32,
+        _: f32,
         snarl: &mut Snarl<MaterialNode>,
     ) {
         if ui.button("Add").clicked() {
@@ -664,7 +664,7 @@ impl MaterialView {
         context: &egui::Context,
     ) -> Option<anyhow::Result<ResolveResult>> {
         egui::SidePanel::left("Detail").show(context, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {});
+            egui::ScrollArea::vertical().show(ui, |_| {});
         });
 
         egui::CentralPanel::default().show(context, |ui| {

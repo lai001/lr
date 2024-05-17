@@ -9,7 +9,7 @@ use crate::{
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Mesh<'a> {
-    c: &'a mut russimp_sys::aiMesh,
+    _ai_mesh: &'a mut russimp_sys::aiMesh,
     pub name: String,
     pub bones: Vec<Rc<RefCell<Bone<'a>>>>,
     pub primitive_type: EPrimitiveType,
@@ -26,14 +26,14 @@ pub struct Mesh<'a> {
 
 impl<'a> Mesh<'a> {
     pub fn borrow_from(
-        c: &'a mut russimp_sys::aiMesh,
+        ai_mesh: &'a mut russimp_sys::aiMesh,
         map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
     ) -> Mesh<'a> {
-        let name = c.mName.into();
+        let name = ai_mesh.mName.into();
         let mut bones = Vec::new();
-        if c.mBones.is_null() == false {
+        if ai_mesh.mBones.is_null() == false {
             let slice = unsafe {
-                std::ptr::slice_from_raw_parts(c.mBones, c.mNumBones as usize)
+                std::ptr::slice_from_raw_parts(ai_mesh.mBones, ai_mesh.mNumBones as usize)
                     .as_ref()
                     .unwrap()
             };
@@ -45,46 +45,53 @@ impl<'a> Mesh<'a> {
             }
         }
 
-        let primitive_type = (c.mPrimitiveTypes as russimp_sys::aiPrimitiveType)
+        let primitive_type = (ai_mesh.mPrimitiveTypes as russimp_sys::aiPrimitiveType)
             .try_into()
             .unwrap();
-        let vertices =
-            unsafe { std::slice::from_raw_parts_mut(c.mVertices, c.mNumVertices as usize) };
+        let vertices = unsafe {
+            std::slice::from_raw_parts_mut(ai_mesh.mVertices, ai_mesh.mNumVertices as usize)
+        };
         let vertices = vertices.iter_mut().map(|x| x.to_vec3()).collect();
 
-        let normals = if c.mNormals == std::ptr::null_mut() {
+        let normals = if ai_mesh.mNormals == std::ptr::null_mut() {
             vec![]
         } else {
-            unsafe { std::slice::from_raw_parts_mut(c.mNormals, c.mNumVertices as usize) }
-                .iter_mut()
-                .map(|x| x.to_vec3())
-                .collect()
+            unsafe {
+                std::slice::from_raw_parts_mut(ai_mesh.mNormals, ai_mesh.mNumVertices as usize)
+            }
+            .iter_mut()
+            .map(|x| x.to_vec3())
+            .collect()
         };
 
-        let tangents = if c.mTangents == std::ptr::null_mut() {
+        let tangents = if ai_mesh.mTangents == std::ptr::null_mut() {
             vec![]
         } else {
-            unsafe { std::slice::from_raw_parts_mut(c.mTangents, c.mNumVertices as usize) }
-                .iter_mut()
-                .map(|x| x.to_vec3())
-                .collect()
+            unsafe {
+                std::slice::from_raw_parts_mut(ai_mesh.mTangents, ai_mesh.mNumVertices as usize)
+            }
+            .iter_mut()
+            .map(|x| x.to_vec3())
+            .collect()
         };
 
-        let bitangents = if c.mBitangents == std::ptr::null_mut() {
+        let bitangents = if ai_mesh.mBitangents == std::ptr::null_mut() {
             vec![]
         } else {
-            unsafe { std::slice::from_raw_parts_mut(c.mBitangents, c.mNumVertices as usize) }
-                .iter_mut()
-                .map(|x| x.to_vec3())
-                .collect()
+            unsafe {
+                std::slice::from_raw_parts_mut(ai_mesh.mBitangents, ai_mesh.mNumVertices as usize)
+            }
+            .iter_mut()
+            .map(|x| x.to_vec3())
+            .collect()
         };
 
         let mut texture_coords: Vec<Vec<glam::Vec3>> = vec![];
-        for ai_texture_coords in c.mTextureCoords {
+        for ai_texture_coords in ai_mesh.mTextureCoords {
             if ai_texture_coords == std::ptr::null_mut() {
             } else {
                 let texture_coord = unsafe {
-                    std::slice::from_raw_parts_mut(ai_texture_coords, c.mNumVertices as usize)
+                    std::slice::from_raw_parts_mut(ai_texture_coords, ai_mesh.mNumVertices as usize)
                 }
                 .iter_mut()
                 .map(|x| x.to_vec3())
@@ -94,25 +101,27 @@ impl<'a> Mesh<'a> {
         }
 
         let mut colors: Vec<Vec<glam::Vec4>> = vec![];
-        for ai_colors in c.mColors {
+        for ai_colors in ai_mesh.mColors {
             if ai_colors == std::ptr::null_mut() {
             } else {
-                let color =
-                    unsafe { std::slice::from_raw_parts_mut(ai_colors, c.mNumVertices as usize) }
-                        .iter_mut()
-                        .map(|x| x.to_vec4())
-                        .collect();
+                let color = unsafe {
+                    std::slice::from_raw_parts_mut(ai_colors, ai_mesh.mNumVertices as usize)
+                }
+                .iter_mut()
+                .map(|x| x.to_vec4())
+                .collect();
                 colors.push(color);
             };
         }
 
-        let faces = unsafe { std::slice::from_raw_parts_mut(c.mFaces, c.mNumFaces as usize) }
-            .iter_mut()
-            .map(|x| Face::borrow_from(x))
-            .collect();
+        let faces =
+            unsafe { std::slice::from_raw_parts_mut(ai_mesh.mFaces, ai_mesh.mNumFaces as usize) }
+                .iter_mut()
+                .map(|x| Face::borrow_from(x))
+                .collect();
 
         Mesh {
-            c,
+            _ai_mesh: ai_mesh,
             name,
             marker: PhantomData,
             bones,

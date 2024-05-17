@@ -1,12 +1,8 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline, global_shaders::jfa::JFAShader, gpu_buffer,
-    shader_library::ShaderLibrary,
+    base_compute_pipeline::BaseComputePipeline, constants::JFAConstants,
+    global_shaders::jfa::JFAShader, gpu_buffer, shader_library::ShaderLibrary,
 };
 use wgpu::*;
-
-struct Constants {
-    step: glam::Vec2,
-}
 
 pub struct JFATextures {
     front: wgpu::Texture,
@@ -117,7 +113,7 @@ impl JFAComputePipeline {
             array_layer_count: None,
         });
 
-        let constants = Constants { step };
+        let constants = JFAConstants { step };
 
         let uniform_buf = gpu_buffer::uniform::from(
             device,
