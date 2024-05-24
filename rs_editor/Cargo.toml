@@ -57,7 +57,8 @@ image_dds = { version = "0.5.0" }
 clap = { version = "4.5.4", features = ["derive"] }
 naga = { version = "0.19.0" }
 wgpu = "0.19.1"
-transform-gizmo-egui = { version = "0.1.0", path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
+rand = { version = "0.8.5" }
+transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
 rs_render = { path = "../rs_render" }
 rs_foundation = { path = "../rs_foundation" }
 rs_artifact = { path = "../rs_artifact" }
@@ -67,3 +68,4 @@ rs_shader_compiler = { path = "../rs_shader_compiler" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 rs_assimp = { path = "../rs_assimp" }
 rs_proc_macros = { path = "../rs_proc_macros" }
+rs_metis = { path = "../rs_metis" }

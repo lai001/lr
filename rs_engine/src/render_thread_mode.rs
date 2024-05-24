@@ -27,8 +27,10 @@ impl MultipleThreadRenderer {
     fn spawn_render_thread(
         renderer: Arc<Mutex<Renderer>>,
     ) -> Arc<SingleConsumeChnnel<RenderCommand, Option<RenderOutput2>>> {
-        let channel =
-            SingleConsumeChnnel::<RenderCommand, Option<RenderOutput2>>::shared(Some(2), None);
+        let channel = SingleConsumeChnnel::<RenderCommand, Option<RenderOutput2>>::shared(
+            Some(2),
+            Some(u16::MAX as usize),
+        );
         thread_pool::ThreadPool::render().spawn({
             let renderer = renderer.clone();
             let channel = channel.clone();
@@ -36,7 +38,9 @@ impl MultipleThreadRenderer {
                 channel.from_a_block_current_thread(|command| {
                     let mut renderer = renderer.lock().unwrap();
                     let output = renderer.send_command(command);
-                    channel.to_a(output);
+                    channel
+                        .try_to_a(output)
+                        .expect("Caller should receive output");
                 });
             }
         });

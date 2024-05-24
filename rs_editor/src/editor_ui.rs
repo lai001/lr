@@ -2,7 +2,6 @@ use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
 use crate::ui::content_item_property_view::ContentItemPropertyView;
 use crate::ui::gizmo_view::GizmoView;
-use crate::ui::material_view::MaterialView;
 use crate::ui::object_property_view::{ESelectedObjectType, ObjectPropertyView};
 use crate::ui::top_menu::TopMenu;
 use crate::ui::{
@@ -34,7 +33,6 @@ pub struct EditorUI {
     project_folder_path: Option<PathBuf>,
     top_menu: TopMenu,
     gizmo_view: GizmoView,
-    pub material_view: MaterialView,
     pub egui_context: Context,
     pub content_item_property_view: ContentItemPropertyView,
     pub object_property_view: ObjectPropertyView,
@@ -63,7 +61,6 @@ impl EditorUI {
                 new_project_name: String::new(),
             },
             gizmo_view: GizmoView::default(),
-            material_view: MaterialView::new(),
             egui_context: context.clone(),
             content_item_property_view: ContentItemPropertyView::new(),
             object_property_view: ObjectPropertyView::new(),
@@ -190,14 +187,6 @@ impl EditorUI {
             });
 
         click
-    }
-
-    pub fn draw_material_view(&mut self, context: &Context, data_source: &mut DataSource) {
-        self.material_view.draw(
-            data_source.current_open_material.clone(),
-            context,
-            data_source,
-        );
     }
 
     fn model_hierarchy_window(

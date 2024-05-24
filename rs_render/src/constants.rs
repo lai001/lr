@@ -57,3 +57,9 @@ pub struct PreFilterConstants {
     pub roughness: f32,
     pub sample_count: u32,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MeshViewConstants {
+    pub model: glam::Mat4,
+}

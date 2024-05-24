@@ -8,6 +8,7 @@ use rs_artifact::static_mesh::StaticMesh;
 use rs_artifact::{
     artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
 };
+use rs_render::command::IBLTexturesKey;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -16,6 +17,23 @@ use std::{
 struct LoadResult {
     key: String,
     image: image::ImageResult<image::DynamicImage>,
+}
+
+#[derive(Clone)]
+pub struct IBLTextures {
+    pub brdflut: crate::handle::TextureHandle,
+    pub pre_filter_cube_map: crate::handle::TextureHandle,
+    pub irradiance: crate::handle::TextureHandle,
+}
+
+impl IBLTextures {
+    pub fn to_key(&self) -> IBLTexturesKey {
+        IBLTexturesKey {
+            brdflut_texture: *self.brdflut,
+            pre_filter_cube_map_texture: *self.pre_filter_cube_map,
+            irradiance_texture: *self.irradiance,
+        }
+    }
 }
 
 struct STResourceManager {
@@ -28,6 +46,7 @@ struct STResourceManager {
     skin_meshes: HashMap<url::Url, Arc<rs_artifact::skin_mesh::SkinMesh>>,
     skeleton_animations: HashMap<url::Url, Arc<rs_artifact::skeleton_animation::SkeletonAnimation>>,
     skeletons: HashMap<url::Url, Arc<rs_artifact::skeleton::Skeleton>>,
+    ibl_textures: HashMap<url::Url, IBLTextures>,
     // mesh_buffers: HashMap<url::Url, Arc<MeshBuffer>>,
     // material_render_pipelines: HashMap<url::Url, crate::handle::MaterialRenderPipelineHandle>,
 }
@@ -44,6 +63,7 @@ impl STResourceManager {
             skin_meshes: HashMap::new(),
             skeleton_animations: HashMap::new(),
             skeletons: HashMap::new(),
+            ibl_textures: HashMap::new(),
             // mesh_buffers: HashMap::new(),
             // material_render_pipelines: HashMap::new(),
         }
@@ -280,6 +300,19 @@ impl STResourceManager {
         handle
     }
 
+    fn next_ibl_textures(&mut self, url: url::Url) -> IBLTextures {
+        let brdflut = self.handle_manager.next_texture();
+        let pre_filter_cube_map = self.handle_manager.next_texture();
+        let irradiance = self.handle_manager.next_texture();
+        let ibl_textures = IBLTextures {
+            brdflut,
+            pre_filter_cube_map,
+            irradiance,
+        };
+        self.ibl_textures.insert(url, ibl_textures.clone());
+        ibl_textures
+    }
+
     fn next_virtual_texture(&mut self, url: url::Url) -> crate::handle::TextureHandle {
         let handle = self.handle_manager.next_virtual_texture();
         self.virtual_textures.insert(url, handle.clone());
@@ -308,6 +341,10 @@ impl STResourceManager {
 
     fn get_virtual_texture_by_url(&self, url: &url::Url) -> Option<crate::handle::TextureHandle> {
         self.virtual_textures.get(url).cloned()
+    }
+
+    fn get_ibl_textures(&self) -> HashMap<url::Url, IBLTextures> {
+        self.ibl_textures.clone()
     }
 }
 

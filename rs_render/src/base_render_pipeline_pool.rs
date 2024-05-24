@@ -5,7 +5,7 @@ use crate::VertexBufferType;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::{collections::HashMap, hash::Hash};
-use wgpu::{ColorTargetState, DepthStencilState, Device, MultisampleState, PrimitiveState};
+use wgpu::*;
 
 #[derive(PartialEq, Clone, Default)]
 pub struct BaseRenderPipelineBuilder {

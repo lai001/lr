@@ -299,7 +299,7 @@ impl ProjectContext {
                     let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
                     model_loader.load(&file_path).unwrap();
                     let loaded_skin_mesh = model_loader.to_runtime_skin_mesh(
-                        asset.clone(),
+                        &asset.borrow(),
                         &project_folder_path,
                         ResourceManager::default(),
                     );

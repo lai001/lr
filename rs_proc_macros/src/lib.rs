@@ -20,6 +20,10 @@ pub(crate) fn get_engine_root_dir_at_compile_time() -> std::path::PathBuf {
 pub(crate) fn debug_log<S: AsRef<str>>(file_name: S, content: S) {
     let path = get_engine_root_dir_at_compile_time()
         .join(format!("rs_proc_macros/target/{}.log", file_name.as_ref()));
+    let parent = path.parent().expect("Should not be null");
+    if !parent.exists() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let f = std::fs::File::options()
         .create(true)
         .append(true)

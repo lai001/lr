@@ -559,4 +559,16 @@ impl VirtualTexturePass {
             array_layer_count: Some(self.indirect_table.depth_or_array_layers()),
         })
     }
+
+    pub fn set_settings(&mut self, settings: VirtualTextureSetting) {
+        self.settings = settings;
+    }
+
+    pub fn get_physical_texture(&self) -> &Texture {
+        &self.physical_texture
+    }
+
+    pub fn get_indirect_table(&self) -> &Texture {
+        &self.indirect_table
+    }
 }

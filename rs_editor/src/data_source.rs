@@ -67,10 +67,8 @@ pub struct DataSource {
     pub view_mode: EViewModeType,
     pub console_cmds: Option<Rc<RefCell<HashMap<String, SingleThreadMutType<ConsoleCmd>>>>>,
     pub is_console_cmds_view_open: bool,
-    pub current_open_material: Option<SingleThreadMutType<crate::material::Material>>,
     pub is_content_item_property_view_open: bool,
     pub is_object_property_view_open: bool,
-    pub is_shader_code_window_open: bool,
     pub debug_shading_type: rs_render::global_uniform::EDebugShadingType,
 }
 
@@ -105,9 +103,7 @@ impl DataSource {
             view_mode: EViewModeType::Lit,
             console_cmds: None,
             is_console_cmds_view_open: false,
-            current_open_material: None,
             is_content_item_property_view_open: false,
-            is_shader_code_window_open: false,
             is_object_property_view_open: false,
             debug_shading_type: rs_render::global_uniform::EDebugShadingType::None,
         }

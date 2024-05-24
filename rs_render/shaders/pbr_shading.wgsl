@@ -301,6 +301,8 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
         fragment_output.color = vec4<f32>(vec3<f32>(shading_info.roughness), 1.0);
     } else if (global_constants.debug_shading == DEBUG_SHADING_TYPE_NORMAL) {
         fragment_output.color = vec4<f32>((shading_info.normal + 1.0) / 2.0, 1.0);
+    } else if (global_constants.debug_shading == DEBUG_SHADING_TYPE_VERTEX_COLOR_0) {
+        fragment_output.color = vertex_output.vertex_color;
     }
     return fragment_output;
 }

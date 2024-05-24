@@ -285,15 +285,15 @@ impl ModelLoader {
 
     pub fn to_runtime_skin_mesh<'a>(
         &self,
-        skeleton_mesh: Rc<RefCell<rs_engine::content::skeleton_mesh::SkeletonMesh>>,
+        skeleton_mesh: &rs_engine::content::skeleton_mesh::SkeletonMesh,
         asset_folder: &Path,
         resource_manager: ResourceManager,
     ) -> Arc<SkinMesh> {
-        let url = skeleton_mesh.borrow().asset_url.clone();
+        let url = skeleton_mesh.asset_url.clone();
         match resource_manager.get_skin_mesh(&url) {
             Some(loaded_mesh) => loaded_mesh.clone(),
             None => {
-                let path = asset_folder.join(skeleton_mesh.borrow().get_relative_path());
+                let path = asset_folder.join(skeleton_mesh.get_relative_path());
                 let scene_cache = self
                     .scene_cache
                     .get(&path)
@@ -301,7 +301,7 @@ impl ModelLoader {
                 let imported_mesh = scene_cache
                     .meshes
                     .iter()
-                    .find(|x| x.borrow().name == skeleton_mesh.borrow().get_skeleton_mesh_name())
+                    .find(|x| x.borrow().name == skeleton_mesh.get_skeleton_mesh_name())
                     .expect("Find matching mesh.");
                 let mut triangle_count: usize = 0;
                 for face in &imported_mesh.borrow().faces {
@@ -377,15 +377,14 @@ impl ModelLoader {
                     .map(|x| x.borrow().node.clone().unwrap().borrow().path.clone())
                     .collect();
                 let skin_mesh = SkinMesh {
-                    name: skeleton_mesh.borrow().get_skeleton_mesh_name().clone(),
-                    url: skeleton_mesh.borrow().asset_url.clone(),
+                    name: skeleton_mesh.get_skeleton_mesh_name().clone(),
+                    url: skeleton_mesh.asset_url.clone(),
                     vertexes: vertex_buffer,
                     indexes: index_buffer,
                     bone_paths,
                 };
                 let skin_mesh = Arc::new(skin_mesh);
-                resource_manager
-                    .add_skin_mesh(skeleton_mesh.borrow().asset_url.clone(), skin_mesh.clone());
+                resource_manager.add_skin_mesh(skeleton_mesh.asset_url.clone(), skin_mesh.clone());
                 log::trace!(
                     r#"Load skin mesh "{}" from scene {:?}."#,
                     skin_mesh.clone().name,

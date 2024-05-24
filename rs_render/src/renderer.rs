@@ -1,7 +1,6 @@
 use crate::acceleration_bake::AccelerationBaker;
 use crate::base_render_pipeline_pool::BaseRenderPipelinePool;
 use crate::cube_map::CubeMap;
-use crate::default_textures::DefaultTextures;
 use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
@@ -9,6 +8,7 @@ use crate::prebake_ibl::PrebakeIBL;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
+use crate::render_pipeline::mesh_view::MeshViewPipeline;
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::shader_library::ShaderLibrary;
@@ -27,6 +27,7 @@ use wgpu::*;
 pub const SKIN_MESH_RENDER_PIPELINE: &str = "SKIN_MESH_RENDER_PIPELINE";
 pub const STATIC_MESH_RENDER_PIPELINE: &str = "STATIC_MESH_RENDER_PIPELINE";
 pub const GRID_RENDER_PIPELINE: &str = "GRID_RENDER_PIPELINE";
+pub const MESH_VIEW_RENDER_PIPELINE: &str = "MESH_VIEW_RENDER_PIPELINE";
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
@@ -37,7 +38,7 @@ pub struct Renderer {
     create_buffer_commands: Vec<CreateBuffer>,
     update_buffer_commands: Vec<UpdateBuffer>,
     update_texture_commands: Vec<UpdateTexture>,
-    draw_object_commands: Vec<DrawObject>,
+    // draw_object_commands: Vec<DrawObject>,
     ui_output_commands: VecDeque<crate::egui_render::EGUIRenderOutput>,
     resize_commands: VecDeque<ResizeInfo>,
     task_commands: VecDeque<TaskType>,
@@ -45,24 +46,25 @@ pub struct Renderer {
     textures: HashMap<u64, Texture>,
     buffers: HashMap<u64, Buffer>,
     ui_textures: HashMap<u64, egui::TextureId>,
-    ibl_bakes: HashMap<u64, AccelerationBaker>,
+    ibl_bakes: HashMap<IBLTexturesKey, AccelerationBaker>,
     samplers: HashMap<u64, Sampler>,
 
     shading_pipeline: ShadingPipeline,
     skin_mesh_shading_pipeline: SkinMeshShadingPipeline,
     grid_render_pipeline: GridPipeline,
     attachment_pipeline: AttachmentPipeline,
+    mesh_view_pipeline: MeshViewPipeline,
 
     depth_textures: HashMap<isize, DepthTexture>,
-    default_textures: DefaultTextures,
-
+    // default_textures: DefaultTextures,
     texture_descriptors: HashMap<u64, TextureDescriptorCreateInfo>,
     buffer_infos: HashMap<u64, BufferCreateInfo>,
 
     #[cfg(feature = "renderdoc")]
     render_doc_context: Option<crate::renderdoc::Context>,
 
-    virtual_texture_pass: Option<VirtualTexturePass>,
+    // virtual_texture_pass: Option<VirtualTexturePass>,
+    virtual_texture_pass: HashMap<VirtualTexturePassKey, VirtualTexturePass>,
 
     settings: RenderSettings,
 
@@ -72,7 +74,7 @@ pub struct Renderer {
 
     material_render_pipelines: HashMap<MaterialRenderPipelineHandle, MaterialRenderPipeline>,
 
-    prebake_ibls: HashMap<u64, PrebakeIBL>,
+    prebake_ibls: HashMap<IBLTexturesKey, PrebakeIBL>,
 }
 
 impl Renderer {
@@ -136,28 +138,20 @@ impl Renderer {
             wgpu_context.get_device(),
             Some("Base.DepthTexture"),
         );
-        let default_textures =
-            DefaultTextures::new(wgpu_context.get_device(), wgpu_context.get_queue());
         let attachment_pipeline = AttachmentPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
             &current_swapchain_format,
         );
 
-        let virtual_texture_pass: Option<VirtualTexturePass>;
-        if settings.virtual_texture_setting.is_enable {
-            virtual_texture_pass = VirtualTexturePass::new(
-                wgpu_context.get_device(),
-                &shader_library,
-                false,
-                glam::uvec2(surface_width, surface_height),
-                settings.virtual_texture_setting.clone(),
-            )
-            .ok();
-        } else {
-            virtual_texture_pass = None;
-        }
         let grid_render_pipeline = GridPipeline::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &current_swapchain_format,
+            &mut base_render_pipeline_pool,
+        );
+
+        let mesh_view_pipeline = MeshViewPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
             &current_swapchain_format,
@@ -174,7 +168,7 @@ impl Renderer {
             create_buffer_commands: Vec::new(),
             update_buffer_commands: Vec::new(),
             update_texture_commands: Vec::new(),
-            draw_object_commands: Vec::new(),
+            // draw_object_commands: Vec::new(),
             ui_output_commands: VecDeque::new(),
             resize_commands: VecDeque::new(),
             textures: HashMap::new(),
@@ -183,14 +177,13 @@ impl Renderer {
             shading_pipeline,
             attachment_pipeline,
             depth_textures: HashMap::from([(main_window_id, depth_texture)]),
-            default_textures,
             texture_descriptors: HashMap::new(),
             buffer_infos: HashMap::new(),
             task_commands: VecDeque::new(),
             ibl_bakes: HashMap::new(),
             #[cfg(feature = "renderdoc")]
             render_doc_context: crate::renderdoc::Context::new().ok(),
-            virtual_texture_pass,
+            virtual_texture_pass: HashMap::new(),
             settings,
             skin_mesh_shading_pipeline,
             base_render_pipeline_pool,
@@ -199,6 +192,7 @@ impl Renderer {
             main_window_id,
             material_render_pipelines: HashMap::new(),
             prebake_ibls: HashMap::new(),
+            mesh_view_pipeline,
         }
     }
 
@@ -294,7 +288,7 @@ impl Renderer {
         }
     }
 
-    pub fn present(&mut self, window_id: isize) -> Option<RenderOutput> {
+    pub fn present(&mut self, present_info: PresentInfo) -> Option<RenderOutput> {
         #[cfg(feature = "renderdoc")]
         let mut is_capture_frame = false;
         #[cfg(feature = "renderdoc")]
@@ -536,11 +530,12 @@ impl Renderer {
             }
             render_output
                 .create_ibl_handles
-                .insert(create_iblbake_command.handle);
-            self.ibl_bakes.insert(create_iblbake_command.handle, baker);
+                .insert(create_iblbake_command.key);
+            self.ibl_bakes.insert(create_iblbake_command.key, baker);
         }
 
-        let texture = match self.wgpu_context.get_current_surface_texture(window_id) {
+        let window_id = present_info.window_id;
+        let surface_texture = match self.wgpu_context.get_current_surface_texture(window_id) {
             Ok(texture) => texture,
             Err(err) => {
                 if err != wgpu::SurfaceError::Outdated {
@@ -549,20 +544,20 @@ impl Renderer {
                 return None;
             }
         };
+        let color_texture = &surface_texture.texture;
+        let depth_texture = self.depth_textures.get(&window_id).expect("Not null");
+        let output_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_texture_view = depth_texture.get_view();
 
-        let output_view = texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let depth_texture_view = &self
-            .depth_textures
-            .get(&window_id)
-            .expect("Not null")
-            .get_view();
-        self.clear_buffer(&output_view, depth_texture_view);
-        self.vt_pass();
-        self.draw_objects(&output_view);
+        self.clear_buffer(&output_view, &depth_texture_view);
+        self.vt_pass(&present_info);
+        self.draw_objects(
+            &output_view,
+            &depth_texture_view,
+            &present_info.draw_objects,
+        );
 
-        self.draw_object_commands.clear();
+        // self.draw_object_commands.clear();
 
         for output in self
             .ui_output_commands
@@ -576,7 +571,7 @@ impl Renderer {
         }
         self.ui_output_commands.retain(|x| x.window_id != window_id);
 
-        texture.present();
+        surface_texture.present();
         #[cfg(feature = "renderdoc")]
         {
             if is_capture_frame {
@@ -602,13 +597,6 @@ impl Renderer {
                 a: 1.0,
             },
         );
-
-        if let Some(pass) = &self.virtual_texture_pass {
-            pass.begin_new_frame(
-                self.wgpu_context.get_device(),
-                self.wgpu_context.get_queue(),
-            );
-        }
     }
 
     pub fn load_shader<K>(&mut self, shaders: HashMap<K, String>)
@@ -654,11 +642,14 @@ impl Renderer {
             RenderCommand::CreateBuffer(command) => self.create_buffer_commands.push(command),
             RenderCommand::UpdateBuffer(command) => self.update_buffer_commands.push(command),
             RenderCommand::UpdateTexture(command) => self.update_texture_commands.push(command),
-            RenderCommand::DrawObject(command) => self.draw_object_commands.push(command),
+            // RenderCommand::DrawObject(command) => self.draw_object_commands.push(command),
             RenderCommand::UiOutput(command) => self.ui_output_commands.push_back(command),
             RenderCommand::Resize(command) => self.resize_commands.push_back(command),
-            RenderCommand::Present(window_id) => {
-                self.present(window_id);
+            // RenderCommand::Present(window_id) => {
+            //     self.present(window_id);
+            // }
+            RenderCommand::Present(present_info) => {
+                self.present(present_info);
             }
             RenderCommand::Task(command) => self.task_commands.push_back(command),
             #[cfg(feature = "renderdoc")]
@@ -671,10 +662,11 @@ impl Renderer {
                 self.set_settings(settings);
             }
             RenderCommand::CreateVirtualTextureSource(command) => {
-                if let Some(virtual_texture_pass) = &mut self.virtual_texture_pass {
-                    virtual_texture_pass
-                        .virtual_texture_sources
-                        .insert(command.handle, VirtualTextureSource::new(command.source));
+                for virtual_texture_pass in &mut self.virtual_texture_pass.values_mut() {
+                    virtual_texture_pass.virtual_texture_sources.insert(
+                        command.handle,
+                        VirtualTextureSource::new(command.source.clone()),
+                    );
                 }
             }
             RenderCommand::ChangeViewMode(new_view_mode) => {
@@ -772,77 +764,77 @@ impl Renderer {
                 match prebake_ibl {
                     Ok(prebake_ibl) => {
                         self.prebake_ibls
-                            .insert(upload_prebake_ibl.handle, prebake_ibl);
+                            .insert(upload_prebake_ibl.key, prebake_ibl);
                     }
                     Err(err) => {
                         log::trace!("{}", err);
                     }
                 }
             }
+            RenderCommand::CreateVirtualTexturePass(create_virtual_texture_pass) => {
+                let width = create_virtual_texture_pass.surface_size.x;
+                let height = create_virtual_texture_pass.surface_size.y;
+                let virtual_texture_pass = VirtualTexturePass::new(
+                    self.wgpu_context.get_device(),
+                    &self.shader_library,
+                    false,
+                    glam::uvec2(width, height),
+                    create_virtual_texture_pass.settings.clone(),
+                )
+                .unwrap();
+
+                self.virtual_texture_pass
+                    .insert(create_virtual_texture_pass.key, virtual_texture_pass);
+            }
+            RenderCommand::VirtualTexturePassResize(virtual_texture_pass_resize) => {
+                let Some(pass) = self
+                    .virtual_texture_pass
+                    .get_mut(&virtual_texture_pass_resize.key)
+                else {
+                    return None;
+                };
+                pass.change_surface_size(
+                    self.wgpu_context.get_device(),
+                    virtual_texture_pass_resize.surface_size,
+                );
+            }
+            RenderCommand::ClearVirtualTexturePass(clear_virtual_texture_pass) => {
+                let Some(pass) = self
+                    .virtual_texture_pass
+                    .get_mut(&clear_virtual_texture_pass)
+                else {
+                    return None;
+                };
+                pass.begin_new_frame(
+                    self.wgpu_context.get_device(),
+                    self.wgpu_context.get_queue(),
+                );
+            }
         }
         return None;
     }
 
-    fn vt_pass(&mut self) {
-        let Some(virtual_texture_pass) = &mut self.virtual_texture_pass else {
+    fn vt_pass(&mut self, present_info: &PresentInfo) {
+        let Some(key) = &present_info.virtual_texture_pass else {
+            return;
+        };
+
+        let Some(virtual_texture_pass) = &mut self.virtual_texture_pass.get_mut(&key) else {
             return;
         };
 
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
-        for draw_object_command in &self.draw_object_commands {
-            let is_virtual = draw_object_command
-                .binding_resources
-                .iter()
-                .flatten()
-                .find(|x| match x {
-                    EBindingResource::Texture(texture) => match texture {
-                        ETextureType::Virtual(_) => true,
-                        _ => false,
-                    },
-                    _ => false,
-                })
-                .is_some()
-                || draw_object_command.is_use_virtual_texture;
-            if !is_virtual {
+        for draw_object_command in &present_info.draw_objects {
+            let Some(virtual_pass_set) = draw_object_command.virtual_pass_set.as_ref() else {
                 continue;
-            }
-            let mut vertex_buffers = Vec::<&Buffer>::new();
+            };
+            let vertex_buffers: Vec<&Buffer> = virtual_pass_set
+                .vertex_buffers
+                .iter()
+                .map(|x| self.buffers.get(x).unwrap())
+                .collect();
             let mut index_buffer: Option<&wgpu::Buffer> = None;
-
-            match draw_object_command.render_pipeline.as_str() {
-                SKIN_MESH_RENDER_PIPELINE => {
-                    vertex_buffers.push(
-                        self.buffers
-                            .get(&draw_object_command.vertex_buffers[0])
-                            .unwrap(),
-                    );
-                    vertex_buffers.push(
-                        self.buffers
-                            .get(&draw_object_command.vertex_buffers[2])
-                            .unwrap(),
-                    );
-                }
-                STATIC_MESH_RENDER_PIPELINE => {
-                    vertex_buffers.push(
-                        self.buffers
-                            .get(&draw_object_command.vertex_buffers[0])
-                            .unwrap(),
-                    );
-                }
-                _ => {
-                    vertex_buffers.push(
-                        self.buffers
-                            .get(&draw_object_command.vertex_buffers[0])
-                            .unwrap(),
-                    );
-                    vertex_buffers.push(
-                        self.buffers
-                            .get(&draw_object_command.vertex_buffers[2])
-                            .unwrap(),
-                    );
-                }
-            }
 
             if vertex_buffers.is_empty() {
                 continue;
@@ -859,30 +851,25 @@ impl Renderer {
                 index_count: draw_object_command.index_count,
             };
 
-            let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![vec![], vec![]];
-
-            for binding_resource_type in draw_object_command.global_binding_resources.iter() {
-                let binding_resource = group_binding_resource.get_mut(0).unwrap();
-                match binding_resource_type {
-                    EBindingResource::Texture(_) => {}
-                    EBindingResource::Constants(buffer_handle) => {
-                        let buffer = self.buffers.get(buffer_handle).unwrap().as_entire_binding();
-                        binding_resource.push(buffer);
+            let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![];
+            for binding_resource in &virtual_pass_set.binding_resources {
+                let mut binding_resources: Vec<BindingResource> = vec![];
+                for binding_resource_type in binding_resource {
+                    match binding_resource_type {
+                        EBindingResource::Texture(_) => {
+                            panic!()
+                        }
+                        EBindingResource::Constants(buffer_handle) => {
+                            let buffer =
+                                self.buffers.get(buffer_handle).unwrap().as_entire_binding();
+                            binding_resources.push(buffer);
+                        }
+                        EBindingResource::Sampler(_) => {
+                            panic!()
+                        }
                     }
-                    EBindingResource::Sampler(_) => {}
                 }
-            }
-
-            for binding_resource_type in draw_object_command.vt_binding_resources.iter() {
-                let binding_resource = group_binding_resource.get_mut(1).unwrap();
-                match binding_resource_type {
-                    EBindingResource::Texture(_) => {}
-                    EBindingResource::Constants(buffer_handle) => {
-                        let buffer = self.buffers.get(buffer_handle).unwrap().as_entire_binding();
-                        binding_resource.push(buffer);
-                    }
-                    EBindingResource::Sampler(_) => {}
-                }
+                group_binding_resource.push(binding_resources);
             }
 
             match draw_object_command.render_pipeline.as_str() {
@@ -933,150 +920,203 @@ impl Renderer {
         virtual_texture_pass.update_indirec_table(self.wgpu_context.get_queue(), indirect_map);
     }
 
-    fn draw_objects(&mut self, surface_texture_view: &wgpu::TextureView) {
+    fn draw_object(
+        &mut self,
+        surface_texture_view: &wgpu::TextureView,
+        depth_texture_view: &TextureView,
+        draw_object_command: &DrawObject,
+    ) -> crate::error::Result<()> {
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
+        let mut vertex_buffers = Vec::<&Buffer>::new();
+        let mut index_buffer: Option<&wgpu::Buffer> = None;
 
-        for draw_object_command in &self.draw_object_commands {
-            let mut vertex_buffers = Vec::<&Buffer>::new();
-            let mut index_buffer: Option<&wgpu::Buffer> = None;
+        for vertex_buffer in &draw_object_command.vertex_buffers {
+            if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
+                vertex_buffers.push(vertex_buffer);
+            }
+        }
+        if vertex_buffers.is_empty() {
+            return Err(crate::error::Error::Other(Some(format!(
+                "Vertex buffers is empty"
+            ))));
+        }
+        if let Some(handle) = draw_object_command.index_buffer {
+            if let Some(buffer) = self.buffers.get(&handle) {
+                index_buffer = Some(buffer);
+            }
+        }
+        let mesh_buffer = GpuVertexBufferImp {
+            vertex_buffers: &vertex_buffers,
+            vertex_count: draw_object_command.vertex_count,
+            index_buffer,
+            index_count: draw_object_command.index_count,
+        };
 
-            for vertex_buffer in &draw_object_command.vertex_buffers {
-                if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
-                    vertex_buffers.push(vertex_buffer);
+        let mut tmp_texture_views: HashMap<u64, TextureView> = HashMap::new();
+
+        for (group, binding_resource) in draw_object_command.binding_resources.iter().enumerate() {
+            for (binding, binding_resource_type) in binding_resource.iter().enumerate() {
+                match binding_resource_type {
+                    EBindingResource::Texture(handle) => {
+                        let mut texture_view: Option<TextureView> = None;
+                        if let Some(find_texture) = self.textures.get(handle) {
+                            texture_view =
+                                Some(find_texture.create_view(&TextureViewDescriptor::default()));
+                        } else {
+                            for (key, pass) in &self.virtual_texture_pass {
+                                if key.page_table_texture_handle == *handle {
+                                    texture_view = Some(
+                                        pass.get_indirect_table()
+                                            .create_view(&TextureViewDescriptor::default()),
+                                    );
+                                    break;
+                                } else if key.physical_texture_handle == *handle {
+                                    texture_view = Some(
+                                        pass.get_physical_texture()
+                                            .create_view(&TextureViewDescriptor::default()),
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                        if texture_view.is_none() {
+                            for (key, value) in &self.prebake_ibls {
+                                if key.brdflut_texture == *handle {
+                                    texture_view = Some(value.get_brdflut_texture_view());
+                                } else if key.pre_filter_cube_map_texture == *handle {
+                                    texture_view =
+                                        Some(value.get_pre_filter_cube_map_texture_view());
+                                } else if key.irradiance_texture == *handle {
+                                    texture_view = Some(value.get_irradiance_texture_view());
+                                }
+                            }
+                        }
+
+                        if texture_view.is_none() {
+                            for (key, value) in &self.ibl_bakes {
+                                if key.brdflut_texture == *handle {
+                                    texture_view = Some(value.get_brdflut_texture_view());
+                                } else if key.pre_filter_cube_map_texture == *handle {
+                                    texture_view =
+                                        Some(value.get_pre_filter_cube_map_texture_view());
+                                } else if key.irradiance_texture == *handle {
+                                    texture_view = Some(value.get_irradiance_texture_view());
+                                }
+                            }
+                        }
+
+                        let texture_view = texture_view.ok_or(crate::error::Error::Other(Some(
+                            format!("{}, {}, texture view is null", group, binding),
+                        )))?;
+                        tmp_texture_views.insert(*handle, texture_view);
+                    }
+                    EBindingResource::Constants(_) => {}
+                    EBindingResource::Sampler(_) => {}
                 }
             }
-            if vertex_buffers.is_empty() {
-                return;
-            }
-            if let Some(handle) = draw_object_command.index_buffer {
-                if let Some(buffer) = self.buffers.get(&handle) {
-                    index_buffer = Some(buffer);
-                }
-            }
-            let mesh_buffer = GpuVertexBufferImp {
-                vertex_buffers: &vertex_buffers,
-                vertex_count: draw_object_command.vertex_count,
-                index_buffer,
-                index_count: draw_object_command.index_count,
-            };
+        }
 
-            enum _ResourceType<'a> {
-                Buffer(&'a Buffer),
-                TextureView(TextureView),
-                Sampler(&'a Sampler),
-            }
-
-            let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![vec![]];
-            let mut global_resources: Vec<_ResourceType> = Vec::new();
-
-            for global_binding_resource in draw_object_command.global_binding_resources.iter() {
-                match global_binding_resource {
-                    EBindingResource::Texture(_) => {}
-                    EBindingResource::Constants(handle) => {
-                        let buffer = self.buffers.get(handle).unwrap();
-                        global_resources.push(_ResourceType::Buffer(buffer));
+        let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![];
+        for (group, binding_resource) in draw_object_command.binding_resources.iter().enumerate() {
+            let mut binding_resources: Vec<BindingResource> = vec![];
+            for (binding, binding_resource_type) in binding_resource.iter().enumerate() {
+                match binding_resource_type {
+                    EBindingResource::Texture(handle) => {
+                        let texture_view =
+                            tmp_texture_views
+                                .get(handle)
+                                .ok_or(crate::error::Error::Other(Some(format!(
+                                    "{}, {}, texture view is null",
+                                    group, binding
+                                ))))?;
+                        binding_resources.push(BindingResource::TextureView(texture_view));
+                    }
+                    EBindingResource::Constants(buffer_handle) => {
+                        let buffer = self
+                            .buffers
+                            .get(buffer_handle)
+                            .ok_or(crate::error::Error::Other(Some(format!(
+                                "{}, {}, constants is null",
+                                group, binding
+                            ))))?
+                            .as_entire_binding();
+                        binding_resources.push(buffer);
                     }
                     EBindingResource::Sampler(handle) => {
-                        let sampler = self.samplers.get(handle).unwrap();
-                        global_resources.push(_ResourceType::Sampler(sampler));
+                        let sampler =
+                            self.samplers
+                                .get(handle)
+                                .ok_or(crate::error::Error::Other(Some(format!(
+                                    "{}, {}, sampler is null",
+                                    group, binding
+                                ))))?;
+                        binding_resources.push(BindingResource::Sampler(sampler));
                     }
                 }
             }
+            group_binding_resource.push(binding_resources);
+        }
 
-            let physical_texture_view = match &self.virtual_texture_pass {
-                Some(pass) => pass.get_physical_texture_view(),
-                None => self.default_textures.get_black_texture_view(),
-            };
-            let indirect_table_view = match &self.virtual_texture_pass {
-                Some(pass) => pass.get_indirect_table_view(),
-                None => self.default_textures.get_black_u32_texture_view(),
-            };
-            global_resources.push(_ResourceType::TextureView(physical_texture_view));
-            global_resources.push(_ResourceType::TextureView(indirect_table_view));
-            for resource in global_resources.iter() {
-                match resource {
-                    _ResourceType::Buffer(buffer) => {
-                        group_binding_resource[0].push(buffer.as_entire_binding());
-                    }
-                    _ResourceType::TextureView(texture_view) => {
-                        group_binding_resource[0].push(BindingResource::TextureView(texture_view));
-                    }
-                    _ResourceType::Sampler(sampler) => {
-                        group_binding_resource[0].push(BindingResource::Sampler(sampler));
-                    }
-                }
+        match draw_object_command.render_pipeline.as_str() {
+            SKIN_MESH_RENDER_PIPELINE => {
+                self.skin_mesh_shading_pipeline.draw(
+                    device,
+                    queue,
+                    surface_texture_view,
+                    &depth_texture_view,
+                    &[mesh_buffer],
+                    group_binding_resource,
+                );
             }
-
-            let mut resources: Vec<Vec<_ResourceType>> =
-                Vec::with_capacity(draw_object_command.binding_resources.len());
-
-            for binding_resources in draw_object_command.binding_resources.iter() {
-                let mut binding_resource: Vec<_ResourceType> =
-                    Vec::with_capacity(binding_resources.len());
-                for binding_resource_type in binding_resources.iter() {
-                    match binding_resource_type {
-                        EBindingResource::Texture(texture_type) => match texture_type {
-                            ETextureType::Base(texture_handle) => {
-                                let binding = self.default_textures.get_white_texture();
-                                let texture =
-                                    self.textures.get(&texture_handle).unwrap_or(&binding);
-                                let texture_view =
-                                    texture.create_view(&TextureViewDescriptor::default());
-                                binding_resource.push(_ResourceType::TextureView(texture_view));
-                            }
-                            ETextureType::Virtual(_) => {
-                                let binding = self.default_textures.get_white_texture();
-                                let texture_view =
-                                    binding.create_view(&TextureViewDescriptor::default());
-                                binding_resource.push(_ResourceType::TextureView(texture_view));
-                            }
-                            ETextureType::None => {
-                                let binding = self.default_textures.get_white_texture();
-                                let texture_view =
-                                    binding.create_view(&TextureViewDescriptor::default());
-                                binding_resource.push(_ResourceType::TextureView(texture_view));
-                            }
-                        },
-                        EBindingResource::Constants(buffer_handle) => {
-                            binding_resource.push(_ResourceType::Buffer(
-                                self.buffers.get(buffer_handle).unwrap(),
-                            ));
-                        }
-                        EBindingResource::Sampler(handle) => {
-                            let sampler = self.samplers.get(handle).unwrap();
-                            binding_resource.push(_ResourceType::Sampler(sampler));
-                        }
-                    }
-                }
-                resources.push(binding_resource);
+            STATIC_MESH_RENDER_PIPELINE => {
+                self.shading_pipeline.draw(
+                    device,
+                    queue,
+                    surface_texture_view,
+                    &depth_texture_view,
+                    &[mesh_buffer],
+                    group_binding_resource,
+                );
             }
-
-            for resource in resources.iter() {
-                let mut binding_resource: Vec<BindingResource> = Vec::with_capacity(resource.len());
-                for resource_type in resource.iter() {
-                    match resource_type {
-                        _ResourceType::Buffer(buffer) => {
-                            binding_resource.push(buffer.as_entire_binding());
-                        }
-                        _ResourceType::TextureView(texture_view) => {
-                            binding_resource.push(BindingResource::TextureView(texture_view));
-                        }
-                        _ResourceType::Sampler(sampler) => {
-                            binding_resource.push(BindingResource::Sampler(sampler));
-                        }
-                    }
-                }
-                group_binding_resource.push(binding_resource);
+            GRID_RENDER_PIPELINE => {
+                self.grid_render_pipeline.draw(
+                    device,
+                    queue,
+                    surface_texture_view,
+                    &depth_texture_view,
+                    &[mesh_buffer],
+                    group_binding_resource,
+                );
             }
-            let depth_texture_view = self
-                .depth_textures
-                .get(&self.main_window_id)
-                .unwrap()
-                .get_view();
-            match draw_object_command.render_pipeline.as_str() {
-                SKIN_MESH_RENDER_PIPELINE => {
-                    self.skin_mesh_shading_pipeline.draw(
+            MESH_VIEW_RENDER_PIPELINE => {
+                self.mesh_view_pipeline.draw(
+                    device,
+                    queue,
+                    surface_texture_view,
+                    &depth_texture_view,
+                    &[mesh_buffer],
+                    group_binding_resource,
+                );
+            }
+            _ => {
+                (|| {
+                    if !draw_object_command.render_pipeline.starts_with("material_") {
+                        return;
+                    }
+                    let handle = draw_object_command
+                        .render_pipeline
+                        .strip_prefix("material_")
+                        .unwrap()
+                        .parse::<MaterialRenderPipelineHandle>();
+                    let Ok(handle) = handle else {
+                        return;
+                    };
+                    let material_render_pipeline = self.material_render_pipelines.get(&handle);
+                    let Some(material_render_pipeline) = material_render_pipeline else {
+                        return;
+                    };
+                    material_render_pipeline.draw(
                         device,
                         queue,
                         surface_texture_view,
@@ -1084,98 +1124,28 @@ impl Renderer {
                         &[mesh_buffer],
                         group_binding_resource,
                     );
-                }
-                STATIC_MESH_RENDER_PIPELINE => {
-                    self.shading_pipeline.draw(
-                        device,
-                        queue,
-                        surface_texture_view,
-                        &depth_texture_view,
-                        &[mesh_buffer],
-                        group_binding_resource,
-                    );
-                }
-                GRID_RENDER_PIPELINE => {
-                    self.grid_render_pipeline.draw(
-                        device,
-                        queue,
-                        surface_texture_view,
-                        &depth_texture_view,
-                        &[mesh_buffer],
-                        vec![vec![group_binding_resource[0][0].clone()]],
-                    );
-                }
-                _ => {
-                    let any_first = self.ibl_bakes.iter().find(|_| true);
-                    let any_first1 = self.prebake_ibls.iter().find(|_| true);
-                    let brdflut_texture_view = if let Some((_, acceleration_baker)) = any_first {
-                        Some(acceleration_baker.get_brdflut_texture_view())
-                    } else if let Some((_, prebake_ibl)) = any_first1 {
-                        Some(prebake_ibl.get_brdflut_texture_view())
-                    } else {
-                        None
-                    };
-                    let pre_filter_texture_view = if let Some((_, acceleration_baker)) = any_first {
-                        Some(acceleration_baker.get_pre_filter_cube_map_texture_view())
-                    } else if let Some((_, prebake_ibl)) = any_first1 {
-                        Some(prebake_ibl.get_pre_filter_cube_map_texture_view())
-                    } else {
-                        None
-                    };
-                    let irradiance_texture_view = if let Some((_, acceleration_baker)) = any_first {
-                        Some(acceleration_baker.get_irradiance_texture_view())
-                    } else if let Some((_, prebake_ibl)) = any_first1 {
-                        Some(prebake_ibl.get_irradiance_texture_view())
-                    } else {
-                        None
-                    };
-                    if let (
-                        Some(brdflut_texture_view),
-                        Some(pre_filter_texture_view),
-                        Some(irradiance_texture_view),
-                    ) = (
-                        brdflut_texture_view,
-                        pre_filter_texture_view,
-                        irradiance_texture_view,
-                    ) {
-                        let brdf_binding_resource =
-                            BindingResource::TextureView(&brdflut_texture_view);
-                        let pre_filter_binding_resource =
-                            BindingResource::TextureView(&pre_filter_texture_view);
-                        let irradiance_binding_resource =
-                            BindingResource::TextureView(&irradiance_texture_view);
+                })();
+            }
+        }
+        Ok(())
+    }
 
-                        group_binding_resource[0].push(brdf_binding_resource);
-                        group_binding_resource[0].push(pre_filter_binding_resource);
-                        group_binding_resource[0].push(irradiance_binding_resource);
-
-                        (|| {
-                            if !draw_object_command.render_pipeline.starts_with("material_") {
-                                return;
-                            }
-                            let handle = draw_object_command
-                                .render_pipeline
-                                .strip_prefix("material_")
-                                .unwrap()
-                                .parse::<MaterialRenderPipelineHandle>();
-                            let Ok(handle) = handle else {
-                                return;
-                            };
-                            let material_render_pipeline =
-                                self.material_render_pipelines.get(&handle);
-                            let Some(material_render_pipeline) = material_render_pipeline else {
-                                return;
-                            };
-                            material_render_pipeline.draw(
-                                device,
-                                queue,
-                                surface_texture_view,
-                                &depth_texture_view,
-                                &[mesh_buffer],
-                                group_binding_resource,
-                            );
-                        })();
-                    }
+    fn draw_objects(
+        &mut self,
+        surface_texture_view: &wgpu::TextureView,
+        depth_texture_view: &TextureView,
+        draw_object_commands: &Vec<DrawObject>,
+    ) {
+        for draw_object_command in draw_object_commands {
+            let draw_result = self.draw_object(
+                surface_texture_view,
+                depth_texture_view,
+                draw_object_command,
+            );
+            match draw_result {
+                Ok(_) => {}
+                Err(err) => {
+                    log::trace!("{}, {}", draw_object_command.id, err);
                 }
             }
         }
@@ -1183,27 +1153,11 @@ impl Renderer {
 
     fn set_settings(&mut self, settings: RenderSettings) {
         if settings.virtual_texture_setting.is_enable {
-            if let Some(_) = &mut self.virtual_texture_pass {
-            } else {
-                let surface_width = self
-                    .wgpu_context
-                    .get_surface_config(self.main_window_id)
-                    .width;
-                let surface_height = self
-                    .wgpu_context
-                    .get_surface_config(self.main_window_id)
-                    .height;
-                self.virtual_texture_pass = VirtualTexturePass::new(
-                    self.wgpu_context.get_device(),
-                    &self.shader_library,
-                    false,
-                    glam::uvec2(surface_width, surface_height),
-                    settings.virtual_texture_setting.clone(),
-                )
-                .ok();
+            for (_, v) in &mut self.virtual_texture_pass {
+                v.set_settings(settings.virtual_texture_setting.clone());
             }
         } else {
-            self.virtual_texture_pass = None;
+            self.virtual_texture_pass.clear();
         }
         self.settings = settings;
     }
@@ -1221,9 +1175,6 @@ impl Renderer {
             Some(&format!("Base.DepthTexture.{}", window_id)),
         );
         self.depth_textures.insert(window_id, depth_texture);
-        if let Some(virtual_texture_pass) = &mut self.virtual_texture_pass {
-            virtual_texture_pass.change_surface_size(device, new_size);
-        }
     }
 
     pub fn get_device(&self) -> &wgpu::Device {

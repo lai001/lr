@@ -1,7 +1,7 @@
 use wgpu::Texture;
 
 pub struct DepthTexture {
-    depth_texture: Texture,
+    pub depth_texture: Texture,
 }
 
 impl DepthTexture {

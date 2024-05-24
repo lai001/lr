@@ -2,7 +2,7 @@ use crate::{
     bake_info::BakeInfo, egui_render::EGUIRenderOutput, view_mode::EViewModeType,
     virtual_texture_source::TVirtualTextureSource,
 };
-use rs_core_minimal::settings::RenderSettings;
+use rs_core_minimal::settings::{RenderSettings, VirtualTextureSetting};
 use std::{
     collections::HashSet,
     path::PathBuf,
@@ -109,17 +109,16 @@ pub struct InitTextureData {
 }
 
 #[derive(Clone, Debug)]
-pub enum ETextureType {
-    Base(TextureHandle),
-    Virtual(TextureHandle),
-    None,
-}
-
-#[derive(Clone, Debug)]
 pub enum EBindingResource {
-    Texture(ETextureType),
+    Texture(TextureHandle),
     Constants(BufferHandle),
     Sampler(SamplerHandle),
+}
+
+#[derive(Clone)]
+pub struct VirtualPassSet {
+    pub vertex_buffers: Vec<BufferHandle>,
+    pub binding_resources: Vec<Vec<EBindingResource>>,
 }
 
 #[derive(Clone)]
@@ -129,10 +128,8 @@ pub struct DrawObject {
     pub vertex_count: u32,
     pub index_buffer: Option<BufferHandle>,
     pub index_count: Option<u32>,
-    pub global_binding_resources: Vec<EBindingResource>,
-    pub vt_binding_resources: Vec<EBindingResource>,
     pub binding_resources: Vec<Vec<EBindingResource>>,
-    pub is_use_virtual_texture: bool,
+    pub virtual_pass_set: Option<VirtualPassSet>,
     pub render_pipeline: String,
 }
 
@@ -164,6 +161,32 @@ pub struct CreateVirtualTexture {
 }
 
 #[derive(Clone)]
+pub struct CreateVirtualTexturePass {
+    pub key: VirtualTexturePassKey,
+    pub surface_size: glam::UVec2,
+    pub settings: VirtualTextureSetting,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Copy, Eq)]
+pub struct VirtualTexturePassKey {
+    pub physical_texture_handle: TextureHandle,
+    pub page_table_texture_handle: TextureHandle,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Copy, Eq)]
+pub struct IBLTexturesKey {
+    pub brdflut_texture: TextureHandle,
+    pub pre_filter_cube_map_texture: TextureHandle,
+    pub irradiance_texture: TextureHandle,
+}
+
+#[derive(Clone)]
+pub struct VirtualTexturePassResize {
+    pub key: VirtualTexturePassKey,
+    pub surface_size: glam::UVec2,
+}
+
+#[derive(Clone)]
 pub struct CreateUITexture {
     pub handle: EGUITextureHandle,
     pub referencing_texture_handle: TextureHandle,
@@ -171,7 +194,7 @@ pub struct CreateUITexture {
 
 #[derive(Clone)]
 pub struct CreateIBLBake {
-    pub handle: TextureHandle,
+    pub key: IBLTexturesKey,
     pub file_path: PathBuf,
     pub bake_info: BakeInfo,
     pub save_dir: Option<PathBuf>,
@@ -179,7 +202,7 @@ pub struct CreateIBLBake {
 
 #[derive(Clone)]
 pub struct UploadPrebakeIBL {
-    pub handle: TextureHandle,
+    pub key: IBLTexturesKey,
     pub brdf_data: Vec<u8>,
     pub pre_filter_data: Vec<u8>,
     pub irradiance_data: Vec<u8>,
@@ -192,6 +215,13 @@ pub trait RenderTask {
 pub type TaskType = Arc<Mutex<Box<dyn FnMut(&mut crate::renderer::Renderer) + Send>>>;
 
 #[derive(Clone)]
+pub struct PresentInfo {
+    pub window_id: isize,
+    pub draw_objects: Vec<DrawObject>,
+    pub virtual_texture_pass: Option<VirtualTexturePassKey>,
+}
+
+#[derive(Clone)]
 pub enum RenderCommand {
     CreateIBLBake(CreateIBLBake),
     CreateTexture(CreateTexture),
@@ -199,13 +229,15 @@ pub enum RenderCommand {
     CreateBuffer(CreateBuffer),
     UpdateBuffer(UpdateBuffer),
     UpdateTexture(UpdateTexture),
-    DrawObject(DrawObject),
     UiOutput(EGUIRenderOutput),
     Resize(ResizeInfo),
     CreateVirtualTextureSource(CreateVirtualTexture),
+    CreateVirtualTexturePass(CreateVirtualTexturePass),
+    VirtualTexturePassResize(VirtualTexturePassResize),
+    ClearVirtualTexturePass(VirtualTexturePassKey),
     Task(TaskType),
     Settings(RenderSettings),
-    Present(isize),
+    Present(PresentInfo),
     RemoveWindow(isize),
     ChangeViewMode(EViewModeType),
     CreateSampler(CreateSampler),
@@ -227,10 +259,9 @@ impl RenderCommand {
 pub struct RenderOutput {
     pub create_texture_handles: HashSet<TextureHandle>,
     pub create_buffer_handles: HashSet<BufferHandle>,
-    pub create_ibl_handles: HashSet<TextureHandle>,
+    pub create_ibl_handles: HashSet<IBLTexturesKey>,
 }
 
-// #[derive(Clone)]
 pub enum ERenderOutputType {
     CreateIBLBake(TextureHandle),
     CreateTexture(TextureHandle),
@@ -249,7 +280,6 @@ pub enum ERenderOutputType {
     UploadPrebakeIBL(TextureHandle),
 }
 
-// #[derive(Clone)]
 pub struct RenderOutput2 {
     pub ty: ERenderOutputType,
     pub error: Option<RwLock<crate::error::Error>>,

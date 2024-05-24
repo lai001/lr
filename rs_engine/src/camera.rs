@@ -139,4 +139,8 @@ impl Camera {
     pub fn get_forward_vector(&self) -> glam::Vec3 {
         self.forward_vector
     }
+
+    pub fn get_view_projection_matrix(&self) -> glam::Mat4 {
+        return self.projection_matrix * self.view_matrix;
+    }
 }

@@ -1,14 +1,14 @@
 use crate::edge::Edge;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 pub type GraphVertexIndex = u32;
 pub type MeshVertexIndex = u32;
 
 #[derive(Default)]
 pub struct Graph {
-    pub adjoin_indices: Vec<Vec<GraphVertexIndex>>,
-    pub graph_index_map_indices: HashMap<GraphVertexIndex, Vec<MeshVertexIndex>>,
+    pub adjoin_indices: Vec<HashSet<GraphVertexIndex>>,
     pub edges: HashSet<Edge>,
+    pub graph_vertex_associated_indices: Vec<HashSet<usize>>,
 }
 
 impl Graph {

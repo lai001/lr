@@ -41,3 +41,8 @@ pub fn create_editor_tmp_folder() -> PathBuf {
         path
     }
 }
+
+#[cfg(feature = "editor")]
+pub fn get_gpmetis_program_path() -> PathBuf {
+    get_engine_root_dir().join("build/windows/x64/release/gpmetis.exe")
+}

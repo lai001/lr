@@ -308,6 +308,9 @@ function create_metis_program(target_name, source_files, source_files2)
         if source_files ~= nil then
             add_files(source_files2)
         end
+        if is_plat("android") then 
+            add_defines("MAX_PATH=255")
+        end
         add_deps("GKlib")
         add_deps("metis")
         gklib_add_defines()

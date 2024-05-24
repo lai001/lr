@@ -568,7 +568,7 @@ impl MaterialView {
         &mut self,
         current_open_material: Option<SingleThreadMutType<crate::material::Material>>,
         context: &egui::Context,
-        data_source: &mut crate::data_source::DataSource,
+        data_source: &mut crate::ui::material_ui_window::DataSource,
     ) {
         let Some(material) = current_open_material else {
             return;
@@ -594,7 +594,7 @@ impl MaterialView {
             });
         });
 
-        editor_ui::EditorUI::new_window("Shader Code", data_source.input_mode)
+        editor_ui::EditorUI::new_window("Shader Code", rs_engine::input_mode::EInputMode::UI)
             .open(&mut data_source.is_shader_code_window_open)
             .vscroll(true)
             .hscroll(true)

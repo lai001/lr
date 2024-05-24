@@ -6,6 +6,7 @@ pub enum EDebugShadingType {
     Metallic = 2,
     Roughness = 3,
     Normal = 4,
+    VertexColor0 = 5,
 }
 
 impl EDebugShadingType {
@@ -16,6 +17,7 @@ impl EDebugShadingType {
             EDebugShadingType::Metallic,
             EDebugShadingType::Roughness,
             EDebugShadingType::Normal,
+            EDebugShadingType::VertexColor0,
         ]
     }
 }

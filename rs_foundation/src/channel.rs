@@ -84,6 +84,16 @@ impl<T, U> SingleConsumeChnnel<T, U> {
             .send(SingleConsumeChnnelBPayload::Message(message));
     }
 
+    pub fn try_to_a(
+        &self,
+        message: U,
+    ) -> Result<(), std::sync::mpsc::TrySendError<SingleConsumeChnnelBPayload<U>>> {
+        self.b_thread_sender
+            .lock()
+            .unwrap()
+            .try_send(SingleConsumeChnnelBPayload::Message(message))
+    }
+
     pub fn from_a_block_current_thread<F>(&self, mut closure: F)
     where
         F: FnMut(T) -> (),
