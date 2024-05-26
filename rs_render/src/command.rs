@@ -51,6 +51,33 @@ impl TextureDescriptorCreateInfo {
         }
     }
 
+    pub fn d3(
+        label: Option<String>,
+        width: u32,
+        height: u32,
+        depth: u32,
+        format: Option<TextureFormat>,
+    ) -> TextureDescriptorCreateInfo {
+        TextureDescriptorCreateInfo {
+            label,
+            size: Extent3d {
+                width,
+                height,
+                depth_or_array_layers: depth,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D3,
+            format: format.unwrap_or(TextureFormat::Rgba8Unorm),
+            usage: {
+                let mut usage = TextureUsages::all();
+                usage.remove(TextureUsages::RENDER_ATTACHMENT);
+                usage
+            },
+            view_formats: None,
+        }
+    }
+
     pub fn get(&self) -> wgpu::TextureDescriptor {
         wgpu::TextureDescriptor {
             label: match &self.label {
@@ -104,6 +131,7 @@ pub struct UpdateBuffer {
 
 #[derive(Clone)]
 pub struct InitTextureData {
+    // TODO: Optimization of object with large memory usage
     pub data: Vec<u8>,
     pub data_layout: wgpu::ImageDataLayout,
 }

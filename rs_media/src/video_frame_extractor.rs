@@ -18,28 +18,38 @@ struct HWSection {
 }
 
 impl HWSection {
-    fn new(expect_hw_type: AVHWDeviceType, codec: *const AVCodec) -> HWSection {
-        assert_ne!(codec, std::ptr::null());
-        let mut hw_pixel_formats = HashMap::<AVHWDeviceType, AVPixelFormat>::new();
+    fn new(
+        expect_hw_type: AVHWDeviceType,
+        codec: *const AVCodec,
+    ) -> crate::error::Result<HWSection> {
+        if codec.is_null() {
+            return Err(crate::error::Error::Other(format!("Codec is null")));
+        }
+        let mut hw_pixel_formats = HashMap::<AVHWDeviceType, Vec<AVPixelFormat>>::new();
         for device_type in get_available_hwdevice_types() {
-            match unsafe { find_hw_pix_fmt(codec, device_type) } {
-                Some(pix_fmt) => {
-                    hw_pixel_formats.insert(device_type, pix_fmt);
-                }
-                None => {}
+            for pix_fmt in unsafe { find_hw_pix_fmt(codec, device_type) } {
+                hw_pixel_formats
+                    .entry(device_type)
+                    .or_default()
+                    .push(pix_fmt);
             }
         }
+
         assert!(hw_pixel_formats.contains_key(&expect_hw_type));
         let user_data = MyUserData {
-            hw_pix_fmt: *hw_pixel_formats.get_key_value(&expect_hw_type).unwrap().1,
+            hw_pix_fmt: *hw_pixel_formats
+                .get(&expect_hw_type)
+                .ok_or(crate::error::Error::Other(format!("Not support")))?
+                .first()
+                .ok_or(crate::error::Error::Other(format!("Not support")))?,
         };
         let user_data = Box::new(user_data);
         let user_data = Box::into_raw(user_data);
-        HWSection {
+        Ok(HWSection {
             user_data,
             expect_hw_type,
             release_closure: None,
-        }
+        })
     }
 
     fn init(&mut self, codec_context: *mut AVCodecContext) {
@@ -53,7 +63,7 @@ impl HWSection {
     }
 
     fn get_hw_pix_fmt(&mut self) -> AVPixelFormat {
-        let user_data = unsafe { self.user_data.as_ref() }.unwrap();
+        let user_data = unsafe { self.user_data.as_ref() }.expect(&format!("Should not be null"));
         user_data.hw_pix_fmt.clone()
     }
 }
@@ -64,7 +74,9 @@ impl Drop for HWSection {
         if let Some(closure) = &mut self.release_closure {
             closure();
         }
-        unsafe { Box::from_raw(self.user_data) };
+        unsafe {
+            let _ = Box::from_raw(self.user_data);
+        };
     }
 }
 
@@ -104,18 +116,23 @@ impl VideoFrameExtractor {
     pub fn new(
         filepath: &str,
         video_decoder_type: Option<EVideoDecoderType>,
-    ) -> VideoFrameExtractor {
-        let format_input = ffmpeg_next::format::input(&filepath.to_owned()).unwrap();
+    ) -> crate::error::Result<VideoFrameExtractor> {
+        let format_input = ffmpeg_next::format::input(&filepath.to_owned())
+            .map_err(|err| crate::error::Error::FFMpeg(err))?;
         let input_stream = format_input
             .streams()
             .best(ffmpeg_next::media::Type::Video)
-            .unwrap();
+            .ok_or(crate::error::Error::Other(format!("No video stream")))?;
+
         let time_base = input_stream.time_base();
         let video_stream_index = input_stream.index();
         let context_decoder =
             ffmpeg_next::codec::context::Context::from_parameters(input_stream.parameters())
-                .unwrap();
-        let mut video_decoder = context_decoder.decoder().video().unwrap();
+                .map_err(|err| crate::error::Error::FFMpeg(err))?;
+        let mut video_decoder = context_decoder
+            .decoder()
+            .video()
+            .map_err(|err| crate::error::Error::FFMpeg(err))?;
         unsafe { (*video_decoder.as_mut_ptr()).pkt_timebase = time_base.into() };
         let video_decoder_type = video_decoder_type.unwrap_or(EVideoDecoderType::Software);
 
@@ -135,8 +152,14 @@ impl VideoFrameExtractor {
             EVideoDecoderType::Software => {}
             EVideoDecoderType::Hardware => {
                 let expect_hw_type = AVHWDeviceType::AV_HWDEVICE_TYPE_CUDA;
-                let codec = unsafe { video_player_item.video_decoder.codec().unwrap().as_ptr() };
-                let mut hw_section_in = HWSection::new(expect_hw_type, codec);
+                let codec = unsafe {
+                    video_player_item
+                        .video_decoder
+                        .codec()
+                        .ok_or(crate::error::Error::Other(format!("No video codec")))?
+                        .as_ptr()
+                };
+                let mut hw_section_in = HWSection::new(expect_hw_type, codec)?;
                 hw_section_in.init(unsafe { video_player_item.video_decoder.as_mut_ptr() });
                 video_player_item.hw_section = Some(hw_section_in);
                 video_player_item.hwframe = Some(ffmpeg_next::frame::Video::empty());
@@ -145,7 +168,7 @@ impl VideoFrameExtractor {
         video_player_item.scaler = Some(video_player_item.get_matched_scaler());
 
         video_player_item.seek(0.0);
-        video_player_item
+        Ok(video_player_item)
     }
 
     pub fn get_stream_time_base(&self) -> ffmpeg_next::Rational {
@@ -217,77 +240,85 @@ impl VideoFrameExtractor {
     }
 
     pub fn next_frames(&mut self) -> Option<Vec<VideoFrame>> {
-        match self.find_next_packet() {
-            Some((stream, packet)) => {
-                let time_base = stream.time_base();
-                let mut video_frames: Vec<VideoFrame> = vec![];
-                self.video_decoder.send_packet(&packet).unwrap();
-                while self
-                    .video_decoder
-                    .receive_frame(&mut self.decoded_video_frame)
-                    .is_ok()
-                {
-                    let rescale_start_pts: i64;
-                    let rescale_end_pts: i64;
-                    let pict_type: ffmpeg_next::ffi::AVPictureType;
-                    unsafe {
-                        let pts = (*self.decoded_video_frame.as_mut_ptr()).pts;
-                        let duration = (*self.decoded_video_frame.as_mut_ptr()).duration;
-                        rescale_start_pts = pts;
-                        rescale_end_pts = rescale_start_pts + duration as i64;
-                        pict_type = (*self.decoded_video_frame.as_mut_ptr()).pict_type;
-                    }
+        let Some((stream, packet)) = self.find_next_packet() else {
+            return None;
+        };
 
-                    if self.video_decoder_type == EVideoDecoderType::Hardware {
-                        let state = unsafe {
-                            av_hwframe_transfer_data(
-                                self.hwframe.as_mut().unwrap().as_mut_ptr(),
-                                self.decoded_video_frame.as_mut_ptr(),
-                                0,
-                            )
-                        };
-                        if state < 0 {
-                            log::warn!("Error transferring the data to system memory");
-                        }
-                    }
-                    let decoded_video_frame =
-                        self.hwframe.as_ref().unwrap_or(&self.decoded_video_frame);
-                    match self
-                        .scaler
-                        .as_mut()
-                        .unwrap()
-                        .run(decoded_video_frame, &mut self.rescale_video_frame)
-                    {
-                        Ok(_) => {
-                            let data = self.rescale_video_frame.data(0);
-                            let image = image::RgbaImage::from_raw(
-                                self.video_decoder.width(),
-                                self.video_decoder.height(),
-                                data.to_vec(),
-                            )
-                            .unwrap();
-                            let video_frame = VideoFrame {
-                                time_range_rational: TimeRangeRational {
-                                    start: ffmpeg_next::Rational(
-                                        rescale_start_pts as i32,
-                                        time_base.denominator(),
-                                    ),
-                                    end: ffmpeg_next::Rational(
-                                        rescale_end_pts as i32,
-                                        time_base.denominator(),
-                                    ),
-                                },
-                                image,
-                                pict_type,
-                            };
-                            video_frames.push(video_frame);
-                        }
-                        Err(error) => log::warn!("{:?}", error),
-                    }
-                }
-                return Some(video_frames);
+        let time_base = stream.time_base();
+        let mut video_frames: Vec<VideoFrame> = vec![];
+        self.video_decoder.send_packet(&packet).unwrap();
+        while self
+            .video_decoder
+            .receive_frame(&mut self.decoded_video_frame)
+            .is_ok()
+        {
+            let rescale_start_pts: i64;
+            let rescale_end_pts: i64;
+            let pict_type: ffmpeg_next::ffi::AVPictureType;
+            unsafe {
+                let pts = (*self.decoded_video_frame.as_mut_ptr()).pts;
+                let duration = (*self.decoded_video_frame.as_mut_ptr()).duration;
+                rescale_start_pts = pts;
+                rescale_end_pts = rescale_start_pts + duration as i64;
+                pict_type = (*self.decoded_video_frame.as_mut_ptr()).pict_type;
             }
-            None => None,
+
+            if self.video_decoder_type == EVideoDecoderType::Hardware {
+                let state = unsafe {
+                    av_hwframe_transfer_data(
+                        self.hwframe.as_mut().unwrap().as_mut_ptr(),
+                        self.decoded_video_frame.as_mut_ptr(),
+                        0,
+                    )
+                };
+                if state < 0 {
+                    log::warn!("Error transferring the data to system memory");
+                }
+            }
+            let decoded_video_frame = self.hwframe.as_ref().unwrap_or(&self.decoded_video_frame);
+            match self
+                .scaler
+                .as_mut()
+                .unwrap()
+                .run(decoded_video_frame, &mut self.rescale_video_frame)
+            {
+                Ok(_) => {
+                    let data = self.rescale_video_frame.data(0);
+                    let image = image::RgbaImage::from_raw(
+                        self.video_decoder.width(),
+                        self.video_decoder.height(),
+                        data.to_vec(),
+                    )
+                    .unwrap();
+                    let video_frame = VideoFrame {
+                        time_range_rational: TimeRangeRational {
+                            start: ffmpeg_next::Rational(
+                                rescale_start_pts as i32,
+                                time_base.denominator(),
+                            ),
+                            end: ffmpeg_next::Rational(
+                                rescale_end_pts as i32,
+                                time_base.denominator(),
+                            ),
+                        },
+                        image,
+                        pict_type,
+                    };
+                    video_frames.push(video_frame);
+                }
+                Err(error) => log::warn!("{:?}", error),
+            }
         }
+        return Some(video_frames);
+    }
+
+    pub fn get_duration(&self) -> f32 {
+        let video_stream = self
+            .format_input
+            .stream(self.video_stream_index)
+            .expect("Should not be null");
+        let time_base = video_stream.time_base();
+        let duration = video_stream.duration();
+        (duration as f32) * (time_base.numerator() as f32) / (time_base.denominator() as f32)
     }
 }

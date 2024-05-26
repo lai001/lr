@@ -1,15 +1,17 @@
 # rs_computer_graphics
 
-Windows 10  
-.net6   
-Rust 1.74.0 
+Windows 10
+Android
+.net6
+Rust 1.74.0
 
 ## Feature
-- C# script hot reload
+- Hot reload
 
 ## Build
 ```
-xmake build_clean
-xmake setup_project
-xmake build_target
+xmake download_deps
+xmake setup
+xmake gen_config
+xmake ci
 ```

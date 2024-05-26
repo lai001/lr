@@ -1,3 +1,4 @@
+use super::misc::update_window_with_input_mode;
 use crate::{custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType};
 use anyhow::anyhow;
 use egui_winit::State;
@@ -22,7 +23,7 @@ use rs_render::{
     vertex_data_type::mesh_vertex::MeshVertex3,
 };
 use std::collections::HashMap;
-use winit::event::{MouseScrollDelta, WindowEvent};
+use winit::event::{MouseButton, MouseScrollDelta, WindowEvent};
 
 struct MeshViewDrawObject {
     draw_object: rs_render::command::DrawObject,
@@ -41,6 +42,7 @@ pub struct MeshUIWindow {
     grid_draw_object: DrawObject,
     camera_movement_speed: f32,
     camera_motion_speed: f32,
+    input_mode: EInputMode,
 }
 
 impl MeshUIWindow {
@@ -104,7 +106,8 @@ impl MeshUIWindow {
         engine.send_render_command(command);
 
         let grid_draw_object = engine.create_grid_draw_object(0, global_constants_handle.clone());
-
+        let input_mode = EInputMode::UI;
+        update_window_with_input_mode(window, input_mode);
         Ok(MeshUIWindow {
             egui_winit_state,
             draw_objects: vec![],
@@ -116,17 +119,17 @@ impl MeshUIWindow {
             grid_draw_object,
             camera_movement_speed: 0.01,
             camera_motion_speed: 0.1,
+            input_mode,
         })
     }
 
     pub fn device_event_process(&mut self, device_event: &winit::event::DeviceEvent) {
         match device_event {
             winit::event::DeviceEvent::MouseMotion { delta } => {
-                let input_mode = EInputMode::Game;
                 DefaultCameraInputEventHandle::mouse_motion_handle(
                     &mut self.camera,
                     *delta,
-                    input_mode,
+                    self.input_mode,
                     self.camera_motion_speed,
                 );
             }
@@ -160,6 +163,19 @@ impl MeshUIWindow {
                 }
                 MouseScrollDelta::PixelDelta(_) => todo!(),
             },
+            WindowEvent::MouseInput { state, button, .. } => {
+                if *button == MouseButton::Right {
+                    match state {
+                        winit::event::ElementState::Pressed => {
+                            self.input_mode = EInputMode::Game;
+                        }
+                        winit::event::ElementState::Released => {
+                            self.input_mode = EInputMode::UI;
+                        }
+                    }
+                    update_window_with_input_mode(window, self.input_mode);
+                }
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
                     return;
@@ -171,12 +187,11 @@ impl MeshUIWindow {
                 engine.recv_output_hook();
 
                 for (virtual_key_code, element_state) in &self.virtual_key_code_states {
-                    let input_mode = EInputMode::Game;
                     DefaultCameraInputEventHandle::keyboard_input_handle(
                         &mut self.camera,
                         virtual_key_code,
                         element_state,
-                        input_mode,
+                        self.input_mode,
                         self.camera_movement_speed,
                     );
                 }
@@ -241,8 +256,15 @@ impl MeshUIWindow {
             vertices.as_slice(),
             num_parts as u32,
             get_gpmetis_program_path(),
-        )
-        .unwrap();
+        );
+        let mesh_clusters = match mesh_clusters {
+            Ok(mesh_clusters) => mesh_clusters,
+            Err(err) => {
+                log::warn!("{err}");
+                return;
+            }
+        };
+
         let resource_manager = ResourceManager::default();
         self.draw_objects.clear();
 

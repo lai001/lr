@@ -77,8 +77,7 @@ impl AudioPcmbuffer {
 #[cfg(test)]
 mod tests {
     use crate::{
-        audio_format::{AudioFormat, EAudioFormatIdentifiersType, EAudioSampleType},
-        audio_format_flag::AudioFormatFlag,
+        audio_format::{AudioFormat, EAudioSampleType},
         audio_pcmbuffer::AudioPcmbuffer,
     };
 

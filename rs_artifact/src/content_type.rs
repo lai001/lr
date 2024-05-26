@@ -10,4 +10,5 @@ pub enum EContentType {
     Level,
     Material,
     IBL,
+    MediaSource,
 }

@@ -311,6 +311,7 @@ impl Engine {
                             }
                         }
                         EContentType::IBL => {}
+                        EContentType::MediaSource => todo!(),
                     },
                     _ => {}
                 }
@@ -623,7 +624,9 @@ impl Engine {
     pub fn present(&mut self, window_id: isize) {
         let mut draw_objects = self.draw_objects.entry(window_id).or_default().clone();
         if let Some(grid_draw_object) = &self.grid_draw_object {
-            draw_objects.push(grid_draw_object.clone());
+            if window_id == self.main_window_id {
+                draw_objects.push(grid_draw_object.clone());
+            }
         }
         let virtual_texture_pass = if window_id == self.main_window_id {
             self.virtual_pass_handle.clone().map(|x| x.key())

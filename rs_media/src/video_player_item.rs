@@ -15,6 +15,7 @@ pub struct VideoPlayerItem {
     video_receiver: Option<Receiver<Protocol>>,
     user_sender: Option<Sender<Protocol>>,
     capacity: usize,
+    duration: f32,
 }
 
 impl VideoPlayerItem {
@@ -24,6 +25,7 @@ impl VideoPlayerItem {
             video_receiver: None,
             user_sender: None,
             capacity: 3,
+            duration: 0.0,
         };
         player.init();
         player
@@ -38,9 +40,13 @@ impl VideoPlayerItem {
 
         let filepath = self.filepath.to_string();
         let capacity = self.capacity;
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+
         std::thread::spawn(move || {
             let mut video_frame_extractor =
-                VideoFrameExtractor::new(&filepath, Some(EVideoDecoderType::Hardware));
+                VideoFrameExtractor::new(&filepath, Some(EVideoDecoderType::Hardware)).unwrap();
+            sender.send(video_frame_extractor.get_duration()).unwrap();
             let mut resp_protocols: VecDeque<Protocol> = VecDeque::new();
 
             loop {
@@ -142,6 +148,7 @@ impl VideoPlayerItem {
         });
         self.video_receiver = Some(video_receiver);
         self.user_sender = Some(user_sender);
+        self.duration = receiver.recv().unwrap();
     }
 
     pub fn try_recv(&mut self) -> Result<VideoFrame, crate::error::Error> {
@@ -187,5 +194,9 @@ impl VideoPlayerItem {
             seek_time: Some(time),
             eof: None,
         });
+    }
+
+    pub fn get_duration(&self) -> f32 {
+        self.duration
     }
 }

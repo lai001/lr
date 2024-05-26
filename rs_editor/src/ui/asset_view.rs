@@ -8,6 +8,7 @@ pub enum EClickItemType {
     File(AssetFile),
     SingleClickFile(AssetFile),
     CreateTexture(AssetFile),
+    CreateMediaSource(AssetFile),
     Back,
 }
 
@@ -127,6 +128,14 @@ fn draw_content(
                                         let url = format!("file://{}", file.path.to_str().unwrap());
                                         ui.image(url);
                                     }
+                                    EFileType::Mp4 => {
+                                        ui.painter_at(ui.available_rect_before_wrap()).rect_filled(
+                                            ui.available_rect_before_wrap(),
+                                            0.0,
+                                            Color32::WHITE,
+                                        );
+                                        ui.allocate_space(ui.available_rect_before_wrap().size());
+                                    }
                                 }
                                 let response = ui.button(file.name.clone());
                                 if response.clicked() {
@@ -153,6 +162,18 @@ fn draw_content(
                                                 click_item = Some(EClickItemType::CreateTexture(
                                                     file.clone(),
                                                 ));
+                                                ui.close_menu();
+                                            }
+                                        });
+                                    }
+                                    EFileType::Mp4 => {
+                                        response.context_menu(|ui| {
+                                            highlight_item =
+                                                Some(EClickItemType::SingleClickFile(file.clone()));
+                                            if ui.button("Create media source").clicked() {
+                                                click_item = Some(
+                                                    EClickItemType::CreateMediaSource(file.clone()),
+                                                );
                                                 ui.close_menu();
                                             }
                                         });

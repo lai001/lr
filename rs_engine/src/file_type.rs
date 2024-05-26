@@ -11,6 +11,7 @@ pub enum EFileType {
     Hdr,
     Blend,
     Dae,
+    Mp4,
 }
 
 impl ToString for EFileType {
@@ -43,6 +44,7 @@ impl EFileType {
             "glb" => Some(EFileType::Glb),
             "blend" => Some(EFileType::Blend),
             "dae" => Some(EFileType::Dae),
+            "mp4" => Some(EFileType::Mp4),
             _ => None,
         }
     }
@@ -58,6 +60,7 @@ impl EFileType {
             EFileType::Jpg => "jpg",
             EFileType::Blend => "blend",
             EFileType::Dae => "dae",
+            EFileType::Mp4 => "mp4",
         }
     }
 }

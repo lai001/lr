@@ -21,7 +21,9 @@ standalone = [
 ]
 
 [dependencies]
-egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "0106647", version = "0.3.0", features = ["serde"]}
+egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "0106647", version = "0.3.0", features = [
+    "serde",
+] }
 syn = { version = "2.0.57", features = ["full", "extra-traits"] }
 log = "0.4.17"
 env_logger = "0.10.0"
@@ -58,6 +60,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 naga = { version = "0.19.0" }
 wgpu = "0.19.1"
 rand = { version = "0.8.5" }
+mp4 = { version = "0.14.0" }
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
 rs_render = { path = "../rs_render" }
 rs_foundation = { path = "../rs_foundation" }
@@ -69,3 +72,5 @@ rs_core_minimal = { path = "../rs_core_minimal" }
 rs_assimp = { path = "../rs_assimp" }
 rs_proc_macros = { path = "../rs_proc_macros" }
 rs_metis = { path = "../rs_metis" }
+rs_media = { path = "../rs_media" }
+rs_audio = { path = "../rs_audio" }

@@ -2,6 +2,44 @@
 local rs_project_name = rs_project_name
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
+
+local function media_cmd_workspace_file(json)
+    local extraEnv = {
+        ["FFMPEG_DIR"] = ffmpeg_dir,
+    }
+    local media_cmd = {
+        ["folders"] = { {
+            ["path"] = path.absolute("./")
+        } },
+        ["settings"] = {
+            ["rust-analyzer.linkedProjects"] = {
+                path.absolute("./rs_media/Cargo.toml"),
+                path.absolute("./rs_media_cmd/Cargo.toml")
+            },
+            ["rust-analyzer.cargo.extraEnv"] = extraEnv,
+            ["rust-analyzer.server.extraEnv"] = extraEnv,
+            ["rust-analyzer.check.extraEnv"] = extraEnv,
+            ["rust-analyzer.runnables.extraEnv"] = extraEnv
+        }
+    }
+    json.savefile(path.join(path.absolute("./"), "media_cmd.code-workspace"), media_cmd)
+end
+
+local function proc_macros_test_workspace_file(json)
+    local proc_macros_test = {
+        ["folders"] = { {
+            ["path"] = path.absolute("./")
+        } },
+        ["settings"] = {
+            ["rust-analyzer.linkedProjects"] = {
+                path.absolute("./rs_proc_macros/Cargo.toml"),
+                path.absolute("./rs_proc_macros_test/Cargo.toml")
+            },
+        }
+    }
+    json.savefile(path.join(path.absolute("./"), "proc_macros_test.code-workspace"), proc_macros_test)
+end
+
 task("code_workspace") do
     on_run(function(in_plat, in_target, in_mode, in_launch)
         import("core.project.config")
@@ -97,18 +135,8 @@ task("code_workspace") do
         print(save_path)
         json.savefile(save_path, code_workspace)
 
-        local proc_macros_test = {
-            ["folders"] = { {
-                ["path"] = path.absolute("./")
-            } },
-            ["settings"] = {
-                ["rust-analyzer.linkedProjects"] = {
-                    path.absolute("./rs_proc_macros/Cargo.toml"),
-                    path.absolute("./rs_proc_macros_test/Cargo.toml")
-                },
-            }
-        }
-        json.savefile(path.join(path.absolute("./"), "proc_macros_test.code-workspace"), proc_macros_test)
+        proc_macros_test_workspace_file(json)
+        media_cmd_workspace_file(json)
     end)
     set_menu {
         usage = "xmake code_workspace",

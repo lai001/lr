@@ -40,40 +40,36 @@ impl VideoFramePlayer {
     }
 
     pub fn tick(&mut self) {
-        if let Some(start_play_time) = self.start_play_time {
-            self.current_play_time = (Instant::now() - start_play_time
-                + Duration::from_secs_f32(self.seek_time))
-            .as_secs_f32();
-            self.frames.retain(|element| {
-                let time_range = TimeRange {
-                    start: self.current_play_time - 0.2,
-                    end: self.current_play_time + 1.0,
-                };
-                time_range.is_contains(element.get_time_range_second().start)
-                    || time_range.is_contains(element.get_time_range_second().end)
-            });
+        let Some(start_play_time) = self.start_play_time else {
+            return;
+        };
 
-            if let (Some(first), Some(last)) = (self.frames.first(), self.frames.last()) {
-                let time_range = TimeRange {
-                    start: first.get_time_range_second().start,
-                    end: last.get_time_range_second().end,
-                };
-                if !time_range.is_contains(self.current_play_time) {
-                    match self.video_player_item.try_recv() {
-                        Ok(frame) => {
-                            self.frames.push(frame);
-                        }
-                        Err(_) => {}
-                    }
-                }
-            } else {
-                match self.video_player_item.try_recv() {
-                    Ok(frame) => {
-                        self.frames.push(frame);
-                    }
-                    Err(_) => {}
-                }
+        self.current_play_time = (Instant::now() - start_play_time
+            + Duration::from_secs_f32(self.seek_time))
+        .as_secs_f32();
+        self.frames.retain(|element| {
+            let time_range = TimeRange {
+                start: self.current_play_time - 0.2,
+                end: self.current_play_time + 1.0,
+            };
+            time_range.is_contains(element.get_time_range_second().start)
+                || time_range.is_contains(element.get_time_range_second().end)
+        });
+
+        if let (Some(first), Some(last)) = (self.frames.first(), self.frames.last()) {
+            let time_range = TimeRange {
+                start: first.get_time_range_second().start,
+                end: last.get_time_range_second().end,
+            };
+            if time_range.is_contains(self.current_play_time) {
+                return;
             }
+        }
+        match self.video_player_item.try_recv() {
+            Ok(frame) => {
+                self.frames.push(frame);
+            }
+            Err(_) => {}
         }
     }
 
@@ -104,5 +100,9 @@ impl VideoFramePlayer {
             }
         });
         closest
+    }
+
+    pub fn get_duration(&self) -> f32 {
+        self.video_player_item.get_duration()
     }
 }

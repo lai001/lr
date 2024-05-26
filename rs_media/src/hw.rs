@@ -33,17 +33,18 @@ pub fn get_available_hwdevice_types() -> Vec<AVHWDeviceType> {
 pub(crate) unsafe fn find_hw_pix_fmt(
     codec: *const AVCodec,
     device_type: AVHWDeviceType,
-) -> Option<AVPixelFormat> {
+) -> Vec<AVPixelFormat> {
     let mut index = 0;
+    let mut support_formats = vec![];
     loop {
         let codec_hw_config = avcodec_get_hw_config(codec, index);
         if codec_hw_config.is_null() {
-            return None;
+            return support_formats;
         }
         let is_hw_methods =
             (*codec_hw_config).methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX as i32 != 0;
         if is_hw_methods && (*codec_hw_config).device_type == device_type {
-            return Some((*codec_hw_config).pix_fmt);
+            support_formats.push((*codec_hw_config).pix_fmt);
         }
         index += 1;
     }
@@ -116,7 +117,7 @@ unsafe fn hw_test_unsafe(filename: &str) {
     let decoder = context_decoder.decoder();
     let mut video_decoder = decoder.video().unwrap();
     for device_type in get_available_hwdevice_types() {
-        match find_hw_pix_fmt(video_decoder.codec().unwrap().as_ptr(), device_type) {
+        match find_hw_pix_fmt(video_decoder.codec().unwrap().as_ptr(), device_type).first() {
             Some(pix_fmt) => {
                 log::trace!(
                     "Decoder {:?} does support device type {:?}, pix_fmt: {:?}",
@@ -124,7 +125,7 @@ unsafe fn hw_test_unsafe(filename: &str) {
                     device_type,
                     pix_fmt
                 );
-                hw_pixel_formats.insert(device_type, pix_fmt);
+                hw_pixel_formats.insert(device_type, *pix_fmt);
             }
             None => log::trace!(
                 "Decoder {:?} does not support device type {:?}",

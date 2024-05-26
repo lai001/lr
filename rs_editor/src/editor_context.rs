@@ -13,7 +13,9 @@ use crate::{
         asset_view, content_browser, content_item_property_view,
         material_ui_window::MaterialUIWindow,
         material_view::{self, EMaterialNodeType, MaterialNode},
+        media_ui_window::MediaUIWindow,
         mesh_ui_window::MeshUIWindow,
+        misc::update_window_with_input_mode,
         object_property_view::ESelectedObjectType,
         top_menu,
     },
@@ -73,6 +75,12 @@ lazy_static! {
         let mut m = HashSet::new();
         m.extend(SUPPORT_ASSET_IMAGE_FILE_TYPES.iter());
         m.extend(SUPPORT_ASSET_MODEL_FILE_TYPES.iter());
+        m.extend(SUPPORT_ASSET_MEDIA_FILE_TYPES.iter());
+        m
+    };
+    static ref SUPPORT_ASSET_MEDIA_FILE_TYPES: HashSet<EFileType> = {
+        let mut m = HashSet::new();
+        m.insert(EFileType::Mp4);
         m
     };
 }
@@ -82,6 +90,7 @@ pub enum EWindowType {
     Main,
     Material,
     Mesh,
+    Media,
 }
 
 pub struct EditorContext {
@@ -100,6 +109,7 @@ pub struct EditorContext {
     window_manager: Rc<RefCell<WindowsManager>>,
     material_ui_window: Option<MaterialUIWindow>,
     mesh_ui_window: Option<MeshUIWindow>,
+    media_ui_window: Option<MediaUIWindow>,
 }
 
 impl EditorContext {
@@ -205,6 +215,7 @@ impl EditorContext {
             window_manager: window_manager.clone(),
             material_ui_window: None,
             mesh_ui_window: None,
+            media_ui_window: None,
         }
     }
 
@@ -326,21 +337,7 @@ impl EditorContext {
                 std::thread::sleep(wait);
                 window.request_redraw();
 
-                match self.engine.get_input_mode() {
-                    rs_engine::input_mode::EInputMode::Game => {
-                        window
-                            .set_cursor_grab(winit::window::CursorGrabMode::Confined)
-                            .unwrap();
-                        window.set_cursor_visible(false);
-                    }
-                    rs_engine::input_mode::EInputMode::UI => {
-                        window
-                            .set_cursor_grab(winit::window::CursorGrabMode::None)
-                            .unwrap();
-                        window.set_cursor_visible(true);
-                    }
-                    rs_engine::input_mode::EInputMode::GameUI => todo!(),
-                }
+                update_window_with_input_mode(window, self.engine.get_input_mode());
                 self.data_source.input_mode = self.engine.get_input_mode();
             }
             WindowEvent::Destroyed => {}
@@ -431,6 +428,17 @@ impl EditorContext {
                     }
                     EWindowType::Mesh => {
                         let ui_window = self.mesh_ui_window.as_mut().expect("Should not be bull");
+                        ui_window.window_event_process(
+                            window_id,
+                            window,
+                            event,
+                            event_loop_window_target,
+                            &mut self.engine,
+                            &mut *self.window_manager.borrow_mut(),
+                        );
+                    }
+                    EWindowType::Media => {
+                        let ui_window = self.media_ui_window.as_mut().expect("Should not be bull");
                         ui_window.window_event_process(
                             window_id,
                             window,
@@ -1153,6 +1161,23 @@ impl EditorContext {
         self.mesh_ui_window = Some(ui_window);
     }
 
+    fn open_media_window(
+        &mut self,
+        media_path: impl AsRef<Path>,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+    ) {
+        let mut ui_window = MediaUIWindow::new(
+            self.editor_ui.egui_context.clone(),
+            &mut *self.window_manager.borrow_mut(),
+            event_loop_window_target,
+            &mut self.engine,
+        )
+        .expect("Should be opened");
+        let result = ui_window.update(media_path);
+        log::trace!("{:?}", result);
+        self.media_ui_window = Some(ui_window);
+    }
+
     fn collect_textures(&self) -> Vec<url::Url> {
         let Some(project_context) = &self.project_context else {
             return vec![];
@@ -1218,7 +1243,7 @@ impl EditorContext {
             .build(egui_winit_state.egui_ctx(), &mut self.data_source);
 
         self.process_top_menu_event(window, click_event.menu_event);
-        self.process_click_asset_event(click_event.click_aseet);
+        self.process_click_asset_event(click_event.click_aseet, event_loop_window_target);
         self.process_content_item_property_view_event();
         self.process_content_browser_event(
             click_event.content_browser_event,
@@ -1550,7 +1575,11 @@ impl EditorContext {
         }
     }
 
-    fn process_click_asset_event(&mut self, click_aseet: Option<asset_view::EClickItemType>) {
+    fn process_click_asset_event(
+        &mut self,
+        click_aseet: Option<asset_view::EClickItemType>,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+    ) {
         let Some(click_aseet) = click_aseet else {
             return;
         };
@@ -1560,8 +1589,12 @@ impl EditorContext {
             }
             asset_view::EClickItemType::File(asset_file) => {
                 self.data_source.highlight_asset_file = Some(asset_file.clone());
-                let result = self.open_model_file(asset_file.path.clone());
-                log::trace!("{:?}", result);
+                if asset_file.get_file_type() == EFileType::Mp4 {
+                    self.open_media_window(asset_file.path, event_loop_window_target);
+                } else {
+                    let result = self.open_model_file(asset_file.path.clone());
+                    log::trace!("{:?}", result);
+                }
             }
             asset_view::EClickItemType::Back => todo!(),
             asset_view::EClickItemType::SingleClickFile(asset_file) => {
@@ -1597,6 +1630,7 @@ impl EditorContext {
                     }
                 }
             }
+            asset_view::EClickItemType::CreateMediaSource(_) => todo!(),
         }
     }
 

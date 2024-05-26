@@ -101,7 +101,7 @@ impl AudioFrameExtractor {
 
     pub fn next_frames(&mut self) -> Option<Vec<AudioFrame>> {
         match self.find_next_packet() {
-            Some((stream, packet)) => {
+            Some((_, packet)) => {
                 let mut audio_frames: Vec<AudioFrame> = vec![];
                 self.audio_decoder.send_packet(&packet).unwrap();
                 let mut decoded_audio_frame = ffmpeg_next::frame::Audio::empty();

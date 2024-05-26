@@ -19,6 +19,7 @@ includes("BuildScripts/download_deps.lua")
 includes("BuildScripts/build_clean.lua")
 includes("BuildScripts/install_editor.lua")
 includes("BuildScripts/ci.lua")
+includes("BuildScripts/setup.lua")
 
 option("enable_dotnet")
     set_default(false)

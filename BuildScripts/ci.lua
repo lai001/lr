@@ -24,6 +24,9 @@ do
         os.cd(engine_root_dir)
         os.exec("xmake build_android_target --mode=debug --target=aarch64-linux-android")
         os.exec("xmake build_android_target --mode=release --target=aarch64-linux-android")
+        os.cd(path.join(engine_root_dir, "rs_media_cmd"))
+        os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd")
+        os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd --release")
     end)
     set_menu {
         usage = "xmake ci",
