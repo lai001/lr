@@ -117,8 +117,13 @@ impl Reflection {
                     let mut offsets = Vec::<u64>::new();
                     for field in verification.fields.iter() {
                         match field {
-                            type_layout::Field::Field { size, .. } => {
-                                let attr = _vertex_attributes.get_mut(index).unwrap();
+                            type_layout::Field::Field { name, ty, size } => {
+                                let attr = _vertex_attributes.get_mut(index);
+                                if attr.is_none() {
+                                    log::trace!("{:#?}", _vertex_attributes);
+                                    panic!("{}, {:?}, {:?}", index, name, ty);
+                                }
+                                let attr = attr.unwrap();
                                 attr.offset = current_offset;
                                 vertex_attributes.push(*attr);
                                 offsets.push(current_offset);
@@ -202,26 +207,21 @@ impl Reflection {
             // let arg_size = arg_type.inner.size(&module.constants);
 
             match &arg_type.inner {
-                naga::TypeInner::Scalar(scaler) => {
+                naga::TypeInner::Scalar(scalar) => {
                     let mut attribute = wgpu::VertexAttribute {
                         format: wgpu::VertexFormat::Float32,
                         offset,
                         shader_location: 0,
                     };
                     match arg.binding.clone().unwrap() {
-                        naga::Binding::BuiltIn(built_in) => match built_in {
-                            BuiltIn::VertexIndex => {
-                                log::trace!("{:?}", "Skip VertexIndex");
-                            }
-                            _ => {
-                                todo!()
-                            }
-                        },
+                        naga::Binding::BuiltIn(built_in) => {
+                            log::trace!("Skip {:?}", built_in);
+                        }
                         naga::Binding::Location { location, .. } => {
                             attribute.shader_location = location;
                         }
                     }
-                    match scaler.kind {
+                    match scalar.kind {
                         naga::ScalarKind::Sint => {
                             attribute.format = wgpu::VertexFormat::Sint32;
                         }
@@ -276,45 +276,68 @@ impl Reflection {
                         let Ok(arg_type) = module.types.get_handle(member.ty) else {
                             continue;
                         };
+                        match &arg_type.inner {
+                            TypeInner::Scalar(scalar) => {
+                                let mut attribute = wgpu::VertexAttribute {
+                                    format: wgpu::VertexFormat::Float32,
+                                    offset,
+                                    shader_location: *location,
+                                };
 
-                        let TypeInner::Vector { size, scalar } = arg_type.inner else {
-                            continue;
-                        };
-                        let mut attribute = wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32,
-                            offset,
-                            shader_location: *location,
-                        };
-                        match scalar.kind {
-                            naga::ScalarKind::Float => match size {
-                                naga::VectorSize::Bi => {
-                                    attribute.format = wgpu::VertexFormat::Float32x2;
+                                match scalar.kind {
+                                    naga::ScalarKind::Sint => {
+                                        attribute.format = wgpu::VertexFormat::Sint32;
+                                    }
+                                    naga::ScalarKind::Uint => {
+                                        attribute.format = wgpu::VertexFormat::Uint32;
+                                    }
+                                    naga::ScalarKind::Float => {
+                                        attribute.format = wgpu::VertexFormat::Float32;
+                                    }
+                                    _ => todo!(),
                                 }
-                                naga::VectorSize::Tri => {
-                                    attribute.format = wgpu::VertexFormat::Float32x3;
+                                offset += attribute.format.size();
+                                attributes.push(attribute);
+                            }
+                            TypeInner::Vector { size, scalar } => {
+                                let mut attribute = wgpu::VertexAttribute {
+                                    format: wgpu::VertexFormat::Float32,
+                                    offset,
+                                    shader_location: *location,
+                                };
+                                match scalar.kind {
+                                    naga::ScalarKind::Float => match size {
+                                        naga::VectorSize::Bi => {
+                                            attribute.format = wgpu::VertexFormat::Float32x2;
+                                        }
+                                        naga::VectorSize::Tri => {
+                                            attribute.format = wgpu::VertexFormat::Float32x3;
+                                        }
+                                        naga::VectorSize::Quad => {
+                                            attribute.format = wgpu::VertexFormat::Float32x4;
+                                        }
+                                    },
+                                    naga::ScalarKind::Sint => match size {
+                                        naga::VectorSize::Bi => {
+                                            attribute.format = wgpu::VertexFormat::Sint32x2;
+                                        }
+                                        naga::VectorSize::Tri => {
+                                            attribute.format = wgpu::VertexFormat::Sint32x3;
+                                        }
+                                        naga::VectorSize::Quad => {
+                                            attribute.format = wgpu::VertexFormat::Sint32x4;
+                                        }
+                                    },
+                                    _ => todo!(),
                                 }
-                                naga::VectorSize::Quad => {
-                                    attribute.format = wgpu::VertexFormat::Float32x4;
-                                }
-                            },
-                            naga::ScalarKind::Sint => match size {
-                                naga::VectorSize::Bi => {
-                                    attribute.format = wgpu::VertexFormat::Sint32x2;
-                                }
-                                naga::VectorSize::Tri => {
-                                    attribute.format = wgpu::VertexFormat::Sint32x3;
-                                }
-                                naga::VectorSize::Quad => {
-                                    attribute.format = wgpu::VertexFormat::Sint32x4;
-                                }
-                            },
+                                offset += attribute.format.size();
+                                attributes.push(attribute);
+                            }
                             _ => todo!(),
                         }
-                        offset += attribute.format.size();
-                        attributes.push(attribute);
                     }
                 }
-                _ => {}
+                _ => todo!(),
             }
         }
 

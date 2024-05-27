@@ -14,6 +14,7 @@ pub enum EWindowType {
     ObjectProperty,
     Level,
     ComsoleCmds,
+    MultipleDrawUi,
 }
 
 #[derive(Debug)]
@@ -179,6 +180,12 @@ impl TopMenu {
                     });
                     if ui.add(Button::new("Run")).clicked() {
                         click = Some(EClickEventType::Run);
+                        ui.close_menu();
+                    }
+                });
+                ui.menu_button("Test", |ui| {
+                    if ui.add(Button::new("Multiple Draw")).clicked() {
+                        click = Some(EClickEventType::OpenWindow(EWindowType::MultipleDrawUi));
                         ui.close_menu();
                     }
                 });

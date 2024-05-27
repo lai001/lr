@@ -6,6 +6,7 @@ pub mod irradiance_cube_map;
 pub mod jfa;
 pub mod jfa_composition;
 pub mod mesh_view;
+pub mod mesh_view_multiple_draw;
 pub mod panorama_to_cube;
 pub mod pre_filter_environment_cube_map;
 pub mod sdf2d_preprocess;
@@ -23,6 +24,7 @@ use crate::global_shaders::{
     jfa::JFAShader,
     jfa_composition::JFACompositionShader,
     mesh_view::MeshViewShader,
+    mesh_view_multiple_draw::MeshViewMultipleDrawShader,
     panorama_to_cube::PanoramaToCubeShader,
     pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader,
     sdf2d_preprocess::Sdf2dPreprocessShader,
@@ -51,5 +53,6 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(JFAShader {}),
         Box::new(JFACompositionShader {}),
         Box::new(MeshViewShader {}),
+        Box::new(MeshViewMultipleDrawShader {}),
     ]
 }

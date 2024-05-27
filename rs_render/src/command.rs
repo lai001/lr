@@ -150,6 +150,13 @@ pub struct VirtualPassSet {
 }
 
 #[derive(Clone)]
+pub struct MultipleDraw {
+    pub indirect_buffer_handle: BufferHandle,
+    pub indirect_offset: BufferAddress,
+    pub count: u32,
+}
+
+#[derive(Clone)]
 pub struct DrawObject {
     pub id: u32,
     pub vertex_buffers: Vec<BufferHandle>,
@@ -159,6 +166,7 @@ pub struct DrawObject {
     pub binding_resources: Vec<Vec<EBindingResource>>,
     pub virtual_pass_set: Option<VirtualPassSet>,
     pub render_pipeline: String,
+    pub multiple_draw: Option<MultipleDraw>,
 }
 
 #[derive(Clone)]

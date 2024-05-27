@@ -1261,6 +1261,7 @@ impl Engine {
                     ],
                     render_pipeline: static_objcet.render_pipeline.clone(),
                     virtual_pass_set: None,
+                    multiple_draw: None,
                 };
                 self.draw_objects
                     .entry(static_objcet.window_id)
@@ -1291,6 +1292,7 @@ impl Engine {
                     ],
                     render_pipeline: skin_objcet.render_pipeline.clone(),
                     virtual_pass_set: None,
+                    multiple_draw: None,
                 };
                 self.draw_objects
                     .entry(skin_objcet.window_id)
@@ -1330,6 +1332,7 @@ impl Engine {
                             skin_objcet.user_textures_resources,
                         ],
                         virtual_pass_set: None,
+                        multiple_draw: None,
                     };
                     self.draw_objects
                         .entry(skin_objcet.window_id)
@@ -1657,6 +1660,7 @@ impl Engine {
             binding_resources: vec![vec![EBindingResource::Constants(*global_constants_handle)]],
             render_pipeline: rs_render::renderer::GRID_RENDER_PIPELINE.to_string(),
             virtual_pass_set: None,
+            multiple_draw: None,
         }
     }
 

@@ -57,4 +57,12 @@ fn mipmap_size(lod0_size: vec2<f32>, level: u32) -> vec2<f32> {
     return vec2<f32>(f32(x), f32(y));
 }
 
+fn make_translation_matrix(x: f32, y: f32, z: f32) -> mat4x4<f32> {
+    var m = mat4x4<f32>(vec4<f32>(1.0, 0.0, 0.0, 0.0),
+                        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+                        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+                        vec4<f32>(x, y, z, 1.0));
+    return m;
+}
+
 #endif

@@ -16,6 +16,7 @@ use crate::{
         media_ui_window::MediaUIWindow,
         mesh_ui_window::MeshUIWindow,
         misc::update_window_with_input_mode,
+        multiple_draw_ui_window::MultipleDrawUiWindow,
         object_property_view::ESelectedObjectType,
         top_menu,
     },
@@ -91,6 +92,7 @@ pub enum EWindowType {
     Material,
     Mesh,
     Media,
+    MultipleDraw,
 }
 
 pub struct EditorContext {
@@ -110,6 +112,7 @@ pub struct EditorContext {
     material_ui_window: Option<MaterialUIWindow>,
     mesh_ui_window: Option<MeshUIWindow>,
     media_ui_window: Option<MediaUIWindow>,
+    multiple_draw_ui_window: Option<MultipleDrawUiWindow>,
 }
 
 impl EditorContext {
@@ -216,6 +219,7 @@ impl EditorContext {
             material_ui_window: None,
             mesh_ui_window: None,
             media_ui_window: None,
+            multiple_draw_ui_window: None,
         }
     }
 
@@ -355,6 +359,9 @@ impl EditorContext {
                 if let Some(ui_window) = self.mesh_ui_window.as_mut() {
                     ui_window.device_event_process(event);
                 }
+                if let Some(ui_window) = self.multiple_draw_ui_window.as_mut() {
+                    ui_window.device_event_process(event);
+                }
                 match event {
                     winit::event::DeviceEvent::MouseMotion { delta } => {
                         let input_mode = self.engine.get_input_mode();
@@ -439,6 +446,20 @@ impl EditorContext {
                     }
                     EWindowType::Media => {
                         let ui_window = self.media_ui_window.as_mut().expect("Should not be bull");
+                        ui_window.window_event_process(
+                            window_id,
+                            window,
+                            event,
+                            event_loop_window_target,
+                            &mut self.engine,
+                            &mut *self.window_manager.borrow_mut(),
+                        );
+                    }
+                    EWindowType::MultipleDraw => {
+                        let ui_window = self
+                            .multiple_draw_ui_window
+                            .as_mut()
+                            .expect("Should not be bull");
                         ui_window.window_event_process(
                             window_id,
                             window,
@@ -1178,6 +1199,21 @@ impl EditorContext {
         self.media_ui_window = Some(ui_window);
     }
 
+    fn open_multiple_draw_ui_window(
+        &mut self,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+    ) {
+        let mut ui_window = MultipleDrawUiWindow::new(
+            self.editor_ui.egui_context.clone(),
+            &mut *self.window_manager.borrow_mut(),
+            event_loop_window_target,
+            &mut self.engine,
+        )
+        .expect("Should be opened");
+        ui_window.update(&mut self.engine);
+        self.multiple_draw_ui_window = Some(ui_window);
+    }
+
     fn collect_textures(&self) -> Vec<url::Url> {
         let Some(project_context) = &self.project_context else {
             return vec![];
@@ -1242,7 +1278,7 @@ impl EditorContext {
             .editor_ui
             .build(egui_winit_state.egui_ctx(), &mut self.data_source);
 
-        self.process_top_menu_event(window, click_event.menu_event);
+        self.process_top_menu_event(window, click_event.menu_event, event_loop_window_target);
         self.process_click_asset_event(click_event.click_aseet, event_loop_window_target);
         self.process_content_item_property_view_event();
         self.process_content_browser_event(
@@ -1288,6 +1324,7 @@ impl EditorContext {
         &mut self,
         window: &mut winit::window::Window,
         top_menu_event: Option<top_menu::EClickEventType>,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         let Some(menu_event) = top_menu_event else {
             return;
@@ -1377,6 +1414,9 @@ impl EditorContext {
                 }
                 top_menu::EWindowType::ObjectProperty => {
                     self.data_source.is_object_property_view_open = true;
+                }
+                top_menu::EWindowType::MultipleDrawUi => {
+                    self.open_multiple_draw_ui_window(event_loop_window_target);
                 }
             },
             top_menu::EClickEventType::Tool(tool_type) => match tool_type {

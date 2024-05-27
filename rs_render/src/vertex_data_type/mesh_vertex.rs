@@ -29,3 +29,11 @@ pub struct MeshVertex3 {
     pub position: glam::Vec3,
     pub vertex_color: glam::Vec3,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, TypeLayout)]
+pub struct MeshVertex4 {
+    pub position: glam::Vec3,
+    pub vertex_color: glam::Vec3,
+    pub draw_id: u32,
+}

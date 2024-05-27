@@ -9,6 +9,7 @@ use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
 use crate::render_pipeline::mesh_view::MeshViewPipeline;
+use crate::render_pipeline::mesh_view_multiple_draw::MeshViewMultipleDrawPipeline;
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::shader_library::ShaderLibrary;
@@ -28,6 +29,7 @@ pub const SKIN_MESH_RENDER_PIPELINE: &str = "SKIN_MESH_RENDER_PIPELINE";
 pub const STATIC_MESH_RENDER_PIPELINE: &str = "STATIC_MESH_RENDER_PIPELINE";
 pub const GRID_RENDER_PIPELINE: &str = "GRID_RENDER_PIPELINE";
 pub const MESH_VIEW_RENDER_PIPELINE: &str = "MESH_VIEW_RENDER_PIPELINE";
+pub const MESH_VIEW_MULTIPLE_DRAW_PIPELINE: &str = "MESH_VIEW_MULTIPLE_DRAW_PIPELINE";
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
@@ -54,6 +56,7 @@ pub struct Renderer {
     grid_render_pipeline: GridPipeline,
     attachment_pipeline: AttachmentPipeline,
     mesh_view_pipeline: MeshViewPipeline,
+    mesh_view_multiple_draw_pipeline: MeshViewMultipleDrawPipeline,
 
     depth_textures: HashMap<isize, DepthTexture>,
     // default_textures: DefaultTextures,
@@ -158,6 +161,13 @@ impl Renderer {
             &mut base_render_pipeline_pool,
         );
 
+        let mesh_view_multiple_draw_pipeline = MeshViewMultipleDrawPipeline::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &current_swapchain_format,
+            &mut base_render_pipeline_pool,
+        );
+
         Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
@@ -193,6 +203,7 @@ impl Renderer {
             material_render_pipelines: HashMap::new(),
             prebake_ibls: HashMap::new(),
             mesh_view_pipeline,
+            mesh_view_multiple_draw_pipeline,
         }
     }
 
@@ -1098,6 +1109,25 @@ impl Renderer {
                     &[mesh_buffer],
                     group_binding_resource,
                 );
+            }
+            MESH_VIEW_MULTIPLE_DRAW_PIPELINE => {
+                if let Some(multiple_draw) = &draw_object_command.multiple_draw {
+                    let indirect_buffer = self
+                        .buffers
+                        .get(&multiple_draw.indirect_buffer_handle)
+                        .unwrap();
+                    self.mesh_view_multiple_draw_pipeline.multi_draw_indirect(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &depth_texture_view,
+                        &[mesh_buffer],
+                        indirect_buffer,
+                        multiple_draw.indirect_offset,
+                        multiple_draw.count,
+                        group_binding_resource,
+                    );
+                }
             }
             _ => {
                 (|| {

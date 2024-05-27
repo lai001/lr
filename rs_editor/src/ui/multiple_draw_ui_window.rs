@@ -1,9 +1,11 @@
 use super::misc::update_window_with_input_mode;
-use crate::{custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType};
+use crate::{
+    custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType,
+    ui::mesh_ui_window::MeshUIWindow,
+};
 use anyhow::anyhow;
 use egui_winit::State;
-use rs_artifact::skin_mesh::SkinMeshVertex;
-use rs_core_minimal::file_manager::get_gpmetis_program_path;
+use rs_core_minimal::primitive_data::PrimitiveData;
 use rs_engine::{
     camera::Camera,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
@@ -15,23 +17,24 @@ use rs_engine::{
 };
 use rs_render::{
     command::{
-        BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, PresentInfo, RenderCommand,
-        UpdateBuffer,
+        BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, MultipleDraw, PresentInfo,
+        RenderCommand, UpdateBuffer,
     },
     constants::MeshViewConstants,
-    renderer::MESH_VIEW_RENDER_PIPELINE,
-    vertex_data_type::mesh_vertex::MeshVertex3,
+    renderer::MESH_VIEW_MULTIPLE_DRAW_PIPELINE,
+    vertex_data_type::mesh_vertex::MeshVertex4,
 };
 use std::collections::HashMap;
+use wgpu::util::DrawIndexedIndirectArgs;
 use winit::event::{MouseButton, MouseScrollDelta, WindowEvent};
 
 struct MeshViewDrawObject {
     draw_object: rs_render::command::DrawObject,
     constants_handle: BufferHandle,
-    mesh_view_constants: MeshViewConstants,
+    mesh_view_constants_array: Vec<MeshViewConstants>,
 }
 
-pub struct MeshUIWindow {
+pub struct MultipleDrawUiWindow {
     pub egui_winit_state: State,
     draw_objects: Vec<MeshViewDrawObject>,
     camera: Camera,
@@ -45,15 +48,15 @@ pub struct MeshUIWindow {
     input_mode: EInputMode,
 }
 
-impl MeshUIWindow {
+impl MultipleDrawUiWindow {
     pub fn new(
         context: egui::Context,
         window_manager: &mut WindowsManager,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
         engine: &mut Engine,
-    ) -> anyhow::Result<MeshUIWindow> {
+    ) -> anyhow::Result<MultipleDrawUiWindow> {
         let window_context =
-            window_manager.spwan_new_window(EWindowType::Mesh, event_loop_window_target)?;
+            window_manager.spwan_new_window(EWindowType::MultipleDraw, event_loop_window_target)?;
         let window = &*window_context.window.borrow();
 
         engine
@@ -108,7 +111,7 @@ impl MeshUIWindow {
         let grid_draw_object = engine.create_grid_draw_object(0, global_constants_handle.clone());
         let input_mode = EInputMode::UI;
         update_window_with_input_mode(window, input_mode);
-        Ok(MeshUIWindow {
+        Ok(MultipleDrawUiWindow {
             egui_winit_state,
             draw_objects: vec![],
             camera,
@@ -153,7 +156,7 @@ impl MeshUIWindow {
                 engine.resize(window_id, size.width, size.height);
             }
             WindowEvent::CloseRequested => {
-                window_manager.remove_window(EWindowType::Mesh);
+                window_manager.remove_window(EWindowType::MultipleDraw);
                 engine.remove_window(window_id);
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
@@ -205,12 +208,23 @@ impl MeshUIWindow {
                     data: rs_foundation::cast_to_raw_buffer(&vec![self.global_constants]).to_vec(),
                 });
                 engine.send_render_command(command);
-
+                engine.tick();
                 for draw_object in self.draw_objects.iter_mut() {
+                    for (_, mesh_view_constants) in
+                        draw_object.mesh_view_constants_array.iter_mut().enumerate()
+                    {
+                        let r = 0.005 * engine.get_game_time();
+                        mesh_view_constants.model = glam::Mat4::from_rotation_x(r)
+                            * glam::Mat4::from_rotation_y(r)
+                            * glam::Mat4::from_rotation_z(r)
+                            * mesh_view_constants.model;
+                    }
                     engine.send_render_command(RenderCommand::UpdateBuffer(UpdateBuffer {
                         handle: *draw_object.constants_handle,
-                        data: rs_foundation::cast_any_as_u8_slice(&draw_object.mesh_view_constants)
-                            .to_vec(),
+                        data: rs_foundation::cast_to_raw_buffer(
+                            &draw_object.mesh_view_constants_array,
+                        )
+                        .to_vec(),
                     }));
                 }
 
@@ -240,49 +254,57 @@ impl MeshUIWindow {
         }
     }
 
-    pub fn update(
-        &mut self,
-        engine: &mut Engine,
-        skin_mesh_vertices: &[SkinMeshVertex],
-        indices: &[u32],
-    ) {
-        let vertices = skin_mesh_vertices
-            .iter()
-            .map(|x| x.position)
-            .collect::<Vec<glam::Vec3>>();
-        let num_parts = 300;
-        let mesh_clusters = rs_metis::metis::Metis::partition(
-            &indices,
-            vertices.as_slice(),
-            num_parts as u32,
-            get_gpmetis_program_path(),
-        );
-        let mesh_clusters = match mesh_clusters {
-            Ok(mesh_clusters) => mesh_clusters,
-            Err(err) => {
-                log::warn!("{err}");
-                return;
-            }
-        };
-
+    pub fn update(&mut self, engine: &mut Engine) {
         let resource_manager = ResourceManager::default();
-        self.draw_objects.clear();
 
-        let mut vertices: Vec<MeshVertex3> = vec![];
-        for mesh_cluster in mesh_clusters {
-            let color = Self::random_color();
-            for index in mesh_cluster {
-                for offset in 0..=2 {
-                    let vertex_index = indices[index + offset];
-                    let vertex = &skin_mesh_vertices[vertex_index as usize];
-                    let mesh_vertex3 = MeshVertex3 {
-                        position: vertex.position,
-                        vertex_color: color,
-                    };
-                    vertices.push(mesh_vertex3);
-                }
-            }
+        const REPEAT_SIZE: usize = 5000;
+        let quad = PrimitiveData::quad();
+
+        let vertices = (0..REPEAT_SIZE)
+            .flat_map(|id| {
+                let vertex_color = MeshUIWindow::random_color();
+                quad.into_iter()
+                    .map(|(_, vertex_position, ..)| MeshVertex4 {
+                        position: *vertex_position,
+                        vertex_color,
+                        draw_id: id as u32,
+                    })
+                    .collect::<Vec<MeshVertex4>>()
+            })
+            .collect::<Vec<MeshVertex4>>();
+
+        let indices = quad.indices.repeat(REPEAT_SIZE);
+        let draw_indexed_indirect_args_array = (0..REPEAT_SIZE)
+            .map(|x| DrawIndexedIndirectArgs {
+                index_count: quad.indices.len() as u32,
+                instance_count: 1,
+                first_index: quad.indices.len() as u32 * x as u32,
+                base_vertex: quad.vertex_positions.len() as i32 * x as i32,
+                first_instance: 0 as u32,
+            })
+            .collect::<Vec<DrawIndexedIndirectArgs>>();
+
+        let constants_handle = resource_manager.next_buffer();
+        let mut mesh_view_constants_array: Vec<MeshViewConstants> =
+            vec![MeshViewConstants::default(); REPEAT_SIZE];
+
+        for (_, mesh_view_constants) in mesh_view_constants_array.iter_mut().enumerate() {
+            let offset: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -500.0..500.0);
+            let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -1.0..1.0) * offset;
+            let y: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -1.0..1.0) * offset;
+            let z: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -1.0..1.0) * offset;
+            let translation = glam::Mat4::from_translation(glam::vec3(x, y, z));
+            mesh_view_constants.model = translation;
         }
+
+        engine.send_render_command(RenderCommand::CreateBuffer(CreateBuffer {
+            handle: *constants_handle,
+            buffer_create_info: BufferCreateInfo {
+                label: None,
+                contents: rs_foundation::cast_to_raw_buffer(&mesh_view_constants_array).to_vec(),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_WRITE,
+            },
+        }));
 
         let vertex_buffer_handle = resource_manager.next_buffer();
         engine.send_render_command(RenderCommand::CreateBuffer(CreateBuffer {
@@ -294,7 +316,6 @@ impl MeshUIWindow {
             },
         }));
 
-        let indices: Vec<u32> = (0..vertices.len()).map(|x| x as u32).collect();
         let index_buffer_handle = resource_manager.next_buffer();
         engine.send_render_command(RenderCommand::CreateBuffer(CreateBuffer {
             handle: *index_buffer_handle,
@@ -305,17 +326,22 @@ impl MeshUIWindow {
             },
         }));
 
-        let constants_handle = resource_manager.next_buffer();
-        let mesh_view_constants = MeshViewConstants::default();
-
+        let indirect_buffer_handle = resource_manager.next_buffer();
         engine.send_render_command(RenderCommand::CreateBuffer(CreateBuffer {
-            handle: *constants_handle,
+            handle: *indirect_buffer_handle,
             buffer_create_info: BufferCreateInfo {
                 label: None,
-                contents: rs_foundation::cast_any_as_u8_slice(&mesh_view_constants).to_vec(),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::MAP_WRITE,
+                contents: rs_foundation::cast_to_raw_buffer(&draw_indexed_indirect_args_array)
+                    .to_vec(),
+                usage: wgpu::BufferUsages::INDIRECT,
             },
         }));
+
+        let multiple_draw = MultipleDraw {
+            indirect_buffer_handle: *indirect_buffer_handle,
+            indirect_offset: 0,
+            count: REPEAT_SIZE as u32,
+        };
 
         let draw_object = DrawObject {
             id: 0,
@@ -328,20 +354,14 @@ impl MeshUIWindow {
                 EBindingResource::Constants(*constants_handle),
             ]],
             virtual_pass_set: None,
-            render_pipeline: MESH_VIEW_RENDER_PIPELINE.to_string(),
-            multiple_draw: None,
+            render_pipeline: MESH_VIEW_MULTIPLE_DRAW_PIPELINE.to_string(),
+            multiple_draw: Some(multiple_draw),
         };
+        self.draw_objects.clear();
         self.draw_objects.push(MeshViewDrawObject {
             draw_object,
             constants_handle,
-            mesh_view_constants,
+            mesh_view_constants_array,
         });
-    }
-
-    pub fn random_color() -> glam::Vec3 {
-        let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
-        let y: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
-        let z: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
-        glam::vec3(x, y, z)
     }
 }
