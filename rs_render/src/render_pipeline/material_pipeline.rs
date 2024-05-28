@@ -1,17 +1,21 @@
+use std::sync::Arc;
+
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
-    base_render_pipeline_pool::BaseRenderPipelineBuilder,
+    base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     command::MaterialRenderPipelineHandle,
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2},
+    view_mode::EViewModeType,
     VertexBufferType,
 };
 use type_layout::TypeLayout;
 use wgpu::*;
 
 pub struct MaterialRenderPipeline {
-    base_render_pipeline: BaseRenderPipeline,
+    base_render_pipeline: Arc<BaseRenderPipeline>,
+    builder: BaseRenderPipelineBuilder,
 }
 
 impl MaterialRenderPipeline {
@@ -20,6 +24,7 @@ impl MaterialRenderPipeline {
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
+        pool: &mut BaseRenderPipelinePool,
     ) -> crate::error::Result<MaterialRenderPipeline> {
         let shader_name = ShaderLibrary::get_material_shader_name(material_render_pipeline_handle);
 
@@ -49,9 +54,11 @@ impl MaterialRenderPipeline {
             ..Default::default()
         });
 
-        let base_render_pipeline = BaseRenderPipeline::new(device, shader_library, builder);
+        let base_render_pipeline = pool.get(device, shader_library, &builder);
+
         Ok(MaterialRenderPipeline {
             base_render_pipeline,
+            builder,
         })
     }
 
@@ -78,5 +85,34 @@ impl MaterialRenderPipeline {
             None,
             Some(depth_view),
         );
+    }
+    pub fn set_view_mode(
+        &mut self,
+        view_mode: EViewModeType,
+        device: &Device,
+        shader_library: &ShaderLibrary,
+        pool: &mut BaseRenderPipelinePool,
+    ) {
+        match view_mode {
+            EViewModeType::Wireframe => {
+                self.builder.primitive = Some(PrimitiveState {
+                    topology: PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    polygon_mode: PolygonMode::Line,
+                    ..Default::default()
+                });
+            }
+            EViewModeType::Lit => {
+                self.builder.primitive = Some(PrimitiveState {
+                    topology: PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    polygon_mode: PolygonMode::Fill,
+                    ..Default::default()
+                });
+            }
+            EViewModeType::Unlit => todo!(),
+        }
+
+        self.base_render_pipeline = pool.get(device, shader_library, &self.builder);
     }
 }

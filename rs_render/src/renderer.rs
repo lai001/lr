@@ -687,6 +687,14 @@ impl Renderer {
                     &self.shader_library,
                     &mut self.base_render_pipeline_pool,
                 );
+                for (_, pipeline) in self.material_render_pipelines.iter_mut() {
+                    pipeline.set_view_mode(
+                        new_view_mode,
+                        self.wgpu_context.get_device(),
+                        &self.shader_library,
+                        &mut self.base_render_pipeline_pool,
+                    );
+                }
             }
             RenderCommand::CreateSampler(create_sampler) => {
                 let sampler = self
@@ -732,6 +740,7 @@ impl Renderer {
                     device,
                     &self.shader_library,
                     &current_swapchain_format,
+                    &mut self.base_render_pipeline_pool,
                 );
                 if let Ok(material_render_pipeline) = material_render_pipeline {
                     self.material_render_pipelines

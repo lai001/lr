@@ -26,7 +26,7 @@ use rs_render::command::{
     BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline, CreateSampler,
     CreateTexture, CreateVirtualTexture, CreateVirtualTexturePass, DrawObject, EBindingResource,
     InitTextureData, PresentInfo, RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer,
-    UploadPrebakeIBL, VirtualTexturePassKey,
+    UploadPrebakeIBL, VirtualPassSet, VirtualTexturePassKey, VirtualTexturePassResize,
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::global_uniform::{self, EDebugShadingType};
@@ -648,6 +648,20 @@ impl Engine {
     }
 
     pub fn resize(&mut self, window_id: isize, surface_width: u32, surface_height: u32) {
+        let virtual_texture_pass = if window_id == self.main_window_id {
+            self.virtual_pass_handle.clone().map(|x| x.key())
+        } else {
+            None
+        };
+        if let Some(key) = virtual_texture_pass {
+            self.render_thread_mode
+                .send_command(RenderCommand::VirtualTexturePassResize(
+                    VirtualTexturePassResize {
+                        key,
+                        surface_size: glam::uvec2(surface_width, surface_height),
+                    },
+                ));
+        }
         self.render_thread_mode.send_command(RenderCommand::Resize(
             rs_render::command::ResizeInfo {
                 width: surface_width,
@@ -1316,7 +1330,7 @@ impl Engine {
                         render_pipeline,
                         binding_resources: vec![
                             vec![
-                                skin_objcet.global_constants_resource,
+                                skin_objcet.global_constants_resource.clone(),
                                 skin_objcet.base_color_sampler_resource,
                                 skin_objcet.physical_texture_resource,
                                 skin_objcet.page_table_texture_resource,
@@ -1325,13 +1339,25 @@ impl Engine {
                                 skin_objcet.irradiance_texture_resource,
                             ],
                             vec![
-                                skin_objcet.constants_resource,
-                                skin_objcet.skin_constants_resource,
+                                skin_objcet.constants_resource.clone(),
+                                skin_objcet.skin_constants_resource.clone(),
                                 skin_objcet.virtual_texture_constants_resource,
                             ],
                             skin_objcet.user_textures_resources,
                         ],
-                        virtual_pass_set: None,
+                        virtual_pass_set: Some(VirtualPassSet {
+                            vertex_buffers: vec![
+                                *skin_objcet.vertex_buffers[0],
+                                *skin_objcet.vertex_buffers[2],
+                            ],
+                            binding_resources: vec![
+                                vec![skin_objcet.global_constants_resource],
+                                vec![
+                                    skin_objcet.constants_resource,
+                                    skin_objcet.skin_constants_resource,
+                                ],
+                            ],
+                        }),
                         multiple_draw: None,
                     };
                     self.draw_objects

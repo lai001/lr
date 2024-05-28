@@ -349,7 +349,7 @@ impl BaseRenderPipeline {
             for mesh_buffer in mesh_buffers {
                 if self.slots as usize != mesh_buffer.vertex_buffers.len() {
                     panic!(
-                        "{}, slots {} != vertex buffers {}",
+                        "{}, required slots {} != vertex buffers len {}",
                         self.tag,
                         self.slots,
                         mesh_buffer.vertex_buffers.len()

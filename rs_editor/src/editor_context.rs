@@ -266,6 +266,20 @@ impl EditorContext {
                 }
                 MouseScrollDelta::PixelDelta(_) => todo!(),
             },
+            WindowEvent::MouseInput { state, button, .. } => {
+                if *button == winit::event::MouseButton::Right {
+                    match state {
+                        winit::event::ElementState::Pressed => {
+                            self.engine
+                                .set_input_mode(rs_engine::input_mode::EInputMode::Game);
+                        }
+                        winit::event::ElementState::Released => {
+                            self.engine
+                                .set_input_mode(rs_engine::input_mode::EInputMode::UI);
+                        }
+                    }
+                }
+            }
             WindowEvent::KeyboardInput {
                 device_id,
                 event,
@@ -573,22 +587,6 @@ impl EditorContext {
 
         self.virtual_key_code_states
             .insert(virtual_keycode, event.state);
-
-        if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::F1], true) {
-            match self.engine.get_input_mode() {
-                rs_engine::input_mode::EInputMode::Game => {
-                    self.engine
-                        .set_input_mode(rs_engine::input_mode::EInputMode::UI);
-                }
-                rs_engine::input_mode::EInputMode::UI => {
-                    self.engine
-                        .set_input_mode(rs_engine::input_mode::EInputMode::Game);
-                }
-                rs_engine::input_mode::EInputMode::GameUI => {
-                    todo!()
-                }
-            }
-        }
 
         if Self::is_keys_pressed(
             &mut self.virtual_key_code_states,

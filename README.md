@@ -1,9 +1,9 @@
 # rs_computer_graphics
 
-Windows 10
-Android
-.net6
-Rust 1.74.0
+Windows 10  
+Android     
+.net6   
+Rust 1.74.0 
 
 ## Feature
 - Hot reload
