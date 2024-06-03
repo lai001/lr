@@ -15,6 +15,7 @@ pub enum EWindowType {
     Level,
     ComsoleCmds,
     MultipleDrawUi,
+    DebugTexture,
 }
 
 #[derive(Debug)]
@@ -144,6 +145,10 @@ impl TopMenu {
                     }
                     if ui.add(Button::new("Object Property")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::ObjectProperty));
+                        ui.close_menu();
+                    }
+                    if ui.add(Button::new("Debug Texture")).clicked() {
+                        click = Some(EClickEventType::OpenWindow(EWindowType::DebugTexture));
                         ui.close_menu();
                     }
                 });

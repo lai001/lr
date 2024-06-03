@@ -8,6 +8,65 @@ pub struct PrebakeIBL {
 }
 
 impl PrebakeIBL {
+    pub fn empty(device: &Device) -> crate::error::Result<PrebakeIBL> {
+        let brdflut_texture = device.create_texture(&TextureDescriptor {
+            label: Some("brdflut_texture"),
+            size: Extent3d {
+                depth_or_array_layers: 1,
+                width: 4,
+                height: 4,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba32Float,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+
+        let irradiance_texture = device.create_texture(&TextureDescriptor {
+            label: Some("irradiance_texture"),
+            size: Extent3d {
+                depth_or_array_layers: 6,
+                width: 4,
+                height: 4,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba32Float,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+
+        let pre_filter_texture = device.create_texture(&TextureDescriptor {
+            label: Some("pre_filter_texture"),
+            size: Extent3d {
+                depth_or_array_layers: 6,
+                width: 4,
+                height: 4,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba32Float,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+
+        Ok(PrebakeIBL {
+            brdflut_texture: Arc::new(brdflut_texture),
+            irradiance_texture: Arc::new(irradiance_texture),
+            pre_filter_texture: Arc::new(pre_filter_texture),
+        })
+    }
+
     pub fn from_surfaces(
         device: &Device,
         queue: &Queue,

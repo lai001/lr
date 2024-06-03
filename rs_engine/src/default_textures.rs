@@ -1,6 +1,8 @@
 use crate::{
-    build_built_in_resouce_url, handle::TextureHandle, render_thread_mode::ERenderThreadMode,
-    resource_manager::ResourceManager,
+    build_built_in_resouce_url,
+    handle::TextureHandle,
+    render_thread_mode::ERenderThreadMode,
+    resource_manager::{IBLTextures, ResourceManager},
 };
 use rs_render::command::{CreateTexture, RenderCommand, TextureDescriptorCreateInfo};
 use wgpu::*;
@@ -8,6 +10,7 @@ use wgpu::*;
 pub struct DefaultTextures {
     texture_handle: TextureHandle,
     texture_cube_handle: TextureHandle,
+    ibl_textures: IBLTextures,
 }
 
 impl DefaultTextures {
@@ -16,6 +19,7 @@ impl DefaultTextures {
             texture_handle: rm.next_texture(build_built_in_resouce_url("DefaultTexture0").unwrap()),
             texture_cube_handle: rm
                 .next_texture(build_built_in_resouce_url("DefaultCubeTexture0").unwrap()),
+            ibl_textures: rm.next_ibl_textures(build_built_in_resouce_url("IBLTextures0").unwrap()),
         }
     }
 
@@ -57,6 +61,9 @@ impl DefaultTextures {
             },
             init_data: None,
         }));
+
+        render_thread_mode
+            .send_command(RenderCommand::CreateDefaultIBL(self.ibl_textures.to_key()));
     }
 
     pub fn get_texture_handle(&self) -> TextureHandle {
@@ -65,5 +72,9 @@ impl DefaultTextures {
 
     pub fn get_texture_cube_handle(&self) -> TextureHandle {
         self.texture_cube_handle.clone()
+    }
+
+    pub fn get_ibl_textures(&self) -> &IBLTextures {
+        &self.ibl_textures
     }
 }

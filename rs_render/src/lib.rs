@@ -1,6 +1,7 @@
 pub mod acceleration_bake;
 pub mod bake_info;
 pub mod base_compute_pipeline;
+pub mod base_compute_pipeline_pool;
 pub mod base_render_pipeline;
 pub mod base_render_pipeline_pool;
 pub mod bind_group_layout_entry_hook;
@@ -28,6 +29,7 @@ pub mod renderer;
 pub mod sampler_cache;
 pub mod sdf2d_generator;
 pub mod shader_library;
+pub mod shadow_pass;
 pub mod texture_loader;
 pub mod texture_readback;
 pub mod vertex_data_type;

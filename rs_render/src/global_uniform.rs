@@ -1,5 +1,5 @@
 #[repr(i32)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum EDebugShadingType {
     None = 0,
     BaseColor = 1,
@@ -7,6 +7,7 @@ pub enum EDebugShadingType {
     Roughness = 3,
     Normal = 4,
     VertexColor0 = 5,
+    Shadow = 6,
 }
 
 impl EDebugShadingType {
@@ -18,6 +19,7 @@ impl EDebugShadingType {
             EDebugShadingType::Roughness,
             EDebugShadingType::Normal,
             EDebugShadingType::VertexColor0,
+            EDebugShadingType::Shadow,
         ]
     }
 }
@@ -28,6 +30,7 @@ pub struct Constants {
     pub view: glam::Mat4,
     pub projection: glam::Mat4,
     pub view_projection: glam::Mat4,
+    pub light_space_matrix: glam::Mat4,
     pub view_position: glam::Vec3,
     pub physical_texture_size: f32,
     pub tile_size: f32,

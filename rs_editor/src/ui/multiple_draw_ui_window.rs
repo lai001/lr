@@ -213,7 +213,8 @@ impl MultipleDrawUiWindow {
                     for (_, mesh_view_constants) in
                         draw_object.mesh_view_constants_array.iter_mut().enumerate()
                     {
-                        let r = 0.005 * engine.get_game_time();
+                        let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..0.1);
+                        let r = x * engine.get_game_time().sin();
                         mesh_view_constants.model = glam::Mat4::from_rotation_x(r)
                             * glam::Mat4::from_rotation_y(r)
                             * glam::Mat4::from_rotation_z(r)
@@ -342,21 +343,19 @@ impl MultipleDrawUiWindow {
             indirect_offset: 0,
             count: REPEAT_SIZE as u32,
         };
-
-        let draw_object = DrawObject {
-            id: 0,
-            vertex_buffers: vec![*vertex_buffer_handle],
-            vertex_count: vertices.len() as u32,
-            index_buffer: Some(*index_buffer_handle),
-            index_count: Some(indices.len() as u32),
-            binding_resources: vec![vec![
+        let mut draw_object = DrawObject::new(
+            0,
+            vec![*vertex_buffer_handle],
+            vertices.len() as u32,
+            MESH_VIEW_MULTIPLE_DRAW_PIPELINE.to_string(),
+            Some(*index_buffer_handle),
+            Some(indices.len() as u32),
+            vec![vec![
                 EBindingResource::Constants(*self.global_constants_handle),
                 EBindingResource::Constants(*constants_handle),
             ]],
-            virtual_pass_set: None,
-            render_pipeline: MESH_VIEW_MULTIPLE_DRAW_PIPELINE.to_string(),
-            multiple_draw: Some(multiple_draw),
-        };
+        );
+        draw_object.multiple_draw = Some(multiple_draw);
         self.draw_objects.clear();
         self.draw_objects.push(MeshViewDrawObject {
             draw_object,

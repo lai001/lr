@@ -76,6 +76,8 @@ impl SkinMeshVirtualTextureFeedBackPipeline {
             None,
             None,
             Some(depth_view),
+            None,
+            None,
         );
     }
 }

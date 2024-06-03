@@ -81,6 +81,8 @@ impl GridPipeline {
             None,
             None,
             Some(depth_view),
+            None,
+            None,
         );
     }
 }

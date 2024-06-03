@@ -1,4 +1,4 @@
-use rs_engine::{actor::Actor, scene_node::*};
+use rs_engine::{actor::Actor, content::level::DirectionalLight, scene_node::*};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
 #[derive(Clone)]
@@ -7,6 +7,7 @@ pub enum ESelectedObjectType {
     SceneComponent(SingleThreadMutType<SceneComponent>),
     StaticMeshComponent(SingleThreadMutType<StaticMeshComponent>),
     SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
+    DirectionalLight(SingleThreadMutType<DirectionalLight>),
 }
 
 pub struct ObjectPropertyView {
@@ -81,6 +82,18 @@ impl ObjectPropertyView {
                         }
                     });
             }
+            ESelectedObjectType::DirectionalLight(directional_light) => {
+                let mut component = directional_light.borrow_mut();
+                let (mut scale, rotation, mut translation) = component
+                    .get_interactive_transformation()
+                    .to_scale_rotation_translation();
+                let mut rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
+                Self::transformation_detail(&mut scale, &mut rotation, &mut translation, ui);
+                let rotation =
+                    glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
+                *component.get_interactive_transformation() =
+                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+            }
         }
     }
 
@@ -115,24 +128,7 @@ impl ObjectPropertyView {
                 ui.add(egui::DragValue::new(&mut scale.y).speed(0.1).prefix("y: "));
                 ui.add(egui::DragValue::new(&mut scale.z).speed(0.1).prefix("z: "));
             });
-            ui.horizontal(|ui| {
-                ui.label("rotation ");
-                ui.add(
-                    egui::DragValue::new(&mut rotation.x)
-                        .speed(0.1)
-                        .prefix("x: "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut rotation.y)
-                        .speed(0.1)
-                        .prefix("y: "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut rotation.z)
-                        .speed(0.1)
-                        .prefix("z: "),
-                );
-            });
+            Self::rotation_detail(rotation, ui);
         });
         if translation.is_nan() {
             *translation = glam::Vec3::ZERO;
@@ -143,5 +139,26 @@ impl ObjectPropertyView {
         if rotation.is_nan() {
             *rotation = glam::Vec3::ZERO;
         }
+    }
+
+    fn rotation_detail(rotation: &mut glam::Vec3, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("rotation ");
+            ui.add(
+                egui::DragValue::new(&mut rotation.x)
+                    .speed(0.1)
+                    .prefix("x: "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut rotation.y)
+                    .speed(0.1)
+                    .prefix("y: "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut rotation.z)
+                    .speed(0.1)
+                    .prefix("z: "),
+            );
+        });
     }
 }

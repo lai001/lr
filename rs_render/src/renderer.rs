@@ -1,4 +1,5 @@
 use crate::acceleration_bake::AccelerationBaker;
+use crate::base_compute_pipeline_pool::BaseComputePipelinePool;
 use crate::base_render_pipeline_pool::BaseRenderPipelinePool;
 use crate::cube_map::CubeMap;
 use crate::depth_texture::DepthTexture;
@@ -13,9 +14,10 @@ use crate::render_pipeline::mesh_view_multiple_draw::MeshViewMultipleDrawPipelin
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::shader_library::ShaderLibrary;
+use crate::shadow_pass::ShadowPipilines;
 use crate::virtual_texture_pass::VirtualTexturePass;
 use crate::virtual_texture_source::VirtualTextureSource;
-use crate::{command::*, ibl_readback};
+use crate::{command::*, ibl_readback, shadow_pass};
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
 use image::{GenericImage, GenericImageView};
 use rs_core_minimal::settings::{self, RenderSettings};
@@ -30,6 +32,14 @@ pub const STATIC_MESH_RENDER_PIPELINE: &str = "STATIC_MESH_RENDER_PIPELINE";
 pub const GRID_RENDER_PIPELINE: &str = "GRID_RENDER_PIPELINE";
 pub const MESH_VIEW_RENDER_PIPELINE: &str = "MESH_VIEW_RENDER_PIPELINE";
 pub const MESH_VIEW_MULTIPLE_DRAW_PIPELINE: &str = "MESH_VIEW_MULTIPLE_DRAW_PIPELINE";
+pub const SHADOW_DEPTH_SKIN_PIPELINE: &str = "SHADOW_DEPTH_SKIN_PIPELINE";
+pub const SHADOW_DEPTH_PIPELINE: &str = "SHADOW_DEPTH_PIPELINE";
+
+// #[derive(Clone)]
+// pub struct PlayerViewport {
+//     pub window_id: isize,
+//     pub viewport: Option<Viewport>,
+// }
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
@@ -72,12 +82,15 @@ pub struct Renderer {
     settings: RenderSettings,
 
     base_render_pipeline_pool: BaseRenderPipelinePool,
+    base_compute_pipeline_pool: BaseComputePipelinePool,
 
     main_window_id: isize,
 
     material_render_pipelines: HashMap<MaterialRenderPipelineHandle, MaterialRenderPipeline>,
 
     prebake_ibls: HashMap<IBLTexturesKey, PrebakeIBL>,
+
+    shadow_pipilines: Option<shadow_pass::ShadowPipilines>,
 }
 
 impl Renderer {
@@ -123,6 +136,7 @@ impl Renderer {
             }
         }
         let mut base_render_pipeline_pool = BaseRenderPipelinePool::default();
+        let base_compute_pipeline_pool = BaseComputePipelinePool::default();
         let shading_pipeline = ShadingPipeline::new(
             wgpu_context.get_device(),
             &shader_library,
@@ -168,6 +182,12 @@ impl Renderer {
             &mut base_render_pipeline_pool,
         );
 
+        let shadow_pipilines = ShadowPipilines::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &mut base_render_pipeline_pool,
+        );
+
         Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
@@ -204,6 +224,8 @@ impl Renderer {
             prebake_ibls: HashMap::new(),
             mesh_view_pipeline,
             mesh_view_multiple_draw_pipeline,
+            shadow_pipilines: Some(shadow_pipilines),
+            base_compute_pipeline_pool,
         }
     }
 
@@ -327,10 +349,10 @@ impl Renderer {
             );
         }
 
-        while let Some(task_command) = self.task_commands.pop_front() {
-            let mut task = task_command.lock().unwrap();
-            task(self);
-        }
+        // while let Some(task_command) = self.task_commands.pop_front() {
+        //     let mut task = task_command.lock().unwrap();
+        //     task(self);
+        // }
 
         let mut render_output = RenderOutput::default();
 
@@ -562,7 +584,10 @@ impl Renderer {
 
         self.clear_buffer(&output_view, &depth_texture_view);
         self.vt_pass(&present_info);
+        self.shadow_for_draw_objects(present_info.draw_objects.as_slice());
         self.draw_objects(
+            color_texture.width(),
+            color_texture.height(),
             &output_view,
             &depth_texture_view,
             &present_info.draw_objects,
@@ -582,6 +607,11 @@ impl Renderer {
         }
         self.ui_output_commands.retain(|x| x.window_id != window_id);
 
+        while let Some(task_command) = self.task_commands.pop_front() {
+            let mut task = task_command.lock().unwrap();
+            task(self);
+        }
+
         surface_texture.present();
         #[cfg(feature = "renderdoc")]
         {
@@ -599,14 +629,25 @@ impl Renderer {
         self.attachment_pipeline.draw(
             self.wgpu_context.get_device(),
             self.wgpu_context.get_queue(),
-            surface_texture_view,
-            depth_texture_view,
-            Color {
-                r: 0.5,
-                g: 0.5,
-                b: 0.5,
-                a: 1.0,
-            },
+            Some((
+                surface_texture_view,
+                Color {
+                    r: 0.5,
+                    g: 0.5,
+                    b: 0.5,
+                    a: 1.0,
+                },
+            )),
+            Some(depth_texture_view),
+        );
+    }
+
+    fn clear_shadow_depth_texture(&self, depth_texture_view: &TextureView) {
+        self.attachment_pipeline.draw(
+            self.wgpu_context.get_device(),
+            self.wgpu_context.get_queue(),
+            None,
+            Some(depth_texture_view),
         );
     }
 
@@ -830,6 +871,33 @@ impl Renderer {
                     self.wgpu_context.get_queue(),
                 );
             }
+            RenderCommand::ClearDepthTexture(clear_depth_texture) => {
+                let Some(depth_texture) = self.textures.get(&clear_depth_texture.handle) else {
+                    return None;
+                };
+                let is_support = match depth_texture.format() {
+                    TextureFormat::Depth32Float => true,
+                    _ => false,
+                };
+                if !is_support {
+                    return None;
+                }
+                let depth_texture_view =
+                    depth_texture.create_view(&TextureViewDescriptor::default());
+                self.clear_shadow_depth_texture(&depth_texture_view);
+            }
+            RenderCommand::CreateDefaultIBL(key) => {
+                let device = self.wgpu_context.get_device();
+                let prebake_ibl = PrebakeIBL::empty(device);
+                match prebake_ibl {
+                    Ok(prebake_ibl) => {
+                        self.prebake_ibls.insert(key, prebake_ibl);
+                    }
+                    Err(err) => {
+                        log::trace!("{}", err);
+                    }
+                }
+            }
         }
         return None;
     }
@@ -942,10 +1010,14 @@ impl Renderer {
 
     fn draw_object(
         &mut self,
+        width: u32,
+        height: u32,
         surface_texture_view: &wgpu::TextureView,
         depth_texture_view: &TextureView,
         draw_object_command: &DrawObject,
     ) -> crate::error::Result<()> {
+        let _ = height;
+        let _ = width;
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
         let mut vertex_buffers = Vec::<&Buffer>::new();
@@ -981,8 +1053,8 @@ impl Renderer {
                     EBindingResource::Texture(handle) => {
                         let mut texture_view: Option<TextureView> = None;
                         if let Some(find_texture) = self.textures.get(handle) {
-                            texture_view =
-                                Some(find_texture.create_view(&TextureViewDescriptor::default()));
+                            let texture_view_descriptor = TextureViewDescriptor::default();
+                            texture_view = Some(find_texture.create_view(&texture_view_descriptor));
                         } else {
                             for (key, pass) in &self.virtual_texture_pass {
                                 if key.page_table_texture_handle == *handle {
@@ -1162,6 +1234,8 @@ impl Renderer {
                         &depth_texture_view,
                         &[mesh_buffer],
                         group_binding_resource,
+                        None,
+                        None,
                     );
                 })();
             }
@@ -1171,12 +1245,16 @@ impl Renderer {
 
     fn draw_objects(
         &mut self,
+        width: u32,
+        height: u32,
         surface_texture_view: &wgpu::TextureView,
         depth_texture_view: &TextureView,
         draw_object_commands: &Vec<DrawObject>,
     ) {
         for draw_object_command in draw_object_commands {
             let draw_result = self.draw_object(
+                width,
+                height,
                 surface_texture_view,
                 depth_texture_view,
                 draw_object_command,
@@ -1226,5 +1304,110 @@ impl Renderer {
 
     pub fn get_shader_library(&self) -> &ShaderLibrary {
         &self.shader_library
+    }
+
+    fn shadow_for_draw_objects(&mut self, draw_objects: &[DrawObject]) {
+        for draw_object in draw_objects {
+            self.shadow_for_draw_object(draw_object);
+        }
+    }
+
+    fn shadow_for_draw_object(&mut self, draw_object: &DrawObject) {
+        let Some(shadow_pipilines) = self.shadow_pipilines.as_mut() else {
+            return;
+        };
+
+        let Some(shadow_mapping) = &draw_object.shadow_mapping else {
+            return;
+        };
+        let Some(shadow_depth_texture) = self.textures.get(&shadow_mapping.depth_texture_handle)
+        else {
+            return;
+        };
+
+        let device = self.wgpu_context.get_device();
+        let queue = self.wgpu_context.get_queue();
+
+        let depth_ops: Option<Operations<f32>> = None;
+        let stencil_ops: Option<Operations<u32>> = None;
+
+        let depth_view = shadow_depth_texture.create_view(&TextureViewDescriptor::default());
+
+        let vertex_buffers: Vec<&Buffer> = shadow_mapping
+            .vertex_buffers
+            .iter()
+            .flat_map(|handle| self.buffers.get(handle))
+            .collect();
+        let index_buffer: Option<&Buffer> = draw_object
+            .index_buffer
+            .map(|x| self.buffers.get(&x))
+            .flatten();
+
+        let mut group_binding_resources: Vec<Vec<BindingResource>> = vec![];
+        for (group, group_binding_resource) in shadow_mapping.binding_resources.iter().enumerate() {
+            let mut binding_resources: Vec<BindingResource> = vec![];
+            for (binding, binding_resource) in group_binding_resource.iter().enumerate() {
+                match binding_resource {
+                    EBindingResource::Texture(_) => panic!(),
+                    EBindingResource::Constants(buffer_handle) => {
+                        let _ = self
+                            .buffers
+                            .get(buffer_handle)
+                            .ok_or(crate::error::Error::Other(Some(format!(
+                                "{}, {}, constants is null",
+                                group, binding
+                            ))))
+                            .map(|x| x.as_entire_binding())
+                            .and_then(|x| Ok(binding_resources.push(x)));
+                    }
+                    EBindingResource::Sampler(_) => panic!(),
+                }
+            }
+            group_binding_resources.push(binding_resources);
+        }
+
+        match shadow_mapping.render_pipeline.as_str() {
+            SHADOW_DEPTH_SKIN_PIPELINE => {
+                let base_render_pipeline = shadow_pipilines
+                    .depth_skin_pipeline
+                    .base_render_pipeline
+                    .clone();
+                base_render_pipeline.draw_resources2(
+                    device,
+                    queue,
+                    group_binding_resources,
+                    &vec![GpuVertexBufferImp {
+                        vertex_buffers: &vertex_buffers,
+                        vertex_count: draw_object.vertex_count,
+                        index_buffer: index_buffer,
+                        index_count: draw_object.index_count,
+                    }],
+                    &[],
+                    depth_ops,
+                    stencil_ops,
+                    Some(&depth_view),
+                    None,
+                    None,
+                );
+            }
+            SHADOW_DEPTH_PIPELINE => {
+                unimplemented!()
+            }
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn insert_new_texture(&mut self, handle: TextureHandle, texture: Texture) {
+        self.textures.insert(handle, texture);
+    }
+
+    pub fn get_textures(&self, handle: TextureHandle) -> Option<&Texture> {
+        self.textures.get(&handle)
+    }
+
+    pub fn get_base_compute_pipeline_pool(&self) -> &BaseComputePipelinePool {
+        &self.base_compute_pipeline_pool
     }
 }

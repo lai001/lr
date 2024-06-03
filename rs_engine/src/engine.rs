@@ -4,11 +4,13 @@ use crate::camera::Camera;
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::console_cmd::ConsoleCmd;
 use crate::content::content_file_type::EContentFileType;
+use crate::content::level::DirectionalLight;
 use crate::default_textures::DefaultTextures;
 use crate::drawable::{
     EDrawObjectType, MaterialDrawObject, SkinMeshDrawObject, StaticMeshDrawObject,
 };
 use crate::error::Result;
+use crate::handle::{EGUITextureHandle, TextureHandle};
 use crate::input_mode::EInputMode;
 use crate::render_thread_mode::ERenderThreadMode;
 use crate::scene_node::EComponentType;
@@ -23,14 +25,15 @@ use rs_foundation::new::{
 };
 use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline, CreateSampler,
-    CreateTexture, CreateVirtualTexture, CreateVirtualTexturePass, DrawObject, EBindingResource,
-    InitTextureData, PresentInfo, RenderCommand, TextureDescriptorCreateInfo, UpdateBuffer,
-    UploadPrebakeIBL, VirtualPassSet, VirtualTexturePassKey, VirtualTexturePassResize,
+    BufferCreateInfo, ClearDepthTexture, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline,
+    CreateSampler, CreateTexture, CreateUITexture, CreateVirtualTexture, CreateVirtualTexturePass,
+    DrawObject, EBindingResource, InitTextureData, PresentInfo, RenderCommand, ShadowMapping,
+    TextureDescriptorCreateInfo, UpdateBuffer, UploadPrebakeIBL, VirtualPassSet,
+    VirtualTexturePassKey, VirtualTexturePassResize,
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::global_uniform::{self, EDebugShadingType};
-use rs_render::renderer::Renderer;
+use rs_render::renderer::{Renderer, SHADOW_DEPTH_SKIN_PIPELINE};
 use rs_render::sdf2d_generator;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
@@ -110,6 +113,7 @@ pub struct Engine {
     draw_objects: HashMap<isize, Vec<DrawObject>>,
     default_textures: DefaultTextures,
     virtual_pass_handle: Option<VirtualPassHandle>,
+    shadow_depth_texture_handle: Option<TextureHandle>,
 }
 
 impl Engine {
@@ -236,6 +240,30 @@ impl Engine {
         let input_mode = EInputMode::Game;
         let default_textures = DefaultTextures::new(ResourceManager::default());
         default_textures.create(&mut render_thread_mode);
+
+        let shadow_depth_texture_handle = resource_manager
+            .next_texture(build_built_in_resouce_url("ShadowDepthTexture").unwrap());
+        render_thread_mode.send_command(RenderCommand::CreateTexture(CreateTexture {
+            handle: *shadow_depth_texture_handle,
+            texture_descriptor_create_info: TextureDescriptorCreateInfo {
+                label: Some(format!("ShadowDepthTexture")),
+                size: wgpu::Extent3d {
+                    width: 1024,
+                    height: 1024,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: None,
+            },
+            init_data: None,
+        }));
+
         let engine = Engine {
             render_thread_mode,
             resource_manager,
@@ -259,6 +287,7 @@ impl Engine {
             main_window_id: window_id,
             default_textures,
             virtual_pass_handle,
+            shadow_depth_texture_handle: Some(shadow_depth_texture_handle),
         };
 
         Ok(engine)
@@ -636,6 +665,17 @@ impl Engine {
         if let Some(key) = virtual_texture_pass {
             self.render_thread_mode
                 .send_command(RenderCommand::ClearVirtualTexturePass(key));
+        }
+
+        if let Some(shadow_depth_texture_handle) = if window_id == self.main_window_id {
+            self.shadow_depth_texture_handle.clone()
+        } else {
+            None
+        } {
+            self.render_thread_mode
+                .send_command(RenderCommand::ClearDepthTexture(ClearDepthTexture {
+                    handle: *shadow_depth_texture_handle,
+                }));
         }
 
         self.render_thread_mode
@@ -1086,13 +1126,13 @@ impl Engine {
             virtual_texture_constants: Default::default(),
             window_id: self.main_window_id,
             brdflut_texture_resource: EBindingResource::Texture(
-                *self.default_textures.get_texture_handle(),
+                *self.default_textures.get_ibl_textures().brdflut,
             ),
             pre_filter_cube_map_texture_resource: EBindingResource::Texture(
-                *self.default_textures.get_texture_cube_handle(),
+                *self.default_textures.get_ibl_textures().pre_filter_cube_map,
             ),
             irradiance_texture_resource: EBindingResource::Texture(
-                *self.default_textures.get_texture_cube_handle(),
+                *self.default_textures.get_ibl_textures().irradiance,
             ),
             constants_resource: EBindingResource::Constants(*constants_buffer_handle),
             skin_constants_resource: EBindingResource::Constants(*skin_constants_buffer_handle),
@@ -1100,6 +1140,12 @@ impl Engine {
                 *virtual_texture_constants_buffer_handle,
             ),
             user_textures_resources: vec![],
+            shadow_map_texture_resource: EBindingResource::Texture(
+                *self
+                    .shadow_depth_texture_handle
+                    .clone()
+                    .unwrap_or(self.default_textures.get_texture_handle()),
+            ),
         };
         EDrawObjectType::SkinMaterial(object)
     }
@@ -1254,13 +1300,14 @@ impl Engine {
         match draw_object {
             EDrawObjectType::Static(static_objcet) => {
                 let static_objcet = static_objcet.clone();
-                let draw_object = DrawObject {
-                    id: static_objcet.id,
-                    vertex_buffers: static_objcet.vertex_buffers.iter().map(|x| **x).collect(),
-                    vertex_count: static_objcet.vertex_count,
-                    index_buffer: static_objcet.index_buffer.clone().map(|x| *x),
-                    index_count: static_objcet.index_count,
-                    binding_resources: vec![
+                let draw_object = DrawObject::new(
+                    static_objcet.id,
+                    static_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                    static_objcet.vertex_count,
+                    static_objcet.render_pipeline.clone(),
+                    static_objcet.index_buffer.clone().map(|x| *x),
+                    static_objcet.index_count,
+                    vec![
                         vec![
                             static_objcet.global_constants_resource,
                             static_objcet.base_color_sampler_resource,
@@ -1273,10 +1320,8 @@ impl Engine {
                         ],
                         vec![static_objcet.constants_resource],
                     ],
-                    render_pipeline: static_objcet.render_pipeline.clone(),
-                    virtual_pass_set: None,
-                    multiple_draw: None,
-                };
+                );
+
                 self.draw_objects
                     .entry(static_objcet.window_id)
                     .or_default()
@@ -1285,13 +1330,14 @@ impl Engine {
             EDrawObjectType::Skin(skin_objcet) => {
                 let skin_objcet = skin_objcet.clone();
 
-                let draw_object = DrawObject {
-                    id: skin_objcet.id,
-                    vertex_buffers: skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
-                    vertex_count: skin_objcet.vertex_count,
-                    index_buffer: skin_objcet.index_buffer.clone().map(|x| *x),
-                    index_count: skin_objcet.index_count,
-                    binding_resources: vec![
+                let draw_object = DrawObject::new(
+                    skin_objcet.id,
+                    skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                    skin_objcet.vertex_count,
+                    skin_objcet.render_pipeline.clone(),
+                    skin_objcet.index_buffer.clone().map(|x| *x),
+                    skin_objcet.index_count,
+                    vec![
                         vec![
                             skin_objcet.global_constants_resource,
                             skin_objcet.base_color_sampler_resource,
@@ -1304,10 +1350,7 @@ impl Engine {
                         ],
                         vec![skin_objcet.constants_resource],
                     ],
-                    render_pipeline: skin_objcet.render_pipeline.clone(),
-                    virtual_pass_set: None,
-                    multiple_draw: None,
-                };
+                );
                 self.draw_objects
                     .entry(skin_objcet.window_id)
                     .or_default()
@@ -1321,14 +1364,15 @@ impl Engine {
                         rs_render::shader_library::ShaderLibrary::get_material_shader_name(
                             *pipeline_handle,
                         );
-                    let draw_object = DrawObject {
-                        id: skin_objcet.id,
-                        vertex_buffers: skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
-                        vertex_count: skin_objcet.vertex_count,
-                        index_buffer: skin_objcet.index_buffer.clone().map(|x| *x),
-                        index_count: skin_objcet.index_count,
+
+                    let mut draw_object = DrawObject::new(
+                        skin_objcet.id,
+                        skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                        skin_objcet.vertex_count,
                         render_pipeline,
-                        binding_resources: vec![
+                        skin_objcet.index_buffer.clone().map(|x| *x),
+                        skin_objcet.index_count,
+                        vec![
                             vec![
                                 skin_objcet.global_constants_resource.clone(),
                                 skin_objcet.base_color_sampler_resource,
@@ -1337,6 +1381,7 @@ impl Engine {
                                 skin_objcet.brdflut_texture_resource,
                                 skin_objcet.pre_filter_cube_map_texture_resource,
                                 skin_objcet.irradiance_texture_resource,
+                                skin_objcet.shadow_map_texture_resource,
                             ],
                             vec![
                                 skin_objcet.constants_resource.clone(),
@@ -1345,21 +1390,35 @@ impl Engine {
                             ],
                             skin_objcet.user_textures_resources,
                         ],
-                        virtual_pass_set: Some(VirtualPassSet {
+                    );
+                    draw_object.virtual_pass_set = Some(VirtualPassSet {
+                        vertex_buffers: vec![
+                            *skin_objcet.vertex_buffers[0],
+                            *skin_objcet.vertex_buffers[2],
+                        ],
+                        binding_resources: vec![
+                            vec![skin_objcet.global_constants_resource.clone()],
+                            vec![
+                                skin_objcet.constants_resource.clone(),
+                                skin_objcet.skin_constants_resource.clone(),
+                            ],
+                        ],
+                    });
+                    if let Some(handle) = self.shadow_depth_texture_handle.clone() {
+                        draw_object.shadow_mapping = Some(ShadowMapping {
+                            render_pipeline: SHADOW_DEPTH_SKIN_PIPELINE.to_string(),
                             vertex_buffers: vec![
                                 *skin_objcet.vertex_buffers[0],
                                 *skin_objcet.vertex_buffers[2],
                             ],
-                            binding_resources: vec![
-                                vec![skin_objcet.global_constants_resource],
-                                vec![
-                                    skin_objcet.constants_resource,
-                                    skin_objcet.skin_constants_resource,
-                                ],
-                            ],
-                        }),
-                        multiple_draw: None,
-                    };
+                            depth_texture_handle: *handle,
+                            binding_resources: vec![vec![
+                                skin_objcet.global_constants_resource.clone(),
+                                skin_objcet.constants_resource.clone(),
+                                skin_objcet.skin_constants_resource.clone(),
+                            ]],
+                        });
+                    }
                     self.draw_objects
                         .entry(skin_objcet.window_id)
                         .or_default()
@@ -1424,6 +1483,22 @@ impl Engine {
         &mut self.resource_manager
     }
 
+    pub fn create_texture(
+        &mut self,
+        url: &url::Url,
+        info: TextureDescriptorCreateInfo,
+    ) -> crate::handle::TextureHandle {
+        let handle = self.resource_manager.next_texture(url.clone());
+        let create_texture = CreateTexture {
+            handle: *handle,
+            texture_descriptor_create_info: info,
+            init_data: None,
+        };
+        let render_command = RenderCommand::CreateTexture(create_texture);
+        self.render_thread_mode.send_command(render_command);
+        handle
+    }
+
     pub fn create_texture_from_image(
         &mut self,
         url: &url::Url,
@@ -1483,9 +1558,12 @@ impl Engine {
         self.render_thread_mode.send_command(render_command);
     }
 
-    pub fn send_render_task(&mut self, task: rs_render::command::TaskType) {
-        let render_command = RenderCommand::Task(task);
-        self.render_thread_mode.send_command(render_command);
+    pub fn send_render_task(
+        &mut self,
+        task: impl FnMut(&mut rs_render::renderer::Renderer) + Send + 'static,
+    ) {
+        self.render_thread_mode
+            .send_command(RenderCommand::create_task(task));
     }
 
     pub fn ibl_bake<P: AsRef<Path>>(
@@ -1676,18 +1754,16 @@ impl Engine {
             render_thread_mode.send_command(message);
             vertex_buffer_handles.push(vertex_buffer_handle);
         }
-
-        DrawObject {
+        let draw_object = DrawObject::new(
             id,
-            vertex_buffers: vertex_buffer_handles.iter().map(|x| **x).collect(),
-            vertex_count: vertexes0.len() as u32,
-            index_buffer: Some(*index_buffer_handle),
-            index_count: Some(grid_data.indices.len() as u32),
-            binding_resources: vec![vec![EBindingResource::Constants(*global_constants_handle)]],
-            render_pipeline: rs_render::renderer::GRID_RENDER_PIPELINE.to_string(),
-            virtual_pass_set: None,
-            multiple_draw: None,
-        }
+            vertex_buffer_handles.iter().map(|x| **x).collect(),
+            vertexes0.len() as u32,
+            rs_render::renderer::GRID_RENDER_PIPELINE.to_string(),
+            Some(*index_buffer_handle),
+            Some(grid_data.indices.len() as u32),
+            vec![vec![EBindingResource::Constants(*global_constants_handle)]],
+        );
+        draw_object
     }
 
     pub fn set_camera_movement_speed(&mut self, new_speed: f32) {
@@ -1730,6 +1806,22 @@ impl Engine {
 
     pub fn send_render_command(&mut self, command: RenderCommand) {
         self.render_thread_mode.send_command(command);
+    }
+
+    pub fn update_light(&mut self, light: &mut DirectionalLight) {
+        self.global_constants.light_space_matrix = light.get_light_space_matrix();
+    }
+
+    pub fn create_ui_texture(
+        &mut self,
+        handle: EGUITextureHandle,
+        referencing_texture_handle: TextureHandle,
+    ) {
+        self.render_thread_mode
+            .send_command(RenderCommand::CreateUITexture(CreateUITexture {
+                handle: *handle,
+                referencing_texture_handle: *referencing_texture_handle,
+            }));
     }
 }
 

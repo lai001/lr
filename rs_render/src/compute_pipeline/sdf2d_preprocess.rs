@@ -1,6 +1,8 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline, constants::SDF2DConstants,
-    global_shaders::sdf2d_preprocess::Sdf2dPreprocessShader, gpu_buffer,
+    base_compute_pipeline::BaseComputePipeline,
+    constants::SDF2DConstants,
+    global_shaders::{global_shader::GlobalShader, sdf2d_preprocess::Sdf2dPreprocessShader},
+    gpu_buffer,
     shader_library::ShaderLibrary,
 };
 
@@ -14,7 +16,7 @@ impl Sdf2dPreprocessComputePipeline {
         shader_library: &ShaderLibrary,
     ) -> Sdf2dPreprocessComputePipeline {
         let base_compute_pipeline =
-            BaseComputePipeline::new(device, shader_library, &Sdf2dPreprocessShader {});
+            BaseComputePipeline::new(device, shader_library, &Sdf2dPreprocessShader {}.get_name());
         Sdf2dPreprocessComputePipeline {
             base_compute_pipeline,
         }

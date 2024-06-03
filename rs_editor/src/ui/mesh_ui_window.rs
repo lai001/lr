@@ -317,20 +317,18 @@ impl MeshUIWindow {
             },
         }));
 
-        let draw_object = DrawObject {
-            id: 0,
-            vertex_buffers: vec![*vertex_buffer_handle],
-            vertex_count: vertices.len() as u32,
-            index_buffer: Some(*index_buffer_handle),
-            index_count: Some(indices.len() as u32),
-            binding_resources: vec![vec![
+        let draw_object = DrawObject::new(
+            0,
+            vec![*vertex_buffer_handle],
+            vertices.len() as u32,
+            MESH_VIEW_RENDER_PIPELINE.to_string(),
+            Some(*index_buffer_handle),
+            Some(indices.len() as u32),
+            vec![vec![
                 EBindingResource::Constants(*self.global_constants_handle),
                 EBindingResource::Constants(*constants_handle),
             ]],
-            virtual_pass_set: None,
-            render_pipeline: MESH_VIEW_RENDER_PIPELINE.to_string(),
-            multiple_draw: None,
-        };
+        );
         self.draw_objects.push(MeshViewDrawObject {
             draw_object,
             constants_handle,

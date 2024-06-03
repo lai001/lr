@@ -9,6 +9,7 @@ use wgpu::*;
 
 pub struct AttachmentPipeline {
     base_render_pipeline: BaseRenderPipeline,
+    clear_depth_pipeline: BaseRenderPipeline,
 }
 
 impl AttachmentPipeline {
@@ -31,9 +32,12 @@ impl AttachmentPipeline {
             cull_mode: None,
             ..Default::default()
         });
-        let base_render_pipeline = BaseRenderPipeline::new(device, shader_library, builder);
+        let base_render_pipeline = BaseRenderPipeline::new(device, shader_library, builder.clone());
+        builder.targets = vec![];
+        let clear_depth_pipeline = BaseRenderPipeline::new(device, shader_library, builder);
         AttachmentPipeline {
             base_render_pipeline,
+            clear_depth_pipeline,
         }
     }
 
@@ -41,11 +45,29 @@ impl AttachmentPipeline {
         &self,
         device: &Device,
         queue: &Queue,
-        output_view: &TextureView,
-        depth_view: &TextureView,
-        clear_color: wgpu::Color,
+        output_view: Option<(&TextureView, wgpu::Color)>,
+        depth_view: Option<&TextureView>,
     ) {
-        self.base_render_pipeline.draw_resources2(
+        let base_render_pipeline = match (output_view, depth_view) {
+            (None, None) => panic!(),
+            (None, Some(_)) => &self.clear_depth_pipeline,
+            (Some(_), None) => unimplemented!(),
+            (Some(_), Some(_)) => &self.base_render_pipeline,
+        };
+        let color_attachments = if let Some((output_view, clear_color)) = output_view {
+            vec![ColorAttachment {
+                color_ops: Some(Operations {
+                    load: LoadOp::Clear(clear_color),
+                    store: StoreOp::Store,
+                }),
+                view: output_view,
+                resolve_target: None,
+            }]
+        } else {
+            vec![]
+        };
+
+        base_render_pipeline.draw_resources2(
             device,
             queue,
             vec![],
@@ -55,14 +77,7 @@ impl AttachmentPipeline {
                 index_buffer: None,
                 index_count: None,
             }],
-            &[ColorAttachment {
-                color_ops: Some(Operations {
-                    load: LoadOp::Clear(clear_color),
-                    store: StoreOp::Store,
-                }),
-                view: output_view,
-                resolve_target: None,
-            }],
+            &color_attachments,
             Some(Operations {
                 load: LoadOp::Clear(1.0),
                 store: StoreOp::Store,
@@ -71,7 +86,9 @@ impl AttachmentPipeline {
                 load: LoadOp::Clear(0),
                 store: StoreOp::Store,
             }),
-            Some(depth_view),
+            depth_view,
+            None,
+            None,
         );
     }
 }

@@ -1,7 +1,4 @@
-use crate::{
-    global_shaders::global_shader::GlobalShader, reflection::EPipelineType,
-    shader_library::ShaderLibrary,
-};
+use crate::{reflection::EPipelineType, shader_library::ShaderLibrary};
 use wgpu::*;
 
 pub struct BaseComputePipeline {
@@ -14,9 +11,9 @@ impl BaseComputePipeline {
     pub fn new(
         device: &wgpu::Device,
         shader_library: &ShaderLibrary,
-        global_shader: &impl GlobalShader,
+        shader_name: impl AsRef<str>,
     ) -> BaseComputePipeline {
-        let tag = &global_shader.get_name();
+        let tag = shader_name.as_ref();
 
         let shader = shader_library.get_shader(tag);
         let reflection = shader_library.get_shader_reflection(tag);
@@ -52,7 +49,7 @@ impl BaseComputePipeline {
         BaseComputePipeline {
             compute_pipeline,
             bind_group_layouts,
-            tag: tag.clone(),
+            tag: tag.to_string(),
         }
     }
 

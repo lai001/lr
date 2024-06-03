@@ -39,6 +39,7 @@ impl IBLTextures {
 struct STResourceManager {
     image_sync_cache: moka::sync::Cache<String, Arc<image::DynamicImage>>,
     textures: HashMap<url::Url, crate::handle::TextureHandle>,
+    ui_textures: HashMap<url::Url, crate::handle::EGUITextureHandle>,
     virtual_textures: HashMap<url::Url, crate::handle::TextureHandle>,
     artifact_reader: Option<ArtifactReader>,
     handle_manager: HandleManager,
@@ -64,6 +65,7 @@ impl STResourceManager {
             skeleton_animations: HashMap::new(),
             skeletons: HashMap::new(),
             ibl_textures: HashMap::new(),
+            ui_textures: HashMap::new(),
             // mesh_buffers: HashMap::new(),
             // material_render_pipelines: HashMap::new(),
         }
@@ -319,8 +321,10 @@ impl STResourceManager {
         handle
     }
 
-    fn next_ui_texture(&mut self) -> crate::handle::EGUITextureHandle {
-        self.handle_manager.next_ui_texture()
+    fn next_ui_texture(&mut self, url: url::Url) -> crate::handle::EGUITextureHandle {
+        let handle = self.handle_manager.next_ui_texture();
+        self.ui_textures.insert(url, handle.clone());
+        handle
     }
 
     fn next_buffer(&mut self) -> crate::handle::BufferHandle {
@@ -339,12 +343,23 @@ impl STResourceManager {
         self.textures.get(url).cloned()
     }
 
+    fn get_ui_texture_by_url(&self, url: &url::Url) -> Option<crate::handle::EGUITextureHandle> {
+        self.ui_textures.get(url).cloned()
+    }
+
     fn get_virtual_texture_by_url(&self, url: &url::Url) -> Option<crate::handle::TextureHandle> {
         self.virtual_textures.get(url).cloned()
     }
 
     fn get_ibl_textures(&self) -> HashMap<url::Url, IBLTextures> {
         self.ibl_textures.clone()
+    }
+
+    fn get_texture_urls(&self) -> Vec<url::Url> {
+        self.textures
+            .keys()
+            .map(|x| x.clone())
+            .collect::<Vec<url::Url>>()
     }
 }
 

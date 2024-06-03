@@ -1,6 +1,8 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline, constants::SDF2DConstants,
-    global_shaders::jfa_composition::JFACompositionShader, gpu_buffer,
+    base_compute_pipeline::BaseComputePipeline,
+    constants::SDF2DConstants,
+    global_shaders::{global_shader::GlobalShader, jfa_composition::JFACompositionShader},
+    gpu_buffer,
     shader_library::ShaderLibrary,
 };
 use wgpu::*;
@@ -15,7 +17,7 @@ impl JFACompositionComputePipeline {
         shader_library: &ShaderLibrary,
     ) -> JFACompositionComputePipeline {
         let base_compute_pipeline =
-            BaseComputePipeline::new(device, shader_library, &JFACompositionShader {});
+            BaseComputePipeline::new(device, shader_library, &JFACompositionShader {}.get_name());
         JFACompositionComputePipeline {
             base_compute_pipeline,
         }

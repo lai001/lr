@@ -10,7 +10,7 @@ use crate::{
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
     ui::{
-        asset_view, content_browser, content_item_property_view,
+        asset_view, content_browser, content_item_property_view, debug_textures_view,
         material_ui_window::MaterialUIWindow,
         material_view::{self, EMaterialNodeType, MaterialNode},
         media_ui_window::MediaUIWindow,
@@ -25,10 +25,11 @@ use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_engine::{
-    build_asset_url, build_content_file_url,
+    build_asset_url, build_built_in_resouce_url, build_content_file_url,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
-    content::{content_file_type::EContentFileType, texture::TextureFile},
+    content::{content_file_type::EContentFileType, level::DirectionalLight, texture::TextureFile},
     frame_sync::{EOptions, FrameSync},
+    input_mode::EInputMode,
     plugin::Plugin,
 };
 use rs_engine::{
@@ -40,6 +41,7 @@ use rs_engine::{
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_foundation::new::SingleThreadMut;
+use rs_render::command::TextureDescriptorCreateInfo;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -49,6 +51,7 @@ use std::{
     rc::Rc,
     sync::{Arc, Mutex},
 };
+use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
     event::{ElementState, Event, MouseScrollDelta, WindowEvent},
     keyboard::KeyCode,
@@ -267,7 +270,9 @@ impl EditorContext {
                 MouseScrollDelta::PixelDelta(_) => todo!(),
             },
             WindowEvent::MouseInput { state, button, .. } => {
-                if *button == winit::event::MouseButton::Right {
+                if *button == winit::event::MouseButton::Right
+                    && !self.egui_winit_state.egui_ctx().is_pointer_over_area()
+                {
                     match state {
                         winit::event::ElementState::Pressed => {
                             self.engine
@@ -348,15 +353,16 @@ impl EditorContext {
                     self.engine.get_camera_mut().get_projection_matrix();
 
                 self.process_redraw_request(window_id, window, event_loop_window_target);
+
+                update_window_with_input_mode(window, self.engine.get_input_mode());
+                self.data_source.input_mode = self.engine.get_input_mode();
+
                 let wait = self
                     .frame_sync
                     .tick()
                     .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
                 std::thread::sleep(wait);
                 window.request_redraw();
-
-                update_window_with_input_mode(window, self.engine.get_input_mode());
-                self.data_source.input_mode = self.engine.get_input_mode();
             }
             WindowEvent::Destroyed => {}
             _ => {}
@@ -595,6 +601,71 @@ impl EditorContext {
         ) {
             self.data_source.is_console_cmds_view_open =
                 !self.data_source.is_console_cmds_view_open;
+        }
+
+        if self.data_source.input_mode == EInputMode::UI {
+            if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyR], true) {
+                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::Scale;
+            }
+            if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyW], true) {
+                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::Translate;
+            }
+            if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyE], true) {
+                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::Rotate;
+            }
+            if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::Space], true) {
+                let old_gizmo_orientation = &mut self.editor_ui.gizmo_view.gizmo_orientation;
+                match old_gizmo_orientation {
+                    GizmoOrientation::Global => {
+                        *old_gizmo_orientation = GizmoOrientation::Local;
+                    }
+                    GizmoOrientation::Local => {
+                        *old_gizmo_orientation = GizmoOrientation::Global;
+                    }
+                }
+            }
+        }
+
+        let shading_types = HashMap::from([
+            (
+                KeyCode::Digit1,
+                rs_render::global_uniform::EDebugShadingType::None,
+            ),
+            (
+                KeyCode::Digit2,
+                rs_render::global_uniform::EDebugShadingType::BaseColor,
+            ),
+            (
+                KeyCode::Digit3,
+                rs_render::global_uniform::EDebugShadingType::Metallic,
+            ),
+            (
+                KeyCode::Digit4,
+                rs_render::global_uniform::EDebugShadingType::Roughness,
+            ),
+            (
+                KeyCode::Digit5,
+                rs_render::global_uniform::EDebugShadingType::Normal,
+            ),
+            (
+                KeyCode::Digit6,
+                rs_render::global_uniform::EDebugShadingType::VertexColor0,
+            ),
+            (
+                KeyCode::Digit7,
+                rs_render::global_uniform::EDebugShadingType::Shadow,
+            ),
+        ]);
+        for (key_code, debug_shading_type) in shading_types {
+            if Self::is_keys_pressed(
+                &mut self.virtual_key_code_states,
+                &[KeyCode::AltLeft, key_code],
+                true,
+            ) {
+                self.data_source.debug_shading_type = debug_shading_type;
+                self.engine
+                    .set_debug_shading(self.data_source.debug_shading_type);
+            }
         }
 
         if Self::is_keys_pressed(
@@ -889,6 +960,10 @@ impl EditorContext {
                 }
             }
         }
+
+        let rm = ResourceManager::default();
+        self.editor_ui.debug_textures_view.all_texture_urls = rm.get_texture_urls();
+
         self.project_context = Some(project_context);
         let _ = self.try_load_plugin();
         self.data_source
@@ -1026,7 +1101,13 @@ impl EditorContext {
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         if let Some(active_level) = self.data_source.level.clone() {
-            for actor in active_level.borrow().actors.clone() {
+            let active_level = active_level.borrow();
+            if let Some(light) = active_level.directional_lights.first().cloned() {
+                let mut light = light.borrow_mut();
+                self.engine.update_light(&mut light);
+            }
+
+            for actor in active_level.actors.clone() {
                 let actor = actor.borrow_mut();
                 let mut root_scene_node = actor.scene_node.borrow_mut();
                 match &mut root_scene_node.component {
@@ -1076,6 +1157,42 @@ impl EditorContext {
         if let Some(gui_render_output) = gui_render_output {
             self.engine.redraw(gui_render_output);
         }
+
+        self.engine.send_render_task({
+            move |renderer| {
+                let rm = ResourceManager::default();
+                let visualization_url =
+                    build_built_in_resouce_url("ShadowDepthTextureVisualization").unwrap();
+                let shadow_depth_texture_url =
+                    build_built_in_resouce_url("ShadowDepthTexture").unwrap();
+                let Some(texture_handle) = rm.get_texture_by_url(&visualization_url) else {
+                    return;
+                };
+                let Some(shadow_texture_handle) = rm.get_texture_by_url(&shadow_depth_texture_url)
+                else {
+                    return;
+                };
+                let texture_handle = *texture_handle;
+                let shadow_texture_handle = *shadow_texture_handle;
+                let Some(input_texture) = renderer.get_textures(shadow_texture_handle) else {
+                    return;
+                };
+                let Some(output_texture) = renderer.get_textures(texture_handle) else {
+                    return;
+                };
+
+                let input_texture_view =
+                    input_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let output_texture_view =
+                    output_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let device = renderer.get_device();
+                let queue = renderer.get_queue();
+                let shader_library = renderer.get_shader_library();
+                let pool = renderer.get_base_compute_pipeline_pool();
+                let pipeline = rs_render::compute_pipeline::format_conversion::Depth32FloatConvertRGBA8UnormPipeline::new(device, shader_library, &pool);
+                pipeline.execute(device, queue, &input_texture_view, &output_texture_view, glam::uvec3(1024, 1024, 1));
+            }
+        });
 
         self.engine.present(window_id);
     }
@@ -1283,6 +1400,7 @@ impl EditorContext {
             click_event.content_browser_event,
             event_loop_window_target,
         );
+        self.process_debug_texture_view_event(click_event.debug_textures_view_event);
         self.process_click_actor_event(click_event.click_actor);
     }
 
@@ -1416,6 +1534,9 @@ impl EditorContext {
                 top_menu::EWindowType::MultipleDrawUi => {
                     self.open_multiple_draw_ui_window(event_loop_window_target);
                 }
+                top_menu::EWindowType::DebugTexture => {
+                    self.data_source.is_debug_texture_view_open = true;
+                }
             },
             top_menu::EClickEventType::Tool(tool_type) => match tool_type {
                 top_menu::EToolType::DebugShader => {
@@ -1453,11 +1574,67 @@ impl EditorContext {
         }
     }
 
+    fn process_debug_texture_view_event(
+        &mut self,
+        event: Option<debug_textures_view::EClickEventType>,
+    ) {
+        let Some(event) = event else {
+            return;
+        };
+
+        match event {
+            debug_textures_view::EClickEventType::Selected(texture_url) => {
+                let rm = ResourceManager::default();
+                if rm.get_ui_texture_by_url(&texture_url).is_some() {
+                    return;
+                }
+
+                let visualization_url =
+                    build_built_in_resouce_url("ShadowDepthTextureVisualization").unwrap();
+
+                if texture_url.scheme() == rs_engine::BUILT_IN_RESOURCE
+                    && texture_url.host() == Some(url::Host::Domain("ShadowDepthTexture"))
+                    && rm.get_texture_by_url(&visualization_url).is_none()
+                {
+                    let texture_handle = self.engine.create_texture(
+                        &visualization_url,
+                        TextureDescriptorCreateInfo {
+                            label: Some("ShadowDepthTextureVisualization".to_string()),
+                            size: wgpu::Extent3d {
+                                width: 1024,
+                                height: 1024,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            usage: wgpu::TextureUsages::COPY_SRC
+                                | wgpu::TextureUsages::STORAGE_BINDING
+                                | wgpu::TextureUsages::TEXTURE_BINDING,
+                            view_formats: None,
+                        },
+                    );
+
+                    self.engine.create_ui_texture(
+                        rm.next_ui_texture(visualization_url.clone()),
+                        texture_handle,
+                    );
+
+                    self.editor_ui.debug_textures_view.all_texture_urls = rm.get_texture_urls();
+                }
+            }
+        }
+    }
+
     fn process_click_actor_event(
         &mut self,
-        click_actor: Option<crate::ui::level_view::EClickEventType>,
+        level_view_event: Option<crate::ui::level_view::EClickEventType>,
     ) {
-        let Some(event) = click_actor else {
+        let Some(event) = level_view_event else {
+            return;
+        };
+        let Some(opened_level) = self.data_source.level.as_mut() else {
             return;
         };
         match event {
@@ -1481,6 +1658,25 @@ impl EditorContext {
                         );
                     }
                 }
+            }
+            crate::ui::level_view::EClickEventType::CreateDirectionalLight => {
+                let light = DirectionalLight::new(
+                    -10.0,
+                    10.0,
+                    -10.0,
+                    10.0,
+                    0.01,
+                    15.5,
+                    glam::vec3(0.0, 10.0, 10.0),
+                );
+                opened_level
+                    .borrow_mut()
+                    .directional_lights
+                    .push(SingleThreadMut::new(light));
+            }
+            crate::ui::level_view::EClickEventType::DirectionalLight(light) => {
+                self.editor_ui.object_property_view.selected_object =
+                    Some(ESelectedObjectType::DirectionalLight(light));
             }
         }
     }

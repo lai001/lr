@@ -3,7 +3,7 @@
 Windows 10  
 Android     
 .net6   
-Rust 1.74.0 
+Rust 1.78.0 
 
 ## Feature
 - Hot reload
@@ -11,7 +11,14 @@ Rust 1.74.0
 ## Build
 ```
 xmake download_deps
+xmake build_3rdparty
 xmake setup
 xmake gen_config
 xmake ci
+```
+
+## Note
+For android platform
+```
+xmake g --ndk=<path>
 ```

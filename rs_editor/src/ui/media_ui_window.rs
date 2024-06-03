@@ -181,7 +181,8 @@ impl MediaUIWindow {
         engine: &mut Engine,
     ) -> MediaViewDrawObject {
         let rm = ResourceManager::default();
-        let next_ui_texture = rm.next_ui_texture();
+        let next_ui_texture =
+            rm.next_ui_texture(build_built_in_resouce_url("MediaTexture").unwrap());
         let next_texture = rm.next_texture(build_built_in_resouce_url("MediaTexture").unwrap());
 
         engine.send_render_command(CreateTexture(CreateTexture {

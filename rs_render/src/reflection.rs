@@ -407,7 +407,11 @@ impl Reflection {
                             view_dimension: Self::image_dimension2texture_dimension(*dim, *arrayed),
                             multisampled: *multi,
                         },
-                        ImageClass::Depth { .. } => todo!(),
+                        ImageClass::Depth { multi } => BindingType::Texture {
+                            sample_type: TextureSampleType::Depth,
+                            view_dimension: Self::image_dimension2texture_dimension(*dim, *arrayed),
+                            multisampled: *multi,
+                        },
                         ImageClass::Storage { format, access } => BindingType::StorageTexture {
                             access: Self::storage_access2storage_texture_access(access),
                             format: Self::storage_format2texture_format(format),

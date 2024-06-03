@@ -1,15 +1,14 @@
-use std::sync::Arc;
-
 use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
-    command::MaterialRenderPipelineHandle,
+    command::{MaterialRenderPipelineHandle, Viewport},
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2},
     view_mode::EViewModeType,
     VertexBufferType,
 };
+use std::sync::Arc;
 use type_layout::TypeLayout;
 use wgpu::*;
 
@@ -70,6 +69,8 @@ impl MaterialRenderPipeline {
         depth_view: &TextureView,
         mesh_buffers: &[GpuVertexBufferImp],
         binding_resource: Vec<Vec<BindingResource<'_>>>,
+        scissor_rect: Option<glam::UVec4>,
+        viewport: Option<Viewport>,
     ) {
         self.base_render_pipeline.draw_resources2(
             device,
@@ -84,6 +85,8 @@ impl MaterialRenderPipeline {
             None,
             None,
             Some(depth_view),
+            scissor_rect,
+            viewport,
         );
     }
     pub fn set_view_mode(

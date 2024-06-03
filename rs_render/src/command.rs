@@ -157,16 +157,60 @@ pub struct MultipleDraw {
 }
 
 #[derive(Clone)]
+pub struct ShadowMapping {
+    pub render_pipeline: String,
+    pub vertex_buffers: Vec<BufferHandle>,
+    pub depth_texture_handle: TextureHandle,
+    pub binding_resources: Vec<Vec<EBindingResource>>,
+}
+
+#[derive(Clone)]
+pub struct Viewport {
+    pub rect: glam::Vec4,
+    pub depth_range: std::ops::Range<f32>,
+}
+
+#[derive(Clone)]
 pub struct DrawObject {
     pub id: u32,
     pub vertex_buffers: Vec<BufferHandle>,
     pub vertex_count: u32,
+    pub render_pipeline: String,
     pub index_buffer: Option<BufferHandle>,
     pub index_count: Option<u32>,
     pub binding_resources: Vec<Vec<EBindingResource>>,
     pub virtual_pass_set: Option<VirtualPassSet>,
-    pub render_pipeline: String,
     pub multiple_draw: Option<MultipleDraw>,
+    pub shadow_mapping: Option<ShadowMapping>,
+    pub scissor_rect: Option<glam::UVec4>,
+    pub viewport: Option<Viewport>,
+}
+
+impl DrawObject {
+    pub fn new(
+        id: u32,
+        vertex_buffers: Vec<BufferHandle>,
+        vertex_count: u32,
+        render_pipeline: String,
+        index_buffer: Option<BufferHandle>,
+        index_count: Option<u32>,
+        binding_resources: Vec<Vec<EBindingResource>>,
+    ) -> DrawObject {
+        DrawObject {
+            id,
+            vertex_buffers,
+            vertex_count,
+            render_pipeline,
+            index_buffer,
+            index_count,
+            binding_resources,
+            virtual_pass_set: None,
+            multiple_draw: None,
+            shadow_mapping: None,
+            scissor_rect: None,
+            viewport: None,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -258,6 +302,11 @@ pub struct PresentInfo {
 }
 
 #[derive(Clone)]
+pub struct ClearDepthTexture {
+    pub handle: TextureHandle,
+}
+
+#[derive(Clone)]
 pub enum RenderCommand {
     CreateIBLBake(CreateIBLBake),
     CreateTexture(CreateTexture),
@@ -279,6 +328,8 @@ pub enum RenderCommand {
     CreateSampler(CreateSampler),
     CreateMaterialRenderPipeline(CreateMaterialRenderPipeline),
     UploadPrebakeIBL(UploadPrebakeIBL),
+    CreateDefaultIBL(IBLTexturesKey),
+    ClearDepthTexture(ClearDepthTexture),
     #[cfg(feature = "renderdoc")]
     CaptureFrame,
 }

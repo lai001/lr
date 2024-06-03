@@ -74,6 +74,8 @@ impl VirtualTextureFeedBackClearPipeline {
                 store: StoreOp::Store,
             }),
             Some(depth_view),
+            None,
+            None,
         );
     }
 }

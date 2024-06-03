@@ -1,4 +1,5 @@
 pub mod brdf_lut;
+pub mod format_conversion;
 pub mod irradiance_cube_map;
 pub mod jfa;
 pub mod jfa_composition;

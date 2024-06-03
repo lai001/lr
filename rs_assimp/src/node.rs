@@ -91,6 +91,9 @@ impl<'a> Node<'a> {
 
     pub fn update_meshes(&mut self, all_meshes: Vec<Rc<RefCell<Mesh<'a>>>>) {
         let c = &self.c;
+        if c.mMeshes.is_null() {
+            return;
+        }
         let ai_meshes: Vec<usize> =
             unsafe { std::slice::from_raw_parts_mut(c.mMeshes, c.mNumMeshes as _) }
                 .iter()

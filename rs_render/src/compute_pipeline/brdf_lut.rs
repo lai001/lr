@@ -1,6 +1,9 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline, constants::IBLConstants,
-    global_shaders::brdf_lut::BrdfLutShader, gpu_buffer, shader_library::ShaderLibrary,
+    base_compute_pipeline::BaseComputePipeline,
+    constants::IBLConstants,
+    global_shaders::{brdf_lut::BrdfLutShader, global_shader::GlobalShader},
+    gpu_buffer,
+    shader_library::ShaderLibrary,
 };
 
 pub struct BrdfLutPipeline {
@@ -10,7 +13,7 @@ pub struct BrdfLutPipeline {
 impl BrdfLutPipeline {
     pub fn new(device: &wgpu::Device, shader_library: &ShaderLibrary) -> BrdfLutPipeline {
         let base_compute_pipeline =
-            BaseComputePipeline::new(device, shader_library, &BrdfLutShader {});
+            BaseComputePipeline::new(device, shader_library, &BrdfLutShader {}.get_name());
         BrdfLutPipeline {
             base_compute_pipeline,
         }

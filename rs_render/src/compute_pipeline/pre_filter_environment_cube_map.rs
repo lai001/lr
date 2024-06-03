@@ -1,6 +1,11 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline, constants::PreFilterConstants,
-    global_shaders::pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader, gpu_buffer,
+    base_compute_pipeline::BaseComputePipeline,
+    constants::PreFilterConstants,
+    global_shaders::{
+        global_shader::GlobalShader,
+        pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader,
+    },
+    gpu_buffer,
     shader_library::ShaderLibrary,
 };
 
@@ -16,7 +21,7 @@ impl PreFilterEnvironmentCubeMapComputePipeline {
         let base_compute_pipeline = BaseComputePipeline::new(
             device,
             shader_library,
-            &PreFilterEnvironmentCubeMapShader {},
+            &PreFilterEnvironmentCubeMapShader {}.get_name(),
         );
 
         PreFilterEnvironmentCubeMapComputePipeline {

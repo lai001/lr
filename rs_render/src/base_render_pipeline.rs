@@ -1,5 +1,6 @@
 use crate::base_render_pipeline_pool::BaseRenderPipelineBuilder;
 use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
+use crate::command::Viewport;
 use crate::gpu_vertex_buffer::{GpuVertexBufferImp, TGpuVertexBuffer};
 use crate::reflection::{EPipelineType, VertexBufferLayoutBuilder};
 use crate::shader_library::ShaderLibrary;
@@ -167,6 +168,7 @@ impl BaseRenderPipeline {
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
         depth_view: Option<&TextureView>,
+        scissor_rect: Option<glam::UVec4>,
     ) where
         T: TGpuVertexBuffer,
     {
@@ -191,6 +193,7 @@ impl BaseRenderPipeline {
             depth_ops,
             stencil_ops,
             depth_view,
+            scissor_rect,
         );
     }
 
@@ -204,6 +207,7 @@ impl BaseRenderPipeline {
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
         depth_view: Option<&TextureView>,
+        scissor_rect: Option<glam::UVec4>,
     ) where
         T: TGpuVertexBuffer,
     {
@@ -257,6 +261,9 @@ impl BaseRenderPipeline {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+            if let Some(rect) = scissor_rect {
+                render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
+            }
             render_pass.set_pipeline(&self.render_pipeline);
             for (index, bind_group) in bind_groups.iter().enumerate() {
                 render_pass.set_bind_group(index as u32, bind_group, &[]);
@@ -291,6 +298,8 @@ impl BaseRenderPipeline {
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
         depth_view: Option<&TextureView>,
+        scissor_rect: Option<glam::UVec4>,
+        viewport: Option<Viewport>,
     ) -> SubmissionIndex {
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some(&format!("{} command encoder", self.tag)),
@@ -341,6 +350,21 @@ impl BaseRenderPipeline {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+            if let Some(rect) = scissor_rect {
+                render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
+            }
+            if let Some(viewport) = viewport {
+                let rect = &viewport.rect;
+                let depth_range = &viewport.depth_range;
+                render_pass.set_viewport(
+                    rect.x,
+                    rect.y,
+                    rect.z,
+                    rect.w,
+                    depth_range.start,
+                    depth_range.end,
+                );
+            }
             render_pass.set_pipeline(&self.render_pipeline);
             for (index, bind_group) in bind_groups.iter().enumerate() {
                 render_pass.set_bind_group(index as u32, bind_group, &[]);
@@ -381,6 +405,8 @@ impl BaseRenderPipeline {
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
         depth_view: Option<&TextureView>,
+        scissor_rect: Option<glam::UVec4>,
+        viewport: Option<Viewport>,
     ) -> SubmissionIndex {
         let entries = binding_resources
             .iter()
@@ -403,6 +429,8 @@ impl BaseRenderPipeline {
             depth_ops,
             stencil_ops,
             depth_view,
+            scissor_rect,
+            viewport,
         )
     }
 
@@ -419,6 +447,7 @@ impl BaseRenderPipeline {
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
         depth_view: Option<&TextureView>,
+        scissor_rect: Option<glam::UVec4>,
     ) -> SubmissionIndex {
         let entries = binding_resources
             .iter()
@@ -444,6 +473,7 @@ impl BaseRenderPipeline {
             depth_ops,
             stencil_ops,
             depth_view,
+            scissor_rect,
         )
     }
 
@@ -460,6 +490,7 @@ impl BaseRenderPipeline {
         depth_ops: Option<Operations<f32>>,
         stencil_ops: Option<Operations<u32>>,
         depth_view: Option<&TextureView>,
+        scissor_rect: Option<glam::UVec4>,
     ) -> SubmissionIndex {
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some(&format!("{} command encoder", self.tag)),
@@ -510,6 +541,9 @@ impl BaseRenderPipeline {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+            if let Some(rect) = scissor_rect {
+                render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
+            }
             render_pass.set_pipeline(&self.render_pipeline);
             for (index, bind_group) in bind_groups.iter().enumerate() {
                 render_pass.set_bind_group(index as u32, bind_group, &[]);
@@ -542,5 +576,9 @@ impl BaseRenderPipeline {
             }
         }
         queue.submit(Some(encoder.finish()))
+    }
+
+    pub fn get_tag(&self) -> &str {
+        &self.tag
     }
 }

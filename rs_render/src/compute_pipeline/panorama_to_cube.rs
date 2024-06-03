@@ -1,6 +1,7 @@
 use crate::{
     base_compute_pipeline::BaseComputePipeline,
-    global_shaders::panorama_to_cube::PanoramaToCubeShader, shader_library::ShaderLibrary,
+    global_shaders::{global_shader::GlobalShader, panorama_to_cube::PanoramaToCubeShader},
+    shader_library::ShaderLibrary,
 };
 
 pub struct PanoramaToCubePipeline {
@@ -10,7 +11,7 @@ pub struct PanoramaToCubePipeline {
 impl PanoramaToCubePipeline {
     pub fn new(device: &wgpu::Device, shader_library: &ShaderLibrary) -> PanoramaToCubePipeline {
         let base_compute_pipeline =
-            BaseComputePipeline::new(device, shader_library, &PanoramaToCubeShader {});
+            BaseComputePipeline::new(device, shader_library, &PanoramaToCubeShader {}.get_name());
         PanoramaToCubePipeline {
             base_compute_pipeline,
         }

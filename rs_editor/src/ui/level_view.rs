@@ -1,11 +1,13 @@
 use egui::{Context, ScrollArea, Ui};
-use rs_engine::{actor::Actor, scene_node::SceneNode};
+use rs_engine::{actor::Actor, content::level::DirectionalLight, scene_node::SceneNode};
 use rs_foundation::new::SingleThreadMutType;
 use std::{cell::RefCell, rc::Rc};
 
 pub enum EClickEventType {
     Actor(SingleThreadMutType<Actor>),
     SceneNode(SingleThreadMutType<SceneNode>),
+    CreateDirectionalLight,
+    DirectionalLight(SingleThreadMutType<DirectionalLight>),
 }
 
 fn draw_scene_node(
@@ -67,10 +69,23 @@ pub fn draw(
 ) -> Option<EClickEventType> {
     let mut event: Option<EClickEventType> = None;
     window.open(is_open).show(context, |ui| {
-        ui.label(format!("name: {}", level.get_name()));
-        ScrollArea::vertical().show(ui, |ui| {
-            for actor in &level.actors {
-                level_node(ui, actor.clone(), &mut event);
+        let response = ui.vertical(|ui| {
+            ui.label(format!("name: {}", level.get_name()));
+            ScrollArea::vertical().show(ui, |ui| {
+                for (index, light) in level.directional_lights.iter().enumerate() {
+                    if ui.button(format!("DirectionalLight_{}", index)).clicked() {
+                        event = Some(EClickEventType::DirectionalLight(light.clone()));
+                    }
+                }
+                for actor in &level.actors {
+                    level_node(ui, actor.clone(), &mut event);
+                }
+            });
+        });
+        response.response.context_menu(|ui| {
+            if ui.button("Directional Light").clicked() {
+                event = Some(EClickEventType::CreateDirectionalLight);
+                ui.close_menu();
             }
         });
     });

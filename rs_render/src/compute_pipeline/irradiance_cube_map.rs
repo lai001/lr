@@ -1,6 +1,8 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline, constants::IBLConstants,
-    global_shaders::irradiance_cube_map::IrradianceCubeMapShader, gpu_buffer,
+    base_compute_pipeline::BaseComputePipeline,
+    constants::IBLConstants,
+    global_shaders::{global_shader::GlobalShader, irradiance_cube_map::IrradianceCubeMapShader},
+    gpu_buffer,
     shader_library::ShaderLibrary,
 };
 
@@ -10,8 +12,11 @@ pub struct IrradianceCubeMapPipeline {
 
 impl IrradianceCubeMapPipeline {
     pub fn new(device: &wgpu::Device, shader_library: &ShaderLibrary) -> IrradianceCubeMapPipeline {
-        let base_compute_pipeline =
-            BaseComputePipeline::new(device, shader_library, &IrradianceCubeMapShader {});
+        let base_compute_pipeline = BaseComputePipeline::new(
+            device,
+            shader_library,
+            &IrradianceCubeMapShader {}.get_name(),
+        );
         IrradianceCubeMapPipeline {
             base_compute_pipeline,
         }

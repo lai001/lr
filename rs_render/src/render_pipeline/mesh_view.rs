@@ -81,6 +81,8 @@ impl MeshViewPipeline {
             None,
             None,
             Some(depth_view),
+            None,
+            None,
         );
     }
 }

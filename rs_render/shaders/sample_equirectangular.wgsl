@@ -38,6 +38,6 @@ fn sample_equirectangular(texture: texture_2d<f32>, location: vec3<f32>, lod: i3
     var texture_dimensions = textureDimensions(texture);
     let sample_picker = sample_from_3d_to_2d(location);
     var uv = vec2<i32>(i32(sample_picker.x * f32(texture_dimensions.x)), i32(sample_picker.y * f32(texture_dimensions.y)));
-       var color = textureLoad(texture, uv, lod);
+    var color = textureLoad(texture, uv, lod);
     return color;
 }

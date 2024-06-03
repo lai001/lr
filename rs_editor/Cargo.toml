@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["editor"]
+default = ["editor", "renderdoc"]
 renderdoc = ["rs_render/renderdoc", "rs_engine/renderdoc"]
 editor = [
     "rs_shader_compiler/editor",

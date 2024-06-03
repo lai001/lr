@@ -18,10 +18,10 @@ fn fill(current_offset: usize, align: usize) -> usize {
     (rs_foundation::alignment(current_offset as isize, align as isize) as usize) - current_offset
 }
 
-trait Alignment {
-    fn align_of(&self) -> usize;
-    fn size_of(&self) -> usize;
-}
+// trait Alignment {
+//     fn align_of(&self) -> usize;
+//     fn size_of(&self) -> usize;
+// }
 
 trait WgslAlignment {
     fn align_of(&self, module: &naga::Module) -> usize;

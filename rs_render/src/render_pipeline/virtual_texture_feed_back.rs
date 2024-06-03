@@ -74,6 +74,8 @@ impl StaticMeshVirtualTextureFeedBackPipeline {
             None,
             None,
             Some(depth_view),
+            None,
+            None,
         );
     }
 }

@@ -119,6 +119,8 @@ impl SkinMeshShadingPipeline {
             None,
             None,
             Some(depth_view),
+            None,
+            None,
         );
     }
 

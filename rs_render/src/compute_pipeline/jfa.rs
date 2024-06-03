@@ -1,6 +1,9 @@
 use crate::{
-    base_compute_pipeline::BaseComputePipeline, constants::JFAConstants,
-    global_shaders::jfa::JFAShader, gpu_buffer, shader_library::ShaderLibrary,
+    base_compute_pipeline::BaseComputePipeline,
+    constants::JFAConstants,
+    global_shaders::{global_shader::GlobalShader, jfa::JFAShader},
+    gpu_buffer,
+    shader_library::ShaderLibrary,
 };
 use wgpu::*;
 
@@ -78,7 +81,8 @@ pub struct JFAComputePipeline {
 
 impl JFAComputePipeline {
     pub fn new(device: &wgpu::Device, shader_library: &ShaderLibrary) -> JFAComputePipeline {
-        let base_compute_pipeline = BaseComputePipeline::new(device, shader_library, &JFAShader {});
+        let base_compute_pipeline =
+            BaseComputePipeline::new(device, shader_library, &JFAShader {}.get_name());
         JFAComputePipeline {
             base_compute_pipeline,
         }

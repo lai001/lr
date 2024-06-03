@@ -57,6 +57,7 @@ struct VertexOutput {
 	@location(4) tbn_t: vec3<f32>,
 	@location(5) tbn_b: vec3<f32>,
 	@location(6) tbn_n: vec3<f32>,
+    @location(7) frag_position_at_light_space: vec4<f32>,
 };
 
 struct ClearCoatInfo {
@@ -92,6 +93,8 @@ struct ShadingInfo {
 
 @group(0) @binding(6) var irradiance_texture: texture_cube<f32>;
 
+@group(0) @binding(7) var shadow_map: texture_depth_2d;
+
 @group(1) @binding(0) var<uniform> constants: Constants;
 
 #ifdef SKELETON_MAX_BONES
@@ -105,6 +108,20 @@ struct ShadingInfo {
 #ifdef USER_TEXTURES
     USER_TEXTURES
 #endif
+
+fn shadow_calculation(shadow_map: texture_depth_2d, frag_position_at_light_space: vec4<f32>) -> f32 {
+    var bias = 0.005;
+    var proj_coords: vec3<f32> = frag_position_at_light_space.xyz / frag_position_at_light_space.w;
+    var proj_coords_uv = proj_coords * 0.5 + 0.5;
+    proj_coords_uv.y = 1.0 - proj_coords_uv.y;
+    var closest_depth = textureSample(shadow_map, base_color_sampler, proj_coords_uv.xy); 
+    var current_depth = proj_coords.z - bias;
+    var shadow = 0.0;
+    if (current_depth > closest_depth) {
+        shadow = 1.0;
+    }
+    return shadow;
+}
 
 fn D(N: vec3<f32>, H: vec3<f32>, a: f32) -> f32 {
     var a2 = a * a;
@@ -281,6 +298,8 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
     vertex_output.tbn_b = (constants.model * vec4<f32>(vertex_in.bitangent, 0.0)).xyz;
     vertex_output.tbn_n = (constants.model * vec4<f32>(vertex_output.normal, 0.0)).xyz;
 
+    vertex_output.frag_position_at_light_space = global_constants.light_space_matrix * vec4<f32>(vertex_output.frag_position, 1.0);
+
     return vertex_output;
 }
 
@@ -291,6 +310,8 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
     var shading_info = get_shading_info(user_attributes, vertex_output);
 
     var ibl_color = ibl_light(shading_info, irradiance_texture, pre_filter_cube_map_texture, brdflut_texture);
+
+    var shadow = shadow_calculation(shadow_map, vertex_output.frag_position_at_light_space);
 
     fragment_output.color = vec4<f32>(ibl_color, 1.0);
     if (global_constants.debug_shading == DEBUG_SHADING_TYPE_BASE_COLOR) {
@@ -303,6 +324,8 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
         fragment_output.color = vec4<f32>((shading_info.normal + 1.0) / 2.0, 1.0);
     } else if (global_constants.debug_shading == DEBUG_SHADING_TYPE_VERTEX_COLOR_0) {
         fragment_output.color = vertex_output.vertex_color;
+    } else if (global_constants.debug_shading == DEBUG_SHADING_TYPE_SHADOW) {
+        fragment_output.color = vec4<f32>(vec3<f32>(mix(1.0, 0.0, shadow)), 1.0);
     }
     return fragment_output;
 }

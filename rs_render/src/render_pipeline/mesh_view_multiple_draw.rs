@@ -83,6 +83,7 @@ impl MeshViewMultipleDrawPipeline {
             None,
             None,
             Some(depth_view),
+            None,
         );
     }
 }

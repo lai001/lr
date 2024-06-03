@@ -28,10 +28,10 @@ fn main() {
     }
 
     if is_debug() {
-        println!("cargo:rustc-link-search=../build/windows/x64/release");
+        println!("cargo:rustc-link-search=../build/windows/x64/debug");
         defines.push("DEBUG".to_owned());
     } else {
-        println!("cargo:rustc-link-search=../build/windows/x64/debug");
+        println!("cargo:rustc-link-search=../build/windows/x64/release");
         defines.push("NDEBUG".to_owned());
     }
 

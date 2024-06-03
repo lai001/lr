@@ -68,6 +68,7 @@ pub struct MaterialDrawObject {
     pub(crate) brdflut_texture_resource: EBindingResource,
     pub(crate) pre_filter_cube_map_texture_resource: EBindingResource,
     pub(crate) irradiance_texture_resource: EBindingResource,
+    pub(crate) shadow_map_texture_resource: EBindingResource,
 
     pub(crate) constants_resource: EBindingResource,
     pub(crate) skin_constants_resource: EBindingResource,

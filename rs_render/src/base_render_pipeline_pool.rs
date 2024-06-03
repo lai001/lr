@@ -19,6 +19,84 @@ pub struct BaseRenderPipelineBuilder {
     pub hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
 }
 
+impl BaseRenderPipelineBuilder {
+    pub fn standard(
+        texture_format: TextureFormat,
+        vertex_buffer_type: Option<VertexBufferType>,
+    ) -> BaseRenderPipelineBuilder {
+        let mut builder = BaseRenderPipelineBuilder::default();
+        builder.targets = vec![Some(ColorTargetState {
+            format: texture_format,
+            blend: None,
+            write_mask: ColorWrites::ALL,
+        })];
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Less,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
+        builder.vertex_buffer_type = vertex_buffer_type;
+        builder.primitive = Some(PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            polygon_mode: PolygonMode::Fill,
+            ..Default::default()
+        });
+        builder
+    }
+
+    pub fn standard_alpha_blending(
+        texture_format: TextureFormat,
+        vertex_buffer_type: Option<VertexBufferType>,
+    ) -> BaseRenderPipelineBuilder {
+        let mut builder = BaseRenderPipelineBuilder::default();
+        builder.targets = vec![Some(ColorTargetState {
+            format: texture_format,
+            blend: Some(BlendState::ALPHA_BLENDING),
+            write_mask: ColorWrites::ALL,
+        })];
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Less,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
+        builder.vertex_buffer_type = vertex_buffer_type;
+        builder.primitive = Some(PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            polygon_mode: PolygonMode::Fill,
+            ..Default::default()
+        });
+        builder
+    }
+
+    pub fn standard_depth_only(
+        vertex_buffer_type: Option<VertexBufferType>,
+    ) -> BaseRenderPipelineBuilder {
+        let mut builder = BaseRenderPipelineBuilder::default();
+        builder.targets = vec![];
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Less,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
+        builder.vertex_buffer_type = vertex_buffer_type;
+        builder.primitive = Some(PrimitiveState {
+            topology: PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            polygon_mode: PolygonMode::Fill,
+            ..Default::default()
+        });
+        builder
+    }
+}
+
 impl Hash for BaseRenderPipelineBuilder {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         // self.shader.hash(state);

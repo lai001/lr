@@ -1,4 +1,4 @@
-use russimp_sys::{aiColor3D, aiColor4D, aiMatrix4x4, aiString, aiTexel, aiVector2D, aiVector3D};
+use russimp_sys::{aiColor3D, aiColor4D, aiMatrix4x4, aiString, aiVector3D};
 
 use crate::AISTRING_MAXLEN;
 
@@ -22,14 +22,6 @@ pub(crate) trait ConvertToVec3 {
     fn to_vec3(&self) -> glam::Vec3;
 }
 
-pub(crate) trait ConvertToVec2 {
-    fn to_vec2(&self) -> glam::Vec2;
-}
-
-pub(crate) trait ConvertToUVec4 {
-    fn to_uvec4(&self) -> glam::UVec4;
-}
-
 impl ConvertToVec4 for aiColor4D {
     fn to_vec4(&self) -> glam::Vec4 {
         glam::vec4(self.r, self.g, self.b, self.a)
@@ -48,12 +40,6 @@ impl ConvertToVec3 for aiColor3D {
     }
 }
 
-impl ConvertToVec2 for aiVector2D {
-    fn to_vec2(&self) -> glam::Vec2 {
-        glam::vec2(self.x, self.y)
-    }
-}
-
 impl ConvertToMat4 for aiMatrix4x4 {
     fn to_mat4(&self) -> glam::Mat4 {
         glam::mat4(
@@ -68,12 +54,6 @@ impl ConvertToMat4 for aiMatrix4x4 {
 impl ConvertToString for aiString {
     fn to_string(&self) -> String {
         self.into()
-    }
-}
-
-impl ConvertToUVec4 for aiTexel {
-    fn to_uvec4(&self) -> glam::UVec4 {
-        glam::uvec4(self.b as _, self.g as _, self.r as _, self.a as _)
     }
 }
 

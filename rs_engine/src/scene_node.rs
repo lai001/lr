@@ -19,11 +19,23 @@ pub struct SceneComponent {
     pub transformation: glam::Mat4,
 }
 
+impl SceneComponent {
+    pub fn get_interactive_transformation(&mut self) -> &mut glam::Mat4 {
+        &mut self.transformation
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StaticMeshComponent {
     pub name: String,
     pub static_mesh: Option<url::Url>,
     pub transformation: glam::Mat4,
+}
+
+impl StaticMeshComponent {
+    pub fn get_interactive_transformation(&mut self) -> &mut glam::Mat4 {
+        &mut self.transformation
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -48,6 +60,10 @@ pub struct SkeletonMeshComponent {
 }
 
 impl SkeletonMeshComponent {
+    pub fn get_interactive_transformation(&mut self) -> &mut glam::Mat4 {
+        &mut self.transformation
+    }
+
     pub fn new(
         name: String,
         skeleton_url: Option<url::Url>,

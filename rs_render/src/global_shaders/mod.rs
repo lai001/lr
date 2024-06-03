@@ -1,5 +1,7 @@
 pub mod attachment;
 pub mod brdf_lut;
+pub mod depth;
+pub mod format_conversion;
 pub mod global_shader;
 pub mod grid;
 pub mod irradiance_cube_map;
@@ -19,6 +21,8 @@ use self::global_shader::GlobalShader;
 use crate::global_shaders::{
     attachment::AttachmentShader,
     brdf_lut::BrdfLutShader,
+    depth::{DepthShader, DepthSkinShader},
+    format_conversion::Depth32FloatConvertRGBA8UnormShader,
     grid::GridShader,
     irradiance_cube_map::IrradianceCubeMapShader,
     jfa::JFAShader,
@@ -54,5 +58,8 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(JFACompositionShader {}),
         Box::new(MeshViewShader {}),
         Box::new(MeshViewMultipleDrawShader {}),
+        Box::new(DepthShader {}),
+        Box::new(DepthSkinShader {}),
+        Box::new(Depth32FloatConvertRGBA8UnormShader {}),
     ]
 }

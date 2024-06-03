@@ -1,6 +1,7 @@
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
 use crate::ui::content_item_property_view::ContentItemPropertyView;
+use crate::ui::debug_textures_view::{self, DebugTexturesView};
 use crate::ui::gizmo_view::GizmoView;
 use crate::ui::object_property_view::{ESelectedObjectType, ObjectPropertyView};
 use crate::ui::top_menu::TopMenu;
@@ -25,6 +26,7 @@ pub struct ClickEvent {
     pub click_aseet: Option<asset_view::EClickItemType>,
     pub menu_event: Option<top_menu::EClickEventType>,
     pub content_browser_event: Option<content_browser::EClickEventType>,
+    pub debug_textures_view_event: Option<debug_textures_view::EClickEventType>,
 }
 
 pub struct EditorUI {
@@ -32,10 +34,11 @@ pub struct EditorUI {
     _svg_loader: Option<Arc<dyn ImageLoader + Send + Sync + 'static>>,
     project_folder_path: Option<PathBuf>,
     top_menu: TopMenu,
-    gizmo_view: GizmoView,
+    pub gizmo_view: GizmoView,
     pub egui_context: Context,
     pub content_item_property_view: ContentItemPropertyView,
     pub object_property_view: ObjectPropertyView,
+    pub debug_textures_view: DebugTexturesView,
 }
 
 impl EditorUI {
@@ -64,6 +67,7 @@ impl EditorUI {
             egui_context: context.clone(),
             content_item_property_view: ContentItemPropertyView::new(),
             object_property_view: ObjectPropertyView::new(),
+            debug_textures_view: DebugTexturesView::new(),
         }
     }
 
@@ -97,7 +101,8 @@ impl EditorUI {
         if let Some(selected_object) = self.object_property_view.selected_object.as_ref() {
             macro_rules! gizmo {
                 ($component:ident) => {
-                    let model_matrix = &mut $component.borrow_mut().transformation;
+                    let mut component = $component.borrow_mut();
+                    let model_matrix = component.get_interactive_transformation();
                     let gizmo_result = self.gizmo_view.draw(
                         context,
                         data_source.camera_view_matrix,
@@ -125,6 +130,9 @@ impl EditorUI {
                 }
                 ESelectedObjectType::SkeletonMeshComponent(component) => {
                     gizmo!(component);
+                }
+                ESelectedObjectType::DirectionalLight(light) => {
+                    gizmo!(light);
                 }
             }
         }
@@ -184,6 +192,16 @@ impl EditorUI {
             .default_size([250.0, 500.0])
             .show(context, |ui| {
                 self.object_property_view.draw(ui);
+            });
+
+        Self::new_window("Debug Texture View", data_source.input_mode)
+            .open(&mut data_source.is_debug_texture_view_open)
+            .vscroll(true)
+            .hscroll(true)
+            .resizable(true)
+            .default_size([500.0, 500.0])
+            .show(context, |ui| {
+                click.debug_textures_view_event = self.debug_textures_view.draw(ui);
             });
 
         click
