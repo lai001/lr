@@ -35,27 +35,54 @@ impl WGPUContext {
         surface_height: u32,
         adapter: &wgpu::Adapter,
         device: &wgpu::Device,
-    ) -> wgpu::SurfaceConfiguration {
+    ) -> Result<wgpu::SurfaceConfiguration> {
         let swapchain_capabilities = surface.get_capabilities(adapter);
-        let mut swapchain_format = swapchain_capabilities.formats[0];
-        for format in &swapchain_capabilities.formats {
-            if format == &wgpu::TextureFormat::Rgba8UnormSrgb {
-                swapchain_format = *format;
-            }
-        }
+        log::info!("swapchain_capabilities {:#?}", swapchain_capabilities);
+
+        let swapchain_format = *swapchain_capabilities
+            .formats
+            .iter()
+            .find(|x| **x == wgpu::TextureFormat::Rgba8UnormSrgb)
+            .unwrap_or(swapchain_capabilities.formats.first().ok_or(
+                crate::error::Error::Other(Some(format!("No swapchain format supported"))),
+            )?);
+
+        let present_mode = *swapchain_capabilities
+            .present_modes
+            .iter()
+            .find(|x| **x == wgpu::PresentMode::Fifo)
+            .unwrap_or(swapchain_capabilities.present_modes.first().ok_or(
+                crate::error::Error::Other(Some(format!("No present mode supported"))),
+            )?);
+
+        let alpha_mode = *swapchain_capabilities
+            .alpha_modes
+            .iter()
+            .find(|x| **x == wgpu::CompositeAlphaMode::Inherit)
+            .unwrap_or(swapchain_capabilities.alpha_modes.first().ok_or(
+                crate::error::Error::Other(Some(format!("No alpha mode supported"))),
+            )?);
+
+        let guaranteed_format_features =
+            swapchain_format.guaranteed_format_features(device.features());
+        log::info!(
+            "using swapchain_format: {:?}, guaranteed_format_features {:#?}",
+            swapchain_format,
+            guaranteed_format_features
+        );
         let surface_config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            usage: swapchain_capabilities.usages,
             format: swapchain_format,
             width: surface_width,
             height: surface_height,
-            present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: swapchain_capabilities.alpha_modes[0],
+            present_mode,
+            alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 1,
         };
         log::info!("surface_config {:#?}", surface_config);
         surface.configure(device, &surface_config);
-        surface_config
+        Ok(surface_config)
     }
 
     pub fn new<W>(
@@ -90,7 +117,7 @@ impl WGPUContext {
         .map_err(|err| crate::error::Error::RequestDeviceError(err))?;
 
         let surface_config =
-            Self::surface_configure(&surface, surface_width, surface_height, &adapter, &device);
+            Self::surface_configure(&surface, surface_width, surface_height, &adapter, &device)?;
 
         log::info!("adapter info: {:#?}", adapter.get_info());
         log::info!("adapter limits: {:#?}", adapter.limits());
@@ -154,7 +181,7 @@ impl WGPUContext {
                 surface_height,
                 &self.adapter,
                 &self.device,
-            );
+            )?;
             let surface_texture_formats = self.surfaces.values().map(|x| &x.surface_config.format);
             for format in surface_texture_formats {
                 if format != &surface_config.format {
