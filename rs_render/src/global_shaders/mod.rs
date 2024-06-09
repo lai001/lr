@@ -2,6 +2,7 @@ pub mod attachment;
 pub mod brdf_lut;
 pub mod depth;
 pub mod format_conversion;
+pub mod fxaa;
 pub mod global_shader;
 pub mod grid;
 pub mod irradiance_cube_map;
@@ -39,6 +40,7 @@ use crate::global_shaders::{
         SkinMeshVirtualTextureFeedBackShader, StaticMeshVirtualTextureFeedBackShader,
     },
 };
+use fxaa::FXAAShader;
 
 pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
     vec![
@@ -61,5 +63,6 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(DepthShader {}),
         Box::new(DepthSkinShader {}),
         Box::new(Depth32FloatConvertRGBA8UnormShader {}),
+        Box::new(FXAAShader {}),
     ]
 }

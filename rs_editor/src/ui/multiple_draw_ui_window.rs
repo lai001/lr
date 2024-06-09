@@ -22,6 +22,7 @@ use rs_render::{
     },
     constants::MeshViewConstants,
     renderer::MESH_VIEW_MULTIPLE_DRAW_PIPELINE,
+    scene_viewport::SceneViewport,
     vertex_data_type::mesh_vertex::MeshVertex4,
 };
 use std::collections::HashMap;
@@ -242,6 +243,7 @@ impl MultipleDrawUiWindow {
                     window_id,
                     draw_objects: present_draw_objects,
                     virtual_texture_pass: None,
+                    scene_viewport: SceneViewport::new(),
                 }));
                 let wait = self
                     .frame_sync

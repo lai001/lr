@@ -12,6 +12,7 @@ use crate::drawable::{
 use crate::error::Result;
 use crate::handle::{EGUITextureHandle, TextureHandle};
 use crate::input_mode::EInputMode;
+use crate::player_viewport::PlayerViewport;
 use crate::render_thread_mode::ERenderThreadMode;
 use crate::scene_node::EComponentType;
 use crate::{logger::Logger, resource_manager::ResourceManager};
@@ -64,13 +65,13 @@ impl Default for State {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-struct VirtualPassHandle {
+pub struct VirtualPassHandle {
     pub physical_texture_handle: crate::handle::TextureHandle,
     pub page_table_texture_handle: crate::handle::TextureHandle,
 }
 
 impl VirtualPassHandle {
-    fn new() -> VirtualPassHandle {
+    pub fn new() -> VirtualPassHandle {
         let rm = ResourceManager::default();
         VirtualPassHandle {
             physical_texture_handle: rm
@@ -80,7 +81,7 @@ impl VirtualPassHandle {
         }
     }
 
-    fn key(&self) -> VirtualTexturePassKey {
+    pub fn key(&self) -> VirtualTexturePassKey {
         VirtualTexturePassKey {
             physical_texture_handle: *self.physical_texture_handle,
             page_table_texture_handle: *self.page_table_texture_handle,
@@ -114,6 +115,7 @@ pub struct Engine {
     default_textures: DefaultTextures,
     virtual_pass_handle: Option<VirtualPassHandle>,
     shadow_depth_texture_handle: Option<TextureHandle>,
+    player_viewports: Vec<SingleThreadMutType<PlayerViewport>>,
 }
 
 impl Engine {
@@ -264,7 +266,7 @@ impl Engine {
             init_data: None,
         }));
 
-        let engine = Engine {
+        let mut engine = Engine {
             render_thread_mode,
             resource_manager,
             logger,
@@ -288,7 +290,20 @@ impl Engine {
             default_textures,
             virtual_pass_handle,
             shadow_depth_texture_handle: Some(shadow_depth_texture_handle),
+            player_viewports: vec![],
         };
+
+        let mut player_viewport = PlayerViewport::new(
+            window_id,
+            surface_width,
+            surface_height,
+            global_sampler_handle,
+            &mut engine,
+        );
+        player_viewport.enable_fxaa(&mut engine);
+        engine
+            .player_viewports
+            .push(SingleThreadMut::new(player_viewport));
 
         Ok(engine)
     }
@@ -439,7 +454,7 @@ impl Engine {
                                     )?;
 
                                     let image_reference = texture.image_reference.ok_or(
-                                        crate::error::Error::Other(Some(
+                                        crate::error::Error::NullReference(Some(
                                             "No image reference".to_string(),
                                         )),
                                     )?;
@@ -678,13 +693,24 @@ impl Engine {
                 }));
         }
 
+        let player_viewport = self.player_viewports.get(0).unwrap();
+        let player_viewport = player_viewport.borrow();
+
         self.render_thread_mode
             .send_command(RenderCommand::Present(PresentInfo {
                 window_id,
                 draw_objects,
                 virtual_texture_pass,
+                scene_viewport: player_viewport.scene_viewport.clone(),
             }));
         self.draw_objects.entry(window_id).or_default().clear();
+
+        let pending_destroy_textures = ResourceManager::default().get_pending_destroy_textures();
+        if !pending_destroy_textures.is_empty() {
+            let pending_destroy_textures = pending_destroy_textures.iter().map(|x| **x).collect();
+            self.render_thread_mode
+                .send_command(RenderCommand::DestroyTextures(pending_destroy_textures));
+        }
     }
 
     pub fn resize(&mut self, window_id: isize, surface_width: u32, surface_height: u32) {
@@ -709,6 +735,10 @@ impl Engine {
                 window_id,
             },
         ));
+
+        let player_viewport = self.player_viewports.get(0).unwrap().clone();
+        let mut player_viewport = player_viewport.borrow_mut();
+        player_viewport.size_changed(surface_width, surface_height, self);
     }
 
     pub fn remove_window(&mut self, window_id: isize) {
@@ -1822,6 +1852,14 @@ impl Engine {
                 handle: *handle,
                 referencing_texture_handle: *referencing_texture_handle,
             }));
+    }
+
+    pub fn get_resource_manager(&self) -> &ResourceManager {
+        &self.resource_manager
+    }
+
+    pub fn get_render_thread_mode_mut(&mut self) -> &mut ERenderThreadMode {
+        &mut self.render_thread_mode
     }
 }
 

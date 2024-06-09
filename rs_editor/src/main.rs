@@ -1,3 +1,4 @@
-fn main() {
-    rs_editor::editor::Editor::new().run();
+fn main() -> anyhow::Result<()> {
+    rs_editor::editor::Editor::new().run()?;
+    Ok(())
 }

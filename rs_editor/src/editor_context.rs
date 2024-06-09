@@ -20,6 +20,7 @@ use crate::{
         object_property_view::ESelectedObjectType,
         top_menu,
     },
+    watch_shader::WatchShader,
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
@@ -41,7 +42,10 @@ use rs_engine::{
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_foundation::new::SingleThreadMut;
-use rs_render::command::TextureDescriptorCreateInfo;
+use rs_render::{
+    command::{RenderCommand, TextureDescriptorCreateInfo},
+    get_buildin_shader_dir,
+};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -116,6 +120,7 @@ pub struct EditorContext {
     mesh_ui_window: Option<MeshUIWindow>,
     media_ui_window: Option<MediaUIWindow>,
     multiple_draw_ui_window: Option<MultipleDrawUiWindow>,
+    watch_shader: WatchShader,
 }
 
 impl EditorContext {
@@ -153,7 +158,7 @@ impl EditorContext {
         window: &winit::window::Window,
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
         window_manager: Rc<RefCell<WindowsManager>>,
-    ) -> Self {
+    ) -> anyhow::Result<EditorContext> {
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
@@ -161,9 +166,7 @@ impl EditorContext {
         });
         log::trace!(
             "Engine Root Dir: {:?}",
-            rs_core_minimal::file_manager::get_engine_root_dir()
-                .canonicalize_slash()
-                .unwrap()
+            rs_core_minimal::file_manager::get_engine_root_dir().canonicalize_slash()?
         );
 
         let window_size = window.inner_size();
@@ -191,8 +194,8 @@ impl EditorContext {
             logger,
             artifact_reader,
             ProjectContext::pre_process_shaders(),
-        )
-        .unwrap();
+        )?;
+
         Self::insert_cmds(&mut engine);
 
         let mut data_source = DataSource::new();
@@ -205,7 +208,9 @@ impl EditorContext {
 
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
-        Self {
+        let watch_shader = WatchShader::new(get_buildin_shader_dir())?;
+
+        let editor_context = EditorContext {
             event_loop_proxy,
             engine,
             egui_winit_state,
@@ -223,7 +228,9 @@ impl EditorContext {
             mesh_ui_window: None,
             media_ui_window: None,
             multiple_draw_ui_window: None,
-        }
+            watch_shader,
+        };
+        Ok(editor_context)
     }
 
     fn insert_cmds(engine: &mut rs_engine::engine::Engine) {
@@ -315,6 +322,11 @@ impl EditorContext {
                 self.engine.tick();
                 if !is_visible || is_minimized {
                     return;
+                }
+                let changed_results = self.watch_shader.get_changed_results();
+                for changed_result in changed_results {
+                    self.engine
+                        .send_render_command(RenderCommand::BuiltinShaderChanged(changed_result))
                 }
                 if let Some(project_context) = &mut self.project_context {
                     if project_context.is_need_reload_plugin() {

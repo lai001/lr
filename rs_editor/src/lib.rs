@@ -12,3 +12,4 @@ pub mod model_loader;
 pub mod project;
 pub mod project_context;
 pub mod ui;
+pub mod watch_shader;

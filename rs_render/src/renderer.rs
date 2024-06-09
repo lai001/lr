@@ -1,4 +1,5 @@
 use crate::acceleration_bake::AccelerationBaker;
+use crate::antialias_type::EAntialiasType;
 use crate::base_compute_pipeline_pool::BaseComputePipelinePool;
 use crate::base_render_pipeline_pool::BaseRenderPipelinePool;
 use crate::cube_map::CubeMap;
@@ -7,6 +8,7 @@ use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::prebake_ibl::PrebakeIBL;
 use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
+use crate::render_pipeline::fxaa::FXAAPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
 use crate::render_pipeline::mesh_view::MeshViewPipeline;
@@ -34,12 +36,6 @@ pub const MESH_VIEW_RENDER_PIPELINE: &str = "MESH_VIEW_RENDER_PIPELINE";
 pub const MESH_VIEW_MULTIPLE_DRAW_PIPELINE: &str = "MESH_VIEW_MULTIPLE_DRAW_PIPELINE";
 pub const SHADOW_DEPTH_SKIN_PIPELINE: &str = "SHADOW_DEPTH_SKIN_PIPELINE";
 pub const SHADOW_DEPTH_PIPELINE: &str = "SHADOW_DEPTH_PIPELINE";
-
-// #[derive(Clone)]
-// pub struct PlayerViewport {
-//     pub window_id: isize,
-//     pub viewport: Option<Viewport>,
-// }
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
@@ -91,6 +87,8 @@ pub struct Renderer {
     prebake_ibls: HashMap<IBLTexturesKey, PrebakeIBL>,
 
     shadow_pipilines: Option<shadow_pass::ShadowPipilines>,
+
+    fxaa_pipeline: Option<FXAAPipeline>,
 }
 
 impl Renderer {
@@ -125,7 +123,7 @@ impl Renderer {
             match result {
                 Ok(_) => {}
                 Err(err) => match err {
-                    crate::error::Error::Wgpu(err) => match err {
+                    crate::error::Error::Wgpu(err) => match err.lock().unwrap().deref() {
                         Error::Validation { description, .. } => {
                             log::warn!("{shader_name}\n{}", description);
                         }
@@ -188,6 +186,13 @@ impl Renderer {
             &mut base_render_pipeline_pool,
         );
 
+        let fxaa_pipeline = FXAAPipeline::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &current_swapchain_format,
+            &mut base_render_pipeline_pool,
+        );
+
         Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
@@ -226,6 +231,7 @@ impl Renderer {
             mesh_view_multiple_draw_pipeline,
             shadow_pipilines: Some(shadow_pipilines),
             base_compute_pipeline_pool,
+            fxaa_pipeline: Some(fxaa_pipeline),
         }
     }
 
@@ -593,6 +599,41 @@ impl Renderer {
             &present_info.draw_objects,
         );
 
+        (|| {
+            let anti_type = &present_info.scene_viewport.anti_type;
+            let EAntialiasType::FXAA(fxaa_info) = anti_type else {
+                return;
+            };
+            let Some(fxaa_pipeline) = &self.fxaa_pipeline else {
+                return;
+            };
+            let Some(sampler) = self.samplers.get(&fxaa_info.sampler) else {
+                return;
+            };
+            let Some(texture) = self.textures.get(&fxaa_info.texture) else {
+                return;
+            };
+            let queue = self.wgpu_context.get_queue();
+            let device = self.wgpu_context.get_device();
+            let mut command_encoder =
+                device.create_command_encoder(&CommandEncoderDescriptor::default());
+            command_encoder.copy_texture_to_texture(
+                color_texture.as_image_copy(),
+                texture.as_image_copy(),
+                texture.size(),
+            );
+            let _ = queue.submit(vec![command_encoder.finish()]);
+            let texture_view = texture.create_view(&TextureViewDescriptor::default());
+            fxaa_pipeline.draw(
+                device,
+                queue,
+                &output_view,
+                vec![vec![
+                    BindingResource::Sampler(sampler),
+                    BindingResource::TextureView(&texture_view),
+                ]],
+            );
+        })();
         // self.draw_object_commands.clear();
 
         for output in self
@@ -761,7 +802,7 @@ impl Renderer {
                     Ok(_) => {}
                     Err(err) => match err {
                         crate::error::Error::ShaderReflection(_, _) => {}
-                        crate::error::Error::Wgpu(err) => match err {
+                        crate::error::Error::Wgpu(err) => match err.lock().unwrap().deref() {
                             Error::OutOfMemory { .. } => {
                                 todo!()
                             }
@@ -897,6 +938,53 @@ impl Renderer {
                         log::trace!("{}", err);
                     }
                 }
+            }
+            RenderCommand::BuiltinShaderChanged(builtin_shader_changed) => {
+                let device = self.wgpu_context.get_device();
+                let load_shader_result = self.shader_library.load_shader_from(
+                    builtin_shader_changed.name.clone(),
+                    builtin_shader_changed.source,
+                    device,
+                );
+                match load_shader_result {
+                    Ok(_) => {
+                        self.base_render_pipeline_pool
+                            .invalid_shader(builtin_shader_changed.name.clone());
+                    }
+                    Err(err) => match err {
+                        crate::error::Error::ShaderReflection(_, _) => {}
+                        crate::error::Error::Wgpu(err) => match err.lock().unwrap().deref() {
+                            Error::OutOfMemory { .. } => {
+                                todo!()
+                            }
+                            Error::Validation { description, .. } => {
+                                log::trace!("Failed to create shader, {}", description);
+                            }
+                        },
+                        _ => unreachable!(),
+                    },
+                }
+                match builtin_shader_changed.name {
+                    name if name
+                        == crate::global_shaders::global_shader::GlobalShader::get_name(
+                            &crate::global_shaders::fxaa::FXAAShader {},
+                        ) =>
+                    {
+                        let current_swapchain_format = self
+                            .wgpu_context
+                            .get_current_swapchain_format(self.main_window_id);
+                        self.fxaa_pipeline = Some(FXAAPipeline::new(
+                            device,
+                            &self.shader_library,
+                            &current_swapchain_format,
+                            &mut self.base_render_pipeline_pool,
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+            RenderCommand::DestroyTextures(textures) => {
+                self.textures.retain(|k, _| !textures.contains(k));
             }
         }
         return None;

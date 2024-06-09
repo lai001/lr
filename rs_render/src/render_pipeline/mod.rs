@@ -1,4 +1,5 @@
 pub mod attachment_pipeline;
+pub mod fxaa;
 pub mod generic_pipeline;
 pub mod grid_pipeline;
 pub mod material_pipeline;

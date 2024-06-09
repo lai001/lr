@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 #[derive(Debug)]
 pub enum Error {
     RequestAdapterFailed,
@@ -17,7 +19,7 @@ pub enum Error {
     ImageDdsCreateDds(image_dds::CreateDdsError),
     DdsFile(ddsfile::Error),
     IO(std::io::Error, Option<String>),
-    Wgpu(wgpu::Error),
+    Wgpu(Mutex<wgpu::Error>),
     ValidationError(naga::WithSpan<naga::valid::ValidationError>),
     Other(Option<String>),
 }

@@ -151,11 +151,12 @@ impl Editor {
         Self {}
     }
 
-    pub fn run(mut self) {
+    pub fn run(mut self) -> anyhow::Result<()> {
         let is_run_app = self.parse_args();
         if is_run_app {
-            self.run_app();
+            self.run_app()?;
         }
+        Ok(())
     }
 
     fn parse_args(&mut self) -> bool {
@@ -219,12 +220,12 @@ impl Editor {
         return false;
     }
 
-    fn run_app(self) {
+    fn run_app(self) -> anyhow::Result<()> {
         let window_manager = SingleThreadMut::new(WindowsManager::new());
 
         let window_width = 1280;
         let window_height = 720;
-        let event_loop = EventLoopBuilder::with_user_event().build().unwrap();
+        let event_loop = EventLoopBuilder::with_user_event().build()?;
         let event_loop_proxy: EventLoopProxy<ECustomEventType> = event_loop.create_proxy();
 
         let window = winit::window::WindowBuilder::new()
@@ -236,12 +237,11 @@ impl Editor {
                 width: window_width,
                 height: window_height,
             })
-            .build(&event_loop)
-            .unwrap();
+            .build(&event_loop)?;
         window.set_ime_allowed(true);
 
         let mut editor_context =
-            EditorContext::new(&window, event_loop_proxy.clone(), window_manager.clone());
+            EditorContext::new(&window, event_loop_proxy.clone(), window_manager.clone())?;
         window_manager
             .borrow_mut()
             .add_new_window(EWindowType::Main, window);
@@ -251,11 +251,6 @@ impl Editor {
                 editor_context.handle_event(&event, event_loop_window_target);
             }
         });
-        match event_loop_result {
-            Ok(_) => {}
-            Err(err) => {
-                log::warn!("{}", err);
-            }
-        }
+        Ok(event_loop_result?)
     }
 }

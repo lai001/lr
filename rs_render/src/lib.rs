@@ -1,4 +1,5 @@
 pub mod acceleration_bake;
+pub mod antialias_type;
 pub mod bake_info;
 pub mod base_compute_pipeline;
 pub mod base_compute_pipeline_pool;
@@ -27,6 +28,7 @@ pub mod render_pipeline;
 pub mod renderdoc;
 pub mod renderer;
 pub mod sampler_cache;
+pub mod scene_viewport;
 pub mod sdf2d_generator;
 pub mod shader_library;
 pub mod shadow_pass;

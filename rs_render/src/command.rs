@@ -1,6 +1,6 @@
 use crate::{
-    bake_info::BakeInfo, egui_render::EGUIRenderOutput, view_mode::EViewModeType,
-    virtual_texture_source::TVirtualTextureSource,
+    bake_info::BakeInfo, egui_render::EGUIRenderOutput, scene_viewport::SceneViewport,
+    view_mode::EViewModeType, virtual_texture_source::TVirtualTextureSource,
 };
 use rs_core_minimal::settings::{RenderSettings, VirtualTextureSetting};
 use std::{
@@ -299,11 +299,18 @@ pub struct PresentInfo {
     pub window_id: isize,
     pub draw_objects: Vec<DrawObject>,
     pub virtual_texture_pass: Option<VirtualTexturePassKey>,
+    pub scene_viewport: SceneViewport,
 }
 
 #[derive(Clone)]
 pub struct ClearDepthTexture {
     pub handle: TextureHandle,
+}
+
+#[derive(Clone)]
+pub struct BuiltinShaderChanged {
+    pub name: String,
+    pub source: String,
 }
 
 #[derive(Clone)]
@@ -330,6 +337,8 @@ pub enum RenderCommand {
     UploadPrebakeIBL(UploadPrebakeIBL),
     CreateDefaultIBL(IBLTexturesKey),
     ClearDepthTexture(ClearDepthTexture),
+    BuiltinShaderChanged(BuiltinShaderChanged),
+    DestroyTextures(Vec<TextureHandle>),
     #[cfg(feature = "renderdoc")]
     CaptureFrame,
 }

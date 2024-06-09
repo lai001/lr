@@ -1,7 +1,10 @@
 use super::reflection::Reflection;
 use crate::command::MaterialRenderPipelineHandle;
 use pollster::FutureExt;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 pub struct ShaderLibrary {
     shader_dic: HashMap<String, Arc<wgpu::ShaderModule>>,
@@ -68,7 +71,7 @@ impl ShaderLibrary {
             if let Some(err) = device
                 .pop_error_scope()
                 .block_on()
-                .map(|x| crate::error::Error::Wgpu(x))
+                .map(|x| crate::error::Error::Wgpu(Mutex::new(x)))
             {
                 Err(err)
             } else {

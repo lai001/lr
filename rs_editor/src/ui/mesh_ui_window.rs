@@ -20,6 +20,7 @@ use rs_render::{
     },
     constants::MeshViewConstants,
     renderer::MESH_VIEW_RENDER_PIPELINE,
+    scene_viewport::SceneViewport,
     vertex_data_type::mesh_vertex::MeshVertex3,
 };
 use std::collections::HashMap;
@@ -227,6 +228,7 @@ impl MeshUIWindow {
                     window_id,
                     draw_objects: present_draw_objects,
                     virtual_texture_pass: None,
+                    scene_viewport: SceneViewport::new(),
                 }));
                 let wait = self
                     .frame_sync

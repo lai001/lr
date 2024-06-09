@@ -50,6 +50,7 @@ struct STResourceManager {
     ibl_textures: HashMap<url::Url, IBLTextures>,
     // mesh_buffers: HashMap<url::Url, Arc<MeshBuffer>>,
     // material_render_pipelines: HashMap<url::Url, crate::handle::MaterialRenderPipelineHandle>,
+    pending_destroy_textures: Vec<crate::handle::TextureHandle>,
 }
 
 impl STResourceManager {
@@ -66,6 +67,7 @@ impl STResourceManager {
             skeletons: HashMap::new(),
             ibl_textures: HashMap::new(),
             ui_textures: HashMap::new(),
+            pending_destroy_textures: vec![],
             // mesh_buffers: HashMap::new(),
             // material_render_pipelines: HashMap::new(),
         }
@@ -298,7 +300,9 @@ impl STResourceManager {
 
     fn next_texture(&mut self, url: url::Url) -> crate::handle::TextureHandle {
         let handle = self.handle_manager.next_texture();
-        self.textures.insert(url, handle.clone());
+        if let Some(pending_destroy_texture) = self.textures.insert(url, handle.clone()) {
+            self.pending_destroy_textures.push(pending_destroy_texture);
+        }
         handle
     }
 
@@ -360,6 +364,10 @@ impl STResourceManager {
             .keys()
             .map(|x| x.clone())
             .collect::<Vec<url::Url>>()
+    }
+
+    fn get_pending_destroy_textures(&self) -> Vec<crate::handle::TextureHandle> {
+        self.pending_destroy_textures.clone()
     }
 }
 

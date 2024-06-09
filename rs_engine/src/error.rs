@@ -7,6 +7,7 @@ pub enum Error {
     ArtifactReaderNotSet,
     RendererError(rs_render::error::Error),
     RecvError(std::sync::mpsc::RecvError),
+    NullReference(Option<String>),
     Other(Option<String>),
 }
 
