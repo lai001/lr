@@ -2,7 +2,7 @@ use crate::build_built_in_resouce_url;
 use crate::engine::{Engine, VirtualPassHandle};
 use crate::handle::TextureHandle;
 use glam::Vec4Swizzles;
-use rs_render::antialias_type::FXAAInfo;
+use rs_render::antialias_type::{FXAAInfo, MSAAInfo};
 use rs_render::command::{
     BufferCreateInfo, CreateBuffer, DrawObject, RenderCommand, TextureDescriptorCreateInfo,
 };
@@ -92,6 +92,62 @@ impl PlayerViewport {
         });
     }
 
+    pub fn enable_msaa(&mut self, engine: &mut Engine) {
+        let size = self
+            .scene_viewport
+            .viewport
+            .as_ref()
+            .map_or(glam::uvec2(self.width, self.height), |x| {
+                x.rect.zw().floor().as_uvec2()
+            });
+        let texture_handle = engine.create_texture(
+            &build_built_in_resouce_url("MSAATexture").unwrap(),
+            TextureDescriptorCreateInfo {
+                label: Some(format!("MSAATexture")),
+                size: wgpu::Extent3d {
+                    width: size.x,
+                    height: size.y,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 4,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: None,
+            },
+        );
+
+        let depth_texture_handle = engine.create_texture(
+            &build_built_in_resouce_url("MSAADepthTexture").unwrap(),
+            TextureDescriptorCreateInfo {
+                label: Some(format!("MSAADepthTexture")),
+                size: wgpu::Extent3d {
+                    width: size.x,
+                    height: size.y,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 4,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: None,
+            },
+        );
+
+        self.scene_viewport.anti_type = EAntialiasType::MSAA(MSAAInfo {
+            texture: *texture_handle,
+            depth_texture: *depth_texture_handle,
+        });
+    }
+
+    pub fn disable_antialias(&mut self) {
+        self.scene_viewport.anti_type = EAntialiasType::None;
+    }
+
     pub fn size_changed(&mut self, width: u32, height: u32, engine: &mut Engine) {
         self.width = width;
         self.height = height;
@@ -99,6 +155,9 @@ impl PlayerViewport {
             EAntialiasType::None => {}
             EAntialiasType::FXAA(_) => {
                 self.enable_fxaa(engine);
+            }
+            EAntialiasType::MSAA(_) => {
+                self.enable_msaa(engine);
             }
         }
     }

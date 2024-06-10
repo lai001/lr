@@ -1414,6 +1414,7 @@ impl EditorContext {
         );
         self.process_debug_texture_view_event(click_event.debug_textures_view_event);
         self.process_click_actor_event(click_event.click_actor);
+        self.process_project_settings_event(click_event.project_settings_event);
     }
 
     fn is_new_content_name_avaliable(&self, new_name: &str) -> bool {
@@ -1635,6 +1636,20 @@ impl EditorContext {
 
                     self.editor_ui.debug_textures_view.all_texture_urls = rm.get_texture_urls();
                 }
+            }
+        }
+    }
+
+    fn process_project_settings_event(
+        &mut self,
+        event: Option<crate::ui::project_settings::EEventType>,
+    ) {
+        let Some(event) = event else {
+            return;
+        };
+        match event {
+            crate::ui::project_settings::EEventType::AntialiasType(ty) => {
+                self.engine.on_antialias_type_changed(ty);
             }
         }
     }

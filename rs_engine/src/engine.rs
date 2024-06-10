@@ -274,7 +274,7 @@ impl Engine {
             draw_objects: HashMap::new(),
             camera,
             state: State::default(),
-            settings,
+            settings: settings.clone(),
             draw_object_id,
             game_time: std::time::Instant::now(),
             game_time_sec: 0.0,
@@ -300,7 +300,15 @@ impl Engine {
             global_sampler_handle,
             &mut engine,
         );
-        player_viewport.enable_fxaa(&mut engine);
+        match &settings.render_setting.antialias_type {
+            rs_core_minimal::settings::EAntialiasType::None => {}
+            rs_core_minimal::settings::EAntialiasType::FXAA => {
+                player_viewport.enable_fxaa(&mut engine);
+            }
+            rs_core_minimal::settings::EAntialiasType::MSAA => {
+                player_viewport.enable_msaa(&mut engine);
+            }
+        }
         engine
             .player_viewports
             .push(SingleThreadMut::new(player_viewport));
@@ -1860,6 +1868,26 @@ impl Engine {
 
     pub fn get_render_thread_mode_mut(&mut self) -> &mut ERenderThreadMode {
         &mut self.render_thread_mode
+    }
+
+    pub fn on_antialias_type_changed(
+        &mut self,
+        antialias_type: rs_core_minimal::settings::EAntialiasType,
+    ) {
+        for player_viewport in self.player_viewports.clone() {
+            let mut player_viewport = player_viewport.borrow_mut();
+            match antialias_type {
+                rs_core_minimal::settings::EAntialiasType::None => {
+                    player_viewport.disable_antialias();
+                }
+                rs_core_minimal::settings::EAntialiasType::FXAA => {
+                    player_viewport.enable_fxaa(self);
+                }
+                rs_core_minimal::settings::EAntialiasType::MSAA => {
+                    player_viewport.enable_msaa(self);
+                }
+            }
+        }
     }
 }
 

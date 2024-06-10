@@ -6,7 +6,8 @@ use crate::ui::gizmo_view::GizmoView;
 use crate::ui::object_property_view::{ESelectedObjectType, ObjectPropertyView};
 use crate::ui::top_menu::TopMenu;
 use crate::ui::{
-    asset_view, console_cmds_view, content_browser, gizmo_settings, level_view, top_menu,
+    asset_view, console_cmds_view, content_browser, gizmo_settings, level_view, project_settings,
+    top_menu,
 };
 use egui::*;
 use rs_engine::input_mode::EInputMode;
@@ -27,6 +28,7 @@ pub struct ClickEvent {
     pub menu_event: Option<top_menu::EClickEventType>,
     pub content_browser_event: Option<content_browser::EClickEventType>,
     pub debug_textures_view_event: Option<debug_textures_view::EClickEventType>,
+    pub project_settings_event: Option<project_settings::EEventType>,
 }
 
 pub struct EditorUI {
@@ -147,7 +149,7 @@ impl EditorUI {
         );
         if let Some(project_settings) = data_source.project_settings.clone() {
             let window = Self::new_window("Project Settings", data_source.input_mode);
-            crate::ui::project_settings::draw(
+            click.project_settings_event = crate::ui::project_settings::draw(
                 window,
                 context,
                 &mut data_source.project_settings_open,

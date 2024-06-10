@@ -7,7 +7,9 @@ use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::prebake_ibl::PrebakeIBL;
-use crate::render_pipeline::attachment_pipeline::AttachmentPipeline;
+use crate::render_pipeline::attachment_pipeline::{
+    AttachmentPipeline, ClearAll, ClearColor, ClearDepth, EClearType,
+};
 use crate::render_pipeline::fxaa::FXAAPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
@@ -157,6 +159,7 @@ impl Renderer {
             wgpu_context.get_device(),
             &shader_library,
             &current_swapchain_format,
+            &mut base_render_pipeline_pool,
         );
 
         let grid_render_pipeline = GridPipeline::new(
@@ -587,8 +590,35 @@ impl Renderer {
         let depth_texture = self.depth_textures.get(&window_id).expect("Not null");
         let output_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let depth_texture_view = depth_texture.get_view();
+        let msaa_texture_view: Option<TextureView> = match &present_info.scene_viewport.anti_type {
+            EAntialiasType::None => None,
+            EAntialiasType::FXAA(_) => None,
+            EAntialiasType::MSAA(msaa_info) => self
+                .textures
+                .get(&msaa_info.texture)
+                .map(|x| x.create_view(&TextureViewDescriptor::default())),
+        };
+        let msaa_depth_texture_view: Option<TextureView> =
+            match &present_info.scene_viewport.anti_type {
+                EAntialiasType::None => None,
+                EAntialiasType::FXAA(_) => None,
+                EAntialiasType::MSAA(msaa_info) => self
+                    .textures
+                    .get(&msaa_info.depth_texture)
+                    .map(|x| x.create_view(&TextureViewDescriptor::default())),
+            };
 
-        self.clear_buffer(&output_view, &depth_texture_view);
+        if let (Some(msaa_texture_view), Some(msaa_depth_texture_view)) =
+            (msaa_texture_view.as_ref(), msaa_depth_texture_view.as_ref())
+        {
+            self.clear_buffer(
+                &output_view,
+                &msaa_depth_texture_view,
+                Some(msaa_texture_view),
+            );
+        } else {
+            self.clear_buffer(&output_view, &depth_texture_view, None);
+        }
         self.vt_pass(&present_info);
         self.shadow_for_draw_objects(present_info.draw_objects.as_slice());
         self.draw_objects(
@@ -597,6 +627,8 @@ impl Renderer {
             &output_view,
             &depth_texture_view,
             &present_info.draw_objects,
+            msaa_texture_view.as_ref(),
+            msaa_depth_texture_view.as_ref(),
         );
 
         (|| {
@@ -666,20 +698,30 @@ impl Renderer {
         return Some(render_output);
     }
 
-    fn clear_buffer(&self, surface_texture_view: &TextureView, depth_texture_view: &TextureView) {
+    fn clear_buffer(
+        &self,
+        surface_texture_view: &TextureView,
+        depth_texture_view: &TextureView,
+        resolve_target: Option<&TextureView>,
+    ) {
         self.attachment_pipeline.draw(
             self.wgpu_context.get_device(),
             self.wgpu_context.get_queue(),
-            Some((
-                surface_texture_view,
-                Color {
-                    r: 0.5,
-                    g: 0.5,
-                    b: 0.5,
-                    a: 1.0,
+            EClearType::Both(ClearAll {
+                clear_color: ClearColor {
+                    view: surface_texture_view,
+                    resolve_target,
+                    color: Color {
+                        r: 0.5,
+                        g: 0.5,
+                        b: 0.5,
+                        a: 1.0,
+                    },
                 },
-            )),
-            Some(depth_texture_view),
+                clear_depth: ClearDepth {
+                    view: depth_texture_view,
+                },
+            }),
         );
     }
 
@@ -687,8 +729,9 @@ impl Renderer {
         self.attachment_pipeline.draw(
             self.wgpu_context.get_device(),
             self.wgpu_context.get_queue(),
-            None,
-            Some(depth_texture_view),
+            EClearType::Depth(ClearDepth {
+                view: depth_texture_view,
+            }),
         );
     }
 
@@ -1103,6 +1146,8 @@ impl Renderer {
         surface_texture_view: &wgpu::TextureView,
         depth_texture_view: &TextureView,
         draw_object_command: &DrawObject,
+        resolve_target: Option<&TextureView>,
+        resolve_depth_target: Option<&TextureView>,
     ) -> crate::error::Result<()> {
         let _ = height;
         let _ = width;
@@ -1264,7 +1309,8 @@ impl Renderer {
                     device,
                     queue,
                     surface_texture_view,
-                    &depth_texture_view,
+                    resolve_target,
+                    resolve_depth_target.unwrap_or(&depth_texture_view),
                     &[mesh_buffer],
                     group_binding_resource,
                 );
@@ -1338,6 +1384,8 @@ impl Renderer {
         surface_texture_view: &wgpu::TextureView,
         depth_texture_view: &TextureView,
         draw_object_commands: &Vec<DrawObject>,
+        resolve_target: Option<&TextureView>,
+        resolve_depth_target: Option<&TextureView>,
     ) {
         for draw_object_command in draw_object_commands {
             let draw_result = self.draw_object(
@@ -1346,6 +1394,8 @@ impl Renderer {
                 surface_texture_view,
                 depth_texture_view,
                 draw_object_command,
+                resolve_target,
+                resolve_depth_target,
             );
             match draw_result {
                 Ok(_) => {}

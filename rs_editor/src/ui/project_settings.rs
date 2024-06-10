@@ -1,13 +1,19 @@
 use egui::{Context, Ui};
-use rs_core_minimal::settings::{Backends, PowerPreference, Settings};
+use rs_core_minimal::settings::{Backends, EAntialiasType, PowerPreference, Settings};
 use std::{cell::RefCell, rc::Rc};
+
+#[derive(Clone)]
+pub enum EEventType {
+    AntialiasType(EAntialiasType),
+}
 
 pub fn draw(
     window: egui::Window,
     context: &Context,
     open: &mut bool,
     project_settings: Rc<RefCell<Settings>>,
-) {
+) -> Option<EEventType> {
+    let mut event: Option<EEventType> = None;
     window
         .open(open)
         .vscroll(true)
@@ -15,16 +21,18 @@ pub fn draw(
         .resizable(true)
         .default_size([350.0, 150.0])
         .show(context, |ui| {
-            draw_content(ui, project_settings);
+            event = draw_content(ui, project_settings);
         });
+    event
 }
 
-fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) {
+fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) -> Option<EEventType> {
+    let mut event: Option<EEventType> = None;
     ui.collapsing("Render", |ui| {
+        let mut project_settings = project_settings.borrow_mut();
+        let render_setting = &mut project_settings.render_setting;
         ui.collapsing("Virtual Texture", |ui| {
             ui.vertical(|ui| {
-                let mut project_settings = project_settings.borrow_mut();
-                let render_setting = &mut project_settings.render_setting;
                 ui.checkbox(
                     &mut render_setting.virtual_texture_setting.is_enable,
                     "Is Enable",
@@ -73,5 +81,28 @@ fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) {
                     });
             });
         });
+        egui::ComboBox::from_label("Antialias Type")
+            .selected_text(format!("{:?}", render_setting.antialias_type))
+            .show_ui(ui, |ui| {
+                ui.style_mut().wrap = Some(false);
+                ui.set_min_width(60.0);
+                for ty in [
+                    EAntialiasType::None,
+                    EAntialiasType::FXAA,
+                    EAntialiasType::MSAA,
+                ] {
+                    if ui
+                        .selectable_value(
+                            &mut render_setting.antialias_type,
+                            ty.clone(),
+                            format!("{:?}", ty),
+                        )
+                        .clicked()
+                    {
+                        event = Some(EEventType::AntialiasType(ty.clone()));
+                    }
+                }
+            });
     });
+    event
 }

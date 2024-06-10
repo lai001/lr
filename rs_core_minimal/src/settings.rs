@@ -12,19 +12,29 @@ pub struct VirtualTextureSetting {
     pub feedback_bias: f32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub enum PowerPreference {
+    #[default]
     None,
     LowPower,
     HighPerformance,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub enum Backends {
+    #[default]
     Primary,
     Vulkan,
     GL,
     DX12,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub enum EAntialiasType {
+    #[default]
+    None,
+    FXAA,
+    MSAA,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -33,6 +43,8 @@ pub struct RenderSettings {
     pub backends: Backends,
     pub android_backends: Backends,
     pub virtual_texture_setting: VirtualTextureSetting,
+    #[serde(default)]
+    pub antialias_type: EAntialiasType,
 }
 
 impl RenderSettings {
@@ -69,6 +81,7 @@ impl Default for Settings {
                 #[cfg(not(target_os = "windows"))]
                 backends: Backends::Primary,
                 android_backends: Backends::Primary,
+                antialias_type: EAntialiasType::None,
             },
         }
     }
