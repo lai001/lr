@@ -1,7 +1,7 @@
 use crate::base_render_pipeline_pool::BaseRenderPipelineBuilder;
 use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
 use crate::command::Viewport;
-use crate::gpu_vertex_buffer::{GpuVertexBufferImp, TGpuVertexBuffer};
+use crate::gpu_vertex_buffer::{EDrawCallType, GpuVertexBufferImp};
 use crate::reflection::{EPipelineType, VertexBufferLayoutBuilder};
 use crate::shader_library::ShaderLibrary;
 use wgpu::*;
@@ -34,6 +34,7 @@ impl BaseRenderPipeline {
             primitive,
             vertex_buffer_type,
             hooks,
+            vertex_layout_hooks,
         } = base_render_pipeline_builder;
 
         let tag = shader_name.as_ref();
@@ -130,6 +131,13 @@ impl BaseRenderPipeline {
         if let Some(builder) = &builder {
             vertex_buffer_layouts = builder.get_vertex_buffer_layout();
         }
+        if let Some(vertex_layout_hooks) = vertex_layout_hooks {
+            for (location, step_mode) in vertex_layout_hooks {
+                if let Some(vertex_buffer_layout) = vertex_buffer_layouts.get_mut(location) {
+                    vertex_buffer_layout.step_mode = step_mode;
+                }
+            }
+        }
 
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some(&format!("{} render pipeline", tag)),
@@ -158,137 +166,7 @@ impl BaseRenderPipeline {
         }
     }
 
-    pub fn draw_resources<T>(
-        &self,
-        device: &Device,
-        queue: &Queue,
-        binding_resources: Vec<Vec<BindingResource>>,
-        mesh_buffers: &[T],
-        color_attachments: &[ColorAttachment],
-        depth_ops: Option<Operations<f32>>,
-        stencil_ops: Option<Operations<u32>>,
-        depth_view: Option<&TextureView>,
-        scissor_rect: Option<glam::UVec4>,
-    ) where
-        T: TGpuVertexBuffer,
-    {
-        let entries = binding_resources
-            .iter()
-            .map(|x| {
-                x.iter()
-                    .enumerate()
-                    .map(|(binding, resource)| wgpu::BindGroupEntry {
-                        binding: binding as u32,
-                        resource: resource.clone(),
-                    })
-                    .collect()
-            })
-            .collect();
-        self.draw(
-            device,
-            queue,
-            entries,
-            mesh_buffers,
-            color_attachments,
-            depth_ops,
-            stencil_ops,
-            depth_view,
-            scissor_rect,
-        );
-    }
-
-    pub fn draw<T>(
-        &self,
-        device: &Device,
-        queue: &Queue,
-        entries: Vec<Vec<BindGroupEntry>>,
-        mesh_buffers: &[T],
-        color_attachments: &[ColorAttachment],
-        depth_ops: Option<Operations<f32>>,
-        stencil_ops: Option<Operations<u32>>,
-        depth_view: Option<&TextureView>,
-        scissor_rect: Option<glam::UVec4>,
-    ) where
-        T: TGpuVertexBuffer,
-    {
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some(&format!("{} command encoder", self.tag)),
-        });
-        {
-            let mut depth_stencil_attachment: Option<RenderPassDepthStencilAttachment> = None;
-            if let Some(depth_view) = depth_view {
-                depth_stencil_attachment = Some(RenderPassDepthStencilAttachment {
-                    view: depth_view,
-                    depth_ops: Some(depth_ops.unwrap_or(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: StoreOp::Store,
-                    })),
-                    stencil_ops: Some(stencil_ops.unwrap_or(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: StoreOp::Store,
-                    })),
-                });
-            }
-
-            let mut bind_groups: Vec<BindGroup> = Vec::new();
-            for (entry_vec, bind_group_layout) in entries.iter().zip(self.bind_group_layouts.iter())
-            {
-                let bind_group = device.create_bind_group(&BindGroupDescriptor {
-                    layout: &bind_group_layout,
-                    entries: &entry_vec,
-                    label: Some(&format!("{} bind group", self.tag)),
-                });
-                bind_groups.push(bind_group);
-            }
-
-            let mut render_pass_color_attachments: Vec<Option<RenderPassColorAttachment>> =
-                Vec::new();
-            for x in color_attachments {
-                render_pass_color_attachments.push(Some(RenderPassColorAttachment {
-                    ops: x.color_ops.unwrap_or(Operations {
-                        load: LoadOp::Load,
-                        store: StoreOp::Store,
-                    }),
-                    view: x.view,
-                    resolve_target: x.resolve_target,
-                }));
-            }
-
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some(&format!("{} render pass", self.tag)),
-                color_attachments: &render_pass_color_attachments,
-                depth_stencil_attachment,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-            if let Some(rect) = scissor_rect {
-                render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
-            }
-            render_pass.set_pipeline(&self.render_pipeline);
-            for (index, bind_group) in bind_groups.iter().enumerate() {
-                render_pass.set_bind_group(index as u32, bind_group, &[]);
-            }
-
-            for mesh_buffer in mesh_buffers {
-                debug_assert_eq!(self.slots as usize, mesh_buffer.get_vertex_buffers().len());
-                for (slot, vertex_buffer) in mesh_buffer.get_vertex_buffers().iter().enumerate() {
-                    render_pass.set_vertex_buffer(slot as u32, vertex_buffer.slice(..));
-                }
-                if let (Some(index_buffer), Some(index_count)) = (
-                    mesh_buffer.get_index_buffer(),
-                    mesh_buffer.get_index_count(),
-                ) {
-                    render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..index_count, 0, 0..1);
-                } else {
-                    render_pass.draw(0..mesh_buffer.get_vertex_count(), 0..1);
-                }
-            }
-        }
-        queue.submit(Some(encoder.finish()));
-    }
-
-    pub fn draw2(
+    pub fn draw(
         &self,
         device: &Device,
         queue: &Queue,
@@ -386,16 +264,38 @@ impl BaseRenderPipeline {
                     (mesh_buffer.index_buffer, mesh_buffer.index_count)
                 {
                     render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..index_count, 0, 0..1);
+                    match &mesh_buffer.draw_type {
+                        EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                            render_pass.multi_draw_indexed_indirect(
+                                multi_draw_indirect.indirect_buffer,
+                                multi_draw_indirect.indirect_offset,
+                                multi_draw_indirect.count,
+                            );
+                        }
+                        EDrawCallType::Draw(draw) => {
+                            render_pass.draw_indexed(0..index_count, 0, draw.instances.clone());
+                        }
+                    }
                 } else {
-                    render_pass.draw(0..mesh_buffer.vertex_count, 0..1);
+                    match &mesh_buffer.draw_type {
+                        EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                            render_pass.multi_draw_indirect(
+                                multi_draw_indirect.indirect_buffer,
+                                multi_draw_indirect.indirect_offset,
+                                multi_draw_indirect.count,
+                            );
+                        }
+                        EDrawCallType::Draw(draw) => {
+                            render_pass.draw(0..mesh_buffer.vertex_count, draw.instances.clone());
+                        }
+                    }
                 }
             }
         }
         queue.submit(Some(encoder.finish()))
     }
 
-    pub fn draw_resources2(
+    pub fn draw_resources(
         &self,
         device: &Device,
         queue: &Queue,
@@ -420,7 +320,7 @@ impl BaseRenderPipeline {
                     .collect()
             })
             .collect();
-        self.draw2(
+        self.draw(
             device,
             queue,
             entries,
@@ -432,150 +332,6 @@ impl BaseRenderPipeline {
             scissor_rect,
             viewport,
         )
-    }
-
-    pub fn multi_draw_indirect_resource(
-        &self,
-        device: &Device,
-        queue: &Queue,
-        binding_resources: Vec<Vec<BindingResource>>,
-        mesh_buffers: &[GpuVertexBufferImp],
-        indirect_buffer: &Buffer,
-        indirect_offset: BufferAddress,
-        count: u32,
-        color_attachments: &[ColorAttachment],
-        depth_ops: Option<Operations<f32>>,
-        stencil_ops: Option<Operations<u32>>,
-        depth_view: Option<&TextureView>,
-        scissor_rect: Option<glam::UVec4>,
-    ) -> SubmissionIndex {
-        let entries = binding_resources
-            .iter()
-            .map(|x| {
-                x.iter()
-                    .enumerate()
-                    .map(|(binding, resource)| wgpu::BindGroupEntry {
-                        binding: binding as u32,
-                        resource: resource.clone(),
-                    })
-                    .collect()
-            })
-            .collect();
-        self.multi_draw_indirect(
-            device,
-            queue,
-            entries,
-            mesh_buffers,
-            indirect_buffer,
-            indirect_offset,
-            count,
-            color_attachments,
-            depth_ops,
-            stencil_ops,
-            depth_view,
-            scissor_rect,
-        )
-    }
-
-    pub fn multi_draw_indirect(
-        &self,
-        device: &Device,
-        queue: &Queue,
-        entries: Vec<Vec<BindGroupEntry>>,
-        mesh_buffers: &[GpuVertexBufferImp],
-        indirect_buffer: &Buffer,
-        indirect_offset: BufferAddress,
-        count: u32,
-        color_attachments: &[ColorAttachment],
-        depth_ops: Option<Operations<f32>>,
-        stencil_ops: Option<Operations<u32>>,
-        depth_view: Option<&TextureView>,
-        scissor_rect: Option<glam::UVec4>,
-    ) -> SubmissionIndex {
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some(&format!("{} command encoder", self.tag)),
-        });
-        {
-            let mut depth_stencil_attachment: Option<RenderPassDepthStencilAttachment> = None;
-            if let Some(depth_view) = depth_view {
-                depth_stencil_attachment = Some(RenderPassDepthStencilAttachment {
-                    view: depth_view,
-                    depth_ops: Some(depth_ops.unwrap_or(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: StoreOp::Store,
-                    })),
-                    stencil_ops: Some(stencil_ops.unwrap_or(wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: StoreOp::Store,
-                    })),
-                });
-            }
-
-            let mut bind_groups: Vec<BindGroup> = Vec::new();
-            for (entry_vec, bind_group_layout) in entries.iter().zip(self.bind_group_layouts.iter())
-            {
-                let bind_group = device.create_bind_group(&BindGroupDescriptor {
-                    layout: &bind_group_layout,
-                    entries: &entry_vec,
-                    label: Some(&format!("{} bind group", self.tag)),
-                });
-                bind_groups.push(bind_group);
-            }
-
-            let mut render_pass_color_attachments: Vec<Option<RenderPassColorAttachment>> =
-                Vec::new();
-            for x in color_attachments {
-                render_pass_color_attachments.push(Some(RenderPassColorAttachment {
-                    ops: x.color_ops.unwrap_or(Operations {
-                        load: LoadOp::Load,
-                        store: StoreOp::Store,
-                    }),
-                    view: x.view,
-                    resolve_target: x.resolve_target,
-                }));
-            }
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some(&format!("{} render pass", self.tag)),
-                color_attachments: &render_pass_color_attachments,
-                depth_stencil_attachment,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-            if let Some(rect) = scissor_rect {
-                render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
-            }
-            render_pass.set_pipeline(&self.render_pipeline);
-            for (index, bind_group) in bind_groups.iter().enumerate() {
-                render_pass.set_bind_group(index as u32, bind_group, &[]);
-            }
-
-            for mesh_buffer in mesh_buffers {
-                if self.slots as usize != mesh_buffer.vertex_buffers.len() {
-                    panic!(
-                        "{}, slots {} != vertex buffers {}",
-                        self.tag,
-                        self.slots,
-                        mesh_buffer.vertex_buffers.len()
-                    );
-                }
-                for (slot, vertex_buffer) in mesh_buffer.vertex_buffers.iter().enumerate() {
-                    render_pass.set_vertex_buffer(slot as u32, vertex_buffer.slice(..));
-                }
-                if let (Some(index_buffer), Some(_)) =
-                    (mesh_buffer.index_buffer, mesh_buffer.index_count)
-                {
-                    render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
-                    render_pass.multi_draw_indexed_indirect(
-                        indirect_buffer,
-                        indirect_offset,
-                        count,
-                    );
-                } else {
-                    render_pass.multi_draw_indirect(indirect_buffer, indirect_offset, count);
-                }
-            }
-        }
-        queue.submit(Some(encoder.finish()))
     }
 
     pub fn get_tag(&self) -> &str {

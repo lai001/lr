@@ -17,6 +17,7 @@ pub struct BaseRenderPipelineBuilder {
     pub primitive: Option<PrimitiveState>,
     pub vertex_buffer_type: Option<VertexBufferType>,
     pub hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
+    pub vertex_layout_hooks: Option<HashMap<usize, VertexStepMode>>,
 }
 
 impl BaseRenderPipelineBuilder {
@@ -116,6 +117,14 @@ impl Hash for BaseRenderPipelineBuilder {
                 let r = right.y * 1000000 + right.x;
                 l.cmp(&r)
             });
+            for key in keys {
+                key.hash(state);
+                hooks.get(&key).unwrap().hash(state);
+            }
+        }
+        if let Some(hooks) = &self.vertex_layout_hooks {
+            let mut keys: Vec<usize> = hooks.keys().clone().into_iter().map(|x| *x).collect();
+            keys.sort();
             for key in keys {
                 key.hash(state);
                 hooks.get(&key).unwrap().hash(state);

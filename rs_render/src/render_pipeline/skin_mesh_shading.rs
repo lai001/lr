@@ -106,7 +106,7 @@ impl SkinMeshShadingPipeline {
         mesh_buffers: &[GpuVertexBufferImp],
         binding_resource: Vec<Vec<BindingResource<'_>>>,
     ) {
-        self.base_render_pipeline.draw_resources2(
+        self.base_render_pipeline.draw_resources(
             device,
             queue,
             binding_resource,

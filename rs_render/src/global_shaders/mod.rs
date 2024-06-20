@@ -11,6 +11,7 @@ pub mod jfa_composition;
 pub mod mesh_view;
 pub mod mesh_view_multiple_draw;
 pub mod panorama_to_cube;
+pub mod particle;
 pub mod pre_filter_environment_cube_map;
 pub mod sdf2d_preprocess;
 pub mod shading;
@@ -41,6 +42,7 @@ use crate::global_shaders::{
     },
 };
 use fxaa::FXAAShader;
+use particle::ParticleShader;
 
 pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
     vec![
@@ -64,5 +66,6 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(DepthSkinShader {}),
         Box::new(Depth32FloatConvertRGBA8UnormShader {}),
         Box::new(FXAAShader {}),
+        Box::new(ParticleShader {}),
     ]
 }

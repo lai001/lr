@@ -58,3 +58,18 @@ pub fn gui_render_output(
     };
     gui_render_output
 }
+
+pub fn random_color3() -> glam::Vec3 {
+    let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
+    let y: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
+    let z: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
+    glam::vec3(x, y, z)
+}
+
+pub fn random_color4() -> glam::Vec4 {
+    let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
+    let y: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
+    let z: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
+    let w: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
+    glam::vec4(x, y, z, w)
+}

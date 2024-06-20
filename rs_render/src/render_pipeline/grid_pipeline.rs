@@ -92,7 +92,7 @@ impl GridPipeline {
                 resolve_target: None,
             }
         };
-        render_pipeline.draw_resources2(
+        render_pipeline.draw_resources(
             device,
             queue,
             binding_resource,

@@ -144,6 +144,7 @@ impl ContentItemPropertyView {
                         }
                     });
             }
+            EContentFileType::ParticleSystem(_) => {}
         }
     }
 }

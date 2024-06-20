@@ -65,4 +65,36 @@ fn make_translation_matrix(x: f32, y: f32, z: f32) -> mat4x4<f32> {
     return m;
 }
 
+fn make_translation_matrix_from_vec3(v: vec3<f32>) -> mat4x4<f32> {
+    var m = mat4x4<f32>(vec4<f32>(1.0, 0.0, 0.0, 0.0),
+                        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+                        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+                        vec4<f32>(v.x, v.y, v.z, 1.0));
+    return m;
+}
+
+fn make_identity_matrix() -> mat4x4<f32> {
+    var m = mat4x4<f32>(vec4<f32>(1.0, 0.0, 0.0, 0.0),
+                        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+                        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+                        vec4<f32>(0.0, 0.0, 0.0, 1.0));
+    return m;
+}
+
+fn strip_matrix_location(mat: mat4x4<f32>) -> mat4x4<f32> {
+    var m = mat4x4<f32>(vec4<f32>(mat[0][0], mat[1][0], mat[2][0], 0.0),
+                        vec4<f32>(mat[0][1], mat[1][1], mat[2][1], 0.0),
+                        vec4<f32>(mat[0][2], mat[1][2], mat[2][2], 0.0),
+                        vec4<f32>(0.0, 0.0, 0.0, 1.0));
+    return m;
+}
+
+fn strip_matrix_location_ant(mat: mat4x4<f32>) -> mat4x4<f32> {
+    var m = mat4x4<f32>(vec4<f32>(-mat[0][0], -mat[1][0], -mat[2][0], 0.0),
+                        vec4<f32>(-mat[0][1], -mat[1][1], -mat[2][1], 0.0),
+                        vec4<f32>(-mat[0][2], -mat[1][2], -mat[2][2], 0.0),
+                        vec4<f32>(0.0, 0.0, 0.0, 1.0));
+    return m;
+}
+
 #endif

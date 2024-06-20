@@ -150,10 +150,21 @@ pub struct VirtualPassSet {
 }
 
 #[derive(Clone)]
-pub struct MultipleDraw {
+pub struct MultiDrawIndirect {
     pub indirect_buffer_handle: BufferHandle,
-    pub indirect_offset: BufferAddress,
+    pub indirect_offset: wgpu::BufferAddress,
     pub count: u32,
+}
+
+#[derive(Clone)]
+pub struct Draw {
+    pub instances: std::ops::Range<u32>,
+}
+
+#[derive(Clone)]
+pub enum EDrawCallType {
+    MultiDrawIndirect(MultiDrawIndirect),
+    Draw(Draw),
 }
 
 #[derive(Clone)]
@@ -180,7 +191,7 @@ pub struct DrawObject {
     pub index_count: Option<u32>,
     pub binding_resources: Vec<Vec<EBindingResource>>,
     pub virtual_pass_set: Option<VirtualPassSet>,
-    pub multiple_draw: Option<MultipleDraw>,
+    pub draw_call_type: EDrawCallType,
     pub shadow_mapping: Option<ShadowMapping>,
     pub scissor_rect: Option<glam::UVec4>,
     pub viewport: Option<Viewport>,
@@ -205,10 +216,10 @@ impl DrawObject {
             index_count,
             binding_resources,
             virtual_pass_set: None,
-            multiple_draw: None,
             shadow_mapping: None,
             scissor_rect: None,
             viewport: None,
+            draw_call_type: EDrawCallType::Draw(Draw { instances: 0..1 }),
         }
     }
 }

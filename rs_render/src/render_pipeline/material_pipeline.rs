@@ -72,7 +72,7 @@ impl MaterialRenderPipeline {
         scissor_rect: Option<glam::UVec4>,
         viewport: Option<Viewport>,
     ) {
-        self.base_render_pipeline.draw_resources2(
+        self.base_render_pipeline.draw_resources(
             device,
             queue,
             binding_resource,

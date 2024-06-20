@@ -430,6 +430,7 @@ impl ProjectContext {
                         ibl_bakings.insert(ibl_baking.url.clone(), ibl_baking);
                     }
                 }
+                EContentFileType::ParticleSystem(_) => todo!(),
             }
         }
 

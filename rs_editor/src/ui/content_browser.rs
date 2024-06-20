@@ -10,6 +10,7 @@ pub struct DataSource {
     pub new_folder_name: String,
     pub new_material_name: String,
     pub new_ibl_name: String,
+    pub new_content_name: String,
 }
 
 impl DataSource {
@@ -21,6 +22,7 @@ impl DataSource {
             highlight_file: None,
             new_material_name: "Untitled".to_string(),
             new_ibl_name: "Untitled".to_string(),
+            new_content_name: "Untitled".to_string(),
         }
     }
 }
@@ -29,6 +31,7 @@ pub enum EClickEventType {
     CreateFolder,
     CreateMaterial,
     CreateIBL,
+    CreateParticleSystem,
     OpenFolder(Rc<RefCell<ContentFolder>>),
     OpenFile(EContentFileType),
     SingleClickFile(EContentFileType),
@@ -89,6 +92,13 @@ pub fn draw(
                             ui.text_edit_singleline(&mut data_source.new_ibl_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateIBL);
+                                ui.close_menu();
+                            }
+                        });
+                        ui.menu_button("Particle System", |ui| {
+                            ui.text_edit_singleline(&mut data_source.new_content_name);
+                            if ui.button("Ok").clicked() {
+                                click = Some(EClickEventType::CreateParticleSystem);
                                 ui.close_menu();
                             }
                         });
@@ -206,6 +216,11 @@ fn draw_content(
                                             ));
                                         }
                                         EContentFileType::IBL(_) => {}
+                                        EContentFileType::ParticleSystem(_) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/particle.svg"
+                                            ));
+                                        }
                                     }
                                     let _ = ui.button(name.clone());
                                 })

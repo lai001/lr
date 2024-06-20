@@ -11,7 +11,7 @@ editor = [
     "rs_shader_compiler/editor",
     "rs_render/editor",
     "rs_core_minimal/editor",
-    "dep:anyhow"
+    "dep:anyhow",
 ]
 standalone = [
     "rs_shader_compiler/standalone",
@@ -44,6 +44,7 @@ uuid = { version = "1.6.1", features = [
     "macro-diagnostics",
     "serde",
 ] }
+rand = { version = "0.8.5" }
 rs_foundation = { path = "../rs_foundation" }
 rs_artifact = { path = "../rs_artifact" }
 rs_render = { path = "../rs_render" }

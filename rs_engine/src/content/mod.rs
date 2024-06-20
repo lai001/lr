@@ -3,6 +3,7 @@ pub mod ibl;
 pub mod level;
 pub mod material;
 pub mod media_source;
+pub mod particle_system;
 pub mod skeleton;
 pub mod skeleton_animation;
 pub mod skeleton_mesh;

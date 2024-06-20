@@ -1,4 +1,4 @@
-use super::misc::update_window_with_input_mode;
+use super::misc::{random_color3, update_window_with_input_mode};
 use crate::{custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType};
 use anyhow::anyhow;
 use egui_winit::State;
@@ -272,7 +272,7 @@ impl MeshUIWindow {
 
         let mut vertices: Vec<MeshVertex3> = vec![];
         for mesh_cluster in mesh_clusters {
-            let color = Self::random_color();
+            let color = random_color3();
             for index in mesh_cluster {
                 for offset in 0..=2 {
                     let vertex_index = indices[index + offset];
@@ -336,12 +336,5 @@ impl MeshUIWindow {
             constants_handle,
             mesh_view_constants,
         });
-    }
-
-    pub fn random_color() -> glam::Vec3 {
-        let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
-        let y: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
-        let z: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
-        glam::vec3(x, y, z)
     }
 }

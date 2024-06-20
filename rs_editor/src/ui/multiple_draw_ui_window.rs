@@ -1,7 +1,7 @@
 use super::misc::update_window_with_input_mode;
 use crate::{
     custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType,
-    ui::mesh_ui_window::MeshUIWindow,
+    ui::misc::random_color3,
 };
 use anyhow::anyhow;
 use egui_winit::State;
@@ -17,8 +17,8 @@ use rs_engine::{
 };
 use rs_render::{
     command::{
-        BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, MultipleDraw, PresentInfo,
-        RenderCommand, UpdateBuffer,
+        BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, EDrawCallType,
+        MultiDrawIndirect, PresentInfo, RenderCommand, UpdateBuffer,
     },
     constants::MeshViewConstants,
     renderer::MESH_VIEW_MULTIPLE_DRAW_PIPELINE,
@@ -265,7 +265,7 @@ impl MultipleDrawUiWindow {
 
         let vertices = (0..REPEAT_SIZE)
             .flat_map(|id| {
-                let vertex_color = MeshUIWindow::random_color();
+                let vertex_color = random_color3();
                 quad.into_iter()
                     .map(|(_, vertex_position, ..)| MeshVertex4 {
                         position: *vertex_position,
@@ -340,11 +340,6 @@ impl MultipleDrawUiWindow {
             },
         }));
 
-        let multiple_draw = MultipleDraw {
-            indirect_buffer_handle: *indirect_buffer_handle,
-            indirect_offset: 0,
-            count: REPEAT_SIZE as u32,
-        };
         let mut draw_object = DrawObject::new(
             0,
             vec![*vertex_buffer_handle],
@@ -357,7 +352,12 @@ impl MultipleDrawUiWindow {
                 EBindingResource::Constants(*constants_handle),
             ]],
         );
-        draw_object.multiple_draw = Some(multiple_draw);
+
+        draw_object.draw_call_type = EDrawCallType::MultiDrawIndirect(MultiDrawIndirect {
+            indirect_buffer_handle: *indirect_buffer_handle,
+            indirect_offset: 0,
+            count: REPEAT_SIZE as u32,
+        });
         self.draw_objects.clear();
         self.draw_objects.push(MeshViewDrawObject {
             draw_object,

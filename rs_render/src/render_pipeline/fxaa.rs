@@ -2,7 +2,7 @@ use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     global_shaders::{fxaa::FXAAShader, global_shader::GlobalShader},
-    gpu_vertex_buffer::GpuVertexBufferImp,
+    gpu_vertex_buffer::{Draw, EDrawCallType, GpuVertexBufferImp},
     shader_library::ShaderLibrary,
 };
 use std::sync::Arc;
@@ -48,7 +48,7 @@ impl FXAAPipeline {
         output_view: &TextureView,
         binding_resource: Vec<Vec<BindingResource<'_>>>,
     ) {
-        self.base_render_pipeline.draw_resources2(
+        self.base_render_pipeline.draw_resources(
             device,
             queue,
             binding_resource,
@@ -57,6 +57,7 @@ impl FXAAPipeline {
                 vertex_count: 6,
                 index_buffer: None,
                 index_count: None,
+                draw_type: EDrawCallType::Draw(Draw { instances: 0..1 }),
             }],
             &[ColorAttachment {
                 color_ops: None,

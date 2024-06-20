@@ -2,7 +2,7 @@ use crate::{
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     global_shaders::{attachment::AttachmentShader, global_shader::GlobalShader},
-    gpu_vertex_buffer::GpuVertexBufferImp,
+    gpu_vertex_buffer::{Draw, EDrawCallType, GpuVertexBufferImp},
     shader_library::ShaderLibrary,
 };
 use std::sync::Arc;
@@ -146,7 +146,7 @@ impl AttachmentPipeline {
             EClearType::Both(both) => Some(both.clear_depth.view),
         };
 
-        base_render_pipeline.draw_resources2(
+        base_render_pipeline.draw_resources(
             device,
             queue,
             vec![],
@@ -155,6 +155,7 @@ impl AttachmentPipeline {
                 vertex_count: 0,
                 index_buffer: None,
                 index_count: None,
+                draw_type: EDrawCallType::Draw(Draw { instances: 0..1 }),
             }],
             &color_attachments,
             Some(Operations {

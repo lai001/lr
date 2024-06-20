@@ -15,6 +15,7 @@ use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
 use crate::render_pipeline::mesh_view::MeshViewPipeline;
 use crate::render_pipeline::mesh_view_multiple_draw::MeshViewMultipleDrawPipeline;
+use crate::render_pipeline::particle_pipeline::ParticlePipeline;
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::shader_library::ShaderLibrary;
@@ -38,6 +39,7 @@ pub const MESH_VIEW_RENDER_PIPELINE: &str = "MESH_VIEW_RENDER_PIPELINE";
 pub const MESH_VIEW_MULTIPLE_DRAW_PIPELINE: &str = "MESH_VIEW_MULTIPLE_DRAW_PIPELINE";
 pub const SHADOW_DEPTH_SKIN_PIPELINE: &str = "SHADOW_DEPTH_SKIN_PIPELINE";
 pub const SHADOW_DEPTH_PIPELINE: &str = "SHADOW_DEPTH_PIPELINE";
+pub const PARTICLE_PIPELINE: &str = "PARTICLE_PIPELINE";
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
@@ -65,6 +67,7 @@ pub struct Renderer {
     attachment_pipeline: AttachmentPipeline,
     mesh_view_pipeline: MeshViewPipeline,
     mesh_view_multiple_draw_pipeline: MeshViewMultipleDrawPipeline,
+    particle_pipeline: ParticlePipeline,
 
     depth_textures: HashMap<isize, DepthTexture>,
     // default_textures: DefaultTextures,
@@ -196,6 +199,13 @@ impl Renderer {
             &mut base_render_pipeline_pool,
         );
 
+        let particle_pipeline = ParticlePipeline::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &current_swapchain_format,
+            &mut base_render_pipeline_pool,
+        );
+
         Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
@@ -235,6 +245,7 @@ impl Renderer {
             shadow_pipilines: Some(shadow_pipilines),
             base_compute_pipeline_pool,
             fxaa_pipeline: Some(fxaa_pipeline),
+            particle_pipeline,
         }
     }
 
@@ -712,10 +723,10 @@ impl Renderer {
                     view: surface_texture_view,
                     resolve_target,
                     color: Color {
-                        r: 0.5,
-                        g: 0.5,
-                        b: 0.5,
-                        a: 1.0,
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.0,
                     },
                 },
                 clear_depth: ClearDepth {
@@ -1068,6 +1079,16 @@ impl Renderer {
                 vertex_count: draw_object_command.vertex_count,
                 index_buffer,
                 index_count: draw_object_command.index_count,
+                draw_type: match &draw_object_command.draw_call_type {
+                    EDrawCallType::MultiDrawIndirect(_) => {
+                        todo!()
+                    }
+                    EDrawCallType::Draw(draw) => crate::gpu_vertex_buffer::EDrawCallType::Draw(
+                        crate::gpu_vertex_buffer::Draw {
+                            instances: draw.instances.clone(),
+                        },
+                    ),
+                },
             };
 
             let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![];
@@ -1176,6 +1197,26 @@ impl Renderer {
             vertex_count: draw_object_command.vertex_count,
             index_buffer,
             index_count: draw_object_command.index_count,
+            draw_type: match &draw_object_command.draw_call_type {
+                EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                    let indirect_buffer = self
+                        .buffers
+                        .get(&multi_draw_indirect.indirect_buffer_handle)
+                        .unwrap();
+                    crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
+                        crate::gpu_vertex_buffer::MultiDrawIndirect {
+                            indirect_buffer,
+                            indirect_offset: multi_draw_indirect.indirect_offset,
+                            count: multi_draw_indirect.count,
+                        },
+                    )
+                }
+                EDrawCallType::Draw(draw) => {
+                    crate::gpu_vertex_buffer::EDrawCallType::Draw(crate::gpu_vertex_buffer::Draw {
+                        instances: draw.instances.clone(),
+                    })
+                }
+            },
         };
 
         let mut tmp_texture_views: HashMap<u64, TextureView> = HashMap::new();
@@ -1326,23 +1367,24 @@ impl Renderer {
                 );
             }
             MESH_VIEW_MULTIPLE_DRAW_PIPELINE => {
-                if let Some(multiple_draw) = &draw_object_command.multiple_draw {
-                    let indirect_buffer = self
-                        .buffers
-                        .get(&multiple_draw.indirect_buffer_handle)
-                        .unwrap();
-                    self.mesh_view_multiple_draw_pipeline.multi_draw_indirect(
-                        device,
-                        queue,
-                        surface_texture_view,
-                        &depth_texture_view,
-                        &[mesh_buffer],
-                        indirect_buffer,
-                        multiple_draw.indirect_offset,
-                        multiple_draw.count,
-                        group_binding_resource,
-                    );
-                }
+                self.mesh_view_multiple_draw_pipeline.multi_draw_indirect(
+                    device,
+                    queue,
+                    surface_texture_view,
+                    &depth_texture_view,
+                    &[mesh_buffer],
+                    group_binding_resource,
+                );
+            }
+            PARTICLE_PIPELINE => {
+                self.particle_pipeline.draw(
+                    device,
+                    queue,
+                    surface_texture_view,
+                    &depth_texture_view,
+                    &[mesh_buffer],
+                    group_binding_resource,
+                );
             }
             _ => {
                 (|| {
@@ -1504,22 +1546,44 @@ impl Renderer {
             group_binding_resources.push(binding_resources);
         }
 
+        let mesh_buffer = GpuVertexBufferImp {
+            vertex_buffers: &vertex_buffers,
+            vertex_count: draw_object.vertex_count,
+            index_buffer: index_buffer,
+            index_count: draw_object.index_count,
+            draw_type: match &draw_object.draw_call_type {
+                EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                    let indirect_buffer = self
+                        .buffers
+                        .get(&multi_draw_indirect.indirect_buffer_handle)
+                        .unwrap();
+                    crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
+                        crate::gpu_vertex_buffer::MultiDrawIndirect {
+                            indirect_buffer,
+                            indirect_offset: multi_draw_indirect.indirect_offset,
+                            count: multi_draw_indirect.count,
+                        },
+                    )
+                }
+                EDrawCallType::Draw(draw) => {
+                    crate::gpu_vertex_buffer::EDrawCallType::Draw(crate::gpu_vertex_buffer::Draw {
+                        instances: draw.instances.clone(),
+                    })
+                }
+            },
+        };
+
         match shadow_mapping.render_pipeline.as_str() {
             SHADOW_DEPTH_SKIN_PIPELINE => {
                 let base_render_pipeline = shadow_pipilines
                     .depth_skin_pipeline
                     .base_render_pipeline
                     .clone();
-                base_render_pipeline.draw_resources2(
+                base_render_pipeline.draw_resources(
                     device,
                     queue,
                     group_binding_resources,
-                    &vec![GpuVertexBufferImp {
-                        vertex_buffers: &vertex_buffers,
-                        vertex_count: draw_object.vertex_count,
-                        index_buffer: index_buffer,
-                        index_count: draw_object.index_count,
-                    }],
+                    &vec![mesh_buffer],
                     &[],
                     depth_ops,
                     stencil_ops,

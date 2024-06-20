@@ -63,7 +63,7 @@ impl SkinMeshVirtualTextureFeedBackPipeline {
         binding_resources: Vec<Vec<BindingResource>>,
         mesh_buffers: &[GpuVertexBufferImp],
     ) {
-        self.base_render_pipeline.draw_resources2(
+        self.base_render_pipeline.draw_resources(
             device,
             queue,
             binding_resources,

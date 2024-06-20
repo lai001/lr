@@ -364,6 +364,7 @@ impl Engine {
                         }
                         EContentType::IBL => {}
                         EContentType::MediaSource => todo!(),
+                        EContentType::ParticleSystem => todo!(),
                     },
                     _ => {}
                 }

@@ -15,6 +15,7 @@ pub mod input_mode;
 pub mod logger;
 pub mod mesh_buffer;
 pub mod mipmap_generator;
+pub mod particle;
 pub mod player_viewport;
 pub mod plugin;
 pub mod plugin_context;

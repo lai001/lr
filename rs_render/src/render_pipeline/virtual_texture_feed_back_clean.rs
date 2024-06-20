@@ -4,7 +4,7 @@ use crate::{
     global_shaders::{
         global_shader::GlobalShader, virtual_texture_clean::VirtualTextureCleanShader,
     },
-    gpu_vertex_buffer::GpuVertexBufferImp,
+    gpu_vertex_buffer::{Draw, EDrawCallType, GpuVertexBufferImp},
     shader_library::ShaderLibrary,
 };
 use wgpu::*;
@@ -47,7 +47,7 @@ impl VirtualTextureFeedBackClearPipeline {
         output_view: &TextureView,
         depth_view: &TextureView,
     ) {
-        self.base_render_pipeline.draw_resources2(
+        self.base_render_pipeline.draw_resources(
             device,
             queue,
             vec![],
@@ -56,6 +56,7 @@ impl VirtualTextureFeedBackClearPipeline {
                 vertex_count: 6,
                 index_buffer: None,
                 index_count: None,
+                draw_type: EDrawCallType::Draw(Draw { instances: 0..1 }),
             }],
             &[ColorAttachment {
                 color_ops: Some(Operations {

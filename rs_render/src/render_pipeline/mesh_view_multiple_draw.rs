@@ -62,19 +62,14 @@ impl MeshViewMultipleDrawPipeline {
         output_view: &TextureView,
         depth_view: &TextureView,
         mesh_buffers: &[GpuVertexBufferImp],
-        indirect_buffer: &Buffer,
-        indirect_offset: BufferAddress,
-        count: u32,
+
         binding_resource: Vec<Vec<BindingResource<'_>>>,
     ) {
-        self.base_render_pipeline.multi_draw_indirect_resource(
+        self.base_render_pipeline.draw_resources(
             device,
             queue,
             binding_resource,
             mesh_buffers,
-            indirect_buffer,
-            indirect_offset,
-            count,
             &[ColorAttachment {
                 color_ops: None,
                 view: output_view,
@@ -83,6 +78,7 @@ impl MeshViewMultipleDrawPipeline {
             None,
             None,
             Some(depth_view),
+            None,
             None,
         );
     }

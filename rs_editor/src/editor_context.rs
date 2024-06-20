@@ -18,6 +18,7 @@ use crate::{
         misc::update_window_with_input_mode,
         multiple_draw_ui_window::MultipleDrawUiWindow,
         object_property_view::ESelectedObjectType,
+        particle_system_ui_window::ParticleSystemUIWindow,
         top_menu,
     },
     watch_shader::WatchShader,
@@ -100,6 +101,7 @@ pub enum EWindowType {
     Mesh,
     Media,
     MultipleDraw,
+    Particle,
 }
 
 pub struct EditorContext {
@@ -117,6 +119,7 @@ pub struct EditorContext {
     model_loader: ModelLoader,
     window_manager: Rc<RefCell<WindowsManager>>,
     material_ui_window: Option<MaterialUIWindow>,
+    particle_system_ui_window: Option<ParticleSystemUIWindow>,
     mesh_ui_window: Option<MeshUIWindow>,
     media_ui_window: Option<MediaUIWindow>,
     multiple_draw_ui_window: Option<MultipleDrawUiWindow>,
@@ -229,6 +232,7 @@ impl EditorContext {
             media_ui_window: None,
             multiple_draw_ui_window: None,
             watch_shader,
+            particle_system_ui_window: None,
         };
         Ok(editor_context)
     }
@@ -394,6 +398,9 @@ impl EditorContext {
                 if let Some(ui_window) = self.multiple_draw_ui_window.as_mut() {
                     ui_window.device_event_process(event);
                 }
+                if let Some(ui_window) = self.particle_system_ui_window.as_mut() {
+                    ui_window.device_event_process(event);
+                }
                 match event {
                     winit::event::DeviceEvent::MouseMotion { delta } => {
                         let input_mode = self.engine.get_input_mode();
@@ -490,6 +497,20 @@ impl EditorContext {
                     EWindowType::MultipleDraw => {
                         let ui_window = self
                             .multiple_draw_ui_window
+                            .as_mut()
+                            .expect("Should not be bull");
+                        ui_window.window_event_process(
+                            window_id,
+                            window,
+                            event,
+                            event_loop_window_target,
+                            &mut self.engine,
+                            &mut *self.window_manager.borrow_mut(),
+                        );
+                    }
+                    EWindowType::Particle => {
+                        let ui_window = self
+                            .particle_system_ui_window
                             .as_mut()
                             .expect("Should not be bull");
                         ui_window.window_event_process(
@@ -875,6 +896,7 @@ impl EditorContext {
                     })();
                     log::trace!("{:?}", result);
                 }
+                EContentFileType::ParticleSystem(_) => todo!(),
             }
         }
     }
@@ -1248,6 +1270,22 @@ impl EditorContext {
         Ok(())
     }
 
+    fn open_particle_window(
+        &mut self,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        particle_system: Rc<RefCell<rs_engine::content::particle_system::ParticleSystem>>,
+    ) {
+        let ui_window = ParticleSystemUIWindow::new(
+            self.editor_ui.egui_context.clone(),
+            &mut *self.window_manager.borrow_mut(),
+            event_loop_window_target,
+            &mut self.engine,
+            particle_system,
+        )
+        .expect("Should be opened");
+        self.particle_system_ui_window = Some(ui_window);
+    }
+
     fn open_material_window(
         &mut self,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
@@ -1417,10 +1455,10 @@ impl EditorContext {
         self.process_project_settings_event(click_event.project_settings_event);
     }
 
-    fn is_new_content_name_avaliable(&self, new_name: &str) -> bool {
+    fn get_all_content_names(&self) -> Vec<String> {
         let content_data_source = &self.data_source.content_data_source;
         let Some(current_folder) = &content_data_source.current_folder else {
-            return false;
+            return vec![];
         };
         let names = {
             let current_folder = current_folder.borrow();
@@ -1430,7 +1468,45 @@ impl EditorContext {
                 .map(|x| x.get_name())
                 .collect::<Vec<String>>()
         };
+        names
+    }
+
+    fn is_new_content_name_avaliable(names: &[String], new_name: &str) -> bool {
         names.contains(&new_name.to_string()) == false
+    }
+
+    pub fn make_unique_name(names: Vec<String>, new_name: impl AsRef<str>) -> String {
+        let mut new_name = new_name.as_ref().to_string();
+        let mut current_number: Option<isize> = None;
+
+        loop {
+            if Self::is_new_content_name_avaliable(&names, &new_name) {
+                return new_name.to_string();
+            } else {
+                let re = regex::Regex::new(r"[0-9]\d*$").unwrap();
+                match re.find(&new_name) {
+                    Some(mt) => {
+                        let s = mt.as_str();
+                        let number = s.parse::<isize>().unwrap();
+                        match &mut current_number {
+                            Some(current_number) => {
+                                *current_number = number + 1;
+                            }
+                            None => {
+                                current_number = Some(number);
+                            }
+                        }
+                        new_name = re
+                            .replace(&new_name, current_number.unwrap().to_string())
+                            .to_string();
+                    }
+                    None => {
+                        current_number = Some(0);
+                        new_name = format!("{}_0", new_name);
+                    }
+                }
+            }
+        }
     }
 
     pub fn copy_file_and_log<P: AsRef<Path> + Clone + Debug>(
@@ -1766,29 +1842,27 @@ impl EditorContext {
                         self.open_material_window(event_loop_window_target, Some(material.clone()));
                     }
                     EContentFileType::IBL(_) => {}
+                    EContentFileType::ParticleSystem(particle_system) => {
+                        self.open_particle_window(event_loop_window_target, particle_system);
+                    }
                 }
             }
             content_browser::EClickEventType::SingleClickFile(file) => {
                 self.data_source.content_data_source.highlight_file = Some(file.clone());
             }
             content_browser::EClickEventType::CreateMaterial => {
-                let is_new_content_name_avaliable = self.is_new_content_name_avaliable(
+                let names = self.get_all_content_names();
+                let name = Self::make_unique_name(
+                    names,
                     &self.data_source.content_data_source.new_material_name,
                 );
-                let content_data_source = &mut self.data_source.content_data_source;
                 let Some(project_context) = &mut self.project_context else {
                     return;
                 };
-                if !is_new_content_name_avaliable {
-                    return;
-                }
+
                 let material = rs_engine::content::material::Material::new(
-                    build_content_file_url(&content_data_source.new_material_name).unwrap(),
-                    build_asset_url(format!(
-                        "material/{}",
-                        &content_data_source.new_material_name
-                    ))
-                    .unwrap(),
+                    build_content_file_url(&name).unwrap(),
+                    build_asset_url(format!("material/{}", &name)).unwrap(),
                 );
 
                 let material_editor = crate::material::Material::new(material.asset_url.clone(), {
@@ -1812,16 +1886,14 @@ impl EditorContext {
                     .push(EContentFileType::Material(Rc::new(RefCell::new(material))));
             }
             content_browser::EClickEventType::CreateIBL => {
-                let is_new_content_name_avaliable = self.is_new_content_name_avaliable(
+                let names = self.get_all_content_names();
+                let name = Self::make_unique_name(
+                    names,
                     &self.data_source.content_data_source.new_ibl_name,
                 );
-                if !is_new_content_name_avaliable {
-                    return;
-                }
-                let new_ibl = rs_engine::content::ibl::IBL::new(
-                    build_content_file_url(&self.data_source.content_data_source.new_ibl_name)
-                        .unwrap(),
-                );
+
+                let new_ibl =
+                    rs_engine::content::ibl::IBL::new(build_content_file_url(&name).unwrap());
                 let new_ibl = SingleThreadMut::new(new_ibl);
                 let Some(project_context) = &mut self.project_context else {
                     return;
@@ -1832,6 +1904,26 @@ impl EditorContext {
                     .borrow_mut()
                     .files
                     .push(EContentFileType::IBL(new_ibl));
+            }
+            content_browser::EClickEventType::CreateParticleSystem => {
+                let names = self.get_all_content_names();
+                let name = Self::make_unique_name(
+                    names,
+                    &self.data_source.content_data_source.new_content_name,
+                );
+                let Some(project_context) = &mut self.project_context else {
+                    return;
+                };
+                let particle_system = rs_engine::content::particle_system::ParticleSystem::new(
+                    build_content_file_url(&name).unwrap(),
+                );
+                let particle_system = SingleThreadMut::new(particle_system);
+                project_context
+                    .project
+                    .content
+                    .borrow_mut()
+                    .files
+                    .push(EContentFileType::ParticleSystem(particle_system));
             }
         }
     }
@@ -2002,5 +2094,25 @@ mod test {
         );
 
         assert_eq!(EditorContext::is_project_name_valid("name"), true);
+    }
+
+    #[test]
+    fn test_case1() {
+        assert_eq!(
+            EditorContext::make_unique_name(vec!["abc_1".to_string()], "abc_1"),
+            "abc_2"
+        );
+        assert_eq!(
+            EditorContext::make_unique_name(vec!["abc".to_string()], "abc"),
+            "abc_0"
+        );
+        assert_eq!(
+            EditorContext::make_unique_name(vec!["abc0".to_string()], "abc0"),
+            "abc1"
+        );
+        assert_eq!(
+            EditorContext::make_unique_name(vec!["abc".to_string(), "abc_0".to_string()], "abc"),
+            "abc_1"
+        );
     }
 }
