@@ -11,5 +11,6 @@ pub mod material_resolve;
 pub mod model_loader;
 pub mod project;
 pub mod project_context;
+pub mod thumbnail_cache;
 pub mod ui;
 pub mod watch_shader;

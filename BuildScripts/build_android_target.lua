@@ -55,7 +55,7 @@ do
                 " - release" },
             { "j", "jobs", "kv", nil, "Number of parallel jobs.",
                 " - <N>",
-                " - release" },                
+                " - release" },
             { "t", "target", "kv", "aarch64-linux-android", "Set target.",
                 " - aarch64-linux-android",
                 " - armv7-linux-androideabi",

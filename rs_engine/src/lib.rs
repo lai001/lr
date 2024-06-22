@@ -44,3 +44,7 @@ pub fn build_content_file_url(name: impl AsRef<str>) -> Result<url::Url, url::Pa
 pub fn build_built_in_resouce_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
     url::Url::parse(&format!("{}://{}", BUILT_IN_RESOURCE, name.as_ref()))
 }
+
+#[global_allocator]
+static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
+    tracy_client::ProfiledAllocator::new(std::alloc::System, 100);

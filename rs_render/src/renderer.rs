@@ -105,6 +105,7 @@ impl Renderer {
         shaders: HashMap<String, String>,
         settings: RenderSettings,
     ) -> Renderer {
+        let span = tracy_client::span!();
         let main_window_id = {
             let binding = wgpu_context.get_window_ids();
             *binding.first().expect("Not null")
@@ -205,7 +206,7 @@ impl Renderer {
             &current_swapchain_format,
             &mut base_render_pipeline_pool,
         );
-
+        span.emit_text("done");
         Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
@@ -261,6 +262,7 @@ impl Renderer {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
+        let span = tracy_client::span!();
         let wgpu_context = WGPUContext::new(
             window_id,
             window,
@@ -283,6 +285,7 @@ impl Renderer {
                 },
             }),
         )?;
+        span.emit_text("done");
         Ok(Self::from_context(
             wgpu_context,
             surface_width,

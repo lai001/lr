@@ -15,7 +15,7 @@ do
         end
         for _, dir in ipairs(os.files("Android/Template/rs_android/src/main/jniLibs/*/*.so")) do
             os.tryrm(dir)
-        end        
+        end
     end)
     set_menu {
         usage = "xmake build_clean",

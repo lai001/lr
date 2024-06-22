@@ -1,5 +1,6 @@
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
+use crate::thumbnail_cache::ThumbnailCache;
 use crate::ui::content_item_property_view::ContentItemPropertyView;
 use crate::ui::debug_textures_view::{self, DebugTexturesView};
 use crate::ui::gizmo_view::GizmoView;
@@ -41,6 +42,7 @@ pub struct EditorUI {
     pub content_item_property_view: ContentItemPropertyView,
     pub object_property_view: ObjectPropertyView,
     pub debug_textures_view: DebugTexturesView,
+    thumbnail_cache: ThumbnailCache,
 }
 
 impl EditorUI {
@@ -70,6 +72,7 @@ impl EditorUI {
             content_item_property_view: ContentItemPropertyView::new(),
             object_property_view: ObjectPropertyView::new(),
             debug_textures_view: DebugTexturesView::new(),
+            thumbnail_cache: ThumbnailCache::new(),
         }
     }
 
@@ -98,6 +101,7 @@ impl EditorUI {
             &mut data_source.is_asset_folder_open,
             data_source.current_asset_folder.as_ref(),
             data_source.highlight_asset_file.as_ref(),
+            &mut self.thumbnail_cache,
         );
 
         if let Some(selected_object) = self.object_property_view.selected_object.as_ref() {

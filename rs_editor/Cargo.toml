@@ -61,6 +61,7 @@ naga = { version = "0.19.0" }
 wgpu = "0.19.1"
 rand = { version = "0.8.5" }
 mp4 = { version = "0.14.0" }
+tracy-client = "0.17.0"
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
 rs_render = { path = "../rs_render" }
 rs_foundation = { path = "../rs_foundation" }

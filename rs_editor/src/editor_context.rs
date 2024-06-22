@@ -162,6 +162,7 @@ impl EditorContext {
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
         window_manager: Rc<RefCell<WindowsManager>>,
     ) -> anyhow::Result<EditorContext> {
+        let span = tracy_client::span!();
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
@@ -212,7 +213,7 @@ impl EditorContext {
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
         let watch_shader = WatchShader::new(get_buildin_shader_dir())?;
-
+        span.emit_text("done");
         let editor_context = EditorContext {
             event_loop_proxy,
             engine,
@@ -752,6 +753,8 @@ impl EditorContext {
         project_context: &ProjectContext,
         files: Vec<EContentFileType>,
     ) {
+        let span = tracy_client::span!();
+
         let project_folder_path = project_context.get_project_folder_path();
         for file in files {
             match file {
@@ -899,6 +902,8 @@ impl EditorContext {
                 EContentFileType::ParticleSystem(_) => todo!(),
             }
         }
+
+        span.emit_text("done");
     }
 
     fn add_new_actors(
@@ -930,6 +935,7 @@ impl EditorContext {
         file_path: &Path,
         window: &mut winit::window::Window,
     ) -> anyhow::Result<()> {
+        let span = tracy_client::span!();
         let project_context = ProjectContext::open(&file_path)?;
         window.set_title(&format!("Editor({})", project_context.project.project_name));
         let asset_folder_path = project_context.get_asset_folder_path();
@@ -1006,6 +1012,7 @@ impl EditorContext {
             .insert(file_path.to_path_buf());
         self.data_source.recent_projects.save()?;
         self.post_build_asset_folder();
+        span.emit_text("done");
         Ok(())
     }
 
@@ -1424,6 +1431,8 @@ impl EditorContext {
         window: &mut winit::window::Window,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
+        let span = tracy_client::span!();
+
         let egui_winit_state = &mut self.egui_winit_state;
 
         let ctx = egui_winit_state.egui_ctx().clone();
@@ -1453,6 +1462,8 @@ impl EditorContext {
         self.process_debug_texture_view_event(click_event.debug_textures_view_event);
         self.process_click_actor_event(click_event.click_actor);
         self.process_project_settings_event(click_event.project_settings_event);
+
+        span.emit_text("done");
     }
 
     fn get_all_content_names(&self) -> Vec<String> {

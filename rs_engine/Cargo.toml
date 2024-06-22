@@ -45,6 +45,7 @@ uuid = { version = "1.6.1", features = [
     "serde",
 ] }
 rand = { version = "0.8.5" }
+tracy-client = "0.17.0"
 rs_foundation = { path = "../rs_foundation" }
 rs_artifact = { path = "../rs_artifact" }
 rs_render = { path = "../rs_render" }

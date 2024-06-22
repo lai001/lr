@@ -479,6 +479,7 @@ impl ProjectContext {
     }
 
     pub fn pre_process_shaders() -> HashMap<String, String> {
+        let span = tracy_client::span!();
         let mut shaders = HashMap::new();
         let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
         for buildin_shader in buildin_shaders {
@@ -516,6 +517,7 @@ impl ProjectContext {
                 }
             }
         }
+        span.emit_text("done");
         shaders
     }
 }

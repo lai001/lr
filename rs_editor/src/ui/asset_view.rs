@@ -1,4 +1,7 @@
-use crate::data_source::{AssetFile, AssetFolder};
+use crate::{
+    data_source::{AssetFile, AssetFolder},
+    thumbnail_cache::ThumbnailCache,
+};
 use egui::{Color32, Context, RichText, Ui};
 use rs_engine::file_type::EFileType;
 
@@ -18,6 +21,7 @@ pub fn draw(
     open: &mut bool,
     asset_folder: Option<&AssetFolder>,
     highlight_file: Option<&AssetFile>,
+    thumbnail_cache: &mut ThumbnailCache,
 ) -> Option<EClickItemType> {
     let mut click_back: Option<EClickItemType> = None;
     let mut click_asset: Option<EClickItemType> = None;
@@ -43,7 +47,8 @@ pub fn draw(
                     });
                     ui.separator();
                     egui::ScrollArea::both().show(ui, |ui| {
-                        click_asset = draw_content(ui, asset_folder, highlight_file);
+                        click_asset =
+                            draw_content(ui, asset_folder, highlight_file, thumbnail_cache);
                     });
                 });
             }
@@ -61,6 +66,7 @@ fn draw_content(
     ui: &mut Ui,
     asset_folder: &AssetFolder,
     highlight_file: Option<&AssetFile>,
+    thumbnail_cache: &mut ThumbnailCache,
 ) -> Option<EClickItemType> {
     let mut total_items: Vec<EAssetItem> = vec![];
     for folder in &asset_folder.folders {
@@ -125,8 +131,15 @@ fn draw_content(
                                     | EFileType::Png
                                     | EFileType::Exr
                                     | EFileType::Hdr => {
-                                        let url = format!("file://{}", file.path.to_str().unwrap());
-                                        ui.image(url);
+                                        match thumbnail_cache.get_image_file_uri(&file.path) {
+                                            Some(uri) => {
+                                                ui.image(uri);
+                                            }
+                                            None => {
+                                                thumbnail_cache.load_image(&file.path);
+                                                ui.spinner();
+                                            }
+                                        }
                                     }
                                     EFileType::Mp4 => {
                                         ui.painter_at(ui.available_rect_before_wrap()).rect_filled(

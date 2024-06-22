@@ -132,6 +132,8 @@ impl Engine {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
+        let span = tracy_client::span!();
+
         let settings: Settings;
         if let Some(artifact_reader) = &mut artifact_reader {
             settings = artifact_reader.get_artifact_file_header().settings.clone();
@@ -312,7 +314,7 @@ impl Engine {
         engine
             .player_viewports
             .push(SingleThreadMut::new(player_viewport));
-
+        span.emit_text("done");
         Ok(engine)
     }
 

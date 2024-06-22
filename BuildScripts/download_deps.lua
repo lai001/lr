@@ -5,6 +5,8 @@ local ffmpeg_dir = ffmpeg_dir
 local metis_dir = metis_dir
 local gklib_dir = gklib_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
+local tracy_root_dir = tracy_root_dir
+
 task("download_deps")
 do
     on_run(function()
@@ -98,7 +100,21 @@ do
         -- if os.exists(russimp_prebuild_dir) == false and os.exists(russimp_file) then
         --     archive.extract(russimp_file, russimp_prebuild_dir)
         -- end
-        
+
+        local tracy_archive_file = path.join(deps_dir, "Tracy-0.10.7z")
+        local tracy_file = path.join(deps_dir, "Tracy-0.10")
+        if os.exists(tracy_archive_file) == false then
+            local link = "https://github.com/wolfpld/tracy/releases/download/v0.10/Tracy-0.10.7z"
+            http.download(link, tracy_archive_file)
+        end
+        if os.exists(tracy_file) == false and os.exists(tracy_archive_file) then
+            archive.extract(tracy_archive_file, tracy_file)
+        end
+
+        if os.exists(tracy_root_dir) == false then
+            git.clone("https://github.com/wolfpld/tracy.git", { outputdir = tracy_root_dir })
+            git.checkout("v0.10", { repodir = tracy_root_dir })
+        end
     end)
     set_menu {
         usage = "xmake download_deps",

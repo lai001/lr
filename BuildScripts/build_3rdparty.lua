@@ -1,6 +1,7 @@
 local engine_root_dir = engine_root_dir
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
+
 task("build_3rdparty")
 do
     on_run(function()
@@ -16,8 +17,10 @@ do
         os.exec("xmake build gpmetis")
         os.exec("xmake f -a arm64-v8a -m debug -p android -k static")
         os.exec("xmake build gpmetis")
+        os.exec("xmake build tracy")
         os.exec("xmake f -a arm64-v8a -m release -p android -k static")
         os.exec("xmake build gpmetis")
+        os.exec("xmake build tracy")
     end)
     set_menu {
         usage = "xmake ci",

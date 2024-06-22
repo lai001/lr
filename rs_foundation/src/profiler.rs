@@ -105,9 +105,9 @@ impl Profiler {
     }
 
     #[track_caller]
-    pub fn trace(&self, label: &str) -> Arc<TimeTrace> {
+    pub fn trace(&self, label: String) -> Arc<TimeTrace> {
         let caller_location = std::panic::Location::caller();
-        let time_trace = TimeTrace::begin(label.to_string());
+        let time_trace = TimeTrace::begin(label);
         let time_trace = Arc::new(time_trace);
         let key = format!(
             "{}:{}",

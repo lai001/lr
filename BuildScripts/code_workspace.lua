@@ -58,7 +58,7 @@ task("code_workspace") do
 
         local target = (in_target and {in_target} or {option.get("target")})[1]
         target = (target and {target} or {})[1]
-   
+
         local mode = (in_mode and {in_mode} or {option.get("mode")})[1]
         mode = (mode and {mode} or {"debug"})[1]
 

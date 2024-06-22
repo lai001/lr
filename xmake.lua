@@ -10,6 +10,7 @@ gklib_dir = deps_dir .. "GKlib"
 ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
 russimp_prebuild_dir = path.absolute(deps_dir)
 engine_root_dir = path.absolute("./")
+tracy_root_dir = path.absolute(deps_dir .. "tracy")
 
 includes("BuildScripts/gen_config.lua")
 includes("BuildScripts/build_android_target.lua")
@@ -32,7 +33,7 @@ option("enable_quickjs")
     set_showmenu(true)
 option_end()
 
-local function get_config_default(name, default_value) 
+local function get_config_default(name, default_value)
     local cfg_value = get_config(name)
     if cfg_value == nil then
         cfg_value = default_value
@@ -40,7 +41,7 @@ local function get_config_default(name, default_value)
     return cfg_value
 end
 
-local function ter_op(condition, true_value, false_value) 
+local function ter_op(condition, true_value, false_value)
     return (condition and {true_value} or {false_value})[1]
 end
 
@@ -193,7 +194,7 @@ task("install_target")
         import("core.base.option")
         import("core.base.json")
         import("core.project.config")
-        config.load()    
+        config.load()
         local function install_files(build_type, path_module)
             local source_dir = "./rs_computer_graphics/target/" .. build_type
             local install_dir = path_module.join(get_config("buildir"), get_config("plat"), "bin", build_type)
@@ -206,12 +207,12 @@ task("install_target")
             os.trycp("rs_computer_graphics/src/shader", install_dir)
             os.trycp(path_module.join(get_config("buildir"), get_config("plat"), get_config("arch"), build_type, "gpmetis.exe"), install_dir)
             local project = create_project(get_config("buildir"), get_config("plat"), get_config("arch"), mode, true, path_module)
-            json.savefile(install_dir .. "/Project.json", project)            
+            json.savefile(install_dir .. "/Project.json", project)
         end
         local mode = option.get("mode")
         if mode == nil then
             mode = "debug"
-        end 
+        end
         if mode == "debug" then
             install_files("debug", path)
         elseif mode == "release" then
@@ -310,7 +311,7 @@ function create_metis_program(target_name, source_files, source_files2)
         if source_files ~= nil then
             add_files(source_files2)
         end
-        if is_plat("android") then 
+        if is_plat("android") then
             add_defines("MAX_PATH=255")
         end
         add_deps("GKlib")
@@ -327,7 +328,7 @@ target("GKlib")
     add_files(gklib_dir .. "/*.c")
     add_headerfiles(gklib_dir .. "/*.h")
     add_includedirs(gklib_dir, { public = true })
-    if is_plat("windows") then 
+    if is_plat("windows") then
         add_headerfiles(gklib_dir .. "/win32/*.h")
         add_includedirs(gklib_dir .. "/win32", { public = true })
         add_files(gklib_dir .. "/win32/*.c")
@@ -340,7 +341,7 @@ target("metis")
     add_rules("mode.debug", "mode.release")
     add_files(metis_dir .. "/libmetis/*.c")
     add_headerfiles(metis_dir .. "/libmetis/*.h")
-    add_includedirs(metis_dir .. "/include", { public = true })  
+    add_includedirs(metis_dir .. "/include", { public = true })
     add_deps("GKlib")
     gklib_add_defines()
 
@@ -354,7 +355,7 @@ target("gpmetis")
     add_deps("GKlib")
     add_deps("metis")
     gklib_add_defines()
-    add_includedirs(metis_dir .. "/libmetis")  
+    add_includedirs(metis_dir .. "/libmetis")
 
 create_metis_program("gpmetis", { "gpmetis.c", "cmdline_gpmetis.c", "io.c", "stat.c" })
 -- create_metis_program("ndmetis", { "ndmetis.c", "cmdline_ndmetis.c", "io.c", "smbfactor.c" })
@@ -363,3 +364,11 @@ create_metis_program("gpmetis", { "gpmetis.c", "cmdline_gpmetis.c", "io.c", "sta
 -- create_metis_program("graphchk", { "graphchk.c", "io.c" })
 -- create_metis_program("cmpfillin", { "cmpfillin.c", "io.c", "smbfactor.c" })
 -- create_metis_program("metis_test", {}, { metis_dir .. "/test/mtest.c" })
+
+target("tracy")
+    set_languages("cxx11")
+    set_kind("$(kind)")
+    set_basename("tracy-client")
+    add_rules("mode.debug", "mode.release")
+    add_defines("TRACY_ENABLE")
+    add_files(tracy_root_dir .. "/public/TracyClient.cpp")
