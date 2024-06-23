@@ -10,7 +10,8 @@ use rs_artifact::{
     artifact::ArtifactAssetEncoder, shader_source_code::ShaderSourceCode, EEndianType,
 };
 use rs_engine::{
-    content::content_file_type::EContentFileType, resource_manager::ResourceManager, ASSET_SCHEME,
+    content::content_file_type::EContentFileType, resource_manager::ResourceManager,
+    thread_pool::ThreadPool, ASSET_SCHEME,
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
 use serde::{Deserialize, Serialize};
@@ -482,39 +483,58 @@ impl ProjectContext {
         let span = tracy_client::span!();
         let mut shaders = HashMap::new();
         let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        struct TaskResult {
+            name: String,
+            code: anyhow::Result<String>,
+        }
+        let mut is_finish = buildin_shaders.len();
         for buildin_shader in buildin_shaders {
-            let description = buildin_shader.get_shader_description();
-            let name = buildin_shader.get_name();
-            if rs_core_minimal::misc::is_dev_mode() {
-                let pre_process_code = rs_shader_compiler::pre_process::pre_process(
-                    &description.shader_path,
-                    description.include_dirs.iter(),
-                    description.definitions.iter(),
-                );
-                match pre_process_code {
-                    Ok(code) => {
-                        if shaders.insert(name.clone(), code).is_some() {
-                            panic!("{} is already exists", name);
-                        }
-                        continue;
+            ThreadPool::global().spawn({
+                let description = buildin_shader.get_shader_description();
+                let name = buildin_shader.get_name();
+                let sender = sender.clone();
+                move || {
+                    let span = tracy_client::span!();
+                    if rs_core_minimal::misc::is_dev_mode() {
+                        let pre_process_code = rs_shader_compiler::pre_process::pre_process(
+                            &description.shader_path,
+                            description.include_dirs.iter(),
+                            description.definitions.iter(),
+                        );
+                        let result = TaskResult {
+                            name: name.clone(),
+                            code: pre_process_code.map_err(|err| anyhow::Error::from(err)),
+                        };
+                        let _ = sender.send(result);
+                    } else {
+                        let path = rs_render::get_buildin_shader_dir().join(name.clone());
+                        let code = std::fs::read_to_string(path.clone());
+                        let result = TaskResult {
+                            name: name.clone(),
+                            code: code.map_err(|err| anyhow::Error::from(err)),
+                        };
+                        let _ = sender.send(result);
                     }
-                    Err(err) => {
-                        log::trace!("{err}");
+                    span.emit_text(&format!("Pre process shader: {}", name));
+                }
+            });
+        }
+        while let Ok(task_result) = receiver.recv() {
+            let name = task_result.name;
+            match task_result.code {
+                Ok(code) => {
+                    if shaders.insert(name.clone(), code).is_some() {
+                        panic!("{} is already exists", name);
                     }
                 }
-            } else {
-                let path = rs_render::get_buildin_shader_dir().join(name.clone());
-                let code = std::fs::read_to_string(path.clone());
-                match code {
-                    Ok(code) => {
-                        if shaders.insert(name.clone(), code).is_some() {
-                            panic!("{} is already exists", name);
-                        }
-                    }
-                    Err(err) => {
-                        panic!("{}, {:?}", err, path);
-                    }
+                Err(err) => {
+                    log::warn!("{}", err);
                 }
+            }
+            is_finish -= 1;
+            if is_finish == 0 {
+                break;
             }
         }
         span.emit_text("done");

@@ -1,13 +1,11 @@
-use crate::{build_content_file_url, property, url_extension::UrlExtension};
-use rs_artifact::{
-    asset::Asset, property_value_type::EPropertyValueType, resource_type::EResourceType,
-};
+use crate::{build_content_file_url, url_extension::UrlExtension};
+use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::{cell::RefCell, collections::HashMap};
-#[derive(Serialize, Deserialize, Debug)]
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct DirectionalLight {
     eye: glam::Vec3,
     light_projection: glam::Mat4,
@@ -132,25 +130,4 @@ impl Level {
     pub fn get_name(&self) -> String {
         self.url.get_name_in_editor()
     }
-}
-
-pub fn default_node3d_properties() -> HashMap<String, EPropertyValueType> {
-    HashMap::from([
-        (
-            property::name::TEXTURE.to_string(),
-            EPropertyValueType::Texture(None),
-        ),
-        (
-            property::name::SCALE.to_string(),
-            EPropertyValueType::Vec3(glam::Vec3::ONE),
-        ),
-        (
-            property::name::TRANSLATION.to_string(),
-            EPropertyValueType::Vec3(glam::Vec3::ZERO),
-        ),
-        (
-            property::name::ROTATION.to_string(),
-            EPropertyValueType::Quat(glam::Quat::IDENTITY),
-        ),
-    ])
 }

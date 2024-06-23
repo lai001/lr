@@ -21,6 +21,7 @@ pub enum Error {
     IO(std::io::Error, Option<String>),
     Wgpu(Mutex<wgpu::Error>),
     ValidationError(naga::WithSpan<naga::valid::ValidationError>),
+    NagaBackSpirVError(naga::back::spv::Error),
     Other(Option<String>),
 }
 

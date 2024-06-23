@@ -96,6 +96,7 @@ impl WGPUContext {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
+        let span = tracy_client::span!();
         let instance = wgpu::Instance::new(instance_desc.unwrap_or_default());
         let surface = Self::new_surface(&instance, window)?;
 
@@ -134,7 +135,7 @@ impl WGPUContext {
             "default PrimitiveState: {:?}",
             wgpu::PrimitiveState::default()
         );
-
+        span.emit_text("");
         Ok(WGPUContext {
             instance,
             adapter,

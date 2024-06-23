@@ -12,8 +12,8 @@ standalone = ["rs_shader_compiler/standalone", "rs_core_minimal/standalone"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 serde = { version = "1.0.193", features = ["derive", "rc"] }
-wgpu = "0.19.1"
-naga = "0.19.0"
+wgpu = { version = "0.19.1", features = ["spirv", "naga-ir"] }
+naga = { version = "0.19.0" }
 log = "0.4.17"
 pollster = "0.2"
 raw-window-handle = "0.6"

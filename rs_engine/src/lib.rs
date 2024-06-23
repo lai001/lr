@@ -16,6 +16,7 @@ pub mod logger;
 pub mod mesh_buffer;
 pub mod mipmap_generator;
 pub mod particle;
+pub mod planar_reflection;
 pub mod player_viewport;
 pub mod plugin;
 pub mod plugin_context;
@@ -26,8 +27,9 @@ pub mod rotator;
 pub mod scene_node;
 pub mod static_virtual_texture_source;
 pub mod sync;
-pub mod thread_pool;
 pub mod url_extension;
+
+pub use rs_core_minimal::thread_pool;
 
 pub const ASSET_SCHEME: &str = "asset";
 pub const CONTENT_SCHEME: &str = "content";

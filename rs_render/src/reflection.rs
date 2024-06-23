@@ -67,7 +67,13 @@ impl Reflection {
     pub fn new(shader_code: &str, is_enable_validation: bool) -> crate::error::Result<Reflection> {
         let module = front::wgsl::parse_str(&shader_code)
             .map_err(|err| crate::error::Error::ShaderReflection(err, None))?;
+        Self::from_naga_module(module, is_enable_validation)
+    }
 
+    pub fn from_naga_module(
+        module: Module,
+        is_enable_validation: bool,
+    ) -> crate::error::Result<Reflection> {
         if is_enable_validation {
             ShaderLibrary::validate_shader_module(&module)?
         }

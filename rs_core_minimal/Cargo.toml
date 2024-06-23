@@ -15,3 +15,5 @@ path-slash = "0.1.4"
 serde = { version = "1.0.193", features = ["derive", "rc"] }
 glam = { version = "0.27.0", features = ["mint", "serde"] }
 md-5 = { version = "0.10.6" }
+rayon = "1.6"
+lazy_static = "1.4.0"

@@ -8,6 +8,7 @@ pub enum Error {
     RendererError(rs_render::error::Error),
     RecvError(std::sync::mpsc::RecvError),
     NullReference(Option<String>),
+    UrlParseError(url::ParseError),
     Other(Option<String>),
 }
 
