@@ -1,13 +1,14 @@
-use crate::{
-    audio_format::{AudioFormat, EAudioSampleType},
-    audio_pcmbuffer::AudioPcmbuffer,
-    time_range::TimeRangeRational,
-};
+use crate::time_range::TimeRangeRational;
 use ffmpeg_next::{
     ffi::{av_rescale_q_rnd, av_seek_frame, AVRational, AVRounding, AVSEEK_FLAG_BACKWARD},
     util::format,
 };
+use rs_core_audio::{
+    audio_format::{AudioFormat, EAudioSampleType},
+    audio_pcmbuffer::AudioPcmbuffer,
+};
 use rs_foundation::TimeRange;
+use std::path::Path;
 
 pub struct AudioFrameExtractor {
     format_input: ffmpeg_next::format::context::Input,
@@ -33,18 +34,24 @@ impl AudioFrame {
 }
 
 impl AudioFrameExtractor {
-    pub fn new(filepath: &str) -> AudioFrameExtractor {
-        let format_input = ffmpeg_next::format::input(&filepath.to_owned()).unwrap();
+    pub fn new(filepath: impl AsRef<Path>) -> crate::error::Result<AudioFrameExtractor> {
+        let format_input = ffmpeg_next::format::input(&filepath)
+            .map_err(|err| crate::error::Error::FFMpeg(err))?;
         let input_stream = format_input
             .streams()
             .best(ffmpeg_next::media::Type::Audio)
-            .unwrap();
+            .ok_or(crate::error::Error::Other(format!(
+                "No audio stream found."
+            )))?;
         let time_base = input_stream.time_base();
         let audio_stream_index = input_stream.index();
         let context_decoder =
             ffmpeg_next::codec::context::Context::from_parameters(input_stream.parameters())
-                .unwrap();
-        let mut audio_decoder = context_decoder.decoder().audio().unwrap();
+                .map_err(|err| crate::error::Error::FFMpeg(err))?;
+        let mut audio_decoder = context_decoder
+            .decoder()
+            .audio()
+            .map_err(|err| crate::error::Error::FFMpeg(err))?;
         unsafe { (*audio_decoder.as_mut_ptr()).pkt_timebase = time_base.into() };
         let mut item = AudioFrameExtractor {
             format_input,
@@ -53,7 +60,7 @@ impl AudioFrameExtractor {
             time_base,
         };
         item.seek(0.0);
-        item
+        Ok(item)
     }
 
     pub fn get_stream_time_base(&self) -> ffmpeg_next::Rational {

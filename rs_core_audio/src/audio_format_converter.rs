@@ -197,6 +197,33 @@ impl AudioFormatConverter {
     }
 }
 
+pub fn to_interleaved_data<T: Copy + Default>(source_data: &[&[T]]) -> Vec<T> {
+    if source_data.is_empty() {
+        return vec![];
+    }
+    {
+        let len = source_data[0].len();
+        for item in source_data.iter().skip(1) {
+            if item.len() != len {
+                panic!();
+            }
+        }
+    }
+    let mut output: Vec<T> = Vec::new();
+    output.resize(source_data.len() * source_data[0].len(), T::default());
+    for channel in 0..source_data.len() {
+        for (i, sample) in output
+            .iter_mut()
+            .skip(channel)
+            .step_by(source_data.len())
+            .enumerate()
+        {
+            *sample = source_data[channel][i];
+        }
+    }
+    output
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

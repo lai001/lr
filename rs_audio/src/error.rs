@@ -4,6 +4,7 @@ pub enum Error {
     DevicesError(cpal::DevicesError),
     DeviceNameError(cpal::DeviceNameError),
     DefaultStreamConfigError(cpal::DefaultStreamConfigError),
+    SupportedStreamConfigsError(cpal::SupportedStreamConfigsError),
     BuildStreamError(cpal::BuildStreamError),
     Other(String),
 }

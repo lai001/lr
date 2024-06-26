@@ -1,8 +1,10 @@
+use crate::audio_engine::AudioEngine;
+use crate::audio_node::AudioNode;
+use crate::audio_node::AudioOutputNode;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
-};
+use rs_core_audio::audio_format::{AudioFormat, EAudioSampleType};
+use rs_core_audio::audio_format_converter::to_interleaved_data;
+use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 
 pub struct Opt {
     pub device: String,
@@ -13,7 +15,7 @@ pub struct AudioDevice {
     _device: cpal::Device,
     config: cpal::SupportedStreamConfig,
     stream: cpal::Stream,
-    buffer: Arc<Mutex<VecDeque<f32>>>,
+    output_node: MultipleThreadMutType<AudioOutputNode>,
 }
 
 impl AudioDevice {
@@ -37,42 +39,90 @@ impl AudioDevice {
                 .name()
                 .map_err(|err| crate::error::Error::DeviceNameError(err))?
         );
-
+        let supported_output_configs = device
+            .supported_output_configs()
+            .map_err(|err| crate::error::Error::SupportedStreamConfigsError(err))?;
+        for supported_output_config in supported_output_configs {
+            log::trace!("Supported output config: {:?}", supported_output_config);
+        }
         let config = device
             .default_output_config()
             .map_err(|err| crate::error::Error::DefaultStreamConfigError(err))?;
+        let sample_format = config.sample_format();
+
         log::trace!("Default output config: {:?}", config);
 
         let err_fn = |err| log::error!("an error occurred on stream: {}", err);
 
-        let buffer: Arc<Mutex<VecDeque<f32>>> = Arc::new(Mutex::new(VecDeque::with_capacity(
-            (config.sample_rate().0 * 5) as usize,
-        )));
-        let buffer_clone = buffer.clone();
+        let sample_type = match sample_format {
+            cpal::SampleFormat::I8 => unimplemented!(),
+            cpal::SampleFormat::I16 => todo!(),
+            cpal::SampleFormat::I32 => todo!(),
+            cpal::SampleFormat::I64 => unimplemented!(),
+            cpal::SampleFormat::U8 => unimplemented!(),
+            cpal::SampleFormat::U16 => todo!(),
+            cpal::SampleFormat::U32 => todo!(),
+            cpal::SampleFormat::U64 => unimplemented!(),
+            cpal::SampleFormat::F32 => EAudioSampleType::Float32,
+            cpal::SampleFormat::F64 => todo!(),
+            _ => unimplemented!(),
+        };
 
-        let stream = device
-            .build_output_stream(
-                &config.config(),
-                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    let mut buffer = buffer_clone.lock().unwrap();
-                    let need = data.len().min(buffer.len());
-                    if need > 0 {
-                        let write_data = &buffer.make_contiguous()[0..need];
-                        data.copy_from_slice(write_data);
-                        buffer.drain(0..need);
-                    }
-                },
-                err_fn,
-                None,
-            )
-            .map_err(|err| crate::error::Error::BuildStreamError(err))?;
+        let output_node = MultipleThreadMut::new(AudioOutputNode::new(AudioFormat::from(
+            config.sample_rate().0,
+            config.channels() as u32,
+            sample_type,
+            false,
+        )));
+
+        let stream = match sample_format {
+            cpal::SampleFormat::I8 => unimplemented!(),
+            cpal::SampleFormat::I16 => todo!(),
+            cpal::SampleFormat::I32 => todo!(),
+            cpal::SampleFormat::I64 => unimplemented!(),
+            cpal::SampleFormat::U8 => unimplemented!(),
+            cpal::SampleFormat::U16 => todo!(),
+            cpal::SampleFormat::U32 => todo!(),
+            cpal::SampleFormat::U64 => unimplemented!(),
+            cpal::SampleFormat::F32 => device
+                .build_output_stream(
+                    &config.config(),
+                    {
+                        let output_node = output_node.clone();
+                        let stream_config = config.config().clone();
+                        move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                            let channels = stream_config.channels as usize;
+                            let samples = data.len() / channels;
+                            let mut output_node = output_node.lock().unwrap();
+                            match output_node.next_buffer(samples, channels) {
+                                Some(next_buffer) => {
+                                    let mut source_data: Vec<&[f32]> = vec![];
+                                    for i in 0..next_buffer.get_audio_format().channels_per_frame {
+                                        let data =
+                                            next_buffer.get_channel_data_view::<f32>(i as usize);
+                                        source_data.push(data);
+                                    }
+                                    let interleaved_data = to_interleaved_data(&source_data);
+                                    data.copy_from_slice(&interleaved_data);
+                                }
+                                None => {}
+                            }
+                        }
+                    },
+                    err_fn,
+                    None,
+                )
+                .map_err(|err| crate::error::Error::BuildStreamError(err))?,
+            cpal::SampleFormat::F64 => todo!(),
+            _ => unimplemented!(),
+        };
 
         Ok(AudioDevice {
             _host: host,
             _device: device,
             config,
             stream,
-            buffer,
+            output_node,
         })
     }
 
@@ -86,13 +136,7 @@ impl AudioDevice {
         self.config.config()
     }
 
-    pub fn get_buffer_len(&self) -> usize {
-        self.buffer.lock().unwrap().len()
-    }
-
-    pub fn push_buffer(&self, data: &[f32]) {
-        let mut new_data = VecDeque::from(Vec::from(data));
-        let mut buffer = self.buffer.lock().unwrap();
-        buffer.append(&mut new_data);
+    pub fn create_audio_engien(&self) -> AudioEngine {
+        AudioEngine::new(self.output_node.clone())
     }
 }

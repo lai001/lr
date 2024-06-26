@@ -8,4 +8,11 @@ edition = "2021"
 [dependencies]
 log = "0.4.17"
 cpal = "0.15.2"
+lazy_static = "1.4.0"
+rs_media = { path = "../rs_media" }
+rs_core_audio = { path = "../rs_core_audio" }
 rs_foundation = { path = "../rs_foundation" }
+rs_core_minimal = { path = "../rs_core_minimal" }
+
+[dev-dependencies]
+env_logger = "0.10.0"

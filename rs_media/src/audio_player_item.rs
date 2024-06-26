@@ -1,6 +1,7 @@
 use crate::audio_frame_extractor::{AudioFrame, AudioFrameExtractor};
 use std::{
     collections::VecDeque,
+    path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
 
@@ -13,32 +14,32 @@ struct Protocol {
 }
 
 pub struct AudioPlayerItem {
-    filepath: String,
+    filepath: PathBuf,
     audio_receiver: Option<Receiver<Protocol>>,
     user_sender: Option<Sender<Protocol>>,
 }
 
 impl AudioPlayerItem {
-    pub fn new(filepath: &str) -> AudioPlayerItem {
+    pub fn new(filepath: PathBuf) -> crate::error::Result<AudioPlayerItem> {
         let mut player = AudioPlayerItem {
-            filepath: filepath.to_string(),
+            filepath,
             audio_receiver: None,
             user_sender: None,
         };
-        player.init();
-        player
+        player.init()?;
+        Ok(player)
     }
 
-    fn init(&mut self) {
+    fn init(&mut self) -> crate::error::Result<()> {
         let (audio_sender, audio_receiver) = std::sync::mpsc::channel();
         let (user_sender, user_receiver): (Sender<Protocol>, Receiver<Protocol>) =
             std::sync::mpsc::channel();
 
         let audio_sender_clone = audio_sender.clone();
 
-        let filepath = self.filepath.to_string();
+        let mut audio_frame_extractor = AudioFrameExtractor::new(&self.filepath)?;
+
         std::thread::spawn(move || {
-            let mut audio_frame_extractor = AudioFrameExtractor::new(&filepath);
             let mut resp_protocols: VecDeque<Protocol> = VecDeque::new();
 
             loop {
@@ -140,6 +141,7 @@ impl AudioPlayerItem {
         });
         self.audio_receiver = Some(audio_receiver);
         self.user_sender = Some(user_sender);
+        Ok(())
     }
 
     pub fn try_recv(&mut self) -> Result<AudioFrame, crate::error::Error> {

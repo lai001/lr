@@ -40,6 +40,31 @@ local function proc_macros_test_workspace_file(json)
     json.savefile(path.join(path.absolute("./"), "proc_macros_test.code-workspace"), proc_macros_test)
 end
 
+local function audio_workspace_file(json)
+    local extraEnv = {
+        ["FFMPEG_DIR"] = ffmpeg_dir,
+    }
+    local audio = {
+        ["folders"] = { {
+            ["path"] = path.absolute("./")
+        } },
+        ["settings"] = {
+            ["rust-analyzer.linkedProjects"] = {
+                path.absolute("./rs_audio/Cargo.toml"),
+            },
+            ["rust-analyzer.cargo.extraEnv"] = extraEnv,
+            ["rust-analyzer.server.extraEnv"] = extraEnv,
+            ["rust-analyzer.check.extraEnv"] = extraEnv,
+            ["rust-analyzer.runnables.extraEnv"] = extraEnv,
+            ["rust-analyzer.runnables.extraTestBinaryArgs"] = {
+                "--show-output",
+                "--nocapture"
+            },
+        }
+    }
+    json.savefile(path.join(path.absolute("./"), "audio.code-workspace"), audio)
+end
+
 task("code_workspace") do
     on_run(function(in_plat, in_target, in_mode, in_launch)
         import("core.project.config")
@@ -137,6 +162,7 @@ task("code_workspace") do
 
         proc_macros_test_workspace_file(json)
         media_cmd_workspace_file(json)
+        audio_workspace_file(json)
     end)
     set_menu {
         usage = "xmake code_workspace",
