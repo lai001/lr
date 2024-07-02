@@ -85,6 +85,7 @@ impl ThumbnailCache {
 
     fn load_image_thread(image_path: &Path) -> anyhow::Result<PathBuf> {
         let span = tracy_client::span!();
+        span.emit_text(&format!("load image from path done: {:?}", image_path));
         let mut image = image::open(image_path)?;
         image = image.thumbnail(50, 50);
         image = image::DynamicImage::ImageRgba8(image.to_rgba8());
@@ -94,7 +95,6 @@ impl ThumbnailCache {
             std::fs::create_dir("tmp")?;
         }
         image.save(file_path.clone())?;
-        span.emit_text(&format!("load image from path done: {:?}", image_path));
         Ok(file_path)
     }
 }

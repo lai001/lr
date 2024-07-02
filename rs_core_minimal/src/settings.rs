@@ -45,6 +45,7 @@ pub struct RenderSettings {
     pub virtual_texture_setting: VirtualTextureSetting,
     #[serde(default)]
     pub antialias_type: EAntialiasType,
+    pub is_enable_multithread_rendering: bool,
 }
 
 impl RenderSettings {
@@ -82,6 +83,7 @@ impl Default for Settings {
                 backends: Backends::Primary,
                 android_backends: Backends::Primary,
                 antialias_type: EAntialiasType::None,
+                is_enable_multithread_rendering: false,
             },
         }
     }

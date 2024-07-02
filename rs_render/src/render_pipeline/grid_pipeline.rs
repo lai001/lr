@@ -18,8 +18,8 @@ pub struct Constants {
 }
 
 pub struct GridPipeline {
-    base_render_pipeline: Arc<BaseRenderPipeline>,
-    multisample_pipeline: Arc<BaseRenderPipeline>,
+    pub base_render_pipeline: Arc<BaseRenderPipeline>,
+    pub multisample_pipeline: Arc<BaseRenderPipeline>,
 }
 
 impl GridPipeline {

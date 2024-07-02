@@ -162,7 +162,7 @@ impl EditorContext {
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
         window_manager: Rc<RefCell<WindowsManager>>,
     ) -> anyhow::Result<EditorContext> {
-        let span = tracy_client::span!();
+        let _span = tracy_client::span!();
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
@@ -213,7 +213,7 @@ impl EditorContext {
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
         let watch_shader = WatchShader::new(get_buildin_shader_dir())?;
-        span.emit_text("done");
+
         let editor_context = EditorContext {
             event_loop_proxy,
             engine,
@@ -318,6 +318,12 @@ impl EditorContext {
                 log::trace!("{:?}", result);
             }
             WindowEvent::RedrawRequested => {
+                let wait = self
+                    .frame_sync
+                    .tick()
+                    .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
+                std::thread::sleep(wait);
+                let _span = tracy_client::span!();
                 let (is_minimized, is_visible) = {
                     let is_minimized = window.is_minimized().unwrap_or(false);
                     let is_visible = window.is_visible().unwrap_or(true);
@@ -374,11 +380,6 @@ impl EditorContext {
                 update_window_with_input_mode(window, self.engine.get_input_mode());
                 self.data_source.input_mode = self.engine.get_input_mode();
 
-                let wait = self
-                    .frame_sync
-                    .tick()
-                    .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-                std::thread::sleep(wait);
                 window.request_redraw();
             }
             WindowEvent::Destroyed => {}
@@ -753,7 +754,7 @@ impl EditorContext {
         project_context: &ProjectContext,
         files: Vec<EContentFileType>,
     ) {
-        let span = tracy_client::span!();
+        let _span = tracy_client::span!();
 
         let project_folder_path = project_context.get_project_folder_path();
         for file in files {
@@ -902,8 +903,6 @@ impl EditorContext {
                 EContentFileType::ParticleSystem(_) => todo!(),
             }
         }
-
-        span.emit_text("done");
     }
 
     fn add_new_actors(
@@ -935,7 +934,7 @@ impl EditorContext {
         file_path: &Path,
         window: &mut winit::window::Window,
     ) -> anyhow::Result<()> {
-        let span = tracy_client::span!();
+        let _span = tracy_client::span!();
         let project_context = ProjectContext::open(&file_path)?;
         window.set_title(&format!("Editor({})", project_context.project.project_name));
         let asset_folder_path = project_context.get_asset_folder_path();
@@ -1012,7 +1011,7 @@ impl EditorContext {
             .insert(file_path.to_path_buf());
         self.data_source.recent_projects.save()?;
         self.post_build_asset_folder();
-        span.emit_text("done");
+
         Ok(())
     }
 
@@ -1431,7 +1430,7 @@ impl EditorContext {
         window: &mut winit::window::Window,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
-        let span = tracy_client::span!();
+        let _span = tracy_client::span!();
 
         let egui_winit_state = &mut self.egui_winit_state;
 
@@ -1462,8 +1461,6 @@ impl EditorContext {
         self.process_debug_texture_view_event(click_event.debug_textures_view_event);
         self.process_click_actor_event(click_event.click_actor);
         self.process_project_settings_event(click_event.project_settings_event);
-
-        span.emit_text("done");
     }
 
     fn get_all_content_names(&self) -> Vec<String> {

@@ -480,7 +480,7 @@ impl ProjectContext {
     }
 
     pub fn pre_process_shaders() -> HashMap<String, String> {
-        let span = tracy_client::span!();
+        let _span = tracy_client::span!();
         let mut shaders = HashMap::new();
         let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -496,6 +496,7 @@ impl ProjectContext {
                 let sender = sender.clone();
                 move || {
                     let span = tracy_client::span!();
+                    span.emit_text(&format!("Pre process shader: {}", name));
                     if rs_core_minimal::misc::is_dev_mode() {
                         let pre_process_code = rs_shader_compiler::pre_process::pre_process(
                             &description.shader_path,
@@ -516,7 +517,6 @@ impl ProjectContext {
                         };
                         let _ = sender.send(result);
                     }
-                    span.emit_text(&format!("Pre process shader: {}", name));
                 }
             });
         }
@@ -537,7 +537,7 @@ impl ProjectContext {
                 break;
             }
         }
-        span.emit_text("done");
+
         shaders
     }
 }

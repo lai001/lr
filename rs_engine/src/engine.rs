@@ -132,7 +132,7 @@ impl Engine {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        let span = tracy_client::span!();
+        let _span = tracy_client::span!();
 
         let settings: Settings;
         if let Some(artifact_reader) = &mut artifact_reader {
@@ -140,7 +140,14 @@ impl Engine {
             log::trace!("Load settings: {:?}", settings);
             artifact_reader.check_assets().expect("Valid");
         } else {
-            settings = Settings::default();
+            #[cfg(feature = "editor")]
+            {
+                settings = Self::read_or_create_editor_settings().unwrap_or(Settings::default());
+            }
+            #[cfg(not(feature = "editor"))]
+            {
+                settings = Settings::default();
+            }
             log::trace!("Use default settings: {:?}", settings);
         }
 
@@ -314,8 +321,26 @@ impl Engine {
         engine
             .player_viewports
             .push(SingleThreadMut::new(player_viewport));
-        span.emit_text("done");
+
         Ok(engine)
+    }
+
+    #[cfg(feature = "editor")]
+    fn read_or_create_editor_settings() -> crate::error::Result<Settings> {
+        let path = std::env::current_dir().map_err(|err| crate::error::Error::IO(err, None))?;
+        let path = path.join("editor.cfg");
+        if path.exists() {
+            let contents =
+                std::fs::read_to_string(path).map_err(|err| crate::error::Error::IO(err, None))?;
+            serde_json::from_str::<Settings>(contents.as_str())
+                .map_err(|err| crate::error::Error::SerdeJsonError(err))
+        } else {
+            let default_settings = Settings::default();
+            let contents = serde_json::to_string_pretty(&default_settings)
+                .map_err(|err| crate::error::Error::SerdeJsonError(err))?;
+            std::fs::write(path, contents).map_err(|err| crate::error::Error::IO(err, None))?;
+            Ok(default_settings.clone())
+        }
     }
 
     fn collect_content_files() -> HashMap<url::Url, EContentFileType> {

@@ -52,7 +52,7 @@ impl Default for Constants {
 }
 
 pub struct SkinMeshShadingPipeline {
-    base_render_pipeline: Arc<BaseRenderPipeline>,
+    pub base_render_pipeline: Arc<BaseRenderPipeline>,
     builder: BaseRenderPipelineBuilder,
 }
 

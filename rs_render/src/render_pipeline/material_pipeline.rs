@@ -13,7 +13,7 @@ use type_layout::TypeLayout;
 use wgpu::*;
 
 pub struct MaterialRenderPipeline {
-    base_render_pipeline: Arc<BaseRenderPipeline>,
+    pub base_render_pipeline: Arc<BaseRenderPipeline>,
     builder: BaseRenderPipelineBuilder,
 }
 

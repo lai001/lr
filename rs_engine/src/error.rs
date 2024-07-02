@@ -9,6 +9,7 @@ pub enum Error {
     RecvError(std::sync::mpsc::RecvError),
     NullReference(Option<String>),
     UrlParseError(url::ParseError),
+    SerdeJsonError(serde_json::Error),
     Other(Option<String>),
 }
 

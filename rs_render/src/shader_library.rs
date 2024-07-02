@@ -137,6 +137,7 @@ impl ShaderLibrary {
         K: AsRef<str>,
     {
         let span = tracy_client::span!();
+        span.emit_text(name.as_ref());
         let shader_module = (|| {
             device.push_error_scope(wgpu::ErrorFilter::Validation);
             let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -153,7 +154,6 @@ impl ShaderLibrary {
                 Ok(shader_module)
             }
         })()?;
-        span.emit_text(name.as_ref());
         Ok(shader_module)
     }
 

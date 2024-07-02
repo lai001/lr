@@ -44,6 +44,14 @@ lazy_static! {
             .build()
             .unwrap(),
     ));
+    static ref MULTITHREADED_RENDERING_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> =
+        Mutex::new(Arc::new(
+            rayon::ThreadPoolBuilder::new()
+                .thread_name(|_| { "Multithreaded Rendering".to_string() })
+                .num_threads(2)
+                .build()
+                .unwrap(),
+        ));
 }
 
 pub struct ThreadPool {}
@@ -71,5 +79,9 @@ impl ThreadPool {
 
     pub fn video_decode() -> Arc<rayon::ThreadPool> {
         VIDEO_DECODE_THREAD_POOL.lock().unwrap().clone()
+    }
+
+    pub fn multithreaded_rendering() -> Arc<rayon::ThreadPool> {
+        MULTITHREADED_RENDERING_THREAD_POOL.lock().unwrap().clone()
     }
 }

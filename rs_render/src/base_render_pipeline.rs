@@ -6,17 +6,24 @@ use crate::reflection::{EPipelineType, VertexBufferLayoutBuilder};
 use crate::shader_library::ShaderLibrary;
 use wgpu::*;
 
+#[derive(Clone)]
 pub struct ColorAttachment<'a> {
     pub color_ops: Option<Operations<Color>>,
     pub view: &'a TextureView,
     pub resolve_target: Option<&'a TextureView>,
 }
 
+pub struct MultipleThreadingColorAttachment {
+    pub color_ops: Option<Operations<Color>>,
+    pub view: TextureView,
+    pub resolve_target: Option<TextureView>,
+}
+
 pub struct BaseRenderPipeline {
     pub render_pipeline: RenderPipeline,
-    bind_group_layouts: Vec<BindGroupLayout>,
-    tag: String,
-    slots: u32,
+    pub bind_group_layouts: Vec<BindGroupLayout>,
+    pub tag: String,
+    pub slots: u32,
 }
 
 impl BaseRenderPipeline {
@@ -179,6 +186,8 @@ impl BaseRenderPipeline {
         scissor_rect: Option<glam::UVec4>,
         viewport: Option<Viewport>,
     ) -> SubmissionIndex {
+        let span = tracy_client::span!();
+        span.emit_text(&self.tag);
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some(&format!("{} command encoder", self.tag)),
         });
@@ -187,11 +196,11 @@ impl BaseRenderPipeline {
             if let Some(depth_view) = depth_view {
                 depth_stencil_attachment = Some(RenderPassDepthStencilAttachment {
                     view: depth_view,
-                    depth_ops: Some(depth_ops.unwrap_or(wgpu::Operations {
+                    depth_ops: Some(depth_ops.unwrap_or_else(|| wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: StoreOp::Store,
                     })),
-                    stencil_ops: Some(stencil_ops.unwrap_or(wgpu::Operations {
+                    stencil_ops: Some(stencil_ops.unwrap_or_else(|| wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: StoreOp::Store,
                     })),
@@ -213,7 +222,7 @@ impl BaseRenderPipeline {
                 Vec::new();
             for x in color_attachments {
                 render_pass_color_attachments.push(Some(RenderPassColorAttachment {
-                    ops: x.color_ops.unwrap_or(Operations {
+                    ops: x.color_ops.unwrap_or_else(|| Operations {
                         load: LoadOp::Load,
                         store: StoreOp::Store,
                     }),
@@ -293,6 +302,125 @@ impl BaseRenderPipeline {
             }
         }
         queue.submit(Some(encoder.finish()))
+    }
+
+    pub fn draw_multiple_threading(
+        render_pipeline: &RenderPipeline,
+        tag: String,
+        slots: u32,
+        bind_groups: Vec<BindGroup>,
+        mut encoder: wgpu::CommandEncoder,
+        mesh_buffers: &[GpuVertexBufferImp],
+        color_attachments: &[ColorAttachment],
+        depth_ops: Option<Operations<f32>>,
+        stencil_ops: Option<Operations<u32>>,
+        depth_view: Option<&TextureView>,
+        scissor_rect: Option<glam::UVec4>,
+        viewport: Option<Viewport>,
+    ) -> wgpu::CommandBuffer {
+        let span = tracy_client::span!();
+        span.emit_text(&tag);
+
+        {
+            let mut depth_stencil_attachment: Option<RenderPassDepthStencilAttachment> = None;
+            if let Some(depth_view) = depth_view {
+                depth_stencil_attachment = Some(RenderPassDepthStencilAttachment {
+                    view: depth_view,
+                    depth_ops: Some(depth_ops.unwrap_or(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: StoreOp::Store,
+                    })),
+                    stencil_ops: Some(stencil_ops.unwrap_or(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: StoreOp::Store,
+                    })),
+                });
+            }
+
+            let mut render_pass_color_attachments: Vec<Option<RenderPassColorAttachment>> =
+                Vec::new();
+            for x in color_attachments {
+                render_pass_color_attachments.push(Some(RenderPassColorAttachment {
+                    ops: x.color_ops.unwrap_or(Operations {
+                        load: LoadOp::Load,
+                        store: StoreOp::Store,
+                    }),
+                    view: x.view,
+                    resolve_target: x.resolve_target,
+                }));
+            }
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some(&format!("{} render pass", tag)),
+                color_attachments: &render_pass_color_attachments,
+                depth_stencil_attachment,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            if let Some(rect) = scissor_rect {
+                render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
+            }
+            if let Some(viewport) = viewport {
+                let rect = &viewport.rect;
+                let depth_range = &viewport.depth_range;
+                render_pass.set_viewport(
+                    rect.x,
+                    rect.y,
+                    rect.z,
+                    rect.w,
+                    depth_range.start,
+                    depth_range.end,
+                );
+            }
+            render_pass.set_pipeline(render_pipeline);
+            for (index, bind_group) in bind_groups.iter().enumerate() {
+                render_pass.set_bind_group(index as u32, bind_group, &[]);
+            }
+
+            for mesh_buffer in mesh_buffers {
+                if slots as usize != mesh_buffer.vertex_buffers.len() {
+                    panic!(
+                        "{}, required slots {} != vertex buffers len {}",
+                        tag,
+                        slots,
+                        mesh_buffer.vertex_buffers.len()
+                    );
+                }
+                for (slot, vertex_buffer) in mesh_buffer.vertex_buffers.iter().enumerate() {
+                    render_pass.set_vertex_buffer(slot as u32, vertex_buffer.slice(..));
+                }
+                if let (Some(index_buffer), Some(index_count)) =
+                    (mesh_buffer.index_buffer, mesh_buffer.index_count)
+                {
+                    render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
+                    match &mesh_buffer.draw_type {
+                        EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                            render_pass.multi_draw_indexed_indirect(
+                                multi_draw_indirect.indirect_buffer,
+                                multi_draw_indirect.indirect_offset,
+                                multi_draw_indirect.count,
+                            );
+                        }
+                        EDrawCallType::Draw(draw) => {
+                            render_pass.draw_indexed(0..index_count, 0, draw.instances.clone());
+                        }
+                    }
+                } else {
+                    match &mesh_buffer.draw_type {
+                        EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                            render_pass.multi_draw_indirect(
+                                multi_draw_indirect.indirect_buffer,
+                                multi_draw_indirect.indirect_offset,
+                                multi_draw_indirect.count,
+                            );
+                        }
+                        EDrawCallType::Draw(draw) => {
+                            render_pass.draw(0..mesh_buffer.vertex_count, draw.instances.clone());
+                        }
+                    }
+                }
+            }
+        }
+        encoder.finish()
     }
 
     pub fn draw_resources(

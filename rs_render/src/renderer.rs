@@ -26,9 +26,11 @@ use crate::{command::*, ibl_readback, shadow_pass};
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
 use image::{GenericImage, GenericImageView};
 use rs_core_minimal::settings::{self, RenderSettings};
+use rs_core_minimal::thread_pool::ThreadPool;
 use std::collections::{HashMap, VecDeque};
 use std::ops::Deref;
 use std::path::Path;
+use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
 
@@ -56,7 +58,7 @@ pub struct Renderer {
     task_commands: VecDeque<TaskType>,
 
     textures: HashMap<u64, Texture>,
-    buffers: HashMap<u64, Buffer>,
+    buffers: HashMap<u64, Arc<Buffer>>,
     ui_textures: HashMap<u64, egui::TextureId>,
     ibl_bakes: HashMap<IBLTexturesKey, AccelerationBaker>,
     samplers: HashMap<u64, Sampler>,
@@ -94,6 +96,8 @@ pub struct Renderer {
     shadow_pipilines: Option<shadow_pass::ShadowPipilines>,
 
     fxaa_pipeline: Option<FXAAPipeline>,
+
+    is_enable_multiple_thread: bool,
 }
 
 impl Renderer {
@@ -105,7 +109,7 @@ impl Renderer {
         shaders: HashMap<String, String>,
         settings: RenderSettings,
     ) -> Renderer {
-        let span = tracy_client::span!();
+        let _span = tracy_client::span!();
         let main_window_id = {
             let binding = wgpu_context.get_window_ids();
             *binding.first().expect("Not null")
@@ -206,7 +210,7 @@ impl Renderer {
             &current_swapchain_format,
             &mut base_render_pipeline_pool,
         );
-        span.emit_text("done");
+        let is_enable_multiple_thread = settings.is_enable_multithread_rendering;
         Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
@@ -247,6 +251,7 @@ impl Renderer {
             base_compute_pipeline_pool,
             fxaa_pipeline: Some(fxaa_pipeline),
             particle_pipeline,
+            is_enable_multiple_thread,
         }
     }
 
@@ -262,7 +267,7 @@ impl Renderer {
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        let span = tracy_client::span!();
+        let _span = tracy_client::span!();
         let wgpu_context = WGPUContext::new(
             window_id,
             window,
@@ -285,7 +290,7 @@ impl Renderer {
                 },
             }),
         )?;
-        span.emit_text("done");
+
         Ok(Self::from_context(
             wgpu_context,
             surface_width,
@@ -345,6 +350,7 @@ impl Renderer {
     }
 
     pub fn present(&mut self, present_info: PresentInfo) -> Option<RenderOutput> {
+        let _span = tracy_client::span!();
         #[cfg(feature = "renderdoc")]
         let mut is_capture_frame = false;
         #[cfg(feature = "renderdoc")]
@@ -389,7 +395,7 @@ impl Renderer {
             let new_buffer = device.create_buffer_init(&descriptor);
             let handle = create_buffer_command.handle;
             render_output.create_buffer_handles.insert(handle);
-            self.buffers.insert(handle, new_buffer);
+            self.buffers.insert(handle, Arc::new(new_buffer));
             self.buffer_infos
                 .insert(handle, create_buffer_command.buffer_create_info.clone());
         }
@@ -601,9 +607,8 @@ impl Renderer {
             }
         };
         let color_texture = &surface_texture.texture;
-        let depth_texture = self.depth_textures.get(&window_id).expect("Not null");
+
         let output_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let depth_texture_view = depth_texture.get_view();
         let msaa_texture_view: Option<TextureView> = match &present_info.scene_viewport.anti_type {
             EAntialiasType::None => None,
             EAntialiasType::FXAA(_) => None,
@@ -631,21 +636,44 @@ impl Renderer {
                 Some(msaa_texture_view),
             );
         } else {
+            let depth_texture = self.depth_textures.get(&window_id).expect("Not null");
+            let depth_texture_view = depth_texture.get_view();
             self.clear_buffer(&output_view, &depth_texture_view, None);
         }
         self.vt_pass(&present_info);
         self.shadow_for_draw_objects(present_info.draw_objects.as_slice());
-        self.draw_objects(
-            color_texture.width(),
-            color_texture.height(),
-            &output_view,
-            &depth_texture_view,
-            &present_info.draw_objects,
-            msaa_texture_view.as_ref(),
-            msaa_depth_texture_view.as_ref(),
-        );
+
+        if self.is_enable_multiple_thread {
+            let depth_texture = &self
+                .depth_textures
+                .get(&window_id)
+                .expect("Not null")
+                .depth_texture;
+            self.draw_objects_multiple_thread(
+                color_texture,
+                depth_texture,
+                &present_info.draw_objects,
+            );
+        } else {
+            let depth_texture_view = &self
+                .depth_textures
+                .get(&window_id)
+                .expect("Not null")
+                .get_view();
+            self.draw_objects(
+                color_texture.width(),
+                color_texture.height(),
+                &output_view,
+                &depth_texture_view,
+                &present_info.draw_objects,
+                msaa_texture_view.as_ref(),
+                msaa_depth_texture_view.as_ref(),
+            );
+        }
 
         (|| {
+            let _span = tracy_client::span!("fxaa");
+
             let anti_type = &present_info.scene_viewport.anti_type;
             let EAntialiasType::FXAA(fxaa_info) = anti_type else {
                 return;
@@ -682,24 +710,31 @@ impl Renderer {
         })();
         // self.draw_object_commands.clear();
 
-        for output in self
-            .ui_output_commands
-            .iter()
-            .filter(|x| x.window_id == window_id)
         {
-            let device = self.wgpu_context.get_device();
-            let queue = self.wgpu_context.get_queue();
-            self.gui_renderer
-                .render(output, queue, device, &output_view);
+            let _span = tracy_client::span!("egui render");
+
+            for output in self
+                .ui_output_commands
+                .iter()
+                .filter(|x| x.window_id == window_id)
+            {
+                let device = self.wgpu_context.get_device();
+                let queue = self.wgpu_context.get_queue();
+                self.gui_renderer
+                    .render(output, queue, device, &output_view);
+            }
+            self.ui_output_commands.retain(|x| x.window_id != window_id);
         }
-        self.ui_output_commands.retain(|x| x.window_id != window_id);
 
         while let Some(task_command) = self.task_commands.pop_front() {
             let mut task = task_command.lock().unwrap();
             task(self);
         }
 
-        surface_texture.present();
+        {
+            let _span = tracy_client::span!("present");
+            surface_texture.present();
+        }
         #[cfg(feature = "renderdoc")]
         {
             if is_capture_frame {
@@ -718,6 +753,8 @@ impl Renderer {
         depth_texture_view: &TextureView,
         resolve_target: Option<&TextureView>,
     ) {
+        let _span = tracy_client::span!();
+
         self.attachment_pipeline.draw(
             self.wgpu_context.get_device(),
             self.wgpu_context.get_queue(),
@@ -1048,6 +1085,8 @@ impl Renderer {
     }
 
     fn vt_pass(&mut self, present_info: &PresentInfo) {
+        let _span = tracy_client::span!();
+
         let Some(key) = &present_info.virtual_texture_pass else {
             return;
         };
@@ -1065,7 +1104,7 @@ impl Renderer {
             let vertex_buffers: Vec<&Buffer> = virtual_pass_set
                 .vertex_buffers
                 .iter()
-                .map(|x| self.buffers.get(x).unwrap())
+                .map(|x| self.buffers.get(x).unwrap().as_ref())
                 .collect();
             let mut index_buffer: Option<&wgpu::Buffer> = None;
 
@@ -1173,6 +1212,8 @@ impl Renderer {
         resolve_target: Option<&TextureView>,
         resolve_depth_target: Option<&TextureView>,
     ) -> crate::error::Result<()> {
+        let _span = tracy_client::span!();
+
         let _ = height;
         let _ = width;
         let device = self.wgpu_context.get_device();
@@ -1432,6 +1473,8 @@ impl Renderer {
         resolve_target: Option<&TextureView>,
         resolve_depth_target: Option<&TextureView>,
     ) {
+        let _span = tracy_client::span!();
+
         for draw_object_command in draw_object_commands {
             let draw_result = self.draw_object(
                 width,
@@ -1449,6 +1492,318 @@ impl Renderer {
                 }
             }
         }
+    }
+
+    fn draw_objects_multiple_thread(
+        &self,
+        surface_texture: &wgpu::Texture,
+        depth_texture: &wgpu::Texture,
+        draw_object_commands: &Vec<DrawObject>,
+    ) {
+        let span = tracy_client::span!();
+        span.emit_text(&format!("{}", draw_object_commands.len()));
+        let device = self.get_device();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let mut is_finish = draw_object_commands.len();
+
+        struct TaskResult {
+            index: usize,
+            command_buffer: wgpu::CommandBuffer,
+        }
+
+        for (index, draw_object_command) in draw_object_commands.iter().enumerate() {
+            let sender = sender.clone();
+            let render_pipeline = match draw_object_command.render_pipeline.as_str() {
+                GRID_RENDER_PIPELINE => self.grid_render_pipeline.base_render_pipeline.clone(),
+                SKIN_MESH_RENDER_PIPELINE => {
+                    self.skin_mesh_shading_pipeline.base_render_pipeline.clone()
+                }
+                _ => {
+                    if !draw_object_command.render_pipeline.starts_with("material_") {
+                        panic!()
+                    }
+                    let handle = draw_object_command
+                        .render_pipeline
+                        .strip_prefix("material_")
+                        .unwrap()
+                        .parse::<MaterialRenderPipelineHandle>();
+                    let Ok(handle) = handle else { panic!() };
+                    let material_render_pipeline = self.material_render_pipelines.get(&handle);
+                    let Some(material_render_pipeline) = material_render_pipeline else {
+                        panic!()
+                    };
+                    material_render_pipeline.base_render_pipeline.clone()
+                }
+            };
+
+            let tag = render_pipeline.get_tag().to_string();
+            let slots = render_pipeline.slots;
+            let encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+                label: Some(&format!("{} command encoder", &tag)),
+            });
+
+            let mut tmp_texture_views: HashMap<u64, TextureView> = HashMap::new();
+
+            for (group, binding_resource) in
+                draw_object_command.binding_resources.iter().enumerate()
+            {
+                for (binding, binding_resource_type) in binding_resource.iter().enumerate() {
+                    match binding_resource_type {
+                        EBindingResource::Texture(handle) => {
+                            let mut texture_view: Option<TextureView> = None;
+                            if let Some(find_texture) = self.textures.get(handle) {
+                                let texture_view_descriptor = TextureViewDescriptor::default();
+                                texture_view =
+                                    Some(find_texture.create_view(&texture_view_descriptor));
+                            } else {
+                                for (key, pass) in &self.virtual_texture_pass {
+                                    if key.page_table_texture_handle == *handle {
+                                        texture_view = Some(
+                                            pass.get_indirect_table()
+                                                .create_view(&TextureViewDescriptor::default()),
+                                        );
+                                        break;
+                                    } else if key.physical_texture_handle == *handle {
+                                        texture_view = Some(
+                                            pass.get_physical_texture()
+                                                .create_view(&TextureViewDescriptor::default()),
+                                        );
+                                        break;
+                                    }
+                                }
+                            }
+                            if texture_view.is_none() {
+                                for (key, value) in &self.prebake_ibls {
+                                    if key.brdflut_texture == *handle {
+                                        texture_view = Some(value.get_brdflut_texture_view());
+                                    } else if key.pre_filter_cube_map_texture == *handle {
+                                        texture_view =
+                                            Some(value.get_pre_filter_cube_map_texture_view());
+                                    } else if key.irradiance_texture == *handle {
+                                        texture_view = Some(value.get_irradiance_texture_view());
+                                    }
+                                }
+                            }
+
+                            if texture_view.is_none() {
+                                for (key, value) in &self.ibl_bakes {
+                                    if key.brdflut_texture == *handle {
+                                        texture_view = Some(value.get_brdflut_texture_view());
+                                    } else if key.pre_filter_cube_map_texture == *handle {
+                                        texture_view =
+                                            Some(value.get_pre_filter_cube_map_texture_view());
+                                    } else if key.irradiance_texture == *handle {
+                                        texture_view = Some(value.get_irradiance_texture_view());
+                                    }
+                                }
+                            }
+
+                            let texture_view = texture_view
+                                .ok_or(crate::error::Error::Other(Some(format!(
+                                    "{}, {}, texture view is null",
+                                    group, binding
+                                ))))
+                                .unwrap();
+                            tmp_texture_views.insert(*handle, texture_view);
+                        }
+                        EBindingResource::Constants(_) => {}
+                        EBindingResource::Sampler(_) => {}
+                    }
+                }
+            }
+            let mut group_binding_resource: Vec<Vec<BindingResource>> = vec![];
+            for (group, binding_resource) in
+                draw_object_command.binding_resources.iter().enumerate()
+            {
+                let mut binding_resources: Vec<BindingResource> = vec![];
+                for (binding, binding_resource_type) in binding_resource.iter().enumerate() {
+                    match binding_resource_type {
+                        EBindingResource::Texture(handle) => {
+                            let texture_view = tmp_texture_views
+                                .get(handle)
+                                .ok_or(crate::error::Error::Other(Some(format!(
+                                    "{}, {}, texture view is null",
+                                    group, binding
+                                ))))
+                                .unwrap();
+                            binding_resources.push(BindingResource::TextureView(texture_view));
+                        }
+                        EBindingResource::Constants(buffer_handle) => {
+                            let buffer = self
+                                .buffers
+                                .get(buffer_handle)
+                                .ok_or(crate::error::Error::Other(Some(format!(
+                                    "{}, {}, constants is null",
+                                    group, binding
+                                ))))
+                                .unwrap()
+                                .as_entire_binding();
+                            binding_resources.push(buffer);
+                        }
+                        EBindingResource::Sampler(handle) => {
+                            let sampler = self
+                                .samplers
+                                .get(handle)
+                                .ok_or(crate::error::Error::Other(Some(format!(
+                                    "{}, {}, sampler is null",
+                                    group, binding
+                                ))))
+                                .unwrap();
+                            binding_resources.push(BindingResource::Sampler(sampler));
+                        }
+                    }
+                }
+                group_binding_resource.push(binding_resources);
+            }
+
+            let entries: Vec<Vec<BindGroupEntry>> = group_binding_resource
+                .iter()
+                .map(|x| {
+                    x.iter()
+                        .enumerate()
+                        .map(|(binding, resource)| wgpu::BindGroupEntry {
+                            binding: binding as u32,
+                            resource: resource.clone(),
+                        })
+                        .collect()
+                })
+                .collect();
+            let mut bind_groups: Vec<BindGroup> = Vec::new();
+            for (entry_vec, bind_group_layout) in entries
+                .iter()
+                .zip(render_pipeline.bind_group_layouts.iter())
+            {
+                let bind_group = device.create_bind_group(&BindGroupDescriptor {
+                    layout: &bind_group_layout,
+                    entries: &entry_vec,
+                    label: Some(&format!("{} bind group", &tag)),
+                });
+                bind_groups.push(bind_group);
+            }
+            let mut vertex_buffers = Vec::<Arc<Buffer>>::new();
+            let mut index_buffer: Option<Arc<Buffer>> = None;
+
+            for vertex_buffer in &draw_object_command.vertex_buffers {
+                if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
+                    vertex_buffers.push(vertex_buffer.clone());
+                }
+            }
+            if vertex_buffers.is_empty() {
+                panic!()
+            }
+            if let Some(handle) = draw_object_command.index_buffer {
+                if let Some(buffer) = self.buffers.get(&handle) {
+                    index_buffer = Some(buffer.clone());
+                }
+            }
+            let multiple_threading_mesh_buffer =
+                crate::gpu_vertex_buffer::MultipleThreadingGpuVertexBufferImp {
+                    vertex_buffers,
+                    vertex_count: draw_object_command.vertex_count,
+                    index_buffer,
+                    index_count: draw_object_command.index_count,
+                    draw_type: match &draw_object_command.draw_call_type {
+                        EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                            let indirect_buffer = self
+                                .buffers
+                                .get(&multi_draw_indirect.indirect_buffer_handle)
+                                .unwrap()
+                                .clone();
+                            crate::gpu_vertex_buffer::EMultipleThreadingDrawCallType::MultiDrawIndirect(
+                            crate::gpu_vertex_buffer::MutilpleThreadingMultiDrawIndirect {
+                                indirect_buffer,
+                                indirect_offset: multi_draw_indirect.indirect_offset,
+                                count: multi_draw_indirect.count,
+                            },
+                        )
+                        }
+                        EDrawCallType::Draw(draw) => {
+                            crate::gpu_vertex_buffer::EMultipleThreadingDrawCallType::Draw(
+                                crate::gpu_vertex_buffer::Draw {
+                                    instances: draw.instances.clone(),
+                                },
+                            )
+                        }
+                    },
+                };
+            let output_view = surface_texture.create_view(&TextureViewDescriptor::default());
+            let multiple_threading_color_attachments = [
+                crate::base_render_pipeline::MultipleThreadingColorAttachment {
+                    color_ops: None,
+                    view: output_view,
+                    resolve_target: None,
+                },
+            ];
+            let depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
+
+            ThreadPool::multithreaded_rendering().spawn({
+                move || {
+                    let mesh_buffer = GpuVertexBufferImp {
+                        vertex_buffers: &multiple_threading_mesh_buffer
+                            .vertex_buffers
+                            .iter()
+                            .map(|x| x.as_ref())
+                            .collect::<Vec<&wgpu::Buffer>>(),
+                        vertex_count: multiple_threading_mesh_buffer.vertex_count,
+                        index_buffer: match &multiple_threading_mesh_buffer.index_buffer {
+                            Some(x) => Some(x.as_ref()),
+                            None => None,
+                        },
+                        index_count: multiple_threading_mesh_buffer.index_count,
+                        draw_type: multiple_threading_mesh_buffer.draw_type.to_local(),
+                    };
+                    let mut color_attachments: Vec<crate::base_render_pipeline::ColorAttachment> =
+                        vec![];
+                    for x in &multiple_threading_color_attachments {
+                        color_attachments.push(crate::base_render_pipeline::ColorAttachment {
+                            color_ops: x.color_ops,
+                            view: &x.view,
+                            resolve_target: x.resolve_target.as_ref(),
+                        });
+                    }
+
+                    let command_buffer =
+                        crate::base_render_pipeline::BaseRenderPipeline::draw_multiple_threading(
+                            &render_pipeline.render_pipeline,
+                            tag,
+                            slots,
+                            bind_groups,
+                            encoder,
+                            &vec![mesh_buffer],
+                            &color_attachments,
+                            None,
+                            None,
+                            Some(&depth_view),
+                            None,
+                            None,
+                        );
+                    let _ = sender.send(TaskResult {
+                        index,
+                        command_buffer,
+                    });
+                }
+            });
+        }
+
+        let mut task_results = vec![];
+        let mut command_buffers = vec![];
+
+        while let Ok(task_result) = receiver.recv() {
+            task_results.push(task_result);
+            is_finish -= 1;
+            if is_finish == 0 {
+                break;
+            }
+        }
+
+        task_results.sort_by(|left, right| right.index.cmp(&left.index));
+
+        while let Some(task_result) = task_results.pop() {
+            command_buffers.push(task_result.command_buffer);
+        }
+
+        let queue = self.get_queue();
+        queue.submit(command_buffers);
     }
 
     fn set_settings(&mut self, settings: RenderSettings) {
@@ -1490,6 +1845,8 @@ impl Renderer {
     }
 
     fn shadow_for_draw_objects(&mut self, draw_objects: &[DrawObject]) {
+        let _span = tracy_client::span!();
+
         for draw_object in draw_objects {
             self.shadow_for_draw_object(draw_object);
         }
@@ -1520,10 +1877,12 @@ impl Renderer {
             .vertex_buffers
             .iter()
             .flat_map(|handle| self.buffers.get(handle))
+            .map(|x| x.as_ref())
             .collect();
         let index_buffer: Option<&Buffer> = draw_object
             .index_buffer
             .map(|x| self.buffers.get(&x))
+            .map(|x| x.map(|x| x.as_ref()))
             .flatten();
 
         let mut group_binding_resources: Vec<Vec<BindingResource>> = vec![];
