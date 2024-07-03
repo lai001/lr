@@ -16,7 +16,8 @@ pub trait AudioNode: Send {
 
 pub struct AudioOutputNode {
     audio_format: AudioFormat,
-    node: Option<MultipleThreadMutType<Box<dyn AudioNode>>>,
+    node: Option<MultipleThreadMutType<dyn AudioNode>>,
+    name: String,
 }
 
 impl AudioNode for AudioOutputNode {
@@ -36,10 +37,11 @@ impl AudioNode for AudioOutputNode {
 }
 
 impl AudioOutputNode {
-    pub fn new(audio_format: AudioFormat) -> AudioOutputNode {
+    pub fn new(name: String, audio_format: AudioFormat) -> AudioOutputNode {
         AudioOutputNode {
             audio_format,
             node: None,
+            name,
         }
     }
 
@@ -47,8 +49,16 @@ impl AudioOutputNode {
         self.audio_format = audio_format;
     }
 
-    pub fn connect(&mut self, node: MultipleThreadMutType<Box<dyn AudioNode>>) {
+    pub fn connect(&mut self, node: MultipleThreadMutType<dyn AudioNode>) {
         self.node = Some(node);
+    }
+
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    pub fn disconnect(&mut self) {
+        self.node = None;
     }
 }
 
@@ -63,6 +73,7 @@ impl AudioNode for AudioMixerNode {
 pub struct AudioFilePlayerNode {
     audio_player_item: Option<AudioPlayerItem>,
     channel_data: Vec<VecDeque<u8>>,
+    is_playing: bool,
 }
 
 impl AudioNode for AudioFilePlayerNode {
@@ -71,6 +82,9 @@ impl AudioNode for AudioFilePlayerNode {
         expect_samples_per_channel: usize,
         channels: usize,
     ) -> Option<AudioPcmbuffer> {
+        if !self.is_playing {
+            return None;
+        }
         match self.audio_player_item.as_mut() {
             Some(audio_player_item) => {
                 let audio_frame = audio_player_item.try_recv().ok();
@@ -135,10 +149,24 @@ impl AudioFilePlayerNode {
         AudioFilePlayerNode {
             audio_player_item,
             channel_data: vec![],
+            is_playing: false,
         }
     }
 
-    pub fn start(&mut self) {}
+    pub fn start(&mut self) {
+        self.is_playing = true;
+    }
 
-    pub fn stop(&mut self) {}
+    pub fn stop(&mut self) {
+        self.is_playing = false;
+    }
+
+    pub fn seek(&mut self, time: f32) {
+        for channel_data in self.channel_data.iter_mut() {
+            channel_data.clear();
+        }
+        if let Some(audio_player_item) = self.audio_player_item.as_mut() {
+            audio_player_item.seek(time);
+        }
+    }
 }

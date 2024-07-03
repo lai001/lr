@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use egui::{load::SizedTexture, TextureId};
 use egui_winit::State;
 use image::GenericImage;
+use rs_audio::{audio_engine::AudioEngine, audio_node::AudioFilePlayerNode};
 use rs_engine::{
     build_built_in_resouce_url,
     engine::Engine,
@@ -11,6 +12,7 @@ use rs_engine::{
     input_mode::EInputMode,
     resource_manager::ResourceManager,
 };
+use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 use rs_media::{
     composition::{check_composition, CompositionInfo},
     video_frame_player::VideoFramePlayer,
@@ -39,6 +41,8 @@ pub struct MediaUIWindow {
     video_frame_player: Option<VideoFramePlayer>,
     cache_sized_texture: Option<SizedTexture>,
     composition_info: Option<CompositionInfo>,
+    audio_engine: AudioEngine,
+    audio_player_node: Option<MultipleThreadMutType<AudioFilePlayerNode>>,
 }
 
 impl MediaUIWindow {
@@ -79,6 +83,9 @@ impl MediaUIWindow {
         let input_mode = EInputMode::UI;
         update_window_with_input_mode(window, input_mode);
 
+        let audio_engine = AudioEngine::new();
+        let audio_player_node = None;
+
         Ok(MediaUIWindow {
             egui_winit_state,
             draw_objects: HashMap::new(),
@@ -86,6 +93,8 @@ impl MediaUIWindow {
             video_frame_player: None,
             cache_sized_texture: None,
             composition_info: None,
+            audio_engine,
+            audio_player_node,
         })
     }
 
@@ -97,10 +106,10 @@ impl MediaUIWindow {
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
-    ) {
+    ) -> bool {
         let _ = event_loop_window_target;
         let _ = self.egui_winit_state.on_window_event(window, event);
-
+        let mut is_close = false;
         match event {
             WindowEvent::Resized(size) => {
                 engine.resize(window_id, size.width, size.height);
@@ -108,6 +117,7 @@ impl MediaUIWindow {
             WindowEvent::CloseRequested => {
                 window_manager.remove_window(EWindowType::Media);
                 engine.remove_window(window_id);
+                is_close = true;
             }
             WindowEvent::RedrawRequested => {
                 let wait = self
@@ -145,10 +155,18 @@ impl MediaUIWindow {
                                     let mut play_time = player.get_current_play_time();
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().slider_width = 1000.0;
+                                        ui.set_min_width(150.0);
                                         if ui
                                             .add(egui::Slider::new(&mut play_time, 0.0..=duration))
                                             .changed()
                                         {
+                                            if let Some(audio_player_node) =
+                                                self.audio_player_node.as_ref()
+                                            {
+                                                let mut audio_player_node =
+                                                    audio_player_node.lock().unwrap();
+                                                audio_player_node.seek(play_time);
+                                            }
                                             player.seek(play_time);
                                             player.start();
                                         }
@@ -164,6 +182,7 @@ impl MediaUIWindow {
             }
             _ => {}
         }
+        is_close
     }
 
     pub fn update(&mut self, file_path: impl AsRef<Path>) -> anyhow::Result<()> {
@@ -172,6 +191,14 @@ impl MediaUIWindow {
         let mut video_frame_player = VideoFramePlayer::new(path);
         video_frame_player.start();
         self.video_frame_player = Some(video_frame_player);
+
+        let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path));
+        self.audio_player_node = Some(audio_player_node.clone());
+        audio_player_node.lock().unwrap().start();
+        let default_output_node = self.audio_engine.get_default_output_node();
+        let mut default_output_node = default_output_node.lock().unwrap();
+        default_output_node.connect(audio_player_node);
+
         Ok(())
     }
 
@@ -281,5 +308,13 @@ impl MediaUIWindow {
             size: egui::vec2(width as f32, height as f32),
         };
         *cache_sized_texture = Some(sized_texture);
+    }
+}
+
+impl Drop for MediaUIWindow {
+    fn drop(&mut self) {
+        let default_output_node = self.audio_engine.get_default_output_node();
+        let mut default_output_node = default_output_node.lock().unwrap();
+        default_output_node.disconnect();
     }
 }

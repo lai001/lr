@@ -20,6 +20,7 @@ use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::content_type::EContentType;
 use rs_artifact::resource_info::ResourceInfo;
 use rs_artifact::resource_type::EResourceType;
+use rs_audio::audio_device::AudioDevice;
 use rs_core_minimal::settings::Settings;
 use rs_foundation::new::{
     MultipleThreadMut, MultipleThreadMutType, SingleThreadMut, SingleThreadMutType,
@@ -116,6 +117,7 @@ pub struct Engine {
     virtual_pass_handle: Option<VirtualPassHandle>,
     shadow_depth_texture_handle: Option<TextureHandle>,
     player_viewports: Vec<SingleThreadMutType<PlayerViewport>>,
+    _audio_device: Option<AudioDevice>,
 }
 
 impl Engine {
@@ -274,6 +276,11 @@ impl Engine {
             },
             init_data: None,
         }));
+        let mut audio_device =
+            AudioDevice::new().map_err(|err| crate::error::Error::AudioError(err))?;
+        audio_device
+            .play()
+            .map_err(|err| crate::error::Error::AudioError(err))?;
 
         let mut engine = Engine {
             render_thread_mode,
@@ -300,6 +307,7 @@ impl Engine {
             virtual_pass_handle,
             shadow_depth_texture_handle: Some(shadow_depth_texture_handle),
             player_viewports: vec![],
+            _audio_device: Some(audio_device),
         };
 
         let mut player_viewport = PlayerViewport::new(

@@ -487,7 +487,7 @@ impl EditorContext {
                     }
                     EWindowType::Media => {
                         let ui_window = self.media_ui_window.as_mut().expect("Should not be bull");
-                        ui_window.window_event_process(
+                        let is_close = ui_window.window_event_process(
                             window_id,
                             window,
                             event,
@@ -495,6 +495,9 @@ impl EditorContext {
                             &mut self.engine,
                             &mut *self.window_manager.borrow_mut(),
                         );
+                        if is_close {
+                            self.media_ui_window = None;
+                        }
                     }
                     EWindowType::MultipleDraw => {
                         let ui_window = self

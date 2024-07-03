@@ -1,4 +1,4 @@
-use crate::audio_node::AudioOutputNode;
+use crate::{audio_device::get_global_output_node, audio_node::AudioOutputNode};
 use rs_foundation::new::MultipleThreadMutType;
 
 pub struct AudioEngine {
@@ -6,7 +6,8 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    pub(crate) fn new(default_output_node: MultipleThreadMutType<AudioOutputNode>) -> AudioEngine {
+    pub fn new() -> AudioEngine {
+        let default_output_node: MultipleThreadMutType<AudioOutputNode> = get_global_output_node();
         AudioEngine {
             default_output_node,
         }
@@ -19,12 +20,10 @@ impl AudioEngine {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        audio_device::AudioDevice,
-        audio_node::{AudioFilePlayerNode, AudioNode},
-    };
+    use super::AudioEngine;
+    use crate::{audio_device::AudioDevice, audio_node::AudioFilePlayerNode};
     use rs_core_minimal::file_manager;
-    use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
+    use rs_foundation::new::MultipleThreadMut;
     use std::{thread::sleep, time::Duration};
 
     #[test]
@@ -38,10 +37,10 @@ mod test {
         let mut audio_device = AudioDevice::new().unwrap();
         audio_device.play().unwrap();
 
-        let audio_engine = audio_device.create_audio_engien();
+        let audio_engine = AudioEngine::new();
         let default_output_node = audio_engine.get_default_output_node();
-        let audio_player_node: MultipleThreadMutType<Box<dyn AudioNode>> =
-            MultipleThreadMut::new(Box::new(AudioFilePlayerNode::new(path.clone())));
+        let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path.clone()));
+        audio_player_node.lock().unwrap().start();
         default_output_node
             .lock()
             .unwrap()

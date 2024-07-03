@@ -1,7 +1,7 @@
-use crate::audio_engine::AudioEngine;
 use crate::audio_node::AudioNode;
 use crate::audio_node::AudioOutputNode;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use lazy_static::lazy_static;
 use rs_core_audio::audio_format::{AudioFormat, EAudioSampleType};
 use rs_core_audio::audio_format_converter::to_interleaved_data;
 use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
@@ -15,7 +15,6 @@ pub struct AudioDevice {
     _device: cpal::Device,
     config: cpal::SupportedStreamConfig,
     stream: cpal::Stream,
-    output_node: MultipleThreadMutType<AudioOutputNode>,
 }
 
 impl AudioDevice {
@@ -68,12 +67,15 @@ impl AudioDevice {
             _ => unimplemented!(),
         };
 
-        let output_node = MultipleThreadMut::new(AudioOutputNode::new(AudioFormat::from(
-            config.sample_rate().0,
-            config.channels() as u32,
-            sample_type,
-            false,
-        )));
+        set_global_output_node(AudioOutputNode::new(
+            "MainOutput".to_string(),
+            AudioFormat::from(
+                config.sample_rate().0,
+                config.channels() as u32,
+                sample_type,
+                false,
+            ),
+        ));
 
         let stream = match sample_format {
             cpal::SampleFormat::I8 => unimplemented!(),
@@ -88,9 +90,10 @@ impl AudioDevice {
                 .build_output_stream(
                     &config.config(),
                     {
-                        let output_node = output_node.clone();
+                        let output_node = get_global_output_node().clone();
                         let stream_config = config.config().clone();
                         move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                            data.fill(0.0);
                             let channels = stream_config.channels as usize;
                             let samples = data.len() / channels;
                             let mut output_node = output_node.lock().unwrap();
@@ -122,7 +125,6 @@ impl AudioDevice {
             _device: device,
             config,
             stream,
-            output_node,
         })
     }
 
@@ -135,8 +137,20 @@ impl AudioDevice {
     pub fn get_config(&self) -> cpal::StreamConfig {
         self.config.config()
     }
+}
 
-    pub fn create_audio_engien(&self) -> AudioEngine {
-        AudioEngine::new(self.output_node.clone())
-    }
+lazy_static! {
+    static ref GLOBAL_OUTPUT_NODE: MultipleThreadMutType<AudioOutputNode> =
+        MultipleThreadMut::new(AudioOutputNode::new(
+            String::from("None"),
+            AudioFormat::from(44100, 2, EAudioSampleType::Float32, false)
+        ));
+}
+
+pub(crate) fn get_global_output_node() -> MultipleThreadMutType<AudioOutputNode> {
+    GLOBAL_OUTPUT_NODE.clone()
+}
+
+fn set_global_output_node(node: AudioOutputNode) {
+    *GLOBAL_OUTPUT_NODE.lock().unwrap() = node;
 }

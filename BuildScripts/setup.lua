@@ -1,6 +1,7 @@
 task("setup")
 do
     local ffmpeg_dir = ffmpeg_dir
+    local engine_root_dir = engine_root_dir
     on_run(function()
         import("net.http")
         import("utils.archive")
@@ -19,6 +20,7 @@ do
         setup_ffmpeg("release", "rs_desktop_standalone")
         setup_ffmpeg("debug", "rs_media_cmd")
         setup_ffmpeg("release", "rs_media_cmd")
+        os.cp(path.join(ffmpeg_dir, "lib/*.so"), path.join(engine_root_dir, "Android/Template/rs_android/src/main/jniLibs/arm64-v8a"))
     end)
     set_menu {
         usage = "xmake setup",

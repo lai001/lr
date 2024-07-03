@@ -10,6 +10,7 @@ pub enum Error {
     NullReference(Option<String>),
     UrlParseError(url::ParseError),
     SerdeJsonError(serde_json::Error),
+    AudioError(rs_audio::error::Error),
     Other(Option<String>),
 }
 
