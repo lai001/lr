@@ -8,6 +8,9 @@ default = ["standalone"]
 renderdoc = ["dep:renderdoc"]
 editor = ["rs_shader_compiler/editor", "rs_core_minimal/editor"]
 standalone = ["rs_shader_compiler/standalone", "rs_core_minimal/standalone"]
+profiler = [
+    "tracy-client/default"
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
@@ -26,7 +29,7 @@ dunce = "1.0.4"
 path-slash = "0.1.4"
 image_dds = { version = "0.5.0" }
 ddsfile = "0.5.2"
-tracy-client = "0.17.0"
+tracy-client = { version = "0.17.0", default-features = false }
 rs_foundation = { path = "../rs_foundation" }
 rs_shader_compiler = { path = "../rs_shader_compiler" }
 rs_core_minimal = { path = "../rs_core_minimal" }

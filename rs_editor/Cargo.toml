@@ -19,6 +19,11 @@ standalone = [
     "rs_core_minimal/standalone",
     "rs_engine/standalone",
 ]
+profiler = [
+    "tracy-client/default",
+    "rs_render/profiler",
+    "rs_engine/profiler",
+]
 
 [dependencies]
 egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "0106647", version = "0.3.0", features = [
@@ -61,7 +66,7 @@ naga = { version = "0.19.0" }
 wgpu = "0.19.1"
 rand = { version = "0.8.5" }
 mp4 = { version = "0.14.0" }
-tracy-client = "0.17.0"
+tracy-client = { version = "0.17.0", default-features = false }
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
 rs_render = { path = "../rs_render" }
 rs_foundation = { path = "../rs_foundation" }

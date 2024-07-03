@@ -261,6 +261,8 @@ impl ProjectContext {
     }
 
     pub fn export(&mut self, model_loader: &mut ModelLoader) -> anyhow::Result<PathBuf> {
+        let _span = tracy_client::span!();
+
         let output_folder_path = self.try_create_build_dir()?;
         if !output_folder_path.exists() {
             std::fs::create_dir(output_folder_path.clone())?;

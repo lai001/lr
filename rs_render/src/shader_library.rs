@@ -35,6 +35,9 @@ impl ShaderLibrary {
 
         let mut results: HashMap<String, crate::error::Result<()>> = HashMap::new();
 
+        if shaders.is_empty() {
+            return results;
+        }
         let (sender, receiver) = std::sync::mpsc::channel();
 
         let mut is_finish = shaders.len();
@@ -222,7 +225,7 @@ impl ShaderLibrary {
         Arc::clone(
             self.shader_dic
                 .get(name)
-                .expect(&format!("{} shader is loaded.", name)),
+                .expect(&format!("{} shader should not be null.", name)),
         )
     }
 
@@ -230,7 +233,7 @@ impl ShaderLibrary {
         Arc::clone(
             self.reflection_dic
                 .get(name)
-                .expect(&format!("{} shader reflection is loaded.", name)),
+                .expect(&format!("{} shader reflection should not be null.", name)),
         )
     }
 

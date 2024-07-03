@@ -25,7 +25,7 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
-use rs_core_minimal::path_ext::CanonicalizeSlashExt;
+use rs_core_minimal::{file_manager, path_ext::CanonicalizeSlashExt};
 use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
@@ -1653,22 +1653,44 @@ impl EditorContext {
                 self.engine.set_view_mode(mode);
             }
             top_menu::EClickEventType::Run => {
-                let Some(project_context) = self.project_context.as_ref() else {
+                let Some(project_context) = self.project_context.as_mut() else {
                     return;
                 };
-                let debug_exe_path = project_context
-                    .get_build_dir()
-                    .join("windows/debug/x64/rs_desktop_standalone.exe");
-                let release_exe_path = project_context
-                    .get_build_dir()
-                    .join("windows/release/x64/rs_desktop_standalone.exe");
-                if release_exe_path.exists() {
-                    let mut cmd = std::process::Command::new(release_exe_path);
-                    let _ = cmd.output();
+                let Ok(output_path) = project_context.export(&mut self.model_loader) else {
+                    return;
+                };
+                let Some(output_path) = output_path
+                    .canonicalize_slash()
+                    .map(|x| x.to_str().map(|x| x.to_string()))
+                    .ok()
+                    .flatten()
+                else {
+                    return;
+                };
+
+                let debug_exe_path = file_manager::get_engine_root_dir()
+                    .join("rs_desktop_standalone/target/debug/rs_desktop_standalone.exe");
+                let release_exe_path = file_manager::get_engine_root_dir()
+                    .join("rs_desktop_standalone/target/release/rs_desktop_standalone.exe");
+                let executable_path = if release_exe_path.exists() {
+                    Ok(release_exe_path)
                 } else if debug_exe_path.exists() {
-                    let mut cmd = std::process::Command::new(debug_exe_path);
-                    let _ = cmd.output();
-                }
+                    Ok(debug_exe_path)
+                } else {
+                    Err(crate::error::Error::IO(
+                        std::io::ErrorKind::NotFound.into(),
+                        None,
+                    ))
+                };
+                let Ok(executable_path) = executable_path else {
+                    return;
+                };
+
+                let mut command = std::process::Command::new(executable_path);
+                command.arg("-i");
+                command.arg(output_path);
+                let output = command.output();
+                log::trace!("{:?}", output);
             }
             top_menu::EClickEventType::DebugShading(ty) => self.engine.set_debug_shading(ty),
         }

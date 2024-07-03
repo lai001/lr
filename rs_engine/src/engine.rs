@@ -1,4 +1,3 @@
-use crate::build_built_in_resouce_url;
 use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
@@ -15,6 +14,7 @@ use crate::input_mode::EInputMode;
 use crate::player_viewport::PlayerViewport;
 use crate::render_thread_mode::ERenderThreadMode;
 use crate::scene_node::EComponentType;
+use crate::{build_built_in_resouce_url, BUILT_IN_RESOURCE};
 use crate::{logger::Logger, resource_manager::ResourceManager};
 use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::content_type::EContentType;
@@ -1358,7 +1358,10 @@ impl Engine {
                 assert_eq!(binding_resources.len(), map_textures.len());
                 object.user_textures_resources = binding_resources;
                 let ibl_textures = ResourceManager::default().get_ibl_textures();
-                let Some((_, ibl_textures)) = ibl_textures.iter().find(|_| true) else {
+                let Some((_, ibl_textures)) = ibl_textures.iter().find(|x| {
+                    let url = x.0;
+                    url.scheme() != BUILT_IN_RESOURCE
+                }) else {
                     return;
                 };
                 object.brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);

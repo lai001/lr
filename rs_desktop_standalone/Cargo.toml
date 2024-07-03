@@ -12,6 +12,11 @@ standalone = [
     "rs_engine/standalone",
     "rs_core_minimal/standalone",
 ]
+profiler = [
+    "tracy-client/default",
+    "rs_render/profiler",
+    "rs_engine/profiler",
+]
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
@@ -46,6 +51,7 @@ anyhow = { version = "1.0.79" }
 lazy_static = "1.4.0"
 naga = { version = "0.19.0" }
 wgpu = "0.19.1"
+tracy-client = { version = "0.17.0", default-features = false }
 rs_render = { version = "0.1.0", path = "../rs_render" }
 rs_foundation = { version = "0.1.0", path = "../rs_foundation" }
 rs_artifact = { version = "0.1.0", path = "../rs_artifact" }

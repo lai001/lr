@@ -18,6 +18,10 @@ standalone = [
     "rs_render/standalone",
     "rs_core_minimal/standalone",
 ]
+profiler = [
+    "tracy-client/default",
+    "rs_render/default",
+]
 
 [dependencies]
 md-5 = { version = "0.10.6" }
@@ -45,7 +49,7 @@ uuid = { version = "1.6.1", features = [
     "serde",
 ] }
 rand = { version = "0.8.5" }
-tracy-client = "0.17.0"
+tracy-client = { version = "0.17.0", default-features = false }
 rs_foundation = { path = "../rs_foundation" }
 rs_audio = { path = "../rs_audio" }
 rs_artifact = { path = "../rs_artifact" }
