@@ -8,6 +8,7 @@ pub mod default_textures;
 pub mod drawable;
 pub mod engine;
 pub mod error;
+pub mod ffi;
 pub mod file_type;
 pub mod frame_sync;
 pub mod handle;

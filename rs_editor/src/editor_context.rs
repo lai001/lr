@@ -32,7 +32,6 @@ use rs_engine::{
     content::{content_file_type::EContentFileType, level::DirectionalLight, texture::TextureFile},
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
-    plugin::Plugin,
 };
 use rs_engine::{
     drawable::EDrawObjectType,
@@ -43,6 +42,8 @@ use rs_engine::{
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_foundation::new::SingleThreadMut;
+#[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
+use rs_native_plugin::Plugin;
 use rs_render::{
     command::{RenderCommand, TextureDescriptorCreateInfo},
     get_buildin_shader_dir,
@@ -113,7 +114,8 @@ pub struct EditorContext {
     draw_objects: HashMap<uuid::Uuid, EDrawObjectType>,
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     editor_ui: EditorUI,
-    plugin_context: Arc<Mutex<PluginContext>>,
+    _plugin_context: Arc<Mutex<PluginContext>>,
+    #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
     plugins: Vec<Box<dyn Plugin>>,
     frame_sync: FrameSync,
     model_loader: ModelLoader,
@@ -223,7 +225,8 @@ impl EditorContext {
             draw_objects: HashMap::new(),
             virtual_key_code_states: HashMap::new(),
             editor_ui,
-            plugin_context,
+            _plugin_context: plugin_context,
+            #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
             plugins: vec![],
             frame_sync,
             model_loader: ModelLoader::new(),
@@ -257,6 +260,7 @@ impl EditorContext {
     ) {
         match event {
             WindowEvent::CloseRequested => {
+                #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
                 self.plugins.clear();
                 self.egui_winit_state.egui_ctx().memory_mut(|writer| {
                     writer.data.clear();
@@ -536,14 +540,15 @@ impl EditorContext {
     }
 
     fn try_load_plugin(&mut self) -> anyhow::Result<()> {
+        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
         if let Some(project_context) = self.project_context.as_mut() {
             project_context.reload()?;
             let lib = project_context.hot_reload.get_library_reload();
             let lib = lib.lock().unwrap();
-            let func = lib.load_symbol::<rs_engine::plugin::signature::CreatePlugin>(
-                rs_engine::plugin::symbol_name::CREATE_PLUGIN,
+            let func = lib.load_symbol::<rs_native_plugin::signature::CreatePlugin>(
+                rs_native_plugin::symbol_name::CREATE_PLUGIN,
             )?;
-            let plugin = func(Arc::clone(&self.plugin_context));
+            let plugin = func();
             self.plugins.push(plugin);
             log::trace!("Load plugin.");
         }
@@ -1177,8 +1182,17 @@ impl EditorContext {
         }
         self.process_ui(window, event_loop_window_target);
 
+        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
         if let Some(plugin) = self.plugins.last_mut() {
-            plugin.tick();
+            #[cfg(feature = "plugin_shared_lib")]
+            {
+                let mut ffi_engine = unsafe { rs_engine::ffi::Engine::new(&mut self.engine) };
+                plugin.tick(ffi_engine.as_mut() as *mut rs_engine::ffi::Engine as _);
+            }
+            #[cfg(feature = "plugin_shared_crate")]
+            {
+                plugin.tick(&mut self.engine);
+            }
         }
 
         let gui_render_output = (|| {

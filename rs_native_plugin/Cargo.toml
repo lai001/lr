@@ -1,0 +1,15 @@
+[package]
+name = "rs_native_plugin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rs_engine = { path = "../rs_engine", optional = true }
+
+[features]
+plugin_shared_lib = []
+plugin_shared_crate = ["dep:rs_engine"]
+default = []
+
+[build-dependencies]
+rs_core_minimal = { path = "../rs_core_minimal" }

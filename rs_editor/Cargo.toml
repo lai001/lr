@@ -19,11 +19,9 @@ standalone = [
     "rs_core_minimal/standalone",
     "rs_engine/standalone",
 ]
-profiler = [
-    "tracy-client/default",
-    "rs_render/profiler",
-    "rs_engine/profiler",
-]
+profiler = ["tracy-client/default", "rs_render/profiler", "rs_engine/profiler"]
+plugin_shared_lib = ["rs_native_plugin/plugin_shared_lib"]
+plugin_shared_crate = ["rs_native_plugin/plugin_shared_crate"]
 
 [dependencies]
 egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "0106647", version = "0.3.0", features = [
@@ -80,3 +78,4 @@ rs_proc_macros = { path = "../rs_proc_macros" }
 rs_metis = { path = "../rs_metis" }
 rs_media = { path = "../rs_media" }
 rs_audio = { path = "../rs_audio" }
+rs_native_plugin = { path = "../rs_native_plugin" }

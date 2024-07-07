@@ -18,10 +18,7 @@ standalone = [
     "rs_render/standalone",
     "rs_core_minimal/standalone",
 ]
-profiler = [
-    "tracy-client/default",
-    "rs_render/default",
-]
+profiler = ["tracy-client/default", "rs_render/default"]
 
 [dependencies]
 md-5 = { version = "0.10.6" }
@@ -64,3 +61,6 @@ winit = { version = "0.29.4" }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 ndk-sys = "0.5.0"
+
+[lib]
+crate-type = ["rlib", "cdylib"]

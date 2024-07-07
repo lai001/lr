@@ -195,26 +195,27 @@ impl Editor {
                 }
             }
             None => {
-                let result = EditorContext::prepreocess_shader();
-                let output_path = rs_core_minimal::file_manager::get_engine_root_dir()
-                    .join("rs_editor/target/shaders");
-                for entry in walkdir::WalkDir::new(output_path) {
-                    let entry = entry.unwrap();
-                    if !entry.path().is_file() {
-                        continue;
+                let result: anyhow::Result<()> = (|| {
+                    EditorContext::prepreocess_shader()?;
+                    let output_path = rs_core_minimal::file_manager::get_engine_root_dir()
+                        .join("rs_editor/target/shaders");
+                    for entry in walkdir::WalkDir::new(output_path) {
+                        let entry = entry?;
+                        if !entry.path().is_file() {
+                            continue;
+                        }
+                        let path = entry.path();
+                        let path = std::env::current_dir()?.join(path).canonicalize_slash()?;
+                        println!("{:?}", &path);
+                        let shader_source = std::fs::read_to_string(path)?;
+                        naga::front::wgsl::parse_str(&shader_source)?;
                     }
-                    let path = entry.path();
-                    let path = std::env::current_dir()
-                        .unwrap()
-                        .join(path)
-                        .canonicalize_slash()
-                        .unwrap();
-                    log::trace!("{:?}", &path);
-                    let shader_source = std::fs::read_to_string(path).unwrap();
-                    let result = naga::front::wgsl::parse_str(&shader_source);
-                    let _ = result.unwrap();
+                    Ok(())
+                })();
+                match result {
+                    Ok(_) => {}
+                    Err(err) => log::error!("{}", err),
                 }
-                let _ = result.unwrap();
             }
         }
         return false;

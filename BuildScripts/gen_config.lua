@@ -1,3 +1,5 @@
+local ffmpeg_dir = ffmpeg_dir
+
 task("gen_config")
 do
     on_run(function()
@@ -26,9 +28,22 @@ rustflags = ["-Clink-args=--target=@target@@api@"]
             local t = target_template:gsub("@target@", target)
             t = t:gsub("@api@", "30")
             t = t:gsub("@ndk@", ndk_path)
-            t = t:gsub("@host@", get_config("plat"))
+            -- t = t:gsub("@host@", get_config("plat"))
+            t = t:gsub("@host@", "windows")
             content = content .. "\n" .. t
         end
+        content = content .. "\n" .. [[
+[build]
+# rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
+rustflags = ["-C", "rpath"]
+        ]]
+        local ffmpeg_block = [[
+[env]
+FFMPEG_DIR = "@ffmpeg_dir@"
+        ]]
+        ffmpeg_block = ffmpeg_block:gsub("@ffmpeg_dir@", ffmpeg_dir)
+        content = content .. "\n" .. ffmpeg_block
+        content = content:gsub("\\", "/")
         io.writefile(".cargo/config.toml", content)
     end)
     set_menu {

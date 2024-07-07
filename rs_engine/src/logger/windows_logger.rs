@@ -50,10 +50,10 @@ impl Logger {
             .format({
                 let world_file = world_file.clone();
                 move |buf, record| {
-                    if !record.target().starts_with("rs_") {
+                    let level = record.level();
+                    if !record.target().starts_with("rs_") && level >= log::Level::Warn {
                         return Err(std::io::ErrorKind::Other.into());
                     }
-                    let level = record.level();
                     let level_style = buf.default_level_style(level);
                     let current_thread = std::thread::current();
                     let thread_name = format!("{}", current_thread.name().unwrap_or("Unknown"));
