@@ -6,23 +6,25 @@ using Foundation;
 namespace ExampleApplication
 {
     using RuntimeApplicationType = IntPtr;
+    using NativeEngineType = IntPtr;
 
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct NativeApplicationFunctions
     {
-        private unsafe delegate* unmanaged<RuntimeApplicationType, NativeTextureView, NativeQueue, void> applicationRedrawRequested = &RedrawRequested;
         private unsafe delegate* unmanaged<RuntimeApplicationType, NativeKeyboardInput, void> applicationKeyboardInput = &KeyboardInput;
         private unsafe delegate* unmanaged<RuntimeApplicationType, PhysicalPosition, void> applicationCursorMoved = &CursorMoved;
+        private unsafe delegate* unmanaged<RuntimeApplicationType, NativeEngineType, void> applicationTick = &Tick;
 
         public NativeApplicationFunctions()
         {
         }
 
         [UnmanagedCallersOnly]
-        private static unsafe void RedrawRequested(RuntimeApplicationType pointer, NativeTextureView nativeTextureView, NativeQueue nativeQueue)
+        private static unsafe void Tick(RuntimeApplicationType pointer, NativeEngineType nativeEngine)
         {
             Application application = UnmanagedObject<Application>.Cast(pointer);
-            application.RedrawRequested(nativeTextureView, nativeQueue);
+            NativeEngine engine = new NativeEngine(nativeEngine);
+            application.Tick(engine);
         }
 
         [UnmanagedCallersOnly]

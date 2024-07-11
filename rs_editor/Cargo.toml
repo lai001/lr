@@ -22,6 +22,7 @@ standalone = [
 profiler = ["tracy-client/default", "rs_render/profiler", "rs_engine/profiler"]
 plugin_shared_lib = ["rs_native_plugin/plugin_shared_lib"]
 plugin_shared_crate = ["rs_native_plugin/plugin_shared_crate"]
+plugin_dotnet = ["dep:rs_dotnet", "dep:rs_dotnet_host"]
 
 [dependencies]
 egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "0106647", version = "0.3.0", features = [
@@ -79,3 +80,7 @@ rs_metis = { path = "../rs_metis" }
 rs_media = { path = "../rs_media" }
 rs_audio = { path = "../rs_audio" }
 rs_native_plugin = { path = "../rs_native_plugin" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+rs_dotnet = { path = "../rs_dotnet", optional = true }
+rs_dotnet_host = { path = "../rs_dotnet_host", optional = true }

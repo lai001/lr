@@ -260,6 +260,14 @@ impl ProjectContext {
         Ok(path)
     }
 
+    #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+    pub fn get_dotnet_script_shared_lib_path(&self) -> PathBuf {
+        self.project_folder_path.join(format!(
+            "dotnet/{}/bin/Debug/{}.dll",
+            &self.project.project_name, &self.project.project_name
+        ))
+    }
+
     pub fn export(&mut self, model_loader: &mut ModelLoader) -> anyhow::Result<PathBuf> {
         let _span = tracy_client::span!();
 

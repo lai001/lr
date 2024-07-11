@@ -1,6 +1,7 @@
 ﻿using Native;
 using Script;
 using System.Runtime.InteropServices;
+using System;
 
 namespace ExampleApplication
 {
@@ -11,7 +12,7 @@ namespace ExampleApplication
         private NativePipelineLayout nativePipelineLayout;
         private NativeRenderPipeline nativeRenderPipeline;
 
-        public UserSscript userSscript;
+        public UserSscriptPayload userSscript;
 
         public void Initialize()
         {
@@ -19,29 +20,14 @@ namespace ExampleApplication
             {
                 userSscript.Initialize();
             }
-            //nativeShaderModule = NativeDevice.Instance.NativeCreateShaderModule("shader.wgsl", "../../src/shader/triangle.wgsl");
-            //nativePipelineLayout = NativeDevice.Instance.NativeCreatePipelineLayout("PipelineLayout");
-            //nativeRenderPipeline = NativeDevice.Instance.NativeCreateRenderPipeline("RenderPipeline", nativePipelineLayout, nativeShaderModule, NativeTextureFormat.Bgra8unormSrgb);
         }
 
-        public void RedrawRequested(NativeTextureView nativeTextureView, NativeQueue nativeQueue)
+        public void Tick(NativeEngine engine)
         {
             if (userSscript != null)
             {
-                userSscript.RedrawRequested(nativeTextureView, nativeQueue);
+                userSscript.Tick(engine);
             }
-            //System.Diagnostics.Debugger.Launch();
-
-            //NativeCommandEncoder nativeCommandEncoder = NativeDevice.Instance.NativeCreateCommandEncoder();
-
-            //using (NativeRenderPass nativeRenderPass = nativeCommandEncoder.BeginRenderPass(nativeTextureView))
-            //{
-            //    nativeRenderPass.SetPipeline(nativeRenderPipeline);
-            //    nativeRenderPass.Draw(new Range<uint>(0, 3), new Range<uint>(0, 1));
-            //}
-
-            //NativeCommandBuffer nativeCommandBuffer = nativeCommandEncoder.Finish();
-            //nativeCommandBuffer.Submit(nativeQueue);
         }
 
         public void KeyboardInput(NativeKeyboardInput keyboardInput)

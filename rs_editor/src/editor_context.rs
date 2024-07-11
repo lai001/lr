@@ -126,6 +126,8 @@ pub struct EditorContext {
     media_ui_window: Option<MediaUIWindow>,
     multiple_draw_ui_window: Option<MultipleDrawUiWindow>,
     watch_shader: WatchShader,
+    #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+    donet_host: Option<rs_dotnet_host::dotnet_runtime::DotnetRuntime>,
 }
 
 impl EditorContext {
@@ -174,7 +176,9 @@ impl EditorContext {
             "Engine Root Dir: {:?}",
             rs_core_minimal::file_manager::get_engine_root_dir().canonicalize_slash()?
         );
-
+        // for var in std::env::vars() {
+        //     log::trace!("{:?}", var);
+        // }
         let window_size = window.inner_size();
         let scale_factor = 1.0f32;
         let window_width = window_size.width;
@@ -216,6 +220,9 @@ impl EditorContext {
 
         let watch_shader = WatchShader::new(get_buildin_shader_dir())?;
 
+        #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+        let donet_host = rs_dotnet_host::dotnet_runtime::DotnetRuntime::default().ok();
+
         let editor_context = EditorContext {
             event_loop_proxy,
             engine,
@@ -237,6 +244,8 @@ impl EditorContext {
             multiple_draw_ui_window: None,
             watch_shader,
             particle_system_ui_window: None,
+            #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+            donet_host,
         };
         Ok(editor_context)
     }
@@ -348,6 +357,7 @@ impl EditorContext {
                         let _ = self.try_load_plugin();
                     }
                 }
+                let _ = self.try_load_dotnet_plugin();
                 if let Some(project_context) = &mut self.project_context {
                     if let Some(folder_update_type) = project_context.check_folder_notification() {
                         match folder_update_type {
@@ -551,6 +561,23 @@ impl EditorContext {
             let plugin = func();
             self.plugins.push(plugin);
             log::trace!("Load plugin.");
+        }
+        Ok(())
+    }
+
+    fn try_load_dotnet_plugin(&mut self) -> anyhow::Result<()> {
+        #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+        if let Some(project_context) = self.project_context.as_mut() {
+            if let Some(donet_host) = self.donet_host.as_mut() {
+                if !donet_host.is_watching() {
+                    let file_path = project_context.get_dotnet_script_shared_lib_path();
+                    donet_host.start_watch(file_path)?;
+                    donet_host.reload_script()?;
+                }
+                if donet_host.is_need_reload() {
+                    donet_host.reload_script()?;
+                }
+            }
         }
         Ok(())
     }
@@ -1013,6 +1040,7 @@ impl EditorContext {
 
         self.project_context = Some(project_context);
         let _ = self.try_load_plugin();
+        let _ = self.try_load_dotnet_plugin();
         self.data_source
             .recent_projects
             .paths
@@ -1193,6 +1221,11 @@ impl EditorContext {
             {
                 plugin.tick(&mut self.engine);
             }
+        }
+
+        #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+        if let Some(dotnet) = self.donet_host.as_mut() {
+            dotnet.application.tick(&mut self.engine);
         }
 
         let gui_render_output = (|| {

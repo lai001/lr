@@ -9,6 +9,7 @@ namespace ExampleApplication
 {
     using RuntimeApplicationType = IntPtr;
     using NativeDeviceType = IntPtr;
+    using NativeStringType = IntPtr;
 
     public static unsafe class Entry
     {
@@ -24,18 +25,19 @@ namespace ExampleApplication
             *nativeEntryInfo->nativeRuntimeApplicationFunctions = new NativeApplicationFunctions();
             *nativeEntryInfo->fileWatchFunctions = new FileWatchFunctions();
             NativeDevice.Functions = nativeEntryInfo->nativeGpuContextFunctions;
-            NativeDevice.nativeDevice = nativeEntryInfo->nativeDevice;
+            //NativeDevice.nativeDevice = nativeEntryInfo->nativeDevice;
             NativeCommandEncoder.Functions = nativeEntryInfo->nativeCommandEncoderFunctions;
             NativeRenderPass.Functions = nativeEntryInfo->nativeRenderPassFunctions;
             NativeQueue.Functions = nativeEntryInfo->nativeQueueFunctions;
             NativeShaderModule.Functions = nativeEntryInfo->nativeShaderModuleFunctions;
             NativePipelineLayout.Functions = nativeEntryInfo->nativePipelineLayoutFunctions;
             NativeRenderPipeline.Functions = nativeEntryInfo->nativeRenderPipelineFunctions;
+            NativeEngine.Functions = nativeEntryInfo->nativeEngineFunctions;
             //System.Diagnostics.Debugger.Launch();
             ScriptEngine = new Script.ScriptEngine();
-            ScriptEngine.Reload();
-            Application.userSscript = ScriptEngine.userSscript;
-            Application.Initialize();
+            //ScriptEngine.Reload();
+            //Application.userSscript = ScriptEngine.userSscript;
+            //Application.Initialize();
 
             Console.WriteLine(".NET C# Engine is running.");
         }
@@ -48,29 +50,35 @@ namespace ExampleApplication
         public NativeApplicationFunctions* nativeRuntimeApplicationFunctions;
         public FileWatchFunctions* fileWatchFunctions;
         public NativeDeviceFunctions nativeGpuContextFunctions;
-        public NativeDeviceType nativeDevice;
+        //public NativeDeviceType nativeDevice;
         public NativeCommandEncoderFunctions nativeCommandEncoderFunctions;
         public NativeRenderPassFunctions nativeRenderPassFunctions;
         public NativeQueueFunctions nativeQueueFunctions;
         public NativeShaderModuleFunctions nativeShaderModuleFunctions;
         public NativeRenderPipelineFunctions nativeRenderPipelineFunctions;
         public NativePipelineLayoutFunctions nativePipelineLayoutFunctions;
+        public NativeEngineFunctions nativeEngineFunctions;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct FileWatchFunctions
     {
-        public unsafe delegate* unmanaged<void> runtimeSourceFileChanged = &SourceFileChanged;
+        public unsafe delegate* unmanaged<NativeStringType, void> runtimeSourceFileChanged = &SourceFileChanged;
 
         public FileWatchFunctions()
         {
         }
 
         [UnmanagedCallersOnly]
-        public static unsafe void SourceFileChanged()
+        public static unsafe void SourceFileChanged(NativeStringType filePath)
         {
-            Entry.ScriptEngine.Reload();
-            Entry.Application.userSscript = Entry.ScriptEngine.userSscript;
+            if (Marshal.PtrToStringUTF8(filePath) is not { } path)
+            {
+                return;
+            }
+
+            Entry.ScriptEngine.Reload(path);
+            Entry.Application.userSscript = Entry.ScriptEngine.userSscriptPayload;
             Entry.Application.Initialize();
         }
     }

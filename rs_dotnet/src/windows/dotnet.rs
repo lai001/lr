@@ -3,8 +3,7 @@ use super::win::to_wstring;
 use super::win::LoadLibraryW;
 use crate::windows::global_context::GLOBAL_CONTEXT;
 
-// #[link(name = "./target/debug/nethost")]
-#[link(name = "../../../target/release/nethost")]
+#[link(name = "nethost")]
 extern "stdcall" {
     pub fn get_hostfxr_path(
         buffer: *mut u16,

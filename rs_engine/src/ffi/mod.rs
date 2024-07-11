@@ -1,5 +1,19 @@
 use rs_render::view_mode::EViewModeType;
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct NativeEngineFunctions {
+    pub set_view_mode: *mut std::ffi::c_void,
+}
+
+impl NativeEngineFunctions {
+    pub fn new() -> NativeEngineFunctions {
+        NativeEngineFunctions {
+            set_view_mode: rs_engine_Engine_set_view_mode as *mut std::ffi::c_void,
+        }
+    }
+}
+
 pub struct Engine {
     inner: *mut crate::engine::Engine,
 }

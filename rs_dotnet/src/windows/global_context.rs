@@ -1,8 +1,7 @@
-use std::sync::Mutex;
-
 use crate::dotnet::{
     HostfxrCloseFn, HostfxrGetRuntimeDelegateFn, HostfxrInitializeForRuntimeConfigFn,
 };
+use std::sync::Mutex;
 
 pub struct Context {
     pub initialize_for_runtime_config_func_ptr: *mut HostfxrInitializeForRuntimeConfigFn,

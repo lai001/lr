@@ -21,9 +21,9 @@ do
         local is_enable_quickjs = get_config("enable_quickjs")
 
         if is_enable_dotnet then
-            local dotnetSDKFilename = "dotnet-sdk-6.0.408-win-x64.zip"
+            local dotnetSDKFilename = "dotnet-sdk-8.0.302-win-x64.zip"
             local link =
-                "https://download.visualstudio.microsoft.com/download/pr/ca13c6f1-3107-4cf8-991c-f70edc1c1139/a9f90579d827514af05c3463bed63c22/" ..
+                "https://download.visualstudio.microsoft.com/download/pr/5af098e1-e433-4fda-84af-3f54fd27c108/6bd1c6e48e64e64871957289023ca590/" ..
                 dotnetSDKFilename
 
             if os.exists(deps_dir .. dotnetSDKFilename) == false then

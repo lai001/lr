@@ -7,11 +7,11 @@ using Native;
 
 namespace Script
 {
-    public class UserSscript
+    public class UserSscriptPayload
     {
         private WeakReference userScriptWeakRef;
 
-        public UserSscript(IUserScript userScript)
+        public UserSscriptPayload(IUserScript userScript)
         {
             userScriptWeakRef = new WeakReference(userScript);
         }
@@ -25,12 +25,12 @@ namespace Script
             }
         }
 
-        public void RedrawRequested(NativeTextureView nativeTextureView, NativeQueue nativeQueue)
+        public void Tick(NativeEngine engine)
         {
             if (userScriptWeakRef.Target != null)
             {
                 IUserScript userScript = userScriptWeakRef.Target as IUserScript;
-                userScript.RedrawRequested(nativeTextureView, nativeQueue);
+                userScript.Tick(engine);
             }
         }
 
@@ -55,25 +55,40 @@ namespace Script
 
     public class ScriptEngine
     {
-        public UserSscript userSscript;
+        public UserSscriptPayload userSscriptPayload;
 
         public ScriptEngine()
         {
         }
 
-        public void Reload()
+        //public void Reload()
+        //{
+        //    string fileName = "UserScript.dll";
+        //    RemoteAssembly.SetAssemblyPath($"./{fileName}");
+        //    string source = Path.Join(Directory.GetCurrentDirectory(), "tmp", fileName);
+        //    string target = Path.Join(Directory.GetCurrentDirectory(), fileName);
+        //    try
+        //    {
+        //        RemoteAssembly.UnloadAssembly();
+        //        File.Copy(source, target, true);
+        //        Console.WriteLine($"copy {source} to {target}.");
+        //        RemoteAssembly.LoadAssembly();
+        //        userSscript = new UserSscript(Util.CreateInstances<IUserScript>(RemoteAssembly.GetAssembly()).First());
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine($"{ex}");
+        //    }
+        //}
+
+        public void Reload(string Path)
         {
-            string fileName = "UserScript.dll";
-            RemoteAssembly.SetAssemblyPath($"./{fileName}");
-            string source = Path.Join(Directory.GetCurrentDirectory(), "tmp", fileName);
-            string target = Path.Join(Directory.GetCurrentDirectory(), fileName);
+            RemoteAssembly.SetAssemblyPath(Path);
             try
             {
                 RemoteAssembly.UnloadAssembly();
-                File.Copy(source, target, true);
-                Console.WriteLine($"copy {source} to {target}.");
                 RemoteAssembly.LoadAssembly();
-                userSscript = new UserSscript(Util.CreateInstances<IUserScript>(RemoteAssembly.GetAssembly()).First());
+                userSscriptPayload = new UserSscriptPayload(Util.CreateInstances<IUserScript>(RemoteAssembly.GetAssembly()).First());
             }
             catch (Exception ex)
             {

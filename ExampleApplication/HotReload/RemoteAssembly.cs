@@ -41,7 +41,8 @@ namespace HotReload
             {
                 var context = new HotReloadAssemblyLoadContext(assemblyPath);
                 contextWeakRef = new WeakReference(context);
-                Assembly assembly = context.LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(assemblyPath)));
+                //Assembly assembly = context.LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(assemblyPath)));
+                Assembly assembly = context.LoadFromAssemblyPath(assemblyPath);
                 assemblyWeakRef = new WeakReference(assembly);
                 isLoaded = true;
             }

@@ -15,6 +15,7 @@ pub mod default_textures;
 pub mod depth_texture;
 pub mod egui_render;
 pub mod error;
+pub mod ffi;
 pub mod frame_buffer;
 pub mod global_shaders;
 pub mod global_uniform;

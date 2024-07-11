@@ -10,7 +10,7 @@ namespace Script
 
         public void Initialize();
 
-        public void RedrawRequested(NativeTextureView nativeTextureView, NativeQueue nativeQueue);
+        public void Tick(NativeEngine engine);
 
         public void KeyboardInput(NativeKeyboardInput keyboardInput);
 
