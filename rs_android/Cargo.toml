@@ -26,4 +26,4 @@ rs_artifact = { version = "0.1.0", path = "../rs_artifact" }
 rs_render = { version = "0.1.0", path = "../rs_render" }
 
 [lib]
-crate_type = ["rlib", "cdylib"]
+crate-type = ["rlib", "cdylib"]

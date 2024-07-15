@@ -6,6 +6,7 @@ local metis_dir = metis_dir
 local gklib_dir = gklib_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
 local tracy_root_dir = tracy_root_dir
+local dotnet_sdk_dir = dotnet_sdk_dir
 
 task("download_deps")
 do
@@ -30,8 +31,8 @@ do
                 http.download(link, deps_dir .. dotnetSDKFilename)
             end
 
-            if os.exists(deps_dir .. "dotnetSDK") == false and os.exists(deps_dir .. dotnetSDKFilename) then
-                archive.extract(deps_dir .. dotnetSDKFilename, deps_dir .. "dotnetSDK")
+            if os.exists(dotnet_sdk_dir) == false and os.exists(deps_dir .. dotnetSDKFilename) then
+                archive.extract(deps_dir .. dotnetSDKFilename, dotnet_sdk_dir)
             end
         end
 

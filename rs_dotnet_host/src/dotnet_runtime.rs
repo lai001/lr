@@ -1,6 +1,5 @@
 use super::application::RuntimeApplication;
 use crate::{
-    application::{RuntimeApplicationFunctions, GLOBAL_RUNTIME_APPLICATION_FUNCTIONS},
     entry_info,
     file_watch::{FileChangedFunc, FileWatch},
 };
@@ -8,15 +7,6 @@ use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::DebouncedEvent;
 use notify_debouncer_mini::Debouncer;
 use rs_core_minimal::{file_manager, path_ext::CanonicalizeSlashExt};
-use rs_engine::ffi::NativeEngineFunctions;
-use rs_render::ffi::{
-    native_command_encoder::NativeWGPUCommandEncoderFunctions,
-    native_device::NativeWGPUDeviceFunctions,
-    native_pipeline_layout::NativeWGPUPipelineLayoutFunctions,
-    native_queue::NativeWGPUQueueFunctions, native_render_pass::NativeWGPURenderPassFunctions,
-    native_render_pipeline::NativeWGPURenderPipelineFunctions,
-    native_shader_module::NativeWGPUShaderModuleFunctions,
-};
 use std::{
     path::{Path, PathBuf},
     sync::mpsc::Receiver,
@@ -74,25 +64,7 @@ impl DotnetRuntime {
 
         unsafe {
             type EntryPointFn = unsafe extern "C" fn(entry_info: *mut std::ffi::c_void);
-            let mut entry_info = entry_info::EntryInfo {
-                runtime_application: std::ptr::null_mut(),
-                runtime_application_functions: (&mut GLOBAL_RUNTIME_APPLICATION_FUNCTIONS
-                    .lock()
-                    .unwrap())
-                    as &mut RuntimeApplicationFunctions
-                    as *mut _
-                    as *mut RuntimeApplicationFunctions,
-                native_device_functions: NativeWGPUDeviceFunctions::new(),
-                // native_device: device as *mut _ as *mut wgpu::Device,
-                native_command_encoder_functions: NativeWGPUCommandEncoderFunctions::new(),
-                native_render_pass_functions: NativeWGPURenderPassFunctions::new(),
-                native_queue_functions: NativeWGPUQueueFunctions::new(),
-                runtime_file_watch: &mut file_watch as *mut _ as *mut FileWatch,
-                native_shader_module_functions: NativeWGPUShaderModuleFunctions::new(),
-                native_render_pipeline_functions: NativeWGPURenderPipelineFunctions::new(),
-                native_pipeline_layout_functions: NativeWGPUPipelineLayoutFunctions::new(),
-                native_engine_functions: NativeEngineFunctions::new(),
-            };
+            let mut entry_info = entry_info::EntryInfo::new(&mut file_watch);
 
             let entry_point_func: *mut EntryPointFn =
                 rs_dotnet::dotnet::load_and_get_entry_point_func(

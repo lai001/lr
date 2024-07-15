@@ -1,19 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Foundation;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace Native
 {
     using NativeEngineType = IntPtr;
+    using NativeCameraType = IntPtr;
 
     [StructLayout(LayoutKind.Sequential)]
     public unsafe struct NativeEngineFunctions
     {
         public delegate* unmanaged<NativeEngineType, int, void> rs_engine_Engine_set_view_mode;
+        public delegate* unmanaged<NativeEngineType, NativeCameraType> rs_engine_Engine_get_camera_mut;
     }
 
     public unsafe class NativeEngine
@@ -32,6 +28,14 @@ namespace Native
             System.Diagnostics.Debug.Assert(Functions != null && Functions.HasValue);
             System.Diagnostics.Debug.Assert(nativeEngine != NativeEngineType.Zero);
             Functions.Value.rs_engine_Engine_set_view_mode(nativeEngine, mode);
+        }
+
+        public NativeCamera GetCameraMut()
+        {
+            System.Diagnostics.Debug.Assert(Functions != null && Functions.HasValue);
+            System.Diagnostics.Debug.Assert(nativeEngine != NativeEngineType.Zero);
+            NativeCameraType camera = Functions.Value.rs_engine_Engine_get_camera_mut(nativeEngine);
+            return new NativeCamera(camera);
         }
     }
 }

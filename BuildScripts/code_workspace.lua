@@ -123,15 +123,9 @@ task("code_workspace") do
         if is_enable_renderdoc then
             table.join2(features, "renderdoc")
         end
-        if is_enable_quickjs then
-            table.join2(features, "rs_quickjs")
-            table.join2(linkedProjects, path.absolute("./rs_quickjs/Cargo.toml"))
-            table.join2(associations, { ["quickjs.h"] = "c" })
-        end
-        if is_enable_dotnet then
-            table.join2(features, "rs_dotnet")
-            table.join2(linkedProjects, path.absolute("./rs_dotnet/Cargo.toml"))
-        end
+        table.join2(features, "plugin_shared_lib")
+        table.join2(features, "plugin_dotnet")
+        table.join2(features, "plugin_v8")
 
         if #features == 0 then
             features = nil

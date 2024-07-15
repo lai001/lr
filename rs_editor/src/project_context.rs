@@ -268,6 +268,19 @@ impl ProjectContext {
         ))
     }
 
+    #[cfg(all(feature = "plugin_v8"))]
+    pub fn get_js_script_entry_path(&self) -> PathBuf {
+        self.project_folder_path.join(format!(
+            "js/{}/{}.js",
+            &self.project.project_name, &self.project.project_name
+        ))
+    }
+
+    #[cfg(all(feature = "plugin_v8"))]
+    pub fn get_js_script_root_dir(&self) -> PathBuf {
+        self.project_folder_path.join(format!("js"))
+    }
+
     pub fn export(&mut self, model_loader: &mut ModelLoader) -> anyhow::Result<PathBuf> {
         let _span = tracy_client::span!();
 

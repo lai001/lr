@@ -53,6 +53,12 @@ impl EGUIRenderer {
         }
     }
 
+    pub fn change_scale_factor(&mut self, window_id: isize, scale_factor: f32) {
+        if let Some(screen_descriptor) = self.screen_descriptors.get_mut(&window_id) {
+            screen_descriptor.pixels_per_point = scale_factor;
+        }
+    }
+
     pub fn render(
         &mut self,
         gui_render_output: &EGUIRenderOutput,

@@ -41,6 +41,7 @@ impl Project {
         Self::create_dotnet_script_file(project_parent_folder, project_name)?;
         Self::create_dotnet_project_file(project_parent_folder, project_name)?;
         Self::create_sln_file(project_parent_folder, project_name)?;
+        Self::create_js_script_file(project_parent_folder, project_name)?;
         #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
         Self::create_my_plugin_file(project_parent_folder, project_name)?;
         let project_folder = project_parent_folder.join(project_name);
@@ -148,6 +149,24 @@ impl Project {
         Ok(file.write_fmt(format_args!("{}", content))?)
     }
 
+    fn create_js_script_file(
+        project_parent_folder: &Path,
+        project_name: &str,
+    ) -> anyhow::Result<()> {
+        let project_folder = project_parent_folder.join(project_name);
+        let script_file_path =
+            project_folder.join(format!("js/{}/{}.js", project_name, project_name));
+        let parent = script_file_path
+            .parent()
+            .ok_or(anyhow!("Parent folder not found"))?;
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let content = get_js_script_template();
+        let mut file = std::fs::File::create(script_file_path)?;
+        Ok(file.write_fmt(format_args!("{}", content))?)
+    }
+
     fn create_dotnet_script_file(
         project_parent_folder: &Path,
         project_name: &str,
@@ -194,10 +213,7 @@ impl Project {
         if !parent.exists() {
             std::fs::create_dir_all(parent)?;
         }
-        let content = fill_sln_template(
-            project_name,
-            file_manager::get_engine_root_dir().join("ExampleApplication/Script/Script.csproj"),
-        );
+        let content = fill_sln_template(project_name);
         let mut file = std::fs::File::create(sln_file_path)?;
         Ok(file.write_fmt(format_args!("{}", content))?)
     }
@@ -287,6 +303,13 @@ fn fill_cargo_toml_template(name: &str, engine_path: &str) -> String {
     template
 }
 
+fn get_js_script_template() -> &'static str {
+    return r#"function engineTick(engine) {
+    engine.setViewMode(0);
+}
+    "#;
+}
+
 fn get_dotnet_script_template() -> &'static str {
     return r#"using Native;
 using Script;
@@ -354,16 +377,27 @@ fn fill_dotnet_project_template(script_dependency_path: impl AsRef<Path>) -> Str
     template
 }
 
-fn fill_sln_template(project_name: &str, script_dependency_path: impl AsRef<Path>) -> String {
+fn fill_sln_template(project_name: &str) -> String {
+    let dependency_root_dir = file_manager::get_engine_root_dir()
+        .join("ExampleApplication")
+        .canonicalize_slash()
+        .unwrap();
     let mut template = get_sln_template().to_string();
-    template = template.replace(
-        "@script_dependency@",
-        &script_dependency_path
-            .as_ref()
-            .canonicalize_slash()
-            .unwrap()
-            .to_slash_lossy(),
-    );
+    for dependency_name in vec![
+        "Native",
+        "Script",
+        "ExampleApplication",
+        "Foundation",
+        "HotReload",
+    ] {
+        template = template.replace(
+            &format!("@{}@", dependency_name),
+            &dependency_root_dir
+                .join(format!("{}/{}.csproj", dependency_name, dependency_name))
+                .to_string_lossy()
+                .to_string(),
+        );
+    }
     template = template.replace("@project_name@", project_name);
     template
 }
@@ -373,17 +407,24 @@ fn get_sln_template() -> &'static str {
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "@project_name@", "@project_name@\@project_name@.csproj", "{E586AB3C-95F6-4263-963D-CEF5BFB27F91}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "@project_name@", "@project_name@/@project_name@.csproj", "{E586AB3C-95F6-4263-963D-CEF5BFB27F91}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Script", "@script_dependency@", "{B864FD6F-2680-45B0-A913-308CDE4E6848}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Script", "@Script@", "{B864FD6F-2680-45B0-A913-308CDE4E6848}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Engine", "Engine", "{7F434F99-6D48-43B6-8ABD-AA91C5A65822}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Native", "@Native@", "{5C270EC8-6650-4226-BCAA-CE80439C76A8}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExampleApplication", "@ExampleApplication@", "{F55770EF-CDBD-405C-8FD0-FAE78FEBAAFE}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Foundation", "@Foundation@", "{51A54552-2FBB-4F50-9E87-770C0E7AE3C3}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HotReload", "@HotReload@", "{E3015BE7-FE45-4A2F-852F-0B8D8FE55A39}"
 EndProject
 Global
     GlobalSection(SolutionConfigurationPlatforms) = preSolution
         Debug|Any CPU = Debug|Any CPU
         Release|Any CPU = Release|Any CPU
-    EndGlobalSection
-    GlobalSection(SolutionProperties) = preSolution
-        HideSolutionNode = FALSE
     EndGlobalSection
     GlobalSection(ProjectConfigurationPlatforms) = postSolution
         {E586AB3C-95F6-4263-963D-CEF5BFB27F91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -394,12 +435,35 @@ Global
         {B864FD6F-2680-45B0-A913-308CDE4E6848}.Debug|Any CPU.Build.0 = Debug|Any CPU
         {B864FD6F-2680-45B0-A913-308CDE4E6848}.Release|Any CPU.ActiveCfg = Release|Any CPU
         {B864FD6F-2680-45B0-A913-308CDE4E6848}.Release|Any CPU.Build.0 = Release|Any CPU
+        {5C270EC8-6650-4226-BCAA-CE80439C76A8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {5C270EC8-6650-4226-BCAA-CE80439C76A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {5C270EC8-6650-4226-BCAA-CE80439C76A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {5C270EC8-6650-4226-BCAA-CE80439C76A8}.Release|Any CPU.Build.0 = Release|Any CPU
+        {F55770EF-CDBD-405C-8FD0-FAE78FEBAAFE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {F55770EF-CDBD-405C-8FD0-FAE78FEBAAFE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {F55770EF-CDBD-405C-8FD0-FAE78FEBAAFE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {F55770EF-CDBD-405C-8FD0-FAE78FEBAAFE}.Release|Any CPU.Build.0 = Release|Any CPU
+        {51A54552-2FBB-4F50-9E87-770C0E7AE3C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {51A54552-2FBB-4F50-9E87-770C0E7AE3C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {51A54552-2FBB-4F50-9E87-770C0E7AE3C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {51A54552-2FBB-4F50-9E87-770C0E7AE3C3}.Release|Any CPU.Build.0 = Release|Any CPU
+        {E3015BE7-FE45-4A2F-852F-0B8D8FE55A39}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {E3015BE7-FE45-4A2F-852F-0B8D8FE55A39}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {E3015BE7-FE45-4A2F-852F-0B8D8FE55A39}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {E3015BE7-FE45-4A2F-852F-0B8D8FE55A39}.Release|Any CPU.Build.0 = Release|Any CPU
+    EndGlobalSection
+    GlobalSection(SolutionProperties) = preSolution
+        HideSolutionNode = FALSE
     EndGlobalSection
     GlobalSection(NestedProjects) = preSolution
-        {F823BB19-A240-4362-B0F7-A97A48802860} = {4ACFEBD7-8C06-45F3-A722-9F37C1687F0E}
-        {F1914579-1D39-4650-9DD0-A5C1D444F700} = {F823BB19-A240-4362-B0F7-A97A48802860}
-        {2714AAC9-13BC-4D8A-968E-DDECC87453DE} = {F1914579-1D39-4650-9DD0-A5C1D444F700}
-        {B864FD6F-2680-45B0-A913-308CDE4E6848} = {2714AAC9-13BC-4D8A-968E-DDECC87453DE}
+        {B864FD6F-2680-45B0-A913-308CDE4E6848} = {7F434F99-6D48-43B6-8ABD-AA91C5A65822}
+        {5C270EC8-6650-4226-BCAA-CE80439C76A8} = {7F434F99-6D48-43B6-8ABD-AA91C5A65822}
+        {F55770EF-CDBD-405C-8FD0-FAE78FEBAAFE} = {7F434F99-6D48-43B6-8ABD-AA91C5A65822}
+        {51A54552-2FBB-4F50-9E87-770C0E7AE3C3} = {7F434F99-6D48-43B6-8ABD-AA91C5A65822}
+        {E3015BE7-FE45-4A2F-852F-0B8D8FE55A39} = {7F434F99-6D48-43B6-8ABD-AA91C5A65822}
+    EndGlobalSection
+    GlobalSection(ExtensibilityGlobals) = postSolution
+        SolutionGuid = {7286F4B4-11B0-43DB-837A-AC2B25CFEBD9}
     EndGlobalSection
 EndGlobal
   "#;

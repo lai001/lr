@@ -18,12 +18,11 @@ pub type ApplicationCursorMoved =
     unsafe extern "C" fn(appPtr: RuntimeInstanceType, position: glam::DVec2);
 
 pub type ApplicationTick =
-    unsafe extern "C" fn(appPtr: RuntimeInstanceType, engine: *mut rs_engine::ffi::Engine);
+    unsafe extern "C" fn(appPtr: RuntimeInstanceType, engine: *mut rs_engine::ffi::engine::Engine);
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct RuntimeApplicationFunctions {
-    // application_redraw_requested: *mut ApplicationRedrawRequested,
     application_keyboard_input: *mut ApplicationKeyboardInput,
     application_cursor_moved: *mut ApplicationCursorMoved,
     application_tick: *mut ApplicationTick,
@@ -36,7 +35,6 @@ lazy_static! {
     // TODO: Optimization, remove mutex
     pub static ref GLOBAL_RUNTIME_APPLICATION_FUNCTIONS: Mutex<RuntimeApplicationFunctions> =
         Mutex::new(RuntimeApplicationFunctions {
-            // application_redraw_requested: std::ptr::null_mut(),
             application_keyboard_input: std::ptr::null_mut(),
             application_tick: std::ptr::null_mut(),
             application_cursor_moved: std::ptr::null_mut(),
@@ -53,22 +51,6 @@ impl RuntimeApplication {
     pub fn new(instance: RuntimeInstanceType) -> RuntimeApplication {
         RuntimeApplication { instance }
     }
-
-    // pub fn redraw_requested(
-    //     &mut self,
-    //     native_texture_view: NativeWGPUTextureView,
-    //     native_queue: NativeWGPUQueue,
-    // ) {
-    //     unsafe {
-    //         let func_ptr: ApplicationRedrawRequested = std::mem::transmute(
-    //             GLOBAL_RUNTIME_APPLICATION_FUNCTIONS
-    //                 .lock()
-    //                 .unwrap()
-    //                 .application_redraw_requested,
-    //         );
-    //         func_ptr(self.instance, native_texture_view, native_queue);
-    //     }
-    // }
 
     pub fn keyboard_input(&mut self, keyboard_input: NativeKeyboardInput) {
         unsafe {
@@ -104,7 +86,7 @@ impl RuntimeApplication {
                 return;
             }
             let func_ptr: ApplicationTick = std::mem::transmute(application_tick);
-            let ffi_engine = rs_engine::ffi::Engine::new(engine);
+            let ffi_engine = rs_engine::ffi::engine::Engine::new(engine);
             let raw = Box::into_raw(ffi_engine);
             func_ptr(self.instance, raw);
             let _ = Box::from_raw(raw);

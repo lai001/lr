@@ -11,6 +11,7 @@ ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-sha
 russimp_prebuild_dir = path.absolute(deps_dir)
 engine_root_dir = path.absolute("./")
 tracy_root_dir = path.absolute(deps_dir .. "tracy")
+dotnet_sdk_dir = path.absolute(deps_dir .. "dotnetSDK")
 
 includes("BuildScripts/gen_config.lua")
 includes("BuildScripts/build_android_target.lua")

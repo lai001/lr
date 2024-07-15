@@ -1080,6 +1080,10 @@ impl Renderer {
             RenderCommand::DestroyTextures(textures) => {
                 self.textures.retain(|k, _| !textures.contains(k));
             }
+            RenderCommand::ScaleChanged(info) => {
+                self.gui_renderer
+                    .change_scale_factor(info.window_id, info.new_factor);
+            }
         }
         return None;
     }

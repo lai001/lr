@@ -232,6 +232,12 @@ pub struct ResizeInfo {
 }
 
 #[derive(Clone)]
+pub struct ScaleChangedInfo {
+    pub window_id: isize,
+    pub new_factor: f32,
+}
+
+#[derive(Clone)]
 pub struct UpdateTexture {
     pub handle: TextureHandle,
     pub texture_data: InitTextureData,
@@ -334,6 +340,7 @@ pub enum RenderCommand {
     UpdateTexture(UpdateTexture),
     UiOutput(EGUIRenderOutput),
     Resize(ResizeInfo),
+    ScaleChanged(ScaleChangedInfo),
     CreateVirtualTextureSource(CreateVirtualTexture),
     CreateVirtualTexturePass(CreateVirtualTexturePass),
     VirtualTexturePassResize(VirtualTexturePassResize),

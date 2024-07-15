@@ -33,6 +33,7 @@ namespace ExampleApplication
             NativePipelineLayout.Functions = nativeEntryInfo->nativePipelineLayoutFunctions;
             NativeRenderPipeline.Functions = nativeEntryInfo->nativeRenderPipelineFunctions;
             NativeEngine.Functions = nativeEntryInfo->nativeEngineFunctions;
+            NativeCamera.Functions = nativeEntryInfo->nativeCameraFunctions;
             //System.Diagnostics.Debugger.Launch();
             ScriptEngine = new Script.ScriptEngine();
             //ScriptEngine.Reload();
@@ -58,6 +59,7 @@ namespace ExampleApplication
         public NativeRenderPipelineFunctions nativeRenderPipelineFunctions;
         public NativePipelineLayoutFunctions nativePipelineLayoutFunctions;
         public NativeEngineFunctions nativeEngineFunctions;
+        public NativeCameraFunctions nativeCameraFunctions;
     }
 
     [StructLayout(LayoutKind.Sequential)]

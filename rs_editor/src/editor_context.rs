@@ -45,7 +45,7 @@ use rs_foundation::new::SingleThreadMut;
 #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
 use rs_native_plugin::Plugin;
 use rs_render::{
-    command::{RenderCommand, TextureDescriptorCreateInfo},
+    command::{RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
     get_buildin_shader_dir,
 };
 use std::{
@@ -117,6 +117,8 @@ pub struct EditorContext {
     _plugin_context: Arc<Mutex<PluginContext>>,
     #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
     plugins: Vec<Box<dyn Plugin>>,
+    #[cfg(feature = "plugin_v8")]
+    v8_runtime: Option<rs_v8_host::v8_runtime::V8Runtime>,
     frame_sync: FrameSync,
     model_loader: ModelLoader,
     window_manager: Rc<RefCell<WindowsManager>>,
@@ -179,8 +181,9 @@ impl EditorContext {
         // for var in std::env::vars() {
         //     log::trace!("{:?}", var);
         // }
+
         let window_size = window.inner_size();
-        let scale_factor = 1.0f32;
+        let scale_factor = window.scale_factor() as f32;
         let window_width = window_size.width;
         let window_height = window_size.height;
         let egui_context = egui::Context::default();
@@ -222,7 +225,13 @@ impl EditorContext {
 
         #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
         let donet_host = rs_dotnet_host::dotnet_runtime::DotnetRuntime::default().ok();
-
+        #[cfg(feature = "plugin_v8")]
+        let v8_runtime = {
+            let mut v8_runtime = rs_v8_host::v8_runtime::V8Runtime::new();
+            let _ = v8_runtime.register_func_global();
+            // let _ = v8_runtime.register_engine_global(&mut editor_context.engine);
+            v8_runtime
+        };
         let editor_context = EditorContext {
             event_loop_proxy,
             engine,
@@ -235,18 +244,21 @@ impl EditorContext {
             _plugin_context: plugin_context,
             #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
             plugins: vec![],
+            #[cfg(feature = "plugin_v8")]
+            v8_runtime: Some(v8_runtime),
             frame_sync,
             model_loader: ModelLoader::new(),
             window_manager: window_manager.clone(),
             material_ui_window: None,
+            particle_system_ui_window: None,
             mesh_ui_window: None,
             media_ui_window: None,
             multiple_draw_ui_window: None,
             watch_shader,
-            particle_system_ui_window: None,
             #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
             donet_host,
         };
+
         Ok(editor_context)
     }
 
@@ -285,6 +297,13 @@ impl EditorContext {
                     .get_camera_mut()
                     .set_window_size(size.width, size.height);
                 self.engine.resize(window_id, size.width, size.height);
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                self.engine
+                    .send_render_command(RenderCommand::ScaleChanged(ScaleChangedInfo {
+                        window_id,
+                        new_factor: *scale_factor as f32,
+                    }));
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(_, up) => {
@@ -358,6 +377,7 @@ impl EditorContext {
                     }
                 }
                 let _ = self.try_load_dotnet_plugin();
+                let _ = self.try_load_js_plugin();
                 if let Some(project_context) = &mut self.project_context {
                     if let Some(folder_update_type) = project_context.check_folder_notification() {
                         match folder_update_type {
@@ -582,6 +602,23 @@ impl EditorContext {
         Ok(())
     }
 
+    fn try_load_js_plugin(&mut self) -> anyhow::Result<()> {
+        #[cfg(feature = "plugin_v8")]
+        if let Some(project_context) = self.project_context.as_mut() {
+            if let Some(v8_runtime) = self.v8_runtime.as_mut() {
+                if !v8_runtime.is_watching() {
+                    let entry_path = project_context.get_js_script_entry_path();
+                    let root_dir = project_context.get_js_script_root_dir();
+                    v8_runtime.start_watch(root_dir, entry_path)?;
+                    v8_runtime.reload_script()?;
+                }
+                if v8_runtime.is_need_reload() {
+                    v8_runtime.reload_script()?;
+                }
+            }
+        }
+        Ok(())
+    }
     fn post_build_asset_folder(&mut self) {
         let Some(project_context) = &self.project_context else {
             return;
@@ -1041,6 +1078,7 @@ impl EditorContext {
         self.project_context = Some(project_context);
         let _ = self.try_load_plugin();
         let _ = self.try_load_dotnet_plugin();
+        let _ = self.try_load_js_plugin();
         self.data_source
             .recent_projects
             .paths
@@ -1214,8 +1252,9 @@ impl EditorContext {
         if let Some(plugin) = self.plugins.last_mut() {
             #[cfg(feature = "plugin_shared_lib")]
             {
-                let mut ffi_engine = unsafe { rs_engine::ffi::Engine::new(&mut self.engine) };
-                plugin.tick(ffi_engine.as_mut() as *mut rs_engine::ffi::Engine as _);
+                let mut ffi_engine =
+                    unsafe { rs_engine::ffi::engine::Engine::new(&mut self.engine) };
+                plugin.tick(ffi_engine.as_mut() as *mut rs_engine::ffi::engine::Engine as _);
             }
             #[cfg(feature = "plugin_shared_crate")]
             {
@@ -1226,6 +1265,11 @@ impl EditorContext {
         #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
         if let Some(dotnet) = self.donet_host.as_mut() {
             dotnet.application.tick(&mut self.engine);
+        }
+
+        #[cfg(feature = "plugin_v8")]
+        if let Some(v8_runtime) = self.v8_runtime.as_mut() {
+            let _ = v8_runtime.tick(&mut self.engine);
         }
 
         let gui_render_output = (|| {
