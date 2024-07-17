@@ -34,7 +34,7 @@ pub fn gui_render_output(
             .viewports
             .get_mut(&viewport_id)
             .unwrap();
-        egui_winit::update_viewport_info(viewport_info, &ctx, window);
+        egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
     }
 
     let new_input = egui_winit_state.take_egui_input(window);

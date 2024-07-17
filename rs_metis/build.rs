@@ -48,7 +48,7 @@ fn main() {
         .allowlist_var("METIS_.*")
         .clang_args(defines.iter().map(|x| format!("-D {}", x)).collect::<Vec<String>>())
         .clang_args(include_dirs.iter().map(|x| format!("-I{}", x)).collect::<Vec<String>>())
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
 

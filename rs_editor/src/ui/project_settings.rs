@@ -42,7 +42,7 @@ fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) -> Option<
                         &mut render_setting.virtual_texture_setting.feed_back_texture_div,
                     )
                     .speed(1)
-                    .clamp_range(1..=10)
+                    .range(1..=10)
                     .prefix("Feed Back Texture Div:  "),
                 );
 
@@ -50,7 +50,7 @@ fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) -> Option<
                 egui::ComboBox::from_label("Select Backends")
                     .selected_text(format!("{:?}", backends))
                     .show_ui(ui, |ui| {
-                        ui.style_mut().wrap = Some(false);
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                         ui.set_min_width(60.0);
                         ui.selectable_value(backends, Backends::DX12, "DX12");
                         ui.selectable_value(backends, Backends::GL, "GL");
@@ -61,7 +61,7 @@ fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) -> Option<
                 egui::ComboBox::from_label("Select Power Preference")
                     .selected_text(format!("{:?}", render_setting.power_preference))
                     .show_ui(ui, |ui| {
-                        ui.style_mut().wrap = Some(false);
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                         ui.set_min_width(60.0);
                         ui.selectable_value(
                             &mut render_setting.power_preference,
@@ -84,7 +84,7 @@ fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) -> Option<
         egui::ComboBox::from_label("Antialias Type")
             .selected_text(format!("{:?}", render_setting.antialias_type))
             .show_ui(ui, |ui| {
-                ui.style_mut().wrap = Some(false);
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                 ui.set_min_width(60.0);
                 for ty in [
                     EAntialiasType::None,

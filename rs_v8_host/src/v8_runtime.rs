@@ -14,7 +14,7 @@ use v8::OwnedIsolate;
 // const INNER_KEY: &'static str = "__inner__";
 
 struct ScriptWatcher {
-    receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, Vec<notify::Error>>>,
+    receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>,
     _debouncer: Debouncer<ReadDirectoryChangesWatcher>,
     _watch_dir: PathBuf,
     _watch_entry_file: PathBuf,
@@ -151,12 +151,9 @@ impl V8Runtime {
         watch_entry_file: impl AsRef<Path>,
     ) -> crate::error::Result<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
-        let mut debouncer = notify_debouncer_mini::new_debouncer(
-            std::time::Duration::from_millis(1000),
-            None,
-            sender,
-        )
-        .map_err(|err| crate::error::Error::Debouncer(err))?;
+        let mut debouncer =
+            notify_debouncer_mini::new_debouncer(std::time::Duration::from_millis(1000), sender)
+                .map_err(|err| crate::error::Error::Debouncer(err))?;
 
         debouncer
             .watcher()

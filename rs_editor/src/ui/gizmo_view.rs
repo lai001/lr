@@ -4,7 +4,7 @@ use transform_gizmo_egui::{math::Transform, *};
 pub struct GizmoView {
     gizmo: Gizmo,
     pub visuals: GizmoVisuals,
-    pub gizmo_mode: GizmoMode,
+    pub gizmo_mode: EnumSet<GizmoMode>,
     pub gizmo_orientation: GizmoOrientation,
     pub custom_highlight_color: bool,
 
@@ -17,7 +17,7 @@ impl GizmoView {
     pub fn default() -> GizmoView {
         GizmoView {
             visuals: Self::default_gizmo_visuals(),
-            gizmo_mode: GizmoMode::Rotate,
+            gizmo_mode: GizmoMode::all_rotate(),
             gizmo_orientation: GizmoOrientation::Global,
             custom_highlight_color: false,
             view_matrix: glam::Mat4::IDENTITY,

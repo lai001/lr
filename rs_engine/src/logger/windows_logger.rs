@@ -60,7 +60,7 @@ impl Logger {
                     let content = format!(
                         "{} [{}] [{}] {}:{} {}",
                         buf.timestamp_millis(),
-                        level_style.value(level),
+                        level,
                         thread_name,
                         record.file().unwrap_or("Unknown"),
                         record.line().unwrap_or(0),
@@ -86,9 +86,9 @@ impl Logger {
                     }
                     writeln!(
                         buf,
-                        "{} [{}] [{}] {}:{} {}",
+                        "{} [{level_style}{}{level_style:#}] [{}] {}:{} {}",
                         buf.timestamp_millis(),
-                        level_style.value(level),
+                        level,
                         thread_name,
                         record.file().unwrap_or("Unknown"),
                         record.line().unwrap_or(0),

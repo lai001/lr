@@ -5,7 +5,7 @@ use rs_render::{command::BuiltinShaderChanged, global_shaders::global_shader::Gl
 use std::sync::mpsc::Receiver;
 
 pub struct WatchShader {
-    receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, Vec<notify::Error>>>,
+    receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>,
     _debouncer: Debouncer<ReadDirectoryChangesWatcher>,
     buildin_shaders: Vec<Box<dyn GlobalShader>>,
 }
@@ -13,7 +13,7 @@ pub struct WatchShader {
 impl WatchShader {
     pub fn new(shader_folder_path: impl AsRef<std::path::Path>) -> Result<WatchShader> {
         let (sender, receiver) = std::sync::mpsc::channel();
-        let mut debouncer = new_debouncer(std::time::Duration::from_millis(200), None, sender)?;
+        let mut debouncer = new_debouncer(std::time::Duration::from_millis(200), sender)?;
 
         debouncer.watcher().watch(
             shader_folder_path.as_ref(),

@@ -66,6 +66,7 @@ impl MultipleDrawUiWindow {
                 window,
                 window_context.get_width(),
                 window_context.get_height(),
+                window.scale_factor() as f32,
             )
             .map_err(|err| anyhow!("{err}"))?;
         let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());

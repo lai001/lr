@@ -537,11 +537,11 @@ impl MaterialView {
     pub fn new() -> MaterialView {
         let mut snarl = Snarl::new();
         let mut style = SnarlStyle::new();
-        style._bg_pattern = Some(egui_snarl::ui::BackgroundPattern::Grid(Grid {
+        style.bg_pattern = Some(egui_snarl::ui::BackgroundPattern::Grid(Grid {
             spacing: egui::emath::vec2(64.0, 64.0),
             angle: 0.0,
         }));
-        style._wire_style = Some(egui_snarl::ui::WireStyle::AxisAligned { corner_radius: 5.0 });
+        style.wire_style = Some(egui_snarl::ui::WireStyle::AxisAligned { corner_radius: 5.0 });
         let viewer = GraphViewer {
             texture_urls: vec![],
             virtual_texture_urls: vec![],

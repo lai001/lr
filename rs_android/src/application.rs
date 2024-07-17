@@ -111,7 +111,13 @@ impl Application {
         let surface_width = native_window.get_width();
         let surface_height = native_window.get_height();
         self.engine
-            .set_new_window(WINDOW_ID, &native_window, surface_width, surface_height)
+            .set_new_window(
+                WINDOW_ID,
+                &native_window,
+                surface_width,
+                surface_height,
+                1.0,
+            )
             .map_err(|err| crate::error::Error::Engine(err))?;
         self.native_window = native_window;
         Ok(())

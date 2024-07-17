@@ -15,9 +15,9 @@ pub fn setup_log() {
                 let thread_name = format!("Thread: {}", current_thread.name().unwrap_or("Unknown"));
                 writeln!(
                     buf,
-                    "{} [{}] [{}] {}:{} {}",
+                    "{} [{level_style}{}{level_style:#}] [{}] {}:{} {}",
                     buf.timestamp_millis(),
-                    level_style.value(level),
+                    level,
                     thread_name,
                     record.file().unwrap_or("Unknown"),
                     record.line().unwrap_or(0),

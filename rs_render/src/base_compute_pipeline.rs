@@ -45,6 +45,7 @@ impl BaseComputePipeline {
             layout: Some(&pipeline_layout),
             module: &shader,
             entry_point: &cs.name,
+            compilation_options: PipelineCompilationOptions::default(),
         });
         BaseComputePipeline {
             compute_pipeline,

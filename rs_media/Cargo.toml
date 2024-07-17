@@ -7,13 +7,13 @@ edition = "2021"
 
 [dependencies]
 ffmpeg-next = "6.0.0"
-cpal = "0.15.2"
-image = "0.24.5"
-bitflags = "2.1.0"
-num-complex = "0.4.3"
-log = "0.4.17"
+cpal = "0.15.3"
+image = "0.25.1"
+bitflags = "2.6.0"
+num-complex = "0.4.6"
+log = "0.4.22"
 rustfft = "6.1.0"
-glam = { version = "0.27.0", features = ["mint"] }
+glam = { version = "0.28.0", features = ["mint"] }
 mp4 = { version = "0.14.0" }
 rs_foundation = { path = "../rs_foundation" }
 rs_core_audio = { path = "../rs_core_audio" }

@@ -94,7 +94,7 @@ fn pre_process(
             clang.arg(format!("-D{}", definition));
         }
     }
-    let path_arg = file_parameters.file.to_slash_lossy();
+    let path_arg = file_parameters.file.to_slash_lossy().to_string();
     clang.arg(path_arg);
     let output = clang.output();
     let output = output.map_err(|err| crate::error::Error::IO(err, None))?;

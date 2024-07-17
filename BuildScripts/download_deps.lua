@@ -48,8 +48,8 @@ do
         end
 
         if os.exists(gizmo_dir) == false then
-            git.clone("https://github.com/urholaukkarinen/egui-gizmo.git", { outputdir = gizmo_dir })
-            git.checkout("63d8aaed860d0265e454c08a820d65fcf9e07d83", { repodir = gizmo_dir })
+            git.clone("https://github.com/urholaukkarinen/transform-gizmo.git", { outputdir = gizmo_dir })
+            git.checkout("00be178c38a09a6a8df2ae4f557b7a12fcdafe14", { repodir = gizmo_dir })
         end
 
         if os.exists("Resource/Remote/neon_photostudio_2k.exr") == false then

@@ -8,10 +8,10 @@ edition = "2021"
 rs_dotnet = []
 
 [dependencies]
-libc = "0.2.33"
-lazy_static = "1.4.0"
-log = "0.4.17"
-env_logger = "0.10.0"
+libc = "0.2.155"
+lazy_static = "1.5.0"
+log = "0.4.22"
+env_logger = "0.11.3"
 
 [build-dependencies]
 rs_core_minimal = { path = "../rs_core_minimal" }

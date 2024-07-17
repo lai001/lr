@@ -9,12 +9,12 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0.79"
-syn = { version = "2.0.57", features = ["full", "extra-traits"] }
-quote = "1.0.35"
-prettyplease = "0.2.17"
+proc-macro2 = "1.0.86"
+syn = { version = "2.0.71", features = ["full", "extra-traits"] }
+quote = "1.0.36"
+prettyplease = "0.2.20"
 dunce = "1.0.4"
-path-slash = "0.1.4"
-naga = { version = "0.19.0" }
-wgpu = "0.19.1"
+path-slash = "0.2.1"
+naga = { version = "0.20.0" }
+wgpu = "0.20.0"
 rs_foundation = { path = "../rs_foundation" }

@@ -153,11 +153,13 @@ impl BaseRenderPipeline {
                 module: &shader,
                 entry_point: &vs.name,
                 buffers: &vertex_buffer_layouts,
+                compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(FragmentState {
                 module: &shader,
                 entry_point: &fs.name,
                 targets: &targets,
+                compilation_options: PipelineCompilationOptions::default(),
             }),
             primitive: primitive.unwrap_or_default(),
             depth_stencil,

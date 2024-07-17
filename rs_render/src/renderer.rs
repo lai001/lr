@@ -307,6 +307,7 @@ impl Renderer {
         window: &W,
         surface_width: u32,
         surface_height: u32,
+        scale_factor: f32,
     ) -> Result<()>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -319,7 +320,7 @@ impl Renderer {
             Some(&format!("Base.DepthTexture.{}", window_id)),
         );
         self.depth_textures.insert(window_id, depth_texture);
-        let scale_factor = 1.0;
+
         let screen_descriptor = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [surface_width, surface_height],
             pixels_per_point: scale_factor,
@@ -903,6 +904,7 @@ impl Renderer {
                             Error::Validation { description, .. } => {
                                 log::trace!("Failed to create shader, {}", description);
                             }
+                            Error::Internal { .. } => todo!(),
                         },
                         _ => unreachable!(),
                     },
@@ -1054,6 +1056,7 @@ impl Renderer {
                             Error::Validation { description, .. } => {
                                 log::trace!("Failed to create shader, {}", description);
                             }
+                            Error::Internal { .. } => todo!(),
                         },
                         _ => unreachable!(),
                     },

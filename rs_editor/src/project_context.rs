@@ -58,9 +58,8 @@ pub struct ProjectContext {
     project_file_path: PathBuf,
     _shader_folder_path: PathBuf,
     pub hot_reload: rs_hotreload_plugin::hot_reload::HotReload,
-    folder_receiver: Option<
-        std::sync::mpsc::Receiver<std::result::Result<Vec<DebouncedEvent>, Vec<notify::Error>>>,
-    >,
+    folder_receiver:
+        Option<std::sync::mpsc::Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>>,
     folder_debouncer: Option<Debouncer<ReadDirectoryChangesWatcher>>,
 }
 
@@ -98,12 +97,10 @@ impl ProjectContext {
     fn watch_project_folder(&mut self) -> anyhow::Result<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
 
-        let mut debouncer = notify_debouncer_mini::new_debouncer(
-            std::time::Duration::from_millis(200),
-            None,
-            sender,
-        )
-        .map_err(|err| anyhow!("{:?}", err))?;
+        let mut debouncer =
+            notify_debouncer_mini::new_debouncer(std::time::Duration::from_millis(200), sender)
+                .map_err(|err| anyhow!("{:?}", err))?;
+
         let watch_folder_path = self.get_project_folder_path();
 
         debouncer.watcher().watch(

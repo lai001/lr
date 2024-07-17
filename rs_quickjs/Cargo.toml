@@ -8,8 +8,8 @@ edition = "2021"
 rs_quickjs = []
 
 [dependencies]
-lazy_static = "1.4.0"
-bitflags = "2.3.3"
+lazy_static = "1.5.0"
+bitflags = "2.6.0"
 
 [build-dependencies]
-bindgen = "0.65.1"
+bindgen = "0.69.4"

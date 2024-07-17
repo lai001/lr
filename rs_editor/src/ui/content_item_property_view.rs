@@ -71,43 +71,43 @@ impl ContentItemPropertyView {
                     egui::DragValue::new(&mut ibl_bake_info.brdf_sample_count)
                         .speed(1)
                         .prefix("BRDF Sample Count: ")
-                        .clamp_range(1..=8192),
+                        .range(1..=8192),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.irradiance_sample_count)
                         .speed(1)
                         .prefix("Irradiance Sample Count: ")
-                        .clamp_range(1..=8192),
+                        .range(1..=8192),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.pre_filter_sample_count)
                         .speed(1)
                         .prefix("Prefilter Sample Count: ")
-                        .clamp_range(1..=8192),
+                        .range(1..=8192),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.brdflutmap_length)
                         .speed(1)
                         .prefix("BRDF Length: ")
-                        .clamp_range(64..=2048),
+                        .range(64..=2048),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.pre_filter_cube_map_max_mipmap_level)
                         .speed(1)
                         .prefix("Prefilter Max Mipmap: ")
-                        .clamp_range(1..=64),
+                        .range(1..=64),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.irradiance_cube_map_length)
                         .speed(1)
                         .prefix("Irradiance Length: ")
-                        .clamp_range(4..=8192),
+                        .range(4..=8192),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.pre_filter_cube_map_length)
                         .speed(1)
                         .prefix("Prefilter Cube Map Length: ")
-                        .clamp_range(4..=8192),
+                        .range(4..=8192),
                 );
 
                 let selected_text = if let Some(image_reference) = &ibl.image_reference {

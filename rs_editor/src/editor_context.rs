@@ -712,13 +712,13 @@ impl EditorContext {
 
         if self.data_source.input_mode == EInputMode::UI {
             if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyR], true) {
-                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::Scale;
+                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::all_scale();
             }
             if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyW], true) {
-                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::Translate;
+                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::all_translate();
             }
             if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyE], true) {
-                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::Rotate;
+                self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::all_rotate();
             }
             if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::Space], true) {
                 let old_gizmo_orientation = &mut self.editor_ui.gizmo_view.gizmo_orientation;
@@ -1535,7 +1535,7 @@ impl EditorContext {
             .viewports
             .get_mut(&viewport_id)
             .unwrap();
-        egui_winit::update_viewport_info(viewport_info, &ctx, window);
+        egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
 
         let new_input = egui_winit_state.take_egui_input(window);
         egui_winit_state.egui_ctx().begin_frame(new_input);

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 pub struct HotReload {
     library_reload: Arc<Mutex<LibraryReload>>,
-    receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, Vec<notify::Error>>>,
+    receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>,
     _debouncer: Debouncer<ReadDirectoryChangesWatcher>,
 }
 
@@ -19,7 +19,7 @@ impl HotReload {
         let library_reload = Arc::new(Mutex::new(library_reload));
         let (sender, receiver) = std::sync::mpsc::channel();
         log::trace!("Watch {:?}", watch_folder_path);
-        let mut debouncer = new_debouncer(std::time::Duration::from_millis(200), None, sender)
+        let mut debouncer = new_debouncer(std::time::Duration::from_millis(200), sender)
             .map_err(|err| crate::error::Error::Debouncer(err))?;
 
         debouncer

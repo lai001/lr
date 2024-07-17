@@ -15,7 +15,7 @@ fn main() {
         .clang_arg("-I../.xmake/deps/quickjs")
         .clang_arg("-D CONFIG_BIGNUM")
         .clang_arg("-D JS_STRICT_NAN_BOXING")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
 

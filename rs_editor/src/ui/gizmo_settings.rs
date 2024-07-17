@@ -1,11 +1,25 @@
 use egui::{color_picker::Alpha, Context, Widget};
 use transform_gizmo_egui::*;
 
+fn gizmo_mode_text(gizmo_mode: &EnumSet<GizmoMode>) -> &'static str {
+    if gizmo_mode == &GizmoMode::all_rotate() {
+        "Rotate"
+    } else if gizmo_mode == &GizmoMode::all_scale() {
+        "Scale"
+    } else if gizmo_mode == &GizmoMode::all_translate() {
+        "Translate"
+    } else if gizmo_mode == &GizmoMode::all() {
+        "All"
+    } else {
+        unreachable!()
+    }
+}
+
 pub fn draw(
     window: egui::Window,
     context: &Context,
     visuals: &mut GizmoVisuals,
-    gizmo_mode: &mut GizmoMode,
+    gizmo_mode: &mut EnumSet<GizmoMode>,
     gizmo_orientation: &mut GizmoOrientation,
     custom_highlight_color: &mut bool,
 ) {
@@ -24,11 +38,16 @@ pub fn draw(
         .default_open(false)
         .show(context, |ui| {
             egui::ComboBox::from_label("Mode")
-                .selected_text(format!("{gizmo_mode:?}"))
+                .selected_text(gizmo_mode_text(gizmo_mode))
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(gizmo_mode, GizmoMode::Rotate, "Rotate");
-                    ui.selectable_value(gizmo_mode, GizmoMode::Translate, "Translate");
-                    ui.selectable_value(gizmo_mode, GizmoMode::Scale, "Scale");
+                    for mode in [
+                        GizmoMode::all_rotate(),
+                        GizmoMode::all_scale(),
+                        GizmoMode::all_translate(),
+                        GizmoMode::all(),
+                    ] {
+                        ui.selectable_value(gizmo_mode, mode, gizmo_mode_text(&mode));
+                    }
                 });
             ui.end_row();
 
@@ -66,20 +85,20 @@ pub fn draw(
 
             ui.horizontal(|ui| {
                 egui::color_picker::color_edit_button_srgba(ui, x_color, Alpha::Opaque);
-                egui::Label::new("X axis color").wrap(false).ui(ui);
+                egui::Label::new("X axis color").ui(ui);
             });
 
             ui.horizontal(|ui| {
                 egui::color_picker::color_edit_button_srgba(ui, y_color, Alpha::Opaque);
-                egui::Label::new("Y axis color").wrap(false).ui(ui);
+                egui::Label::new("Y axis color").ui(ui);
             });
             ui.horizontal(|ui| {
                 egui::color_picker::color_edit_button_srgba(ui, z_color, Alpha::Opaque);
-                egui::Label::new("Z axis color").wrap(false).ui(ui);
+                egui::Label::new("Z axis color").ui(ui);
             });
             ui.horizontal(|ui| {
                 egui::color_picker::color_edit_button_srgba(ui, s_color, Alpha::Opaque);
-                egui::Label::new("Screen axis color").wrap(false).ui(ui);
+                egui::Label::new("Screen axis color").ui(ui);
             });
             ui.end_row();
         });

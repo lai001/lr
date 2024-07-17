@@ -17,7 +17,8 @@ pub trait GlobalShader {
         let shader_description = self.get_shader_description();
         let mut arguments = vec![];
         for include_dir in &shader_description.include_dirs {
-            let include_dir = include_dir.canonicalize_slash().unwrap().to_slash_lossy();
+            let include_dir = include_dir.canonicalize_slash().unwrap();
+            let include_dir = include_dir.to_slash_lossy();
             arguments.push(format!("-I{}", include_dir));
         }
         for definition in &shader_description.definitions {
@@ -30,7 +31,8 @@ pub trait GlobalShader {
                 .shader_path
                 .canonicalize_slash()
                 .unwrap()
-                .to_slash_lossy(),
+                .to_slash_lossy()
+                .to_string(),
         }
     }
 }

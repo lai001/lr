@@ -13,7 +13,7 @@ use std::{
 };
 
 struct ScriptWatcher {
-    receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, Vec<notify::Error>>>,
+    receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>,
     _debouncer: Debouncer<ReadDirectoryChangesWatcher>,
     watch_path: PathBuf,
 }
@@ -141,12 +141,9 @@ impl DotnetRuntime {
 
     pub fn start_watch(&mut self, file_path: impl AsRef<Path>) -> crate::error::Result<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
-        let mut debouncer = notify_debouncer_mini::new_debouncer(
-            std::time::Duration::from_millis(1000),
-            None,
-            sender,
-        )
-        .map_err(|err| crate::error::Error::Debouncer(err))?;
+        let mut debouncer =
+            notify_debouncer_mini::new_debouncer(std::time::Duration::from_millis(1000), sender)
+                .map_err(|err| crate::error::Error::Debouncer(err))?;
 
         debouncer
             .watcher()

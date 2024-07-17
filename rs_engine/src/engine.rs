@@ -796,12 +796,18 @@ impl Engine {
         window: &W,
         surface_width: u32,
         surface_height: u32,
+        scale_factor: f32,
     ) -> Result<()>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        self.render_thread_mode
-            .set_new_window(window_id, window, surface_width, surface_height)
+        self.render_thread_mode.set_new_window(
+            window_id,
+            window,
+            surface_width,
+            surface_height,
+            scale_factor,
+        )
     }
 
     fn next_draw_object_id(&mut self) -> u32 {

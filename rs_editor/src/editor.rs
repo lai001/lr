@@ -97,8 +97,13 @@ impl WindowsManager {
         window_type: EWindowType,
         event_loop_window_target: &EventLoopWindowTarget<ECustomEventType>,
     ) -> anyhow::Result<&mut WindowContext> {
-        let window_width = 1280;
-        let window_height = 720;
+        let scale_factor = event_loop_window_target
+            .primary_monitor()
+            .map(|x| x.scale_factor())
+            .unwrap_or(1.0);
+
+        let window_width = (1280 as f64 * scale_factor) as u32;
+        let window_height = (720 as f64 * scale_factor) as u32;
         let child_window_builder = winit::window::WindowBuilder::new()
             .with_decorations(true)
             .with_resizable(true)
@@ -224,10 +229,15 @@ impl Editor {
     fn run_app(self) -> anyhow::Result<()> {
         let window_manager = SingleThreadMut::new(WindowsManager::new());
 
-        let window_width = 1280;
-        let window_height = 720;
         let event_loop = EventLoopBuilder::with_user_event().build()?;
         let event_loop_proxy: EventLoopProxy<ECustomEventType> = event_loop.create_proxy();
+        let scale_factor = event_loop
+            .primary_monitor()
+            .map(|x| x.scale_factor())
+            .unwrap_or(1.0);
+
+        let window_width = (1280 as f64 * scale_factor) as u32;
+        let window_height = (720 as f64 * scale_factor) as u32;
 
         let window = winit::window::WindowBuilder::new()
             .with_decorations(true)
