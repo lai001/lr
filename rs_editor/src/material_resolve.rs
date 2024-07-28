@@ -1,6 +1,7 @@
 use crate::ui::material_view::{EMaterialNodeType, MaterialNode};
 use egui_snarl::{InPinId, NodeId, OutPinId, Snarl};
 use rs_artifact::material::{MaterialInfo, TextureBinding};
+use rs_render_types::MaterialOptions;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -60,7 +61,22 @@ impl ResolveContext {
     }
 }
 
-pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<ResolveResult> {
+pub fn resolve(
+    snarl: &Snarl<MaterialNode>,
+    options: Vec<MaterialOptions>,
+) -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
+    let mut results: HashMap<MaterialOptions, ResolveResult> = HashMap::new();
+    for option in options {
+        let result = resolve_internal(snarl, &option)?;
+        results.insert(option, result);
+    }
+    Ok(results)
+}
+
+fn resolve_internal(
+    snarl: &Snarl<MaterialNode>,
+    options: &MaterialOptions,
+) -> anyhow::Result<ResolveResult> {
     let mut material_info = MaterialInfo {
         map_textures: HashSet::new(),
         virtual_textures: HashSet::new(),
@@ -80,15 +96,21 @@ pub fn resolve(snarl: &Snarl<MaterialNode>) -> anyhow::Result<ResolveResult> {
     let material_shader_code = lines.join("\n");
     let shader_path = rs_render::get_buildin_shader_dir().join("pbr_shading.wgsl");
     let include_dirs: Vec<PathBuf> = vec![];
-    let definitions: Vec<String> = vec![
+    let mut definitions: Vec<String> = vec![
         "VIRTUAL_TEXTURE=1".to_string(),
         "MATERIAL_SHADER_CODE=@MATERIAL_SHADER_CODE@".to_string(),
         "USER_TEXTURES=@USER_TEXTURES@".to_string(),
-        format!(
+    ];
+    if options.is_skin {
+        definitions.push(format!(
             "SKELETON_MAX_BONES={}",
             rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE
-        ),
-    ];
+        ));
+        definitions.push(format!("SKIN_CONSTANTS_BINDING={}", 1));
+        definitions.push(format!("VIRTUAL_TEXTURE_CONSTANTS_BINDING={}", 2));
+    } else {
+        definitions.push(format!("VIRTUAL_TEXTURE_CONSTANTS_BINDING={}", 1));
+    }
     let shader_code = rs_shader_compiler::pre_process::pre_process(
         &shader_path,
         include_dirs.iter(),

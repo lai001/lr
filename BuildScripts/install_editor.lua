@@ -27,6 +27,7 @@ task("install_editor") do
         os.cp(path.join(engine_root_dir, "rs_desktop_standalone/target/*/rs_desktop_standalone.exe"), prefix, {rootdir = engine_root_dir})
         os.cp(path.join(engine_root_dir, "rs_desktop_standalone/target/*/*.dll"), prefix, {rootdir = engine_root_dir})
         os.cp(path.join(engine_root_dir, "rs_media_cmd/target/*/rs_media_cmd.exe"), prefix, {rootdir = engine_root_dir})
+        os.cp(path.join(engine_root_dir, "ExampleApplication"), prefix, {rootdir = engine_root_dir})
     end)
     set_menu {
         usage = "xmake install_editor",

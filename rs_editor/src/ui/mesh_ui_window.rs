@@ -19,7 +19,7 @@ use rs_render::{
         UpdateBuffer,
     },
     constants::MeshViewConstants,
-    renderer::MESH_VIEW_RENDER_PIPELINE,
+    renderer::{EBuiltinPipelineType, EPipelineType},
     scene_viewport::SceneViewport,
     vertex_data_type::mesh_vertex::MeshVertex3,
 };
@@ -324,7 +324,7 @@ impl MeshUIWindow {
             0,
             vec![*vertex_buffer_handle],
             vertices.len() as u32,
-            MESH_VIEW_RENDER_PIPELINE.to_string(),
+            EPipelineType::Builtin(EBuiltinPipelineType::MeshView),
             Some(*index_buffer_handle),
             Some(indices.len() as u32),
             vec![vec![

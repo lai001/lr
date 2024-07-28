@@ -25,6 +25,7 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
+use rs_artifact::material::MaterialInfo;
 use rs_core_minimal::{file_manager, path_ext::CanonicalizeSlashExt};
 use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
@@ -48,6 +49,7 @@ use rs_render::{
     command::{RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
     get_buildin_shader_dir,
 };
+use rs_render_types::MaterialOptions;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -494,17 +496,20 @@ impl EditorContext {
                         };
                         match event {
                             material_view::EEventType::Update(material, resolve_result) => {
-                                let handle = self
-                                    .engine
-                                    .create_material(resolve_result.shader_code.to_string());
+                                let mut shader_code = HashMap::new();
+                                let mut material_info = HashMap::new();
+                                for (k, v) in resolve_result.iter() {
+                                    shader_code.insert(k.clone(), v.shader_code.clone());
+                                    material_info.insert(k.clone(), v.material_info.clone());
+                                }
+                                let handle = self.engine.create_material(shader_code);
                                 let material_content = material.borrow().get_associated_material();
                                 let Some(material_content) = material_content else {
                                     return;
                                 };
                                 let mut material_content = material_content.borrow_mut();
                                 material_content.set_pipeline_handle(handle);
-                                material_content
-                                    .set_material_info(resolve_result.material_info.clone());
+                                material_content.set_material_info(material_info);
                             }
                         }
                     }
@@ -829,12 +834,19 @@ impl EditorContext {
         let _span = tracy_client::span!();
 
         let project_folder_path = project_context.get_project_folder_path();
+        let asset_folder_path = project_context.get_asset_folder_path();
         for file in files {
             match file {
                 EContentFileType::StaticMesh(static_mesh) => {
-                    let file_path = project_folder_path
-                        .join(&static_mesh.borrow().asset_reference_relative_path);
+                    let file_path = asset_folder_path
+                        // .join(&static_mesh.borrow().asset_reference_relative_path);
+                        .join(&static_mesh.borrow().asset_info.relative_path);
                     model_loader.load(&file_path).unwrap();
+                    let _ = model_loader.to_runtime_static_mesh(
+                        &static_mesh.borrow(),
+                        &asset_folder_path,
+                        ResourceManager::default(),
+                    );
                 }
                 EContentFileType::SkeletonMesh(skeleton_mesh) => {
                     let file_path =
@@ -903,18 +915,31 @@ impl EditorContext {
                         .find(|x| x.borrow().url == material_content.borrow().asset_url)
                         .cloned();
                     if let Some(material_editor) = find {
-                        if let Ok(resolve_result) =
-                            material_resolve::resolve(&material_editor.borrow().snarl)
-                        {
-                            let pipeline_handle =
-                                engine.create_material(resolve_result.shader_code);
-                            let mut material_content = material_content.borrow_mut();
-                            material_content.set_pipeline_handle(pipeline_handle);
-                            material_content.set_material_info(resolve_result.material_info);
+                        let mut shader_code: HashMap<MaterialOptions, String> = HashMap::new();
+                        let mut material_info: HashMap<MaterialOptions, MaterialInfo> =
+                            HashMap::new();
+                        let mut material_editor = material_editor.borrow_mut();
+                        match material_resolve::resolve(
+                            &material_editor.snarl,
+                            MaterialOptions::all(),
+                        ) {
+                            Ok(resolve_result) => {
+                                for (option, result) in resolve_result {
+                                    shader_code.insert(option.clone(), result.shader_code);
+                                    material_info.insert(option, result.material_info);
+                                }
+                                {
+                                    let pipeline_handle = engine.create_material(shader_code);
+                                    let mut material_content = material_content.borrow_mut();
+                                    material_content.set_pipeline_handle(pipeline_handle);
+                                    material_content.set_material_info(material_info);
+                                }
+                                material_editor.set_associated_material(material_content.clone());
+                            }
+                            Err(err) => {
+                                log::warn!("{}", err);
+                            }
                         }
-                        material_editor
-                            .borrow_mut()
-                            .set_associated_material(material_content.clone());
                     }
                 }
                 EContentFileType::IBL(ibl) => {
@@ -987,7 +1012,12 @@ impl EditorContext {
             let mut root_scene_node = actor.scene_node.borrow_mut();
             match &mut root_scene_node.component {
                 rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                rs_engine::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                rs_engine::scene_node::EComponentType::StaticMeshComponent(
+                    static_mesh_component,
+                ) => {
+                    let mut static_mesh_component = static_mesh_component.borrow_mut();
+                    static_mesh_component.initialize(ResourceManager::default(), engine, files);
+                }
                 rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                     skeleton_mesh_component,
                 ) => {
@@ -1226,7 +1256,15 @@ impl EditorContext {
                 let mut root_scene_node = actor.scene_node.borrow_mut();
                 match &mut root_scene_node.component {
                     rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                    rs_engine::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                    rs_engine::scene_node::EComponentType::StaticMeshComponent(
+                        static_mesh_component,
+                    ) => {
+                        let mut static_mesh_component = static_mesh_component.borrow_mut();
+                        static_mesh_component.update(self.engine.get_game_time(), &mut self.engine);
+                        for draw_object in static_mesh_component.get_draw_objects() {
+                            self.engine.draw2(draw_object);
+                        }
+                    }
                     rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                         skeleton_mesh_component,
                     ) => {
@@ -2008,6 +2046,11 @@ impl EditorContext {
                     .borrow_mut()
                     .files
                     .push(EContentFileType::Material(Rc::new(RefCell::new(material))));
+
+                let mut materials = self.editor_ui.object_property_view.materials.borrow_mut();
+                if !materials.contains(&build_content_file_url(&name).unwrap()) {
+                    materials.push(build_content_file_url(&name).unwrap());
+                }
             }
             content_browser::EClickEventType::CreateIBL => {
                 let names = self.get_all_content_names();

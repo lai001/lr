@@ -15,6 +15,6 @@ impl GlobalShader for FXAAShader {
     }
 
     fn get_name(&self) -> String {
-        "FXAAShader".to_string()
+        "FXAAShader.wgsl".to_string()
     }
 }

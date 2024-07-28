@@ -69,6 +69,7 @@ mp4 = { version = "0.14.0" }
 tracy-client = { version = "0.17.1", default-features = false }
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
 rs_render = { path = "../rs_render" }
+rs_render_types = { path = "../rs_render_types" }
 rs_foundation = { path = "../rs_foundation" }
 rs_artifact = { path = "../rs_artifact" }
 rs_engine = { path = "../rs_engine" }

@@ -54,6 +54,7 @@ rs_render = { path = "../rs_render" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 rs_shader_compiler = { path = "../rs_shader_compiler" }
 rs_proc_macros = { path = "../rs_proc_macros" }
+rs_render_types = { path = "../rs_render_types" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 winit = { version = "0.29.4" }

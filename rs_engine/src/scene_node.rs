@@ -1,6 +1,6 @@
 use crate::{
     content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
-    resource_manager::ResourceManager,
+    resource_manager::ResourceManager, static_mesh_component::StaticMeshComponent,
 };
 use rs_artifact::{
     skeleton::{Skeleton, SkeletonBone},
@@ -20,19 +20,6 @@ pub struct SceneComponent {
 }
 
 impl SceneComponent {
-    pub fn get_interactive_transformation(&mut self) -> &mut glam::Mat4 {
-        &mut self.transformation
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct StaticMeshComponent {
-    pub name: String,
-    pub static_mesh: Option<url::Url>,
-    pub transformation: glam::Mat4,
-}
-
-impl StaticMeshComponent {
     pub fn get_interactive_transformation(&mut self) -> &mut glam::Mat4 {
         &mut self.transformation
     }
@@ -183,11 +170,14 @@ impl SkeletonMeshComponent {
             }
 
             match &mut draw_object {
-                EDrawObjectType::Static(_) => panic!(),
+                EDrawObjectType::Static(_) => todo!(),
                 EDrawObjectType::Skin(draw_object) => {
                     draw_object.constants.model = model;
                 }
                 EDrawObjectType::SkinMaterial(draw_object) => {
+                    draw_object.constants.model = model;
+                }
+                EDrawObjectType::StaticMeshMaterial(draw_object) => {
                     draw_object.constants.model = model;
                 }
             }
@@ -347,7 +337,7 @@ impl SkeletonMeshComponent {
             }
             let draw_object = run_time.draw_objects.get_mut(&skin_mesh.name).unwrap();
             match draw_object {
-                EDrawObjectType::Static(_) => panic!(),
+                EDrawObjectType::Static(_) => todo!(),
                 EDrawObjectType::Skin(draw_object) => {
                     draw_object.constants.bones.copy_from_slice(&bones);
                     let mut model = self.transformation;
@@ -372,6 +362,10 @@ impl SkeletonMeshComponent {
                     }
                     draw_object.constants.model = model;
                 }
+                EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                    let model = self.transformation;
+                    draw_object.constants.model = model;
+                }
             }
             engine.update_draw_object(draw_object);
         }
@@ -381,6 +375,42 @@ impl SkeletonMeshComponent {
         match &self.run_time {
             Some(x) => x.draw_objects.values().map(|x| x).collect(),
             None => vec![],
+        }
+    }
+
+    pub fn set_material(&mut self, material_url: url::Url, files: &[EContentFileType]) {
+        self.material_url = Some(material_url);
+        let material = if let Some(material_url) = &self.material_url {
+            files.iter().find_map(|x| {
+                if let EContentFileType::Material(content_material) = x {
+                    if &content_material.borrow().url == material_url {
+                        return Some(content_material.clone());
+                    }
+                }
+                None
+            })
+        } else {
+            None
+        };
+
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+
+        let Some(material) = material else {
+            return;
+        };
+        for (_, draw_object) in &mut run_time.draw_objects {
+            match draw_object {
+                EDrawObjectType::Static(_) => {}
+                EDrawObjectType::Skin(_) => {}
+                EDrawObjectType::SkinMaterial(material_draw_object) => {
+                    material_draw_object.material = material.clone();
+                }
+                EDrawObjectType::StaticMeshMaterial(material_draw_object) => {
+                    material_draw_object.material = material.clone();
+                }
+            }
         }
     }
 }

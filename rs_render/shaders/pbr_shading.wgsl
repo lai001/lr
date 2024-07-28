@@ -98,11 +98,11 @@ struct ShadingInfo {
 @group(1) @binding(0) var<uniform> constants: Constants;
 
 #ifdef SKELETON_MAX_BONES
-@group(1) @binding(1) var<uniform> skin_constants: SkinConstants;
+@group(1) @binding(SKIN_CONSTANTS_BINDING) var<uniform> skin_constants: SkinConstants;
 #endif
 
 #ifdef VIRTUAL_TEXTURE
-@group(1) @binding(2) var<uniform> virtual_texture_constants: VirtualTextureConstants;
+@group(1) @binding(VIRTUAL_TEXTURE_CONSTANTS_BINDING) var<uniform> virtual_texture_constants: VirtualTextureConstants;
 #endif
 
 #ifdef USER_TEXTURES

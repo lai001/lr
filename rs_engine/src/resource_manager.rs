@@ -172,6 +172,10 @@ impl STResourceManager {
         Ok(level)
     }
 
+    fn add_static_mesh(&mut self, url: url::Url, mesh: Arc<StaticMesh>) -> Option<Arc<StaticMesh>> {
+        self.static_meshs.insert(url, mesh)
+    }
+
     fn get_static_mesh(&mut self, url: &url::Url) -> Result<Arc<StaticMesh>> {
         if let Some(loaded_mesh) = self.static_meshs.get(url) {
             return Ok(loaded_mesh.clone());

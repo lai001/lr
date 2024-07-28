@@ -7,6 +7,7 @@ use crate::content::level::DirectionalLight;
 use crate::default_textures::DefaultTextures;
 use crate::drawable::{
     EDrawObjectType, MaterialDrawObject, SkinMeshDrawObject, StaticMeshDrawObject,
+    StaticMeshMaterialDrawObject,
 };
 use crate::error::Result;
 use crate::handle::{EGUITextureHandle, TextureHandle};
@@ -35,10 +36,11 @@ use rs_render::command::{
 };
 use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::global_uniform::{self, EDebugShadingType};
-use rs_render::renderer::{Renderer, SHADOW_DEPTH_SKIN_PIPELINE};
+use rs_render::renderer::{EBuiltinPipelineType, EPipelineType, MaterialPipelineType, Renderer};
 use rs_render::sdf2d_generator;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
+use rs_render_types::MaterialOptions;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
@@ -946,7 +948,6 @@ impl Engine {
             vertex_count: vertexes0.len() as u32,
             index_buffer: Some(index_buffer_handle),
             index_count: Some(indexes.len() as u32),
-            render_pipeline: rs_render::renderer::STATIC_MESH_RENDER_PIPELINE.to_string(),
             constants: Default::default(),
             diffuse_texture_url: Default::default(),
             specular_texture_url: Default::default(),
@@ -1054,7 +1055,6 @@ impl Engine {
             vertex_count: vertexes0.len() as u32,
             index_buffer: Some(index_buffer_handle),
             index_count: Some(indexes.len() as u32),
-            render_pipeline: rs_render::renderer::SKIN_MESH_RENDER_PIPELINE.to_string(),
             constants: Default::default(),
             diffuse_texture_url: Default::default(),
             specular_texture_url: Default::default(),
@@ -1230,6 +1230,138 @@ impl Engine {
         EDrawObjectType::SkinMaterial(object)
     }
 
+    pub fn create_material_draw_object_from_static_mesh(
+        &mut self,
+        vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
+        indexes: &[u32],
+        name: Option<String>,
+        material: Rc<RefCell<crate::content::material::Material>>,
+    ) -> EDrawObjectType {
+        let name = name.unwrap_or("".to_string());
+        let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
+        let id = self.next_draw_object_id();
+        let index_buffer_handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label: Some(format!("rs.IndexBuffer.{}", name.clone())),
+            contents: rs_foundation::cast_to_raw_buffer(&indexes).to_vec(),
+            usage: wgpu::BufferUsages::INDEX,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *index_buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+        let vertex_buffers = vec![
+            (
+                format!("rs.{name}.MeshVertex0"),
+                rs_foundation::cast_to_raw_buffer(&vertexes0),
+            ),
+            (
+                format!("rs.{name}.MeshVertex1"),
+                rs_foundation::cast_to_raw_buffer(&vertexes1),
+            ),
+        ];
+        let mut vertex_buffer_handles: Vec<crate::handle::BufferHandle> =
+            Vec::with_capacity(vertex_buffers.len());
+        for (name, vertex_buffer) in vertex_buffers {
+            let vertex_buffer_handle = self.resource_manager.next_buffer();
+            let buffer_create_info = BufferCreateInfo {
+                label: Some(format!("rs.{}.VertexBuffer", name)),
+                contents: vertex_buffer.to_vec(),
+                usage: wgpu::BufferUsages::VERTEX,
+            };
+            let create_buffer = CreateBuffer {
+                handle: *vertex_buffer_handle,
+                buffer_create_info,
+            };
+            let message = RenderCommand::CreateBuffer(create_buffer);
+            self.render_thread_mode.send_command(message);
+            vertex_buffer_handles.push(vertex_buffer_handle);
+        }
+
+        let mut fn_create_buffer = |label: String, contents: Vec<u8>| {
+            let constants_buffer_handle = self.resource_manager.next_buffer();
+            let buffer_create_info = BufferCreateInfo {
+                label: Some(label),
+                contents,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::MAP_WRITE,
+            };
+            let create_buffer = CreateBuffer {
+                handle: *constants_buffer_handle,
+                buffer_create_info,
+            };
+            let message = RenderCommand::CreateBuffer(create_buffer);
+            self.render_thread_mode.send_command(message);
+            constants_buffer_handle
+        };
+        let constants_buffer_handle = fn_create_buffer(
+            format!("rs.{}.Constants", name.clone()),
+            rs_foundation::cast_any_as_u8_slice(&rs_render::constants::Constants::default())
+                .to_vec(),
+        );
+
+        let virtual_texture_constants_buffer_handle = fn_create_buffer(
+            format!("rs.{}.VirtualTextureConstants", name.clone()),
+            rs_foundation::cast_any_as_u8_slice(
+                &rs_render::constants::VirtualTextureConstants::default(),
+            )
+            .to_vec(),
+        );
+
+        let object = StaticMeshMaterialDrawObject {
+            id,
+            vertex_buffers: vertex_buffer_handles,
+            vertex_count: vertexes0.len() as u32,
+            index_buffer: Some(index_buffer_handle),
+            index_count: Some(indexes.len() as u32),
+            global_constants_resource: EBindingResource::Constants(*self.global_constants_handle),
+            base_color_sampler_resource: EBindingResource::Sampler(*self.global_sampler_handle),
+            physical_texture_resource: EBindingResource::Texture(
+                self.virtual_pass_handle
+                    .clone()
+                    .map(|x| x.key())
+                    .unwrap()
+                    .physical_texture_handle,
+            ),
+            page_table_texture_resource: EBindingResource::Texture(
+                self.virtual_pass_handle
+                    .clone()
+                    .map(|x| x.key())
+                    .unwrap()
+                    .page_table_texture_handle,
+            ),
+            material,
+            constants_buffer_handle: constants_buffer_handle.clone(),
+            virtual_texture_constants_buffer_handle: virtual_texture_constants_buffer_handle
+                .clone(),
+            constants: Default::default(),
+            virtual_texture_constants: Default::default(),
+            window_id: self.main_window_id,
+            brdflut_texture_resource: EBindingResource::Texture(
+                *self.default_textures.get_ibl_textures().brdflut,
+            ),
+            pre_filter_cube_map_texture_resource: EBindingResource::Texture(
+                *self.default_textures.get_ibl_textures().pre_filter_cube_map,
+            ),
+            irradiance_texture_resource: EBindingResource::Texture(
+                *self.default_textures.get_ibl_textures().irradiance,
+            ),
+            constants_resource: EBindingResource::Constants(*constants_buffer_handle),
+            virtual_texture_constants_resource: EBindingResource::Constants(
+                *virtual_texture_constants_buffer_handle,
+            ),
+            user_textures_resources: vec![],
+            shadow_map_texture_resource: EBindingResource::Texture(
+                *self
+                    .shadow_depth_texture_handle
+                    .clone()
+                    .unwrap_or(self.default_textures.get_texture_handle()),
+            ),
+        };
+        EDrawObjectType::StaticMeshMaterial(object)
+    }
+
     pub fn update_draw_object(&mut self, object: &mut EDrawObjectType) {
         match object {
             EDrawObjectType::Static(object) => {
@@ -1316,8 +1448,15 @@ impl Engine {
                     rs_foundation::cast_any_as_u8_slice(&object.constants),
                 );
                 let material_info = object.material.borrow().get_material_info().clone();
-                let map_textures = material_info.map_textures;
-                for virtual_texture_url in &material_info.virtual_textures {
+                let map_textures = &material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap()
+                    .map_textures;
+                for virtual_texture_url in &material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap()
+                    .virtual_textures
+                {
                     let source = self
                         .virtual_texture_source_infos
                         .get(virtual_texture_url)
@@ -1351,7 +1490,77 @@ impl Engine {
 
                 let mut binding_resources: Vec<EBindingResource> =
                     Vec::with_capacity(map_textures.len());
-                for map_texture in &map_textures {
+                for map_texture in map_textures {
+                    if let Some(handle) = self
+                        .resource_manager
+                        .get_texture_by_url(&map_texture.texture_url)
+                    {
+                        binding_resources.push(EBindingResource::Texture(*handle));
+                    } else {
+                        log::trace!("Can not find {}", map_texture.texture_url.to_string());
+                    }
+                }
+                assert_eq!(binding_resources.len(), map_textures.len());
+                object.user_textures_resources = binding_resources;
+                let ibl_textures = ResourceManager::default().get_ibl_textures();
+                let Some((_, ibl_textures)) = ibl_textures.iter().find(|x| {
+                    let url = x.0;
+                    url.scheme() != BUILT_IN_RESOURCE
+                }) else {
+                    return;
+                };
+                object.brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
+                object.pre_filter_cube_map_texture_resource =
+                    EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
+                object.irradiance_texture_resource =
+                    EBindingResource::Texture(*ibl_textures.irradiance);
+            }
+            EDrawObjectType::StaticMeshMaterial(object) => {
+                self.update_buffer(
+                    object.constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.constants),
+                );
+                let material_info = object.material.borrow().get_material_info().clone();
+                let map_textures = &material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap()
+                    .map_textures;
+                for virtual_texture_url in &material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap()
+                    .virtual_textures
+                {
+                    let source = self
+                        .virtual_texture_source_infos
+                        .get(virtual_texture_url)
+                        .unwrap();
+                    {
+                        let source = source.lock().unwrap();
+                        let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                            source.get_size().min_element(),
+                        );
+                        let max_lod = max_mips
+                            - self
+                                .settings
+                                .render_setting
+                                .virtual_texture_setting
+                                .tile_size
+                                .ilog2()
+                            - 1;
+                        object.virtual_texture_constants.virtual_texture_max_lod = max_lod;
+                        object.virtual_texture_constants.virtual_texture_size =
+                            source.get_size().as_vec2();
+                    }
+                }
+
+                self.update_buffer(
+                    object.virtual_texture_constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.virtual_texture_constants),
+                );
+
+                let mut binding_resources: Vec<EBindingResource> =
+                    Vec::with_capacity(map_textures.len());
+                for map_texture in map_textures {
                     if let Some(handle) = self
                         .resource_manager
                         .get_texture_by_url(&map_texture.texture_url)
@@ -1387,7 +1596,7 @@ impl Engine {
                     static_objcet.id,
                     static_objcet.vertex_buffers.iter().map(|x| **x).collect(),
                     static_objcet.vertex_count,
-                    static_objcet.render_pipeline.clone(),
+                    EPipelineType::Builtin(EBuiltinPipelineType::StaticMeshPhong),
                     static_objcet.index_buffer.clone().map(|x| *x),
                     static_objcet.index_count,
                     vec![
@@ -1417,7 +1626,7 @@ impl Engine {
                     skin_objcet.id,
                     skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
                     skin_objcet.vertex_count,
-                    skin_objcet.render_pipeline.clone(),
+                    EPipelineType::Builtin(EBuiltinPipelineType::SkinMeshPhong),
                     skin_objcet.index_buffer.clone().map(|x| *x),
                     skin_objcet.index_count,
                     vec![
@@ -1443,16 +1652,14 @@ impl Engine {
                 let skin_objcet = skin_objcet.clone();
                 let material = skin_objcet.material.borrow();
                 if let Some(pipeline_handle) = material.get_pipeline_handle() {
-                    let render_pipeline =
-                        rs_render::shader_library::ShaderLibrary::get_material_shader_name(
-                            *pipeline_handle,
-                        );
-
                     let mut draw_object = DrawObject::new(
                         skin_objcet.id,
                         skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
                         skin_objcet.vertex_count,
-                        render_pipeline,
+                        EPipelineType::Material(MaterialPipelineType {
+                            handle: *pipeline_handle,
+                            options: MaterialOptions { is_skin: true },
+                        }),
                         skin_objcet.index_buffer.clone().map(|x| *x),
                         skin_objcet.index_count,
                         vec![
@@ -1489,7 +1696,6 @@ impl Engine {
                     });
                     if let Some(handle) = self.shadow_depth_texture_handle.clone() {
                         draw_object.shadow_mapping = Some(ShadowMapping {
-                            render_pipeline: SHADOW_DEPTH_SKIN_PIPELINE.to_string(),
                             vertex_buffers: vec![
                                 *skin_objcet.vertex_buffers[0],
                                 *skin_objcet.vertex_buffers[2],
@@ -1500,10 +1706,71 @@ impl Engine {
                                 skin_objcet.constants_resource.clone(),
                                 skin_objcet.skin_constants_resource.clone(),
                             ]],
+                            is_skin: true,
                         });
                     }
                     self.draw_objects
                         .entry(skin_objcet.window_id)
+                        .or_default()
+                        .push(draw_object);
+                }
+            }
+            EDrawObjectType::StaticMeshMaterial(static_mesh_draw_objcet) => {
+                let static_mesh_draw_objcet = static_mesh_draw_objcet.clone();
+                let material = static_mesh_draw_objcet.material.borrow();
+                if let Some(pipeline_handle) = material.get_pipeline_handle() {
+                    let mut draw_object = DrawObject::new(
+                        static_mesh_draw_objcet.id,
+                        static_mesh_draw_objcet
+                            .vertex_buffers
+                            .iter()
+                            .map(|x| **x)
+                            .collect(),
+                        static_mesh_draw_objcet.vertex_count,
+                        EPipelineType::Material(MaterialPipelineType {
+                            handle: *pipeline_handle,
+                            options: MaterialOptions { is_skin: false },
+                        }),
+                        static_mesh_draw_objcet.index_buffer.clone().map(|x| *x),
+                        static_mesh_draw_objcet.index_count,
+                        vec![
+                            vec![
+                                static_mesh_draw_objcet.global_constants_resource.clone(),
+                                static_mesh_draw_objcet.base_color_sampler_resource,
+                                static_mesh_draw_objcet.physical_texture_resource,
+                                static_mesh_draw_objcet.page_table_texture_resource,
+                                static_mesh_draw_objcet.brdflut_texture_resource,
+                                static_mesh_draw_objcet.pre_filter_cube_map_texture_resource,
+                                static_mesh_draw_objcet.irradiance_texture_resource,
+                                static_mesh_draw_objcet.shadow_map_texture_resource,
+                            ],
+                            vec![
+                                static_mesh_draw_objcet.constants_resource.clone(),
+                                static_mesh_draw_objcet.virtual_texture_constants_resource,
+                            ],
+                            static_mesh_draw_objcet.user_textures_resources,
+                        ],
+                    );
+                    draw_object.virtual_pass_set = Some(VirtualPassSet {
+                        vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
+                        binding_resources: vec![
+                            vec![static_mesh_draw_objcet.global_constants_resource.clone()],
+                            vec![static_mesh_draw_objcet.constants_resource.clone()],
+                        ],
+                    });
+                    if let Some(handle) = self.shadow_depth_texture_handle.clone() {
+                        draw_object.shadow_mapping = Some(ShadowMapping {
+                            vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
+                            depth_texture_handle: *handle,
+                            binding_resources: vec![vec![
+                                static_mesh_draw_objcet.global_constants_resource.clone(),
+                                static_mesh_draw_objcet.constants_resource.clone(),
+                            ]],
+                            is_skin: false,
+                        });
+                    }
+                    self.draw_objects
+                        .entry(static_mesh_draw_objcet.window_id)
                         .or_default()
                         .push(draw_object);
                 }
@@ -1841,7 +2108,7 @@ impl Engine {
             id,
             vertex_buffer_handles.iter().map(|x| **x).collect(),
             vertexes0.len() as u32,
-            rs_render::renderer::GRID_RENDER_PIPELINE.to_string(),
+            EPipelineType::Builtin(EBuiltinPipelineType::Grid),
             Some(*index_buffer_handle),
             Some(grid_data.indices.len() as u32),
             vec![vec![EBindingResource::Constants(*global_constants_handle)]],
@@ -1859,7 +2126,7 @@ impl Engine {
 
     pub fn create_material(
         &mut self,
-        shader_code: String,
+        shader_code: HashMap<MaterialOptions, String>,
     ) -> crate::handle::MaterialRenderPipelineHandle {
         let shader_handle = self.resource_manager.next_material_render_pipeline();
         self.render_thread_mode

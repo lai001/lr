@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StaticMesh {
     pub name: String,
-    pub id: uuid::Uuid,
+    // pub id: uuid::Uuid,
     pub url: url::Url,
     pub vertexes: Vec<MeshVertex>,
     pub indexes: Vec<u32>,
@@ -24,7 +24,7 @@ impl Default for StaticMesh {
     fn default() -> Self {
         Self {
             name: Default::default(),
-            id: Default::default(),
+            // id: Default::default(),
             url: default_url().clone(),
             vertexes: Default::default(),
             indexes: Default::default(),

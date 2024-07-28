@@ -7,13 +7,15 @@ use anyhow::{anyhow, Context};
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use rs_artifact::{
-    artifact::ArtifactAssetEncoder, shader_source_code::ShaderSourceCode, EEndianType,
+    artifact::ArtifactAssetEncoder, material::MaterialInfo, shader_source_code::ShaderSourceCode,
+    EEndianType,
 };
 use rs_engine::{
     content::content_file_type::EContentFileType, resource_manager::ResourceManager,
     thread_pool::ThreadPool, ASSET_SCHEME,
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
+use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -393,15 +395,25 @@ impl ProjectContext {
                         .find(|x| x.borrow().url == material_content.borrow().asset_url)
                         .cloned();
                     if let Some(material_editor) = find {
-                        if let Ok(resolve_result) =
-                            crate::material_resolve::resolve(&material_editor.borrow().snarl)
-                        {
+                        if let Ok(resolve_result) = crate::material_resolve::resolve(
+                            &material_editor.borrow().snarl,
+                            MaterialOptions::all(),
+                        ) {
+                            let mut shader_code: HashMap<MaterialOptions, String> = HashMap::new();
+                            let mut material_info: HashMap<MaterialOptions, MaterialInfo> =
+                                HashMap::new();
+
+                            for (option, result) in resolve_result {
+                                shader_code.insert(option.clone(), result.shader_code);
+                                material_info.insert(option, result.material_info);
+                            }
+
                             materials.insert(
                                 material_content.borrow().asset_url.clone(),
                                 rs_artifact::material::Material {
                                     url: material_content.borrow().asset_url.clone(),
-                                    code: resolve_result.shader_code,
-                                    material_info: resolve_result.material_info,
+                                    code: shader_code,
+                                    material_info: material_info,
                                 },
                             );
                             material_contents.insert(

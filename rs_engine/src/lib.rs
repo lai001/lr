@@ -26,6 +26,7 @@ pub mod render_thread_mode;
 pub mod resource_manager;
 pub mod rotator;
 pub mod scene_node;
+pub mod static_mesh_component;
 pub mod static_virtual_texture_source;
 pub mod sync;
 pub mod url_extension;

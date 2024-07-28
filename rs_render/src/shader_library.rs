@@ -2,8 +2,10 @@ use super::reflection::Reflection;
 use crate::command::MaterialRenderPipelineHandle;
 use pollster::FutureExt;
 use rs_core_minimal::thread_pool::ThreadPool;
+use rs_render_types::MaterialOptions;
 use std::{
     collections::HashMap,
+    hash::{Hash, Hasher},
     sync::{Arc, Mutex},
 };
 
@@ -237,15 +239,22 @@ impl ShaderLibrary {
         )
     }
 
-    pub fn get_material_shader_name(handle: MaterialRenderPipelineHandle) -> String {
-        format!("material_{}", handle)
+    pub fn get_material_shader_name(
+        handle: MaterialRenderPipelineHandle,
+        options: &MaterialOptions,
+    ) -> String {
+        let mut hasher = std::hash::DefaultHasher::new();
+        options.hash(&mut hasher);
+
+        format!("material_{}_{}", handle, hasher.finish())
     }
 
     pub fn get_material_shader(
         &self,
         handle: MaterialRenderPipelineHandle,
+        options: &MaterialOptions,
     ) -> Arc<wgpu::ShaderModule> {
-        let name = Self::get_material_shader_name(handle);
+        let name = Self::get_material_shader_name(handle, options);
         self.shader_dic
             .get(&name)
             .expect(&format!("{} shader is loaded.", name))
@@ -255,8 +264,9 @@ impl ShaderLibrary {
     pub fn get_material_shader_reflection(
         &self,
         handle: MaterialRenderPipelineHandle,
+        options: &MaterialOptions,
     ) -> Arc<Reflection> {
-        let name = Self::get_material_shader_name(handle);
+        let name = Self::get_material_shader_name(handle, options);
         self.reflection_dic
             .get(&name)
             .expect(&format!("{} shader reflection is loaded.", name))

@@ -8,7 +8,8 @@ use crate::{
     view_mode::EViewModeType,
     VertexBufferType,
 };
-use std::sync::Arc;
+use rs_render_types::MaterialOptions;
+use std::{collections::HashMap, sync::Arc};
 use type_layout::TypeLayout;
 use wgpu::*;
 
@@ -25,7 +26,31 @@ impl MaterialRenderPipeline {
         texture_format: &TextureFormat,
         pool: &mut BaseRenderPipelinePool,
     ) -> crate::error::Result<MaterialRenderPipeline> {
-        let shader_name = ShaderLibrary::get_material_shader_name(material_render_pipeline_handle);
+        Self::skin(
+            material_render_pipeline_handle,
+            device,
+            shader_library,
+            texture_format,
+            pool,
+        )
+    }
+
+    fn new_internal(
+        material_render_pipeline_handle: MaterialRenderPipelineHandle,
+        device: &Device,
+        shader_library: &ShaderLibrary,
+        texture_format: &TextureFormat,
+        pool: &mut BaseRenderPipelinePool,
+        is_skin: bool,
+    ) -> crate::error::Result<MaterialRenderPipeline> {
+        let shader_name = ShaderLibrary::get_material_shader_name(
+            material_render_pipeline_handle,
+            if is_skin {
+                &MaterialOptions { is_skin: true }
+            } else {
+                &MaterialOptions { is_skin: false }
+            },
+        );
 
         let mut builder = BaseRenderPipelineBuilder::default();
         builder.targets = vec![Some(ColorTargetState {
@@ -41,11 +66,19 @@ impl MaterialRenderPipeline {
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });
-        builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
-            MeshVertex0::type_layout(),
-            MeshVertex1::type_layout(),
-            MeshVertex2::type_layout(),
-        ]));
+        if is_skin {
+            builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
+                MeshVertex0::type_layout(),
+                MeshVertex1::type_layout(),
+                MeshVertex2::type_layout(),
+            ]));
+        } else {
+            builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
+                MeshVertex0::type_layout(),
+                MeshVertex1::type_layout(),
+            ]));
+        }
+
         builder.primitive = Some(PrimitiveState {
             topology: PrimitiveTopology::TriangleList,
             cull_mode: None,
@@ -59,6 +92,40 @@ impl MaterialRenderPipeline {
             base_render_pipeline,
             builder,
         })
+    }
+
+    pub fn skin(
+        material_render_pipeline_handle: MaterialRenderPipelineHandle,
+        device: &Device,
+        shader_library: &ShaderLibrary,
+        texture_format: &TextureFormat,
+        pool: &mut BaseRenderPipelinePool,
+    ) -> crate::error::Result<MaterialRenderPipeline> {
+        Self::new_internal(
+            material_render_pipeline_handle,
+            device,
+            shader_library,
+            texture_format,
+            pool,
+            true,
+        )
+    }
+
+    pub fn static_mesh(
+        material_render_pipeline_handle: MaterialRenderPipelineHandle,
+        device: &Device,
+        shader_library: &ShaderLibrary,
+        texture_format: &TextureFormat,
+        pool: &mut BaseRenderPipelinePool,
+    ) -> crate::error::Result<MaterialRenderPipeline> {
+        Self::new_internal(
+            material_render_pipeline_handle,
+            device,
+            shader_library,
+            texture_format,
+            pool,
+            false,
+        )
     }
 
     pub fn draw(
@@ -117,5 +184,69 @@ impl MaterialRenderPipeline {
         }
 
         self.base_render_pipeline = pool.get(device, shader_library, &self.builder);
+    }
+}
+
+pub struct VariantMaterialRenderPipeline {
+    pipelines: HashMap<MaterialOptions, MaterialRenderPipeline>,
+}
+
+impl VariantMaterialRenderPipeline {
+    pub fn new(
+        handle: MaterialRenderPipelineHandle,
+        options: Vec<MaterialOptions>,
+        device: &Device,
+        shader_library: &ShaderLibrary,
+        texture_format: &TextureFormat,
+        pool: &mut BaseRenderPipelinePool,
+    ) -> VariantMaterialRenderPipeline {
+        let mut variant_material_render_pipeline = VariantMaterialRenderPipeline {
+            pipelines: HashMap::new(),
+        };
+        for option in options {
+            let pipeline = if option.is_skin {
+                MaterialRenderPipeline::skin(handle, device, shader_library, texture_format, pool)
+            } else {
+                MaterialRenderPipeline::static_mesh(
+                    handle,
+                    device,
+                    shader_library,
+                    texture_format,
+                    pool,
+                )
+            };
+            match pipeline {
+                Ok(pipeline) => {
+                    let old_value = variant_material_render_pipeline
+                        .pipelines
+                        .insert(option, pipeline);
+                    debug_assert!(old_value.is_none());
+                }
+                Err(err) => {
+                    log::warn!("{}", err);
+                }
+            }
+        }
+        variant_material_render_pipeline
+    }
+
+    pub fn get(&self, options: &MaterialOptions) -> Option<&MaterialRenderPipeline> {
+        self.pipelines.get(options)
+    }
+
+    pub fn get_mut(&mut self, options: &MaterialOptions) -> Option<&mut MaterialRenderPipeline> {
+        self.pipelines.get_mut(options)
+    }
+
+    pub fn set_view_mode(
+        &mut self,
+        view_mode: EViewModeType,
+        device: &Device,
+        shader_library: &ShaderLibrary,
+        pool: &mut BaseRenderPipelinePool,
+    ) {
+        for (_, pipeline) in self.pipelines.iter_mut() {
+            pipeline.set_view_mode(view_mode, device, shader_library, pool);
+        }
     }
 }

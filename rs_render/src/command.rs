@@ -1,10 +1,12 @@
 use crate::{
-    bake_info::BakeInfo, egui_render::EGUIRenderOutput, scene_viewport::SceneViewport,
-    view_mode::EViewModeType, virtual_texture_source::TVirtualTextureSource,
+    bake_info::BakeInfo, egui_render::EGUIRenderOutput, renderer::EPipelineType,
+    scene_viewport::SceneViewport, view_mode::EViewModeType,
+    virtual_texture_source::TVirtualTextureSource,
 };
 use rs_core_minimal::settings::{RenderSettings, VirtualTextureSetting};
+use rs_render_types::MaterialOptions;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
 };
@@ -113,7 +115,7 @@ pub struct CreateSampler {
 #[derive(Clone)]
 pub struct CreateMaterialRenderPipeline {
     pub handle: MaterialRenderPipelineHandle,
-    pub shader_code: String,
+    pub shader_code: HashMap<MaterialOptions, String>,
 }
 
 #[derive(Clone)]
@@ -169,7 +171,7 @@ pub enum EDrawCallType {
 
 #[derive(Clone)]
 pub struct ShadowMapping {
-    pub render_pipeline: String,
+    pub is_skin: bool,
     pub vertex_buffers: Vec<BufferHandle>,
     pub depth_texture_handle: TextureHandle,
     pub binding_resources: Vec<Vec<EBindingResource>>,
@@ -186,7 +188,8 @@ pub struct DrawObject {
     pub id: u32,
     pub vertex_buffers: Vec<BufferHandle>,
     pub vertex_count: u32,
-    pub render_pipeline: String,
+
+    pub pipeline: EPipelineType,
     pub index_buffer: Option<BufferHandle>,
     pub index_count: Option<u32>,
     pub binding_resources: Vec<Vec<EBindingResource>>,
@@ -202,7 +205,7 @@ impl DrawObject {
         id: u32,
         vertex_buffers: Vec<BufferHandle>,
         vertex_count: u32,
-        render_pipeline: String,
+        pipeline: EPipelineType,
         index_buffer: Option<BufferHandle>,
         index_count: Option<u32>,
         binding_resources: Vec<Vec<EBindingResource>>,
@@ -211,7 +214,7 @@ impl DrawObject {
             id,
             vertex_buffers,
             vertex_count,
-            render_pipeline,
+            pipeline,
             index_buffer,
             index_count,
             binding_resources,

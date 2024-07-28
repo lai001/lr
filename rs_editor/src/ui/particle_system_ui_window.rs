@@ -26,6 +26,7 @@ use rs_render::{
         BufferCreateInfo, CreateBuffer, Draw, DrawObject, EBindingResource, EDrawCallType,
         PresentInfo, RenderCommand, UpdateBuffer,
     },
+    renderer::{EBuiltinPipelineType, EPipelineType},
     scene_viewport::SceneViewport,
     vertex_data_type::mesh_vertex::{Instance0, MeshVertex0},
 };
@@ -413,7 +414,7 @@ impl ParticleSystemUIWindow {
                     0,
                     vec![*self.vertex_buffer_handle, *instance_buffer_handle],
                     quad.vertex_positions.len() as u32,
-                    rs_render::renderer::PARTICLE_PIPELINE.to_string(),
+                    EPipelineType::Builtin(EBuiltinPipelineType::Particle),
                     Some(*self.index_buffer_handle),
                     Some(quad.indices.len() as u32),
                     vec![vec![EBindingResource::Constants(

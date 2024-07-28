@@ -21,7 +21,7 @@ use rs_render::{
         MultiDrawIndirect, PresentInfo, RenderCommand, UpdateBuffer,
     },
     constants::MeshViewConstants,
-    renderer::MESH_VIEW_MULTIPLE_DRAW_PIPELINE,
+    renderer::{EBuiltinPipelineType, EPipelineType},
     scene_viewport::SceneViewport,
     vertex_data_type::mesh_vertex::MeshVertex4,
 };
@@ -345,7 +345,7 @@ impl MultipleDrawUiWindow {
             0,
             vec![*vertex_buffer_handle],
             vertices.len() as u32,
-            MESH_VIEW_MULTIPLE_DRAW_PIPELINE.to_string(),
+            EPipelineType::Builtin(EBuiltinPipelineType::MeshViewMultipleDraw),
             Some(*index_buffer_handle),
             Some(indices.len() as u32),
             vec![vec![

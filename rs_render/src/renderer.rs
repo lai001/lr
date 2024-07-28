@@ -12,7 +12,7 @@ use crate::render_pipeline::attachment_pipeline::{
 };
 use crate::render_pipeline::fxaa::FXAAPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
-use crate::render_pipeline::material_pipeline::MaterialRenderPipeline;
+use crate::render_pipeline::material_pipeline::VariantMaterialRenderPipeline;
 use crate::render_pipeline::mesh_view::MeshViewPipeline;
 use crate::render_pipeline::mesh_view_multiple_draw::MeshViewMultipleDrawPipeline;
 use crate::render_pipeline::particle_pipeline::ParticlePipeline;
@@ -27,6 +27,7 @@ use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
 use image::{GenericImage, GenericImageView};
 use rs_core_minimal::settings::{self, RenderSettings};
 use rs_core_minimal::thread_pool::ThreadPool;
+use rs_render_types::MaterialOptions;
 use std::collections::{HashMap, VecDeque};
 use std::ops::Deref;
 use std::path::Path;
@@ -34,14 +35,29 @@ use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
 
-pub const SKIN_MESH_RENDER_PIPELINE: &str = "SKIN_MESH_RENDER_PIPELINE";
-pub const STATIC_MESH_RENDER_PIPELINE: &str = "STATIC_MESH_RENDER_PIPELINE";
-pub const GRID_RENDER_PIPELINE: &str = "GRID_RENDER_PIPELINE";
-pub const MESH_VIEW_RENDER_PIPELINE: &str = "MESH_VIEW_RENDER_PIPELINE";
-pub const MESH_VIEW_MULTIPLE_DRAW_PIPELINE: &str = "MESH_VIEW_MULTIPLE_DRAW_PIPELINE";
-pub const SHADOW_DEPTH_SKIN_PIPELINE: &str = "SHADOW_DEPTH_SKIN_PIPELINE";
-pub const SHADOW_DEPTH_PIPELINE: &str = "SHADOW_DEPTH_PIPELINE";
-pub const PARTICLE_PIPELINE: &str = "PARTICLE_PIPELINE";
+#[derive(Clone)]
+pub enum EBuiltinPipelineType {
+    SkinMeshPhong,
+    StaticMeshPhong,
+    Grid,
+    MeshView,
+    MeshViewMultipleDraw,
+    ShadowDepthSkinMesh,
+    ShadowDepthStaticMesh,
+    Particle,
+}
+
+#[derive(Clone)]
+pub struct MaterialPipelineType {
+    pub handle: MaterialRenderPipelineHandle,
+    pub options: MaterialOptions,
+}
+
+#[derive(Clone)]
+pub enum EPipelineType {
+    Builtin(EBuiltinPipelineType),
+    Material(MaterialPipelineType),
+}
 
 pub struct Renderer {
     wgpu_context: WGPUContext,
@@ -89,7 +105,7 @@ pub struct Renderer {
 
     main_window_id: isize,
 
-    material_render_pipelines: HashMap<MaterialRenderPipelineHandle, MaterialRenderPipeline>,
+    material_render_pipelines: HashMap<MaterialRenderPipelineHandle, VariantMaterialRenderPipeline>,
 
     prebake_ibls: HashMap<IBLTexturesKey, PrebakeIBL>,
 
@@ -886,45 +902,51 @@ impl Renderer {
                 self.gui_renderer.remove_screen_descriptor(window_id);
             }
             RenderCommand::CreateMaterialRenderPipeline(create_render_pipeline) => {
+                let all_options = MaterialOptions::all();
+                let handle = create_render_pipeline.handle;
                 let device = self.wgpu_context.get_device();
-                let name = ShaderLibrary::get_material_shader_name(create_render_pipeline.handle);
-                let create_shader_result = self.shader_library.load_shader_from(
-                    name.clone(),
-                    create_render_pipeline.shader_code,
-                    device,
-                );
-                match create_shader_result {
-                    Ok(_) => {}
-                    Err(err) => match err {
-                        crate::error::Error::ShaderReflection(_, _) => {}
-                        crate::error::Error::Wgpu(err) => match err.lock().unwrap().deref() {
-                            Error::OutOfMemory { .. } => {
-                                todo!()
-                            }
-                            Error::Validation { description, .. } => {
-                                log::trace!("Failed to create shader, {}", description);
-                            }
-                            Error::Internal { .. } => todo!(),
+                for option in all_options.iter() {
+                    let name = ShaderLibrary::get_material_shader_name(handle, option);
+                    let create_shader_result = self.shader_library.load_shader_from(
+                        name.clone(),
+                        create_render_pipeline
+                            .shader_code
+                            .get(option)
+                            .expect(&format!("Code for {:?}", option))
+                            .clone(),
+                        device,
+                    );
+                    match create_shader_result {
+                        Ok(_) => {}
+                        Err(err) => match err {
+                            crate::error::Error::ShaderReflection(_, _) => {}
+                            crate::error::Error::Wgpu(err) => match err.lock().unwrap().deref() {
+                                Error::OutOfMemory { .. } => {
+                                    todo!()
+                                }
+                                Error::Validation { description, .. } => {
+                                    log::trace!("Failed to create shader, {}", description);
+                                }
+                                Error::Internal { .. } => todo!(),
+                            },
+                            _ => unreachable!(),
                         },
-                        _ => unreachable!(),
-                    },
+                    }
+                    log::trace!("Create material render pipeline: {}", name);
                 }
                 let current_swapchain_format = self
                     .wgpu_context
                     .get_current_swapchain_format(self.main_window_id);
-
-                let material_render_pipeline = MaterialRenderPipeline::new(
-                    create_render_pipeline.handle,
+                let material_render_pipeline = VariantMaterialRenderPipeline::new(
+                    handle,
+                    all_options,
                     device,
                     &self.shader_library,
                     &current_swapchain_format,
                     &mut self.base_render_pipeline_pool,
                 );
-                if let Ok(material_render_pipeline) = material_render_pipeline {
-                    self.material_render_pipelines
-                        .insert(create_render_pipeline.handle, material_render_pipeline);
-                    log::trace!("Create material render pipeline: {}", name);
-                }
+                self.material_render_pipelines
+                    .insert(handle, material_render_pipeline);
             }
             RenderCommand::UploadPrebakeIBL(upload_prebake_ibl) => {
                 macro_rules! get_surface {
@@ -1161,27 +1183,9 @@ impl Renderer {
                 group_binding_resource.push(binding_resources);
             }
 
-            match draw_object_command.render_pipeline.as_str() {
-                SKIN_MESH_RENDER_PIPELINE => {
-                    virtual_texture_pass.render(
-                        device,
-                        queue,
-                        &[mesh_buffer.clone()],
-                        group_binding_resource,
-                        false,
-                    );
-                }
-                STATIC_MESH_RENDER_PIPELINE => {
-                    virtual_texture_pass.render(
-                        device,
-                        queue,
-                        &[mesh_buffer.clone()],
-                        group_binding_resource,
-                        true,
-                    );
-                }
-                _ => {
-                    if draw_object_command.render_pipeline.starts_with("material_") {
+            match &draw_object_command.pipeline {
+                EPipelineType::Builtin(ty) => match ty {
+                    EBuiltinPipelineType::SkinMeshPhong => {
                         virtual_texture_pass.render(
                             device,
                             queue,
@@ -1190,6 +1194,25 @@ impl Renderer {
                             false,
                         );
                     }
+                    EBuiltinPipelineType::StaticMeshPhong => {
+                        virtual_texture_pass.render(
+                            device,
+                            queue,
+                            &[mesh_buffer.clone()],
+                            group_binding_resource,
+                            true,
+                        );
+                    }
+                    _ => unimplemented!(),
+                },
+                EPipelineType::Material(ty) => {
+                    virtual_texture_pass.render(
+                        device,
+                        queue,
+                        &[mesh_buffer.clone()],
+                        group_binding_resource,
+                        ty.options.is_skin == false,
+                    );
                 }
             }
         }
@@ -1375,98 +1398,101 @@ impl Renderer {
             group_binding_resource.push(binding_resources);
         }
 
-        match draw_object_command.render_pipeline.as_str() {
-            SKIN_MESH_RENDER_PIPELINE => {
-                self.skin_mesh_shading_pipeline.draw(
-                    device,
-                    queue,
-                    surface_texture_view,
-                    &depth_texture_view,
-                    &[mesh_buffer],
-                    group_binding_resource,
-                );
-            }
-            STATIC_MESH_RENDER_PIPELINE => {
-                self.shading_pipeline.draw(
-                    device,
-                    queue,
-                    surface_texture_view,
-                    &depth_texture_view,
-                    &[mesh_buffer],
-                    group_binding_resource,
-                );
-            }
-            GRID_RENDER_PIPELINE => {
-                self.grid_render_pipeline.draw(
-                    device,
-                    queue,
-                    surface_texture_view,
-                    resolve_target,
-                    resolve_depth_target.unwrap_or(&depth_texture_view),
-                    &[mesh_buffer],
-                    group_binding_resource,
-                );
-            }
-            MESH_VIEW_RENDER_PIPELINE => {
-                self.mesh_view_pipeline.draw(
-                    device,
-                    queue,
-                    surface_texture_view,
-                    &depth_texture_view,
-                    &[mesh_buffer],
-                    group_binding_resource,
-                );
-            }
-            MESH_VIEW_MULTIPLE_DRAW_PIPELINE => {
-                self.mesh_view_multiple_draw_pipeline.multi_draw_indirect(
-                    device,
-                    queue,
-                    surface_texture_view,
-                    &depth_texture_view,
-                    &[mesh_buffer],
-                    group_binding_resource,
-                );
-            }
-            PARTICLE_PIPELINE => {
-                self.particle_pipeline.draw(
-                    device,
-                    queue,
-                    surface_texture_view,
-                    &depth_texture_view,
-                    &[mesh_buffer],
-                    group_binding_resource,
-                );
-            }
-            _ => {
-                (|| {
-                    if !draw_object_command.render_pipeline.starts_with("material_") {
-                        return;
-                    }
-                    let handle = draw_object_command
-                        .render_pipeline
-                        .strip_prefix("material_")
-                        .unwrap()
-                        .parse::<MaterialRenderPipelineHandle>();
-                    let Ok(handle) = handle else {
-                        return;
-                    };
-                    let material_render_pipeline = self.material_render_pipelines.get(&handle);
-                    let Some(material_render_pipeline) = material_render_pipeline else {
-                        return;
-                    };
-                    material_render_pipeline.draw(
+        match &draw_object_command.pipeline {
+            EPipelineType::Builtin(ty) => match ty {
+                EBuiltinPipelineType::SkinMeshPhong => {
+                    self.skin_mesh_shading_pipeline.draw(
                         device,
                         queue,
                         surface_texture_view,
                         &depth_texture_view,
                         &[mesh_buffer],
                         group_binding_resource,
-                        None,
-                        None,
                     );
-                })();
+                }
+                EBuiltinPipelineType::StaticMeshPhong => {
+                    self.shading_pipeline.draw(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &depth_texture_view,
+                        &[mesh_buffer],
+                        group_binding_resource,
+                    );
+                }
+                EBuiltinPipelineType::Grid => {
+                    self.grid_render_pipeline.draw(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        resolve_target,
+                        resolve_depth_target.unwrap_or(&depth_texture_view),
+                        &[mesh_buffer],
+                        group_binding_resource,
+                    );
+                }
+                EBuiltinPipelineType::MeshView => {
+                    self.mesh_view_pipeline.draw(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &depth_texture_view,
+                        &[mesh_buffer],
+                        group_binding_resource,
+                    );
+                }
+                EBuiltinPipelineType::MeshViewMultipleDraw => {
+                    self.mesh_view_multiple_draw_pipeline.multi_draw_indirect(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &depth_texture_view,
+                        &[mesh_buffer],
+                        group_binding_resource,
+                    );
+                }
+                EBuiltinPipelineType::ShadowDepthSkinMesh => unimplemented!(),
+                EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
+                EBuiltinPipelineType::Particle => {
+                    self.particle_pipeline.draw(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &depth_texture_view,
+                        &[mesh_buffer],
+                        group_binding_resource,
+                    );
+                }
+            },
+            EPipelineType::Material(material_pipeline) => {
+                match self
+                    .material_render_pipelines
+                    .get(&material_pipeline.handle)
+                {
+                    Some(pipeline) => match pipeline.get(&material_pipeline.options) {
+                        Some(render_pipeline) => {
+                            render_pipeline.draw(
+                                device,
+                                queue,
+                                surface_texture_view,
+                                &depth_texture_view,
+                                &[mesh_buffer],
+                                group_binding_resource,
+                                None,
+                                None,
+                            );
+                        }
+                        None => {
+                            log::warn!("{} no match options", &material_pipeline.handle);
+                        }
+                    },
+                    None => {
+                        log::warn!("{} is not found", &material_pipeline.handle);
+                    }
+                }
             }
         }
+
         Ok(())
     }
 
@@ -1520,26 +1546,34 @@ impl Renderer {
 
         for (index, draw_object_command) in draw_object_commands.iter().enumerate() {
             let sender = sender.clone();
-            let render_pipeline = match draw_object_command.render_pipeline.as_str() {
-                GRID_RENDER_PIPELINE => self.grid_render_pipeline.base_render_pipeline.clone(),
-                SKIN_MESH_RENDER_PIPELINE => {
-                    self.skin_mesh_shading_pipeline.base_render_pipeline.clone()
-                }
-                _ => {
-                    if !draw_object_command.render_pipeline.starts_with("material_") {
-                        panic!()
+
+            let render_pipeline = match &draw_object_command.pipeline {
+                EPipelineType::Builtin(ty) => match ty {
+                    EBuiltinPipelineType::Grid => {
+                        self.grid_render_pipeline.base_render_pipeline.clone()
                     }
-                    let handle = draw_object_command
-                        .render_pipeline
-                        .strip_prefix("material_")
-                        .unwrap()
-                        .parse::<MaterialRenderPipelineHandle>();
-                    let Ok(handle) = handle else { panic!() };
-                    let material_render_pipeline = self.material_render_pipelines.get(&handle);
-                    let Some(material_render_pipeline) = material_render_pipeline else {
-                        panic!()
-                    };
-                    material_render_pipeline.base_render_pipeline.clone()
+                    EBuiltinPipelineType::SkinMeshPhong => {
+                        self.grid_render_pipeline.base_render_pipeline.clone()
+                    }
+                    _ => unimplemented!(),
+                },
+                EPipelineType::Material(material_pipeline) => {
+                    match self
+                        .material_render_pipelines
+                        .get(&material_pipeline.handle)
+                    {
+                        Some(pipeline) => match pipeline.get(&material_pipeline.options) {
+                            Some(render_pipeline) => render_pipeline.base_render_pipeline.clone(),
+                            None => {
+                                log::warn!("{} no match options", &material_pipeline.handle);
+                                continue;
+                            }
+                        },
+                        None => {
+                            log::warn!("{} is not found", &material_pipeline.handle);
+                            continue;
+                        }
+                    }
                 }
             };
 
@@ -1918,7 +1952,7 @@ impl Renderer {
         let mesh_buffer = GpuVertexBufferImp {
             vertex_buffers: &vertex_buffers,
             vertex_count: draw_object.vertex_count,
-            index_buffer: index_buffer,
+            index_buffer,
             index_count: draw_object.index_count,
             draw_type: match &draw_object.draw_call_type {
                 EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
@@ -1942,32 +1976,27 @@ impl Renderer {
             },
         };
 
-        match shadow_mapping.render_pipeline.as_str() {
-            SHADOW_DEPTH_SKIN_PIPELINE => {
-                let base_render_pipeline = shadow_pipilines
-                    .depth_skin_pipeline
-                    .base_render_pipeline
-                    .clone();
-                base_render_pipeline.draw_resources(
-                    device,
-                    queue,
-                    group_binding_resources,
-                    &vec![mesh_buffer],
-                    &[],
-                    depth_ops,
-                    stencil_ops,
-                    Some(&depth_view),
-                    None,
-                    None,
-                );
-            }
-            SHADOW_DEPTH_PIPELINE => {
-                unimplemented!()
-            }
-            _ => {
-                panic!()
-            }
-        }
+        let base_render_pipeline = if shadow_mapping.is_skin {
+            shadow_pipilines
+                .depth_skin_pipeline
+                .base_render_pipeline
+                .clone()
+        } else {
+            shadow_pipilines.depth_pipeline.base_render_pipeline.clone()
+        };
+
+        base_render_pipeline.draw_resources(
+            device,
+            queue,
+            group_binding_resources,
+            &vec![mesh_buffer],
+            &[],
+            depth_ops,
+            stencil_ops,
+            Some(&depth_view),
+            None,
+            None,
+        );
     }
 
     pub fn insert_new_texture(&mut self, handle: TextureHandle, texture: Texture) {

@@ -8,8 +8,9 @@ use egui_snarl::{
     InPin, NodeId, OutPin, Snarl,
 };
 use rs_foundation::new::SingleThreadMutType;
+use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 const NODE_IO_COLOR: Color32 = Color32::WHITE;
 
@@ -520,7 +521,10 @@ pub struct MaterialNode {
 }
 
 pub enum EEventType {
-    Update(Rc<RefCell<crate::material::Material>>, ResolveResult),
+    Update(
+        Rc<RefCell<crate::material::Material>>,
+        HashMap<MaterialOptions, ResolveResult>,
+    ),
 }
 
 pub struct MaterialView {
@@ -529,8 +533,8 @@ pub struct MaterialView {
     pub viewer: GraphViewer,
     pub attribute_node_id: NodeId,
     pub event: Option<EEventType>,
-    pub current_resolve_result: Option<ResolveResult>,
-    pub validate: Option<rs_render::error::Result<()>>,
+    pub current_resolve_result: Option<HashMap<MaterialOptions, ResolveResult>>,
+    pub validate: Option<HashMap<MaterialOptions, rs_render::error::Result<()>>>,
 }
 
 impl MaterialView {
@@ -603,29 +607,40 @@ impl MaterialView {
                 let current_resolve_result = &mut self.current_resolve_result;
                 if let Some(current_resolve_result) = current_resolve_result {
                     if ui.button(format!("Validate")).clicked() {
+                        let mut validates = HashMap::new();
+                        for (k,v) in current_resolve_result.iter() {
+                            let validate=rs_render::shader_library::ShaderLibrary::validate_shader_code(
+                                &v.shader_code,
+                            );
+                            validates.insert(k.clone(), validate);
+                        }
                         self.validate = Some(
-                            rs_render::shader_library::ShaderLibrary::validate_shader_code(
-                                &current_resolve_result.shader_code,
-                            ),
+                                validates
                         );
                     }
                     match &self.validate {
-                        Some(validate) => match validate {
-                            Ok(_) => {
-                                ui.label(format!("Ok"));
+                        Some(validates) => {
+
+                            for (_,validate) in validates {
+                                match validate {
+                                    Ok(_) => {
+                                        ui.label(format!("Ok"));
+                                    }
+                                    Err(err) => {
+                                        let theme =
+                                            egui_extras::syntax_highlighting::CodeTheme::from_memory(
+                                                ui.ctx(),
+                                            );
+                                        egui_extras::syntax_highlighting::code_view_ui(
+                                            ui,
+                                            &theme,
+                                            &err.to_string(),
+                                            "wgsl",
+                                        );
+                                    }
+                                }
                             }
-                            Err(err) => {
-                                let theme =
-                                    egui_extras::syntax_highlighting::CodeTheme::from_memory(
-                                        ui.ctx(),
-                                    );
-                                egui_extras::syntax_highlighting::code_view_ui(
-                                    ui,
-                                    &theme,
-                                    &err.to_string(),
-                                    "wgsl",
-                                );
-                            }
+
                         },
                         None => {
                             ui.label(format!("None"));
@@ -636,13 +651,13 @@ impl MaterialView {
                     let clicked = egui_extras::syntax_highlighting::code_view_ui(
                         ui,
                         &theme,
-                        &current_resolve_result.shader_code,
+                        &current_resolve_result.iter().find(|_|true).unwrap().1.shader_code,
                         "wgsl",
                     )
                     .clicked_by(PointerButton::Secondary);
                     if clicked {
                         ui.ctx()
-                            .copy_text(current_resolve_result.shader_code.clone());
+                            .copy_text(current_resolve_result.iter().find(|_|true).unwrap().1.shader_code.clone());
                     }
                 }
             });
@@ -662,7 +677,7 @@ impl MaterialView {
         style: &SnarlStyle,
         snarl: &mut Snarl<MaterialNode>,
         context: &egui::Context,
-    ) -> Option<anyhow::Result<ResolveResult>> {
+    ) -> Option<anyhow::Result<HashMap<MaterialOptions, ResolveResult>>> {
         egui::SidePanel::left("Detail").show(context, |ui| {
             egui::ScrollArea::vertical().show(ui, |_| {});
         });
@@ -674,6 +689,6 @@ impl MaterialView {
         if !viewer.is_updated {
             return None;
         }
-        Some(material_resolve::resolve(snarl))
+        Some(material_resolve::resolve(snarl, MaterialOptions::all()))
     }
 }

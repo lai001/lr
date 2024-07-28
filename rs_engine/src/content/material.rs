@@ -1,12 +1,15 @@
+use std::collections::HashMap;
+
 use crate::{handle::MaterialRenderPipelineHandle, url_extension::UrlExtension};
 use rs_artifact::material::MaterialInfo;
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
+use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 struct MaterialRuntime {
     pipeline_handle: MaterialRenderPipelineHandle,
-    material_info: MaterialInfo,
+    material_info: HashMap<MaterialOptions, MaterialInfo>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,7 +49,7 @@ impl Material {
         } else {
             self.run_time = Some(MaterialRuntime {
                 pipeline_handle,
-                material_info: MaterialInfo::default(),
+                material_info: HashMap::new(),
             });
         }
     }
@@ -59,13 +62,13 @@ impl Material {
         }
     }
 
-    pub fn set_material_info(&mut self, material_info: MaterialInfo) {
+    pub fn set_material_info(&mut self, material_info: HashMap<MaterialOptions, MaterialInfo>) {
         if let Some(runtime) = self.run_time.as_mut() {
             runtime.material_info = material_info;
         }
     }
 
-    pub fn get_material_info(&self) -> &MaterialInfo {
+    pub fn get_material_info(&self) -> &HashMap<MaterialOptions, MaterialInfo> {
         if let Some(runtime) = self.run_time.as_ref() {
             &runtime.material_info
         } else {

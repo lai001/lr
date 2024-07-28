@@ -1,6 +1,7 @@
 use crate::{asset::Asset, resource_type::EResourceType};
+use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct TextureBinding {
@@ -24,8 +25,8 @@ pub struct MaterialInfo {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Material {
     pub url: url::Url,
-    pub code: String,
-    pub material_info: MaterialInfo,
+    pub code: HashMap<MaterialOptions, String>,
+    pub material_info: HashMap<MaterialOptions, MaterialInfo>,
 }
 
 impl Asset for Material {

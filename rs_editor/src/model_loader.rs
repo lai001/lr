@@ -4,7 +4,10 @@ use rs_artifact::{
     mesh_vertex::MeshVertex,
     skin_mesh::{SkinMesh, SkinMeshVertex},
 };
-use rs_engine::{build_content_file_url, resource_manager::ResourceManager};
+use rs_engine::{
+    build_content_file_url, resource_manager::ResourceManager,
+    static_mesh_component::StaticMeshComponent,
+};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_render::vertex_data_type::skin_mesh_vertex::INVALID_BONE;
 use russimp::material::TextureType;
@@ -152,6 +155,55 @@ impl ModelLoader {
         vertex
     }
 
+    fn make_vertex2(
+        index: u32,
+        imported_mesh: &rs_assimp::mesh::Mesh,
+        uv_map: &Option<Vec<glam::Vec3>>,
+        default_normal: &glam::Vec3,
+        default_tangent: &glam::Vec3,
+        default_bitangent: &glam::Vec3,
+        default_vertex_color: &glam::Vec4,
+    ) -> MeshVertex {
+        let mut texture_coord: glam::Vec2 = glam::vec2(0.0, 0.0);
+        if let Some(uv_map) = uv_map {
+            if let Some(uv) = uv_map.get(index as usize) {
+                texture_coord = uv.xy();
+            }
+        }
+        let vertex = imported_mesh
+            .vertices
+            .get(index as usize)
+            .expect("Should not be null");
+        let mut vertex_color: &glam::Vec4 = default_vertex_color;
+        if let Some(color) = imported_mesh.colors.get(index as usize) {
+            if let Some(color) = color.get(0) {
+                vertex_color = color;
+            }
+        }
+        let normal = imported_mesh
+            .normals
+            .get(index as usize)
+            .unwrap_or(default_normal);
+        let tangent = imported_mesh
+            .tangents
+            .get(index as usize)
+            .unwrap_or(default_tangent);
+        let bitangent = imported_mesh
+            .bitangents
+            .get(index as usize)
+            .unwrap_or(default_bitangent);
+
+        let vertex = MeshVertex {
+            vertex_color: vertex_color.clone(),
+            position: vertex.clone(),
+            normal: normal.clone(),
+            tangent: tangent.clone(),
+            bitangent: bitangent.clone(),
+            tex_coord: texture_coord.clone(),
+        };
+        vertex
+    }
+
     fn make_skin_vertex(
         index: u32,
         imported_mesh: &rs_assimp::mesh::Mesh,
@@ -283,7 +335,99 @@ impl ModelLoader {
         Ok(())
     }
 
-    pub fn to_runtime_skin_mesh<'a>(
+    pub fn to_runtime_static_mesh(
+        &self,
+        static_mesh: &rs_engine::content::static_mesh::StaticMesh,
+        asset_folder: &Path,
+        resource_manager: ResourceManager,
+    ) -> anyhow::Result<Arc<rs_artifact::static_mesh::StaticMesh>> {
+        let url = static_mesh.url.clone();
+
+        match resource_manager.get_static_mesh(&url) {
+            Ok(loaded_mesh) => Ok(loaded_mesh),
+            Err(_) => {
+                let relative_path = &static_mesh.asset_info.relative_path;
+                let path = asset_folder.join(relative_path);
+
+                let scene_cache = self
+                    .scene_cache
+                    .get(&path)
+                    .expect(&format!("{:?} Scene has been loaded.", path));
+                let imported_mesh = scene_cache
+                    .meshes
+                    .iter()
+                    .find(|x| x.borrow().name == static_mesh.asset_info.path)
+                    .expect("Find matching mesh.");
+                let mut triangle_count: usize = 0;
+                for face in &imported_mesh.borrow().faces {
+                    debug_assert_eq!(face.indices.len(), 3);
+                    triangle_count += 1;
+                }
+
+                let mut vertex_buffer: Vec<MeshVertex> = vec![];
+                let mut index_buffer: Vec<u32> = Vec::with_capacity(triangle_count * 3);
+                let mut uv_map: Option<Vec<glam::Vec3>> = None;
+                if let Some(map) = imported_mesh.borrow().texture_coords.get(0) {
+                    uv_map = Some(map.to_vec());
+                }
+
+                let default_normal = glam::Vec3 {
+                    x: 0.5,
+                    y: 0.5,
+                    z: 1.0,
+                };
+                let default_tangent = glam::Vec3::X;
+                let default_bitangent = glam::Vec3::Y;
+                let default_vertex_color = glam::Vec4::ZERO;
+                let mut vertex_helper: HashMap<usize, bool> = HashMap::new();
+                for face in &imported_mesh.borrow().faces {
+                    for index in &face.indices {
+                        vertex_helper.insert(*index as usize, false);
+                    }
+                }
+                vertex_buffer.resize(vertex_helper.len(), Default::default());
+
+                for face in &imported_mesh.borrow().faces {
+                    let indices = &face.indices;
+                    for index in indices {
+                        index_buffer.push(*index);
+                        let is_create = vertex_helper.get_mut(&((*index) as usize)).unwrap();
+                        if *is_create {
+                            continue;
+                        }
+                        *is_create = true;
+                        let vertex = Self::make_vertex2(
+                            *index,
+                            &imported_mesh.borrow(),
+                            &uv_map,
+                            &default_normal,
+                            &default_tangent,
+                            &default_bitangent,
+                            &default_vertex_color,
+                        );
+                        vertex_buffer[(*index) as usize] = vertex;
+                    }
+                }
+
+                let static_mesh = rs_artifact::static_mesh::StaticMesh {
+                    vertexes: vertex_buffer,
+                    indexes: index_buffer,
+                    name: static_mesh.asset_info.path.clone(),
+                    url: static_mesh.asset_info.get_url(),
+                };
+                let static_mesh = Arc::new(static_mesh);
+                resource_manager.add_static_mesh(static_mesh.url.clone(), static_mesh.clone());
+                log::trace!(
+                    r#"Load static mesh "{}" from scene {:?}."#,
+                    static_mesh.clone().name,
+                    path
+                );
+                Ok(static_mesh)
+            }
+        }
+    }
+
+    pub fn to_runtime_skin_mesh(
         &self,
         skeleton_mesh: &rs_engine::content::skeleton_mesh::SkeletonMesh,
         asset_folder: &Path,
@@ -593,7 +737,10 @@ impl ModelLoader {
                 )?,
             );
         }
-        let scene = self.scene_cache.get(file_path).unwrap();
+        let scene = self
+            .scene_cache
+            .get(file_path)
+            .ok_or(anyhow::anyhow!("Failed to load file: {:?}", file_path))?;
 
         if scene.armatures.len() > 1 {
             log::warn!("Too many armatures");
@@ -644,9 +791,13 @@ impl ModelLoader {
             let url = build_content_file_url(&name).context(imported_mesh.name.clone())?;
             if imported_mesh.bones.is_empty() {
                 let static_mesh = rs_engine::content::static_mesh::StaticMesh {
-                    asset_reference_name: imported_mesh.name.clone(),
+                    // asset_reference_name: imported_mesh.name.clone(),
                     url,
-                    asset_reference_relative_path: asset_reference.clone(),
+                    // asset_reference_relative_path: asset_reference.clone(),
+                    asset_info: rs_engine::content::static_mesh::AssetInfo {
+                        relative_path: Path::new(&asset_reference).to_path_buf(),
+                        path: imported_mesh.name.clone(),
+                    },
                 };
                 static_meshes.push(Rc::new(RefCell::new(static_mesh)));
             } else {
@@ -656,7 +807,13 @@ impl ModelLoader {
                 );
                 let skeleton_mesh = rs_engine::content::skeleton_mesh::SkeletonMesh {
                     url,
-                    skeleton_url: skeleton.clone().unwrap().clone().borrow().url.clone(),
+                    skeleton_url: skeleton
+                        .clone()
+                        .ok_or(anyhow::anyhow!("Skeleton not found"))?
+                        .clone()
+                        .borrow()
+                        .url
+                        .clone(),
                     asset_url,
                 };
                 skeleton_meshes.push(Rc::new(RefCell::new(skeleton_mesh)));
@@ -693,7 +850,36 @@ impl ModelLoader {
                 }),
             };
         } else {
-            todo!()
+            if let Some(static_meshe) = static_meshes.first() {
+                let name = file_path
+                    .file_name()
+                    .ok_or(anyhow::anyhow!("Incorrect file path: {:?}", file_path))?
+                    .to_str()
+                    .ok_or(anyhow::anyhow!("Incorrect file path: {:?}", file_path))?
+                    .to_string();
+                let static_meshe = static_meshe.borrow();
+                let static_mesh_component = StaticMeshComponent::new(
+                    name.clone(),
+                    Some(static_meshe.url.clone()),
+                    None,
+                    glam::Mat4::IDENTITY,
+                );
+                actor = rs_engine::actor::Actor {
+                    name: if scene.name.is_empty() {
+                        name
+                    } else {
+                        scene.name.clone()
+                    },
+                    scene_node: SingleThreadMut::new(rs_engine::scene_node::SceneNode {
+                        component: rs_engine::scene_node::EComponentType::StaticMeshComponent(
+                            SingleThreadMut::new(static_mesh_component),
+                        ),
+                        childs: vec![],
+                    }),
+                };
+            } else {
+                return Err(anyhow::anyhow!("Static mesh not found"));
+            }
         }
 
         Ok(LoadResult {

@@ -15,6 +15,6 @@ impl GlobalShader for ParticleShader {
     }
 
     fn get_name(&self) -> String {
-        "ParticleShader".to_string()
+        "ParticleShader.wgsl".to_string()
     }
 }
