@@ -72,7 +72,8 @@ impl DotnetRuntime {
                     assembly_path,
                     type_name,
                     method_name,
-                );
+                )
+                .map_err(|err| crate::error::Error::Dotnet(err))?;
 
             let entry_point_func: EntryPointFn = std::mem::transmute(entry_point_func);
             entry_point_func((&mut entry_info) as *mut _ as *mut std::ffi::c_void);

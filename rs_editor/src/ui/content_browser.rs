@@ -1,4 +1,4 @@
-use crate::content_folder::ContentFolder;
+use crate::{content_folder::ContentFolder, thumbnail_cache::ThumbnailCache};
 use egui::{Color32, Context, RichText, Sense, Ui};
 use rs_engine::content::content_file_type::EContentFileType;
 use std::{cell::RefCell, path::Path, rc::Rc};
@@ -48,6 +48,7 @@ pub fn draw(
     context: &Context,
     project_folder_path: &Path,
     data_source: &mut DataSource,
+    thumbnail_cache: &mut ThumbnailCache,
 ) -> Option<EClickEventType> {
     let mut click: Option<EClickEventType> = None;
     let mut click_back: Option<EClickEventType> = None;
@@ -105,7 +106,13 @@ pub fn draw(
                     });
                 });
                 if let Some(current_folder) = current_folder {
-                    click_item = draw_content(ui, project_folder_path, current_folder, highlight);
+                    click_item = draw_content(
+                        ui,
+                        project_folder_path,
+                        current_folder,
+                        highlight,
+                        thumbnail_cache,
+                    );
                 }
                 ui.allocate_space(ui.available_size());
             });
@@ -119,6 +126,7 @@ fn draw_content(
     project_folder_path: &Path,
     current_folder: Rc<RefCell<ContentFolder>>,
     highlight_file: Option<EContentFileType>,
+    thumbnail_cache: &mut ThumbnailCache,
 ) -> Option<EClickEventType> {
     let folders = current_folder.borrow().folders.clone();
     let files = current_folder.borrow().files.clone();
@@ -195,14 +203,17 @@ fn draw_content(
                                             if let Some(image_reference) =
                                                 texture.borrow().get_image_reference_path().as_ref()
                                             {
-                                                let url = format!(
-                                                    "file://{}",
-                                                    project_folder_path
-                                                        .join(image_reference)
-                                                        .to_str()
-                                                        .unwrap()
-                                                );
-                                                ui.image(url);
+                                                let path =
+                                                    project_folder_path.join(image_reference);
+                                                match thumbnail_cache.get_image_file_uri(&path) {
+                                                    Some(uri) => {
+                                                        ui.image(uri);
+                                                    }
+                                                    None => {
+                                                        thumbnail_cache.load_image(&path);
+                                                        ui.spinner();
+                                                    }
+                                                }
                                             }
                                         }
                                         EContentFileType::Level(_) => {
@@ -215,7 +226,22 @@ fn draw_content(
                                                 "../../../Resource/Editor/material.svg"
                                             ));
                                         }
-                                        EContentFileType::IBL(_) => {}
+                                        EContentFileType::IBL(ibl) => {
+                                            let ibl = ibl.borrow();
+                                            if let Some(image_reference) = &ibl.image_reference {
+                                                let path =
+                                                    project_folder_path.join(image_reference);
+                                                match thumbnail_cache.get_image_file_uri(&path) {
+                                                    Some(uri) => {
+                                                        ui.image(uri);
+                                                    }
+                                                    None => {
+                                                        thumbnail_cache.load_image(&path);
+                                                        ui.spinner();
+                                                    }
+                                                }
+                                            }
+                                        }
                                         EContentFileType::ParticleSystem(_) => {
                                             ui.image(egui::include_image!(
                                                 "../../../Resource/Editor/particle.svg"

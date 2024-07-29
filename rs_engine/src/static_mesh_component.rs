@@ -125,4 +125,45 @@ impl StaticMeshComponent {
             None => vec![],
         }
     }
+
+    pub fn set_material(
+        &mut self,
+        engine: &mut Engine,
+        new_material_url: Option<url::Url>,
+        files: &[EContentFileType],
+    ) {
+        self.material_url = new_material_url;
+        let material = if let Some(material_url) = &self.material_url {
+            files.iter().find_map(|x| {
+                if let EContentFileType::Material(content_material) = x {
+                    if &content_material.borrow().url == material_url {
+                        return Some(content_material.clone());
+                    }
+                }
+                None
+            })
+        } else {
+            None
+        };
+
+        if let Some(run_time) = self.run_time.as_mut() {
+            let static_mesh = run_time._mesh.clone();
+            let draw_object: EDrawObjectType;
+            if let Some(material) = material.clone() {
+                draw_object = engine.create_material_draw_object_from_static_mesh(
+                    &static_mesh.vertexes,
+                    &static_mesh.indexes,
+                    Some(static_mesh.name.clone()),
+                    material,
+                );
+            } else {
+                draw_object = engine.create_draw_object_from_static_mesh(
+                    &static_mesh.vertexes,
+                    &static_mesh.indexes,
+                    Some(static_mesh.name.clone()),
+                );
+            }
+            run_time.draw_objects = draw_object;
+        }
+    }
 }

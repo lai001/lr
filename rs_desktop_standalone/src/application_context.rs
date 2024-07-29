@@ -26,7 +26,7 @@ impl ApplicationContext {
             is_flush_before_drop: false,
         });
         let window_size = window.inner_size();
-        let scale_factor = 1.0f32;
+        let scale_factor = window.scale_factor() as f32;
         let window_width = window_size.width;
         let window_height = window_size.height;
 

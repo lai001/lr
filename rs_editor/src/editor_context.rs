@@ -17,7 +17,7 @@ use crate::{
         mesh_ui_window::MeshUIWindow,
         misc::update_window_with_input_mode,
         multiple_draw_ui_window::MultipleDrawUiWindow,
-        object_property_view::ESelectedObjectType,
+        object_property_view::{self, ESelectedObjectType},
         particle_system_ui_window::ParticleSystemUIWindow,
         top_menu,
     },
@@ -42,7 +42,7 @@ use rs_engine::{
     resource_manager::ResourceManager,
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
-use rs_foundation::new::SingleThreadMut;
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
 use rs_native_plugin::Plugin;
 use rs_render::{
@@ -825,6 +825,61 @@ impl EditorContext {
         reg.is_match(name)
     }
 
+    fn load_ibl_content_resource(
+        engine: &mut rs_engine::engine::Engine,
+        project_context: &ProjectContext,
+        ibl: SingleThreadMutType<rs_engine::content::ibl::IBL>,
+    ) -> anyhow::Result<()> {
+        let url = ibl.borrow().url.clone();
+        let image_reference = &ibl.borrow().image_reference;
+        let Some(image_reference) = image_reference.as_ref() else {
+            return Ok(());
+        };
+        let file_path = project_context
+            .get_project_folder_path()
+            .join(image_reference);
+        if !file_path.exists() {
+            return Err(anyhow!("The file is not exist"));
+        }
+        if project_context
+            .get_ibl_bake_cache_dir(image_reference)
+            .exists()
+        {
+            let name = rs_engine::url_extension::UrlExtension::get_name_in_editor(&url);
+            let ibl_baking = rs_artifact::ibl_baking::IBLBaking {
+                name,
+                url: url.clone(),
+                brdf_data: std::fs::read(
+                    project_context
+                        .get_ibl_bake_cache_dir(image_reference)
+                        .join("brdf.dds"),
+                )?,
+                pre_filter_data: std::fs::read(
+                    project_context
+                        .get_ibl_bake_cache_dir(image_reference)
+                        .join("pre_filter.dds"),
+                )?,
+                irradiance_data: std::fs::read(
+                    project_context
+                        .get_ibl_bake_cache_dir(image_reference)
+                        .join("irradiance.dds"),
+                )?,
+            };
+            log::trace!("Load IBL {}, use bake ibl", url.to_string());
+            engine.upload_prebake_ibl(url.clone(), ibl_baking);
+            return Ok(());
+        }
+        let save_dir = project_context.try_create_ibl_bake_cache_dir(image_reference)?;
+        log::trace!("Load IBL {}, bake ibl", url.to_string());
+        engine.ibl_bake(
+            &file_path,
+            url,
+            ibl.borrow().bake_info.clone(),
+            Some(&save_dir),
+        );
+        Ok(())
+    }
+
     fn content_load_resources(
         engine: &mut rs_engine::engine::Engine,
         model_loader: &mut ModelLoader,
@@ -943,58 +998,7 @@ impl EditorContext {
                     }
                 }
                 EContentFileType::IBL(ibl) => {
-                    let result = (|| {
-                        let url = ibl.borrow().url.clone();
-                        log::trace!("Load IBL {}", url.to_string());
-                        let image_reference = &ibl.borrow().image_reference;
-                        let Some(image_reference) = image_reference.as_ref() else {
-                            return Ok(());
-                        };
-                        let file_path = project_context
-                            .get_project_folder_path()
-                            .join(image_reference);
-                        if !file_path.exists() {
-                            return Err(anyhow!("The file is not exist"));
-                        }
-                        if project_context
-                            .get_ibl_bake_cache_dir(image_reference)
-                            .exists()
-                        {
-                            let name =
-                                rs_engine::url_extension::UrlExtension::get_name_in_editor(&url);
-                            let ibl_baking = rs_artifact::ibl_baking::IBLBaking {
-                                name,
-                                url: url.clone(),
-                                brdf_data: std::fs::read(
-                                    project_context
-                                        .get_ibl_bake_cache_dir(image_reference)
-                                        .join("brdf.dds"),
-                                )?,
-                                pre_filter_data: std::fs::read(
-                                    project_context
-                                        .get_ibl_bake_cache_dir(image_reference)
-                                        .join("pre_filter.dds"),
-                                )?,
-                                irradiance_data: std::fs::read(
-                                    project_context
-                                        .get_ibl_bake_cache_dir(image_reference)
-                                        .join("irradiance.dds"),
-                                )?,
-                            };
-                            engine.upload_prebake_ibl(url.clone(), ibl_baking);
-                            return Ok(());
-                        }
-                        let save_dir =
-                            project_context.try_create_ibl_bake_cache_dir(image_reference)?;
-
-                        engine.ibl_bake(
-                            &file_path,
-                            url,
-                            ibl.borrow().bake_info.clone(),
-                            Some(&save_dir),
-                        );
-                        Ok(())
-                    })();
+                    let result = Self::load_ibl_content_resource(engine, project_context, ibl);
                     log::trace!("{:?}", result);
                 }
                 EContentFileType::ParticleSystem(_) => todo!(),
@@ -1593,6 +1597,7 @@ impl EditorContext {
         self.process_debug_texture_view_event(click_event.debug_textures_view_event);
         self.process_click_actor_event(click_event.click_actor);
         self.process_project_settings_event(click_event.project_settings_event);
+        self.process_object_property_view_event(click_event.object_property_view_event);
     }
 
     fn get_all_content_names(&self) -> Vec<String> {
@@ -2022,11 +2027,22 @@ impl EditorContext {
                     return;
                 };
 
-                let material = rs_engine::content::material::Material::new(
+                let mut material = rs_engine::content::material::Material::new(
                     build_content_file_url(&name).unwrap(),
                     build_asset_url(format!("material/{}", &name)).unwrap(),
                 );
-
+                {
+                    let resolve_result = material_view::MaterialView::default_resolve().unwrap();
+                    let mut shader_code = HashMap::new();
+                    let mut material_info = HashMap::new();
+                    for (k, v) in resolve_result.iter() {
+                        shader_code.insert(k.clone(), v.shader_code.clone());
+                        material_info.insert(k.clone(), v.material_info.clone());
+                    }
+                    let handle = self.engine.create_material(shader_code);
+                    material.set_pipeline_handle(handle);
+                    material.set_material_info(material_info);
+                }
                 let material_editor = crate::material::Material::new(material.asset_url.clone(), {
                     let mut snarl = egui_snarl::Snarl::new();
                     let node = MaterialNode {
@@ -2171,17 +2187,18 @@ impl EditorContext {
                     if !file_path.exists() {
                         return Err(anyhow!("The file is not exist"));
                     }
-                    if project_context.get_ibl_bake_cache_dir(new).exists() {
-                        return Ok(());
+                    let is_contains = self
+                        .engine
+                        .get_resource_manager()
+                        .get_ibl_textures()
+                        .contains_key(&url);
+                    if !is_contains {
+                        Self::load_ibl_content_resource(
+                            &mut self.engine,
+                            project_context,
+                            ibl.clone(),
+                        )?;
                     }
-                    let save_dir = project_context.try_create_ibl_bake_cache_dir(new)?;
-
-                    self.engine.ibl_bake(
-                        &file_path,
-                        url,
-                        ibl.borrow().bake_info.clone(),
-                        Some(&save_dir),
-                    );
                     Ok(())
                 })();
                 match result {
@@ -2235,6 +2252,37 @@ impl EditorContext {
                     Ok(())
                 })();
                 log::trace!("{:?}", result);
+            }
+        }
+    }
+
+    fn process_object_property_view_event(
+        &mut self,
+        event: Option<object_property_view::EEventType>,
+    ) {
+        let Some(event) = event else {
+            return;
+        };
+        match event {
+            object_property_view::EEventType::UpdateMaterial(update_material) => {
+                match update_material.selected_object {
+                    ESelectedObjectType::StaticMeshComponent(static_mesh_component) => {
+                        let files = if let Some(folder) =
+                            &self.data_source.content_data_source.current_folder
+                        {
+                            folder.borrow().files.clone()
+                        } else {
+                            vec![]
+                        };
+                        let mut static_mesh_component = static_mesh_component.borrow_mut();
+                        static_mesh_component.set_material(
+                            &mut self.engine,
+                            update_material.new,
+                            &files,
+                        );
+                    }
+                    _ => unimplemented!(),
+                }
             }
         }
     }

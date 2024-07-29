@@ -4,6 +4,16 @@ use rs_engine::{
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
+pub struct UpdateMaterial {
+    pub selected_object: ESelectedObjectType,
+    pub old: Option<url::Url>,
+    pub new: Option<url::Url>,
+}
+
+pub enum EEventType {
+    UpdateMaterial(UpdateMaterial),
+}
+
 #[derive(Clone)]
 pub enum ESelectedObjectType {
     Actor(SingleThreadMutType<Actor>),
@@ -26,11 +36,12 @@ impl ObjectPropertyView {
         }
     }
 
-    pub fn draw(&mut self, ui: &mut egui::Ui) {
+    pub fn draw(&mut self, ui: &mut egui::Ui) -> Option<EEventType> {
         let Some(selected_object) = self.selected_object.as_mut() else {
-            return;
+            return None;
         };
-
+        let mut event = None;
+        let selected_object_clone = selected_object.clone();
         match selected_object {
             ESelectedObjectType::Actor(actor) => {
                 ui.label(actor.borrow().name.clone());
@@ -67,9 +78,37 @@ impl ObjectPropertyView {
                         }
                     }))
                     .show_ui(ui, |ui| {
-                        for material in self.materials.borrow_mut().clone() {
-                            let text = material.to_string();
-                            ui.selectable_value(&mut component.material_url, Some(material), text);
+                        let mut collection: Vec<Option<url::Url>> = vec![];
+                        collection.push(None);
+                        collection.append(
+                            &mut self
+                                .materials
+                                .borrow()
+                                .iter()
+                                .map(|x| Some(x.clone()))
+                                .collect(),
+                        );
+
+                        for material in collection {
+                            let old = component.material_url.clone();
+                            let text = material
+                                .as_ref()
+                                .map(|x| x.to_string())
+                                .unwrap_or("None".to_string());
+                            let is_changed = ui
+                                .selectable_value(
+                                    &mut component.material_url,
+                                    material.clone(),
+                                    text,
+                                )
+                                .changed();
+                            if is_changed {
+                                event = Some(EEventType::UpdateMaterial(UpdateMaterial {
+                                    selected_object: selected_object_clone.clone(),
+                                    old,
+                                    new: material.clone(),
+                                }));
+                            }
                         }
                     });
             }
@@ -93,9 +132,37 @@ impl ObjectPropertyView {
                         }
                     }))
                     .show_ui(ui, |ui| {
-                        for material in self.materials.borrow_mut().clone() {
-                            let text = material.to_string();
-                            ui.selectable_value(&mut component.material_url, Some(material), text);
+                        let mut collection: Vec<Option<url::Url>> = vec![];
+                        collection.push(None);
+                        collection.append(
+                            &mut self
+                                .materials
+                                .borrow()
+                                .iter()
+                                .map(|x| Some(x.clone()))
+                                .collect(),
+                        );
+
+                        for material in collection {
+                            let old = component.material_url.clone();
+                            let text = material
+                                .as_ref()
+                                .map(|x| x.to_string())
+                                .unwrap_or("None".to_string());
+                            let is_changed = ui
+                                .selectable_value(
+                                    &mut component.material_url,
+                                    material.clone(),
+                                    text,
+                                )
+                                .changed();
+                            if is_changed {
+                                event = Some(EEventType::UpdateMaterial(UpdateMaterial {
+                                    selected_object: selected_object_clone.clone(),
+                                    old,
+                                    new: material.clone(),
+                                }));
+                            }
                         }
                     });
             }
@@ -112,6 +179,8 @@ impl ObjectPropertyView {
                     glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
             }
         }
+
+        event
     }
 
     pub fn transformation_detail(

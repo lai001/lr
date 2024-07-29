@@ -1,4 +1,5 @@
 pub mod dotnet;
+pub mod error;
 #[cfg(windows)]
 mod windows;
 #[macro_use]

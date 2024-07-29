@@ -2,6 +2,7 @@
 pub enum Error {
     IO(std::io::Error, Option<String>),
     Debouncer(notify::Error),
+    Dotnet(rs_dotnet::error::Error),
     Other(String),
 }
 

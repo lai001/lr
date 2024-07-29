@@ -568,6 +568,15 @@ impl MaterialView {
         }
     }
 
+    pub fn default_resolve() -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
+        let mut snarl = Snarl::new();
+        let node = MaterialNode {
+            node_type: EMaterialNodeType::Sink(Default::default()),
+        };
+        let _ = snarl.insert_node(egui::pos2(0.0, 0.0), node);
+        material_resolve::resolve(&snarl, MaterialOptions::all())
+    }
+
     pub fn draw(
         &mut self,
         current_open_material: Option<SingleThreadMutType<crate::material::Material>>,

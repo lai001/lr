@@ -301,7 +301,8 @@ impl ProjectContext {
             url::Url,
             rs_artifact::shader_source_code::ShaderSourceCode,
         > = HashMap::new();
-        let static_meshes: HashMap<url::Url, rs_artifact::static_mesh::StaticMesh> = HashMap::new();
+        let mut static_meshes: HashMap<url::Url, rs_artifact::static_mesh::StaticMesh> =
+            HashMap::new();
         let mut skin_meshes: HashMap<url::Url, rs_artifact::skin_mesh::SkinMesh> = HashMap::new();
         let mut skeletons: HashMap<url::Url, rs_artifact::skeleton::Skeleton> = HashMap::new();
         let mut skeleton_animations: HashMap<
@@ -316,6 +317,24 @@ impl ProjectContext {
         for file in &self.project.content.borrow().files {
             match file {
                 EContentFileType::StaticMesh(asset) => {
+                    {
+                        let asset = asset.borrow();
+                        let file_path = self
+                            .get_asset_folder_path()
+                            .join(&asset.asset_info.relative_path);
+                        model_loader.load(&file_path).unwrap();
+                        let loaded_static_mesh = model_loader
+                            .to_runtime_static_mesh(
+                                &asset,
+                                &self.get_asset_folder_path(),
+                                ResourceManager::default(),
+                            )
+                            .expect("Loaded");
+                        static_meshes.insert(
+                            loaded_static_mesh.url.clone(),
+                            loaded_static_mesh.deref().clone(),
+                        );
+                    }
                     artifact_asset_encoder.encode(&*asset.borrow());
                 }
                 EContentFileType::SkeletonMesh(asset) => {

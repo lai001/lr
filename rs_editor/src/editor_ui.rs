@@ -4,7 +4,7 @@ use crate::thumbnail_cache::ThumbnailCache;
 use crate::ui::content_item_property_view::ContentItemPropertyView;
 use crate::ui::debug_textures_view::{self, DebugTexturesView};
 use crate::ui::gizmo_view::GizmoView;
-use crate::ui::object_property_view::{ESelectedObjectType, ObjectPropertyView};
+use crate::ui::object_property_view::{self, ESelectedObjectType, ObjectPropertyView};
 use crate::ui::top_menu::TopMenu;
 use crate::ui::{
     asset_view, console_cmds_view, content_browser, gizmo_settings, level_view, project_settings,
@@ -30,6 +30,7 @@ pub struct ClickEvent {
     pub content_browser_event: Option<content_browser::EClickEventType>,
     pub debug_textures_view_event: Option<debug_textures_view::EClickEventType>,
     pub project_settings_event: Option<project_settings::EEventType>,
+    pub object_property_view_event: Option<object_property_view::EEventType>,
 }
 
 pub struct EditorUI {
@@ -167,6 +168,7 @@ impl EditorUI {
                 context,
                 project_folder_path,
                 &mut data_source.content_data_source,
+                &mut self.thumbnail_cache,
                 // data_source.input_mode,
             );
         }
@@ -197,7 +199,7 @@ impl EditorUI {
             .resizable(true)
             .default_size([250.0, 500.0])
             .show(context, |ui| {
-                self.object_property_view.draw(ui);
+                click.object_property_view_event = self.object_property_view.draw(ui);
             });
 
         Self::new_window("Debug Texture View", data_source.input_mode)

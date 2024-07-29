@@ -17,11 +17,15 @@ pub struct Application {
 }
 
 impl Application {
-    pub fn new() -> Self {
+    pub fn new() -> anyhow::Result<Application> {
         let args = Args::parse();
-        let window_width = 1280;
-        let window_height = 720;
-        let event_loop = EventLoopBuilder::with_user_event().build().unwrap();
+        let event_loop = EventLoopBuilder::with_user_event().build()?;
+        let scale_factor = event_loop
+            .primary_monitor()
+            .map(|x| x.scale_factor())
+            .unwrap_or(1.0);
+        let window_width = (1280 as f64 * scale_factor) as u32;
+        let window_height = (720 as f64 * scale_factor) as u32;
         let event_loop_proxy = event_loop.create_proxy();
         let window = winit::window::WindowBuilder::new()
             .with_decorations(true)
@@ -32,17 +36,16 @@ impl Application {
                 width: window_width,
                 height: window_height,
             })
-            .build(&event_loop)
-            .unwrap();
+            .build(&event_loop)?;
         window.set_ime_allowed(true);
         let application_context = ApplicationContext::new(&window, args.input_file);
 
-        Self {
+        Ok(Self {
             application_context,
             event_loop,
             event_loop_proxy,
             window,
-        }
+        })
     }
 
     pub fn run(mut self) {

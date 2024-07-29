@@ -360,7 +360,25 @@ impl Engine {
             for (url, v) in resource_map.iter() {
                 match v.resource_type {
                     EResourceType::Content(content_ty) => match content_ty {
-                        EContentType::StaticMesh => {}
+                        EContentType::StaticMesh => {
+                            match resource_manager
+                                .get_resource::<crate::content::static_mesh::StaticMesh>(
+                                    url,
+                                    Some(EResourceType::Content(EContentType::StaticMesh)),
+                                ) {
+                                Ok(static_mesh) => {
+                                    files.insert(
+                                        url.clone(),
+                                        EContentFileType::StaticMesh(SingleThreadMut::new(
+                                            static_mesh,
+                                        )),
+                                    );
+                                }
+                                Err(err) => {
+                                    log::warn!("{err}");
+                                }
+                            }
+                        }
                         EContentType::SkeletonMesh => {}
                         EContentType::SkeletonAnimation => {}
                         EContentType::Skeleton => {
@@ -399,7 +417,22 @@ impl Engine {
                                 }
                             }
                         }
-                        EContentType::IBL => {}
+                        EContentType::IBL => {
+                            match resource_manager.get_resource::<crate::content::ibl::IBL>(
+                                url,
+                                Some(EResourceType::Content(EContentType::IBL)),
+                            ) {
+                                Ok(ibl) => {
+                                    files.insert(
+                                        url.clone(),
+                                        EContentFileType::IBL(SingleThreadMut::new(ibl)),
+                                    );
+                                }
+                                Err(err) => {
+                                    log::warn!("{err}");
+                                }
+                            }
+                        }
                         EContentType::MediaSource => todo!(),
                         EContentType::ParticleSystem => todo!(),
                     },
@@ -424,6 +457,17 @@ impl Engine {
                         {
                             self.resource_manager
                                 .add_skin_mesh(url.clone(), Arc::new(skin_mesh));
+                        }
+                    }
+                    rs_artifact::resource_type::EResourceType::StaticMesh => {
+                        if let Ok(static_mesh) = self
+                            .resource_manager
+                            .get_resource::<rs_artifact::static_mesh::StaticMesh>(
+                            &url,
+                            Some(resource_info.resource_type),
+                        ) {
+                            self.resource_manager
+                                .add_static_mesh(url.clone(), Arc::new(static_mesh));
                         }
                     }
                     rs_artifact::resource_type::EResourceType::SkeletonAnimation => {
@@ -545,7 +589,12 @@ impl Engine {
             let mut root_scene_node = root_scene_node.borrow_mut();
             match &mut root_scene_node.component {
                 crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                crate::scene_node::EComponentType::StaticMeshComponent(_) => todo!(),
+                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
+                    let mut static_mesh_component = static_mesh_component.borrow_mut();
+                    let files: Vec<EContentFileType> =
+                        self.content_files.values().map(|x| x.clone()).collect();
+                    static_mesh_component.initialize(ResourceManager::default(), self, &files);
+                }
                 crate::scene_node::EComponentType::SkeletonMeshComponent(
                     skeleton_mesh_component,
                 ) => {
@@ -685,7 +734,13 @@ impl Engine {
             for actor in level.actors.clone() {
                 match &mut actor.borrow_mut().scene_node.borrow_mut().component {
                     EComponentType::SceneComponent(_) => todo!(),
-                    EComponentType::StaticMeshComponent(_) => todo!(),
+                    EComponentType::StaticMeshComponent(static_mesh_component) => {
+                        let mut static_mesh_component = static_mesh_component.borrow_mut();
+                        static_mesh_component.update(self.get_game_time(), self);
+                        for draw_object in static_mesh_component.get_draw_objects() {
+                            self.draw2(draw_object);
+                        }
+                    }
                     EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
                         let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
                         skeleton_mesh_component.update(self.get_game_time(), self);
