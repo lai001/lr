@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+log = "0.4.22"
 russimp-sys = { version = "2.0.2", features = ["prebuilt", "static-link"] }
 bitflags = "2.6.0"
 glam = { version = "0.28.0", features = ["mint", "serde"] }

@@ -45,9 +45,16 @@ impl<'a> Mesh<'a> {
             }
         }
 
-        let primitive_type = (ai_mesh.mPrimitiveTypes as russimp_sys::aiPrimitiveType)
-            .try_into()
-            .unwrap();
+        let primitive_type: std::result::Result<EPrimitiveType, String> =
+            (ai_mesh.mPrimitiveTypes as russimp_sys::aiPrimitiveType).try_into();
+        let primitive_type = match primitive_type {
+            Ok(primitive_type) => primitive_type,
+            Err(err) => {
+                log::warn!("{}, unknow primitive type, fall back to polygon type", err);
+                EPrimitiveType::Polygon
+            }
+        };
+
         let vertices = unsafe {
             std::slice::from_raw_parts_mut(ai_mesh.mVertices, ai_mesh.mNumVertices as usize)
         };

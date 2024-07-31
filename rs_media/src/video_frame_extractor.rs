@@ -12,19 +12,62 @@ use rs_foundation::TimeRange;
 use std::collections::HashMap;
 
 struct HWSection {
-    user_data: *mut MyUserData,
-    expect_hw_type: AVHWDeviceType,
+    hw_pix_fmt: AVPixelFormat,
     release_closure: Option<Box<dyn FnMut() -> ()>>,
 }
 
 impl HWSection {
     fn new(
-        expect_hw_type: AVHWDeviceType,
+        codec_context: *mut AVCodecContext,
         codec: *const AVCodec,
+        fallback_pix_fmt: AVPixelFormat,
     ) -> crate::error::Result<HWSection> {
         if codec.is_null() {
             return Err(crate::error::Error::Other(format!("Codec is null")));
         }
+        let hw_pixel_formats = Self::find_support_types(codec);
+
+        let mut closure: Option<Box<dyn FnMut() -> ()>> = None;
+        let mut hw_pix_fmt: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NONE;
+        for (device_type, formats) in hw_pixel_formats.iter() {
+            let user_data = MyUserData {
+                hw_type: *device_type,
+                hw_pix_fmt: *formats
+                    .first()
+                    .ok_or(crate::error::Error::Other(format!("Not support")))?,
+                fallback_pix_fmt,
+            };
+            let user_data = Box::new(user_data);
+            let user_data = Box::into_raw(user_data);
+            unsafe {
+                (*codec_context).opaque = std::mem::transmute(user_data);
+                (*codec_context).get_format = Some(get_hw_format);
+                if let Some(release_closure) = hw_decoder_init(codec_context, *device_type).ok() {
+                    closure = Some(Box::new(release_closure));
+                    hw_pix_fmt = (*user_data).hw_pix_fmt;
+                }
+            }
+
+            unsafe {
+                let _ = Box::from_raw(user_data);
+            };
+            if closure.is_some() {
+                break;
+            }
+        }
+        if closure.is_none() {
+            return Err(crate::error::Error::Other(format!("")));
+        }
+
+        Ok(HWSection {
+            hw_pix_fmt,
+            release_closure: closure,
+        })
+    }
+
+    pub fn find_support_types(
+        codec: *const AVCodec,
+    ) -> HashMap<AVHWDeviceType, Vec<AVPixelFormat>> {
         let mut hw_pixel_formats = HashMap::<AVHWDeviceType, Vec<AVPixelFormat>>::new();
         for device_type in get_available_hwdevice_types() {
             for pix_fmt in unsafe { find_hw_pix_fmt(codec, device_type) } {
@@ -34,49 +77,20 @@ impl HWSection {
                     .push(pix_fmt);
             }
         }
-
-        assert!(hw_pixel_formats.contains_key(&expect_hw_type));
-        let user_data = MyUserData {
-            hw_pix_fmt: *hw_pixel_formats
-                .get(&expect_hw_type)
-                .ok_or(crate::error::Error::Other(format!("Not support")))?
-                .first()
-                .ok_or(crate::error::Error::Other(format!("Not support")))?,
-        };
-        let user_data = Box::new(user_data);
-        let user_data = Box::into_raw(user_data);
-        Ok(HWSection {
-            user_data,
-            expect_hw_type,
-            release_closure: None,
-        })
-    }
-
-    fn init(&mut self, codec_context: *mut AVCodecContext) {
-        assert_ne!(codec_context, std::ptr::null_mut());
-        unsafe {
-            (*codec_context).opaque = std::mem::transmute(self.user_data);
-            (*codec_context).get_format = Some(get_hw_format);
-            let closure = hw_decoder_init(codec_context, self.expect_hw_type);
-            self.release_closure = Some(Box::new(closure));
-        }
+        hw_pixel_formats.retain(|_, v| !v.is_empty());
+        hw_pixel_formats
     }
 
     fn get_hw_pix_fmt(&mut self) -> AVPixelFormat {
-        let user_data = unsafe { self.user_data.as_ref() }.expect(&format!("Should not be null"));
-        user_data.hw_pix_fmt.clone()
+        self.hw_pix_fmt
     }
 }
 
 impl Drop for HWSection {
     fn drop(&mut self) {
-        assert_ne!(self.user_data, std::ptr::null_mut());
         if let Some(closure) = &mut self.release_closure {
             closure();
         }
-        unsafe {
-            let _ = Box::from_raw(self.user_data);
-        };
     }
 }
 
@@ -110,6 +124,7 @@ pub struct VideoFrameExtractor {
     decoded_video_frame: ffmpeg_next::frame::Video,
     rescale_video_frame: ffmpeg_next::frame::Video,
     hwframe: Option<ffmpeg_next::frame::Video>,
+    is_hw_work: bool,
 }
 
 impl VideoFrameExtractor {
@@ -135,7 +150,7 @@ impl VideoFrameExtractor {
             .map_err(|err| crate::error::Error::FFMpeg(err))?;
         unsafe { (*video_decoder.as_mut_ptr()).pkt_timebase = time_base.into() };
         let video_decoder_type = video_decoder_type.unwrap_or(EVideoDecoderType::Software);
-
+        let fallback_pix_fmt = video_decoder.format();
         let mut video_player_item = VideoFrameExtractor {
             format_input,
             video_decoder,
@@ -147,11 +162,11 @@ impl VideoFrameExtractor {
             decoded_video_frame: ffmpeg_next::frame::Video::empty(),
             rescale_video_frame: ffmpeg_next::frame::Video::empty(),
             hwframe: None,
+            is_hw_work: false,
         };
         match video_decoder_type {
             EVideoDecoderType::Software => {}
             EVideoDecoderType::Hardware => {
-                let expect_hw_type = AVHWDeviceType::AV_HWDEVICE_TYPE_CUDA;
                 let codec = unsafe {
                     video_player_item
                         .video_decoder
@@ -159,10 +174,17 @@ impl VideoFrameExtractor {
                         .ok_or(crate::error::Error::Other(format!("No video codec")))?
                         .as_ptr()
                 };
-                let mut hw_section_in = HWSection::new(expect_hw_type, codec)?;
-                hw_section_in.init(unsafe { video_player_item.video_decoder.as_mut_ptr() });
-                video_player_item.hw_section = Some(hw_section_in);
-                video_player_item.hwframe = Some(ffmpeg_next::frame::Video::empty());
+
+                let hw_section_in = HWSection::new(
+                    unsafe { video_player_item.video_decoder.as_mut_ptr() },
+                    codec,
+                    fallback_pix_fmt.into(),
+                );
+                if let Ok(hw_section_in) = hw_section_in {
+                    video_player_item.hw_section = Some(hw_section_in);
+                    video_player_item.hwframe = Some(ffmpeg_next::frame::Video::empty());
+                    video_player_item.is_hw_work = true;
+                }
             }
         }
         video_player_item.scaler = Some(video_player_item.get_matched_scaler());
@@ -206,7 +228,13 @@ impl VideoFrameExtractor {
         }
         let format = match self.video_decoder_type {
             EVideoDecoderType::Software => self.video_decoder.format(),
-            EVideoDecoderType::Hardware => hw_pixel.unwrap_or(ffmpeg_next::format::Pixel::NV12),
+            EVideoDecoderType::Hardware => {
+                if self.is_hw_work {
+                    hw_pixel.unwrap_or(ffmpeg_next::format::Pixel::NV12)
+                } else {
+                    self.video_decoder.format()
+                }
+            }
         };
 
         let scaler = ffmpeg_next::software::scaling::Context::get(
@@ -263,7 +291,7 @@ impl VideoFrameExtractor {
                 pict_type = (*self.decoded_video_frame.as_mut_ptr()).pict_type;
             }
 
-            if self.video_decoder_type == EVideoDecoderType::Hardware {
+            if self.video_decoder_type == EVideoDecoderType::Hardware && self.is_hw_work {
                 let state = unsafe {
                     av_hwframe_transfer_data(
                         self.hwframe.as_mut().unwrap().as_mut_ptr(),

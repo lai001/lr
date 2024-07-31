@@ -52,7 +52,9 @@ pub(crate) unsafe fn find_hw_pix_fmt(
 
 #[repr(C)]
 pub(crate) struct MyUserData {
+    pub(crate) hw_type: AVHWDeviceType,
     pub(crate) hw_pix_fmt: AVPixelFormat,
+    pub(crate) fallback_pix_fmt: AVPixelFormat,
 }
 
 pub(crate) unsafe extern "C" fn get_hw_format(
@@ -69,6 +71,7 @@ pub(crate) unsafe extern "C" fn get_hw_format(
 
     while *p != AVPixelFormat::AV_PIX_FMT_NONE {
         if *p == (*user_data).hw_pix_fmt {
+            log::trace!("get_hw_format: {:?}", *p);
             return *p;
         }
         p = p.offset(count);
@@ -76,13 +79,13 @@ pub(crate) unsafe extern "C" fn get_hw_format(
     }
 
     log::warn!("Failed to get HW surface format.");
-    return AVPixelFormat::AV_PIX_FMT_NONE;
+    return (*user_data).fallback_pix_fmt;
 }
 
 pub(crate) unsafe fn hw_decoder_init(
     ctx: *mut AVCodecContext,
     device_type: AVHWDeviceType,
-) -> impl FnMut() -> () {
+) -> crate::error::Result<impl FnMut() -> ()> {
     let mut hw_device_ctx: *mut AVBufferRef = std::ptr::null_mut();
     let state = av_hwdevice_ctx_create(
         &mut hw_device_ctx,
@@ -92,12 +95,12 @@ pub(crate) unsafe fn hw_decoder_init(
         0,
     );
     if state < 0 {
-        panic!()
+        return Err(crate::error::Error::FFMpeg(ffmpeg_next::Error::from(state)));
     }
     (*ctx).hw_device_ctx = av_buffer_ref(hw_device_ctx);
-    move || {
+    Ok(move || {
         av_buffer_unref(&mut hw_device_ctx);
-    }
+    })
 }
 
 unsafe fn hw_test_unsafe(filename: &str) {
@@ -137,14 +140,17 @@ unsafe fn hw_test_unsafe(filename: &str) {
     log::trace!("hw_pixel_formats: {:#?}", hw_pixel_formats);
     assert!(hw_pixel_formats.contains_key(&expect_hw_type));
     let user_data = MyUserData {
+        hw_type: expect_hw_type,
         hw_pix_fmt: *hw_pixel_formats.get_key_value(&expect_hw_type).unwrap().1,
+        fallback_pix_fmt: video_decoder.format().into(),
     };
     let user_data = Box::new(user_data);
     let raw = Box::into_raw(user_data);
     (*video_decoder.as_mut_ptr()).opaque = std::mem::transmute(raw);
     (*video_decoder.as_mut_ptr()).get_format = Some(get_hw_format);
 
-    let mut release_hw_device_ctx = hw_decoder_init(video_decoder.as_mut_ptr(), expect_hw_type);
+    let mut release_hw_device_ctx =
+        hw_decoder_init(video_decoder.as_mut_ptr(), expect_hw_type).unwrap();
 
     let mut scaler = Context::get(
         Pixel::NV12,

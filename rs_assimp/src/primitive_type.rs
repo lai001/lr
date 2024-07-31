@@ -12,7 +12,7 @@ pub enum EPrimitiveType {
 }
 
 impl TryFrom<aiPrimitiveType> for EPrimitiveType {
-    type Error = &'static str;
+    type Error = String;
 
     fn try_from(ai_primitive_type: aiPrimitiveType) -> Result<Self, Self::Error> {
         if ai_primitive_type == aiPrimitiveType_aiPrimitiveType_LINE {
@@ -28,7 +28,7 @@ impl TryFrom<aiPrimitiveType> for EPrimitiveType {
         } else if ai_primitive_type == aiPrimitiveType__aiPrimitiveType_Force32Bit {
             Ok(EPrimitiveType::Force32Bit)
         } else {
-            Err("Not a valid value.")
+            Err(format!("{} Not a valid value", ai_primitive_type))
         }
     }
 }
