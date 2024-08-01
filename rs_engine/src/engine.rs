@@ -1285,6 +1285,49 @@ impl Engine {
         EDrawObjectType::SkinMaterial(object)
     }
 
+    pub fn create_gpu_buffer<T: Sized>(
+        &mut self,
+        contents: &[T],
+        usage: wgpu::BufferUsages,
+        label: Option<String>,
+    ) -> crate::handle::BufferHandle {
+        let buffer_handle = self.resource_manager.next_buffer();
+        let buffer_create_info = BufferCreateInfo {
+            label,
+            contents: rs_foundation::cast_to_raw_buffer(&contents).to_vec(),
+            usage,
+        };
+        let create_buffer = CreateBuffer {
+            handle: *buffer_handle,
+            buffer_create_info,
+        };
+        let message = RenderCommand::CreateBuffer(create_buffer);
+        self.render_thread_mode.send_command(message);
+        buffer_handle
+    }
+
+    pub fn create_constants_buffer<T: Sized>(
+        &mut self,
+        contents: &[T],
+        label: Option<String>,
+    ) -> crate::handle::BufferHandle {
+        self.create_gpu_buffer(
+            contents,
+            wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::MAP_WRITE
+                | wgpu::BufferUsages::COPY_DST,
+            label,
+        )
+    }
+
+    pub fn create_vertex_buffer<T: Sized>(
+        &mut self,
+        contents: &[T],
+        label: Option<String>,
+    ) -> crate::handle::BufferHandle {
+        self.create_gpu_buffer(contents, wgpu::BufferUsages::VERTEX, label)
+    }
+
     pub fn create_material_draw_object_from_static_mesh(
         &mut self,
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
@@ -1640,6 +1683,7 @@ impl Engine {
                 object.irradiance_texture_resource =
                     EBindingResource::Texture(*ibl_textures.irradiance);
             }
+            EDrawObjectType::Custom(_) => {}
         }
     }
 
@@ -1829,6 +1873,12 @@ impl Engine {
                         .or_default()
                         .push(draw_object);
                 }
+            }
+            EDrawObjectType::Custom(custom_objcet) => {
+                self.draw_objects
+                    .entry(custom_objcet.window_id)
+                    .or_default()
+                    .push(custom_objcet.draw_object.clone());
             }
         }
     }
@@ -2255,6 +2305,14 @@ impl Engine {
                 }
             }
         }
+    }
+
+    pub fn get_global_constants_handle(&self) -> crate::handle::BufferHandle {
+        self.global_constants_handle.clone()
+    }
+
+    pub fn get_main_window_id(&self) -> isize {
+        self.main_window_id
     }
 }
 

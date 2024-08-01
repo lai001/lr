@@ -6,13 +6,13 @@ use rs_artifact::static_mesh::StaticMesh;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct StaticMeshComponentRuntime {
     draw_objects: EDrawObjectType,
     _mesh: Arc<StaticMesh>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct StaticMeshComponent {
     pub name: String,
     pub static_mesh: Option<url::Url>,
@@ -110,11 +110,10 @@ impl StaticMeshComponent {
             EDrawObjectType::Static(draw_object) => {
                 draw_object.constants.model = self.transformation.clone();
             }
-            EDrawObjectType::Skin(_) => unimplemented!(),
-            EDrawObjectType::SkinMaterial(_) => unimplemented!(),
             EDrawObjectType::StaticMeshMaterial(draw_object) => {
                 draw_object.constants.model = self.transformation.clone();
             }
+            _ => unimplemented!(),
         }
         engine.update_draw_object(&mut run_time.draw_objects);
     }

@@ -16,6 +16,7 @@ use crate::render_pipeline::material_pipeline::VariantMaterialRenderPipeline;
 use crate::render_pipeline::mesh_view::MeshViewPipeline;
 use crate::render_pipeline::mesh_view_multiple_draw::MeshViewMultipleDrawPipeline;
 use crate::render_pipeline::particle_pipeline::ParticlePipeline;
+use crate::render_pipeline::primitive::PrimitiveRenderPipeline;
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::shader_library::ShaderLibrary;
@@ -45,6 +46,7 @@ pub enum EBuiltinPipelineType {
     ShadowDepthSkinMesh,
     ShadowDepthStaticMesh,
     Particle,
+    Primitive,
 }
 
 #[derive(Clone)]
@@ -86,6 +88,7 @@ pub struct Renderer {
     mesh_view_pipeline: MeshViewPipeline,
     mesh_view_multiple_draw_pipeline: MeshViewMultipleDrawPipeline,
     particle_pipeline: ParticlePipeline,
+    primitive_render_pipeline: PrimitiveRenderPipeline,
 
     depth_textures: HashMap<isize, DepthTexture>,
     // default_textures: DefaultTextures,
@@ -124,7 +127,7 @@ impl Renderer {
         scale_factor: f32,
         shaders: HashMap<String, String>,
         settings: RenderSettings,
-    ) -> Renderer {
+    ) -> Result<Renderer> {
         let _span = tracy_client::span!();
         let main_window_id = {
             let binding = wgpu_context.get_window_ids();
@@ -226,8 +229,16 @@ impl Renderer {
             &current_swapchain_format,
             &mut base_render_pipeline_pool,
         );
+
+        let primitive_render_pipeline = PrimitiveRenderPipeline::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &current_swapchain_format,
+            &mut base_render_pipeline_pool,
+        )?;
+
         let is_enable_multiple_thread = settings.is_enable_multithread_rendering;
-        Renderer {
+        let renderer = Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
             // screen_descriptor,
@@ -268,7 +279,9 @@ impl Renderer {
             fxaa_pipeline: Some(fxaa_pipeline),
             particle_pipeline,
             is_enable_multiple_thread,
-        }
+            primitive_render_pipeline,
+        };
+        Ok(renderer)
     }
 
     pub fn from_window<W>(
@@ -307,14 +320,14 @@ impl Renderer {
             }),
         )?;
 
-        Ok(Self::from_context(
+        Self::from_context(
             wgpu_context,
             surface_width,
             surface_height,
             scale_factor,
             shaders,
             settings,
-        ))
+        )
     }
 
     pub fn set_new_window<W>(
@@ -1455,6 +1468,16 @@ impl Renderer {
                 EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
                 EBuiltinPipelineType::Particle => {
                     self.particle_pipeline.draw(
+                        device,
+                        queue,
+                        surface_texture_view,
+                        &depth_texture_view,
+                        &[mesh_buffer],
+                        group_binding_resource,
+                    );
+                }
+                EBuiltinPipelineType::Primitive => {
+                    self.primitive_render_pipeline.draw(
                         device,
                         queue,
                         surface_texture_view,

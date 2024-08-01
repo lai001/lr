@@ -961,7 +961,10 @@ impl EditorContext {
                         );
                     }
                 }
-                EContentFileType::Level(_) => {}
+                EContentFileType::Level(level) => {
+                    let mut level = level.borrow_mut();
+                    level.initialize(engine);
+                }
                 EContentFileType::Material(material_content) => {
                     let find = project_context
                         .project
@@ -1252,7 +1255,11 @@ impl EditorContext {
             let active_level = active_level.borrow();
             if let Some(light) = active_level.directional_lights.first().cloned() {
                 let mut light = light.borrow_mut();
+                light.update(&mut self.engine);
                 self.engine.update_light(&mut light);
+                for draw_object in light.get_draw_objects() {
+                    self.engine.draw2(draw_object);
+                }
             }
 
             for actor in active_level.actors.clone() {
@@ -1930,15 +1937,9 @@ impl EditorContext {
                 }
             }
             crate::ui::level_view::EClickEventType::CreateDirectionalLight => {
-                let light = DirectionalLight::new(
-                    -10.0,
-                    10.0,
-                    -10.0,
-                    10.0,
-                    0.01,
-                    15.5,
-                    glam::vec3(0.0, 10.0, 10.0),
-                );
+                let size = 10.0;
+                let mut light = DirectionalLight::new(-size, size, -size, size, 0.01, 25.0);
+                light.initialize(&mut self.engine);
                 opened_level
                     .borrow_mut()
                     .directional_lights

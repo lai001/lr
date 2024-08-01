@@ -1,13 +1,20 @@
 use crate::handle::BufferHandle;
-use rs_render::command::EBindingResource;
+use rs_render::command::{DrawObject, EBindingResource};
 use std::{cell::RefCell, rc::Rc};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum EDrawObjectType {
     Static(StaticMeshDrawObject),
     Skin(SkinMeshDrawObject),
     SkinMaterial(MaterialDrawObject),
     StaticMeshMaterial(StaticMeshMaterialDrawObject),
+    Custom(CustomDrawObject),
+}
+
+#[derive(Clone)]
+pub struct CustomDrawObject {
+    pub draw_object: DrawObject,
+    pub window_id: isize,
 }
 
 #[derive(Clone, Debug)]

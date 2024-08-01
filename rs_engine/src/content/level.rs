@@ -1,11 +1,25 @@
+use crate::drawable::{CustomDrawObject, EDrawObjectType};
+use crate::engine::Engine;
 use crate::{build_content_file_url, url_extension::UrlExtension};
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
+use rs_core_minimal::frustum::Frustum;
+use rs_core_minimal::misc::get_orthographic_frustum;
 use rs_foundation::new::SingleThreadMutType;
+use rs_render::command::{DrawObject, EBindingResource};
+use rs_render::constants;
+use rs_render::renderer::{EBuiltinPipelineType, EPipelineType};
+use rs_render::vertex_data_type::mesh_vertex::MeshVertex3;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(Serialize, Deserialize, Debug)]
+pub struct Runtime {
+    draw_object: EDrawObjectType,
+    constants_handle: crate::handle::BufferHandle,
+    constants: constants::Constants,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct DirectionalLight {
     eye: glam::Vec3,
     light_projection: glam::Mat4,
@@ -17,6 +31,8 @@ pub struct DirectionalLight {
     top: f32,
     near: f32,
     far: f32,
+    #[serde(skip)]
+    runtime: Option<Runtime>,
 }
 
 impl DirectionalLight {
@@ -31,18 +47,13 @@ impl DirectionalLight {
         top: f32,
         near: f32,
         far: f32,
-        eye: glam::Vec3,
     ) -> DirectionalLight {
         let light_projection = glam::Mat4::orthographic_rh(left, right, bottom, top, near, far);
-        let up = glam::Vec3::new(0.0, 1.0, 0.0);
-        let dir = glam::Vec3::ZERO - eye;
+        let up = glam::Vec3::Y;
+        let dir = glam::Vec3::NEG_Z;
+        let eye = glam::Vec3::ZERO;
         let light_view = glam::Mat4::look_to_rh(eye, dir, up);
-
-        let transformation = glam::Mat4::from_rotation_translation(
-            glam::Quat::from_euler(glam::EulerRot::XYZ, dir.x, dir.y, dir.z),
-            eye,
-        );
-
+        let transformation = glam::Mat4::IDENTITY;
         DirectionalLight {
             light_projection,
             left,
@@ -54,24 +65,144 @@ impl DirectionalLight {
             light_view,
             eye,
             transformation,
+            runtime: None,
         }
     }
 
-    pub fn update_clip(&mut self, near: f32, far: f32) {
-        self.near = near;
-        self.far = far;
-        self.update();
+    pub fn initialize(&mut self, engine: &mut Engine) {
+        let frustum = get_orthographic_frustum(
+            self.left,
+            self.right,
+            self.bottom,
+            self.top,
+            self.near,
+            self.far,
+        );
+
+        let (draw_object, constants_handle) = Self::make_draw_object(engine, &frustum);
+        let runtime = Runtime {
+            draw_object: EDrawObjectType::Custom(CustomDrawObject {
+                draw_object,
+                window_id: engine.get_main_window_id(),
+            }),
+            constants_handle,
+            constants: constants::Constants::default(),
+        };
+        self.runtime = Some(runtime);
     }
 
-    pub fn update_view_rect(&mut self, left: f32, right: f32, bottom: f32, top: f32) {
+    fn make_draw_object(
+        engine: &mut Engine,
+        frustum: &Frustum,
+    ) -> (DrawObject, crate::handle::BufferHandle) {
+        let lines = frustum.make_lines();
+        let mut v1 = lines[0..4]
+            .iter()
+            .flat_map(|x| {
+                vec![
+                    MeshVertex3 {
+                        position: x.p_0,
+                        vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
+                    },
+                    MeshVertex3 {
+                        position: x.p_1,
+                        vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
+                    },
+                ]
+            })
+            .collect::<Vec<MeshVertex3>>();
+        let mut v2 = lines[4..8]
+            .iter()
+            .flat_map(|x| {
+                vec![
+                    MeshVertex3 {
+                        position: x.p_0,
+                        vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
+                    },
+                    MeshVertex3 {
+                        position: x.p_1,
+                        vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
+                    },
+                ]
+            })
+            .collect::<Vec<MeshVertex3>>();
+
+        let mut v3 = lines[8..]
+            .iter()
+            .flat_map(|x| {
+                vec![
+                    MeshVertex3 {
+                        position: x.p_0,
+                        vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
+                    },
+                    MeshVertex3 {
+                        position: x.p_1,
+                        vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
+                    },
+                ]
+            })
+            .collect::<Vec<MeshVertex3>>();
+
+        let mut vertex: Vec<MeshVertex3> = vec![];
+        vertex.append(&mut v1);
+        vertex.append(&mut v2);
+        vertex.append(&mut v3);
+
+        let vertex_count = vertex.len();
+        let vertex_buffer_handle =
+            engine.create_vertex_buffer(&vertex, Some(format!("rs.VertexBuffer")));
+        let constants_handle = engine.create_constants_buffer(
+            &vec![constants::Constants::default()],
+            Some(format!("rs.Constants")),
+        );
+        (
+            DrawObject::new(
+                0,
+                vec![*vertex_buffer_handle],
+                vertex_count as u32,
+                EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+                None,
+                None,
+                vec![
+                    vec![EBindingResource::Constants(
+                        *engine.get_global_constants_handle(),
+                    )],
+                    vec![EBindingResource::Constants(*constants_handle)],
+                ],
+            ),
+            constants_handle,
+        )
+    }
+
+    pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
+        self.runtime
+            .as_ref()
+            .map(|x| vec![&x.draw_object])
+            .unwrap_or(vec![])
+    }
+
+    pub fn update_clip(&mut self, near: f32, far: f32, engine: &mut Engine) {
+        self.near = near;
+        self.far = far;
+        self.update(engine);
+    }
+
+    pub fn update_view_rect(
+        &mut self,
+        left: f32,
+        right: f32,
+        bottom: f32,
+        top: f32,
+        engine: &mut Engine,
+    ) {
         self.left = left;
         self.right = right;
         self.bottom = bottom;
         self.top = top;
-        self.update();
+        self.update(engine);
     }
 
-    fn update(&mut self) {
+    pub fn update(&mut self, engine: &mut Engine) {
         self.light_projection = glam::Mat4::orthographic_rh(
             self.left,
             self.right,
@@ -80,6 +211,14 @@ impl DirectionalLight {
             self.near,
             self.far,
         );
+
+        if let Some(runtime) = self.runtime.as_mut() {
+            runtime.constants.model = self.transformation;
+            engine.update_buffer(
+                runtime.constants_handle.clone(),
+                rs_foundation::cast_any_as_u8_slice(&runtime.constants),
+            );
+        }
     }
 
     pub fn get_light_projection(&self) -> &glam::Mat4 {
@@ -91,17 +230,14 @@ impl DirectionalLight {
     }
 
     pub fn get_light_space_matrix(&mut self) -> glam::Mat4 {
-        let (_, rotation_quat, translation) = self.transformation.to_scale_rotation_translation();
-        let (x, y, z) = rotation_quat.to_euler(glam::EulerRot::XYZ);
-        let rotation = glam::Vec3::from_array([x, y, z]);
-        let up = glam::Vec3::new(0.0, 1.0, 0.0);
-        let direction = rotation;
-        self.light_view = glam::Mat4::look_to_rh(translation, direction, up);
+        let up = glam::Vec3::Y;
+        let dir = glam::Vec3::NEG_Z;
+        self.light_view = self.transformation.inverse() * glam::Mat4::look_to_rh(self.eye, dir, up);
         self.light_projection * self.light_view
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Level {
     pub url: url::Url,
     pub actors: Vec<Rc<RefCell<crate::actor::Actor>>>,
@@ -129,5 +265,12 @@ impl Level {
 
     pub fn get_name(&self) -> String {
         self.url.get_name_in_editor()
+    }
+
+    pub fn initialize(&mut self, engine: &mut Engine) {
+        for light in self.directional_lights.iter_mut() {
+            let mut light = light.borrow_mut();
+            light.initialize(engine);
+        }
     }
 }

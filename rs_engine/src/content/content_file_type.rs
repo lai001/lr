@@ -7,7 +7,7 @@ use rs_artifact::asset::Asset;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum EContentFileType {
     StaticMesh(Rc<RefCell<StaticMesh>>),
     SkeletonMesh(Rc<RefCell<SkeletonMesh>>),

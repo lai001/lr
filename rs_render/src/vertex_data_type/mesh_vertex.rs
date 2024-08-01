@@ -27,7 +27,7 @@ pub struct MeshVertex2 {
 #[derive(Clone, Copy, Debug, Default, TypeLayout)]
 pub struct MeshVertex3 {
     pub position: glam::Vec3,
-    pub vertex_color: glam::Vec3,
+    pub vertex_color: glam::Vec4,
 }
 
 #[repr(C)]

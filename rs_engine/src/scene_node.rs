@@ -25,7 +25,7 @@ impl SceneComponent {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct SkeletonMeshComponentRuntime {
     draw_objects: HashMap<String, EDrawObjectType>,
     skeleton: Option<Arc<Skeleton>>,
@@ -34,7 +34,7 @@ struct SkeletonMeshComponentRuntime {
     // material: Option<SingleThreadMutType<crate::content::material::Material>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SkeletonMeshComponent {
     pub name: String,
     pub skeleton_url: Option<url::Url>,
@@ -170,16 +170,13 @@ impl SkeletonMeshComponent {
             }
 
             match &mut draw_object {
-                EDrawObjectType::Static(_) => todo!(),
                 EDrawObjectType::Skin(draw_object) => {
                     draw_object.constants.model = model;
                 }
                 EDrawObjectType::SkinMaterial(draw_object) => {
                     draw_object.constants.model = model;
                 }
-                EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                    draw_object.constants.model = model;
-                }
+                _ => unimplemented!(),
             }
             run_time
                 .draw_objects
@@ -337,7 +334,6 @@ impl SkeletonMeshComponent {
             }
             let draw_object = run_time.draw_objects.get_mut(&skin_mesh.name).unwrap();
             match draw_object {
-                EDrawObjectType::Static(_) => todo!(),
                 EDrawObjectType::Skin(draw_object) => {
                     draw_object.constants.bones.copy_from_slice(&bones);
                     let mut model = self.transformation;
@@ -362,10 +358,7 @@ impl SkeletonMeshComponent {
                     }
                     draw_object.constants.model = model;
                 }
-                EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                    let model = self.transformation;
-                    draw_object.constants.model = model;
-                }
+                _ => unimplemented!(),
             }
             engine.update_draw_object(draw_object);
         }
@@ -402,27 +395,26 @@ impl SkeletonMeshComponent {
         };
         for (_, draw_object) in &mut run_time.draw_objects {
             match draw_object {
-                EDrawObjectType::Static(_) => {}
-                EDrawObjectType::Skin(_) => {}
                 EDrawObjectType::SkinMaterial(material_draw_object) => {
                     material_draw_object.material = material.clone();
                 }
                 EDrawObjectType::StaticMeshMaterial(material_draw_object) => {
                     material_draw_object.material = material.clone();
                 }
+                _ => unimplemented!(),
             }
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum EComponentType {
     SceneComponent(SingleThreadMutType<SceneComponent>),
     StaticMeshComponent(SingleThreadMutType<StaticMeshComponent>),
     SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SceneNode {
     pub component: EComponentType,
     pub childs: Vec<SingleThreadMutType<SceneNode>>,

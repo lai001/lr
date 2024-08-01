@@ -6,6 +6,7 @@ pub mod material_pipeline;
 pub mod mesh_view;
 pub mod mesh_view_multiple_draw;
 pub mod particle_pipeline;
+pub mod primitive;
 pub mod shading;
 pub mod skin_mesh_shading;
 pub mod skin_mesh_virtual_texture_feed_back;

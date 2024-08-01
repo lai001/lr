@@ -1,5 +1,6 @@
 pub mod error;
 pub mod file_manager;
+pub mod frustum;
 pub mod misc;
 pub mod path_ext;
 pub mod primitive_data;

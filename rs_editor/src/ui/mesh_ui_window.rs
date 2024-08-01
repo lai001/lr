@@ -1,4 +1,4 @@
-use super::misc::{random_color3, update_window_with_input_mode};
+use super::misc::{random_color4, update_window_with_input_mode};
 use crate::{custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType};
 use anyhow::anyhow;
 use egui_winit::State;
@@ -273,7 +273,7 @@ impl MeshUIWindow {
 
         let mut vertices: Vec<MeshVertex3> = vec![];
         for mesh_cluster in mesh_clusters {
-            let color = random_color3();
+            let color = random_color4();
             for index in mesh_cluster {
                 for offset in 0..=2 {
                     let vertex_index = indices[index + offset];
