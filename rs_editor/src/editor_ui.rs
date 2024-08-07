@@ -14,11 +14,18 @@ use egui::*;
 use rs_engine::input_mode::EInputMode;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
+use transform_gizmo_egui::math::Transform;
+use transform_gizmo_egui::GizmoResult;
 
 #[derive(Debug)]
 pub struct ClickMeshItem {
     pub file_path: PathBuf,
     pub item: Rc<MeshItem>,
+}
+
+pub struct GizmoEvent {
+    pub selected_object: ESelectedObjectType,
+    pub gizmo_result: Option<(GizmoResult, Vec<Transform>)>,
 }
 
 #[derive(Default)]
@@ -31,6 +38,7 @@ pub struct ClickEvent {
     pub debug_textures_view_event: Option<debug_textures_view::EClickEventType>,
     pub project_settings_event: Option<project_settings::EEventType>,
     pub object_property_view_event: Option<object_property_view::EEventType>,
+    pub gizmo_event: Option<GizmoEvent>,
 }
 
 pub struct EditorUI {
@@ -127,13 +135,25 @@ impl EditorUI {
                     }
                 };
             }
+
             match selected_object {
                 ESelectedObjectType::Actor(_) => {}
                 ESelectedObjectType::SceneComponent(component) => {
                     gizmo!(component);
                 }
                 ESelectedObjectType::StaticMeshComponent(component) => {
-                    gizmo!(component);
+                    let mut component = component.borrow_mut();
+                    let model_matrix = component.get_interactive_transformation();
+                    let gizmo_result = self.gizmo_view.draw(
+                        context,
+                        data_source.camera_view_matrix,
+                        data_source.camera_projection_matrix,
+                        *model_matrix,
+                    );
+                    click.gizmo_event = Some(GizmoEvent {
+                        selected_object: selected_object.clone(),
+                        gizmo_result,
+                    });
                 }
                 ESelectedObjectType::SkeletonMeshComponent(component) => {
                     gizmo!(component);

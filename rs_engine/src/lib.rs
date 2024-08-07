@@ -5,6 +5,7 @@ pub mod camera_input_event_handle;
 pub mod console_cmd;
 pub mod content;
 pub mod default_textures;
+pub mod directional_light;
 pub mod drawable;
 pub mod engine;
 pub mod error;

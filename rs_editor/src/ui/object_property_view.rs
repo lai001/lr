@@ -1,5 +1,5 @@
 use rs_engine::{
-    actor::Actor, content::level::DirectionalLight, scene_node::*,
+    actor::Actor, directional_light::DirectionalLight, scene_node::*,
     static_mesh_component::StaticMeshComponent,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};

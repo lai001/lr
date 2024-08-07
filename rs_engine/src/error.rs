@@ -11,6 +11,7 @@ pub enum Error {
     UrlParseError(url::ParseError),
     SerdeJsonError(serde_json::Error),
     AudioError(rs_audio::error::Error),
+    TryFromSliceError(std::array::TryFromSliceError),
     Other(Option<String>),
 }
 

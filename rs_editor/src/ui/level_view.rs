@@ -1,5 +1,5 @@
 use egui::{Context, ScrollArea, Ui};
-use rs_engine::{actor::Actor, content::level::DirectionalLight, scene_node::SceneNode};
+use rs_engine::{actor::Actor, directional_light::DirectionalLight, scene_node::SceneNode};
 use rs_foundation::new::SingleThreadMutType;
 use std::{cell::RefCell, rc::Rc};
 

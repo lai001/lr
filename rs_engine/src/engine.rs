@@ -3,8 +3,8 @@ use crate::camera::Camera;
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::console_cmd::ConsoleCmd;
 use crate::content::content_file_type::EContentFileType;
-use crate::content::level::DirectionalLight;
 use crate::default_textures::DefaultTextures;
+use crate::directional_light::DirectionalLight;
 use crate::drawable::{
     EDrawObjectType, MaterialDrawObject, SkinMeshDrawObject, StaticMeshDrawObject,
     StaticMeshMaterialDrawObject,
@@ -730,13 +730,13 @@ impl Engine {
         self.global_constants.feedback_bias = virtual_texture_setting.feedback_bias;
         self.update_global_constants();
 
-        if let Some(level) = self.level.as_ref() {
+        if let Some(level) = self.level.as_mut() {
             for actor in level.actors.clone() {
                 match &mut actor.borrow_mut().scene_node.borrow_mut().component {
                     EComponentType::SceneComponent(_) => todo!(),
                     EComponentType::StaticMeshComponent(static_mesh_component) => {
-                        let mut static_mesh_component = static_mesh_component.borrow_mut();
-                        static_mesh_component.update(self.get_game_time(), self);
+                        let static_mesh_component = static_mesh_component.borrow_mut();
+                        // static_mesh_component.update(self.get_game_time(), self, todo!());
                         for draw_object in static_mesh_component.get_draw_objects() {
                             self.draw2(draw_object);
                         }

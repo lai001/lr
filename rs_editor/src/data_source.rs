@@ -71,6 +71,7 @@ pub struct DataSource {
     pub is_object_property_view_open: bool,
     pub debug_shading_type: rs_render::global_uniform::EDebugShadingType,
     pub is_debug_texture_view_open: bool,
+    pub is_simulate_real_time: bool,
 }
 
 impl DataSource {
@@ -108,6 +109,7 @@ impl DataSource {
             is_object_property_view_open: false,
             debug_shading_type: rs_render::global_uniform::EDebugShadingType::None,
             is_debug_texture_view_open: false,
+            is_simulate_real_time: false,
         }
     }
 

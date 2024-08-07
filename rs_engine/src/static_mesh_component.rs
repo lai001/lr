@@ -2,14 +2,24 @@ use crate::{
     content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
     resource_manager::ResourceManager,
 };
+use rapier3d::{parry::bounding_volume, prelude::*};
 use rs_artifact::static_mesh::StaticMesh;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Clone)]
+pub struct Physics {
+    collider: Collider,
+    rigid_body: RigidBody,
+    rigid_body_handle: RigidBodyHandle,
+    is_apply_simulate: bool,
+}
+
+#[derive(Clone)]
 struct StaticMeshComponentRuntime {
     draw_objects: EDrawObjectType,
     _mesh: Arc<StaticMesh>,
+    physics: Option<Physics>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -93,28 +103,69 @@ impl StaticMeshComponent {
                 );
             }
 
+            let physics =
+                Self::build_physics(find_static_mesh.as_ref(), false, self.transformation).ok();
             self.run_time = Some(StaticMeshComponentRuntime {
                 draw_objects: draw_object,
                 _mesh: find_static_mesh,
+                physics,
             })
         }
     }
 
-    pub fn update(&mut self, time: f32, engine: &mut Engine) {
+    pub fn update(
+        &mut self,
+        time: f32,
+        engine: &mut Engine,
+        mut rigid_body_set: Option<&mut RigidBodySet>,
+    ) {
         let _ = time;
         let _ = engine;
         let Some(run_time) = &mut self.run_time else {
             return;
         };
-        match &mut run_time.draw_objects {
-            EDrawObjectType::Static(draw_object) => {
-                draw_object.constants.model = self.transformation.clone();
+
+        let is_simulate = run_time
+            .physics
+            .as_mut()
+            .map(|x| x.is_apply_simulate)
+            .unwrap_or(false);
+
+        match (
+            run_time.physics.as_mut(),
+            rigid_body_set.as_mut(),
+            is_simulate,
+        ) {
+            (Some(physics), Some(rigid_body_set), true) => {
+                let rigid_body = &rigid_body_set[physics.rigid_body_handle];
+                let translation = rigid_body.translation();
+                let translation = glam::vec3(translation.x, translation.y, translation.z);
+                let rotation = rigid_body.rotation();
+                let rotation = glam::quat(rotation.i, rotation.j, rotation.k, rotation.w);
+                let scale = self.transformation.to_scale_rotation_translation().0;
+                let transformation =
+                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+                match &mut run_time.draw_objects {
+                    EDrawObjectType::Static(draw_object) => {
+                        draw_object.constants.model = transformation;
+                    }
+                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                        draw_object.constants.model = transformation;
+                    }
+                    _ => unimplemented!(),
+                }
             }
-            EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                draw_object.constants.model = self.transformation.clone();
-            }
-            _ => unimplemented!(),
+            _ => match &mut run_time.draw_objects {
+                EDrawObjectType::Static(draw_object) => {
+                    draw_object.constants.model = self.transformation;
+                }
+                EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                    draw_object.constants.model = self.transformation;
+                }
+                _ => unimplemented!(),
+            },
         }
+
         engine.update_draw_object(&mut run_time.draw_objects);
     }
 
@@ -164,5 +215,106 @@ impl StaticMeshComponent {
             }
             run_time.draw_objects = draw_object;
         }
+    }
+
+    fn build_physics(
+        mesh: &StaticMesh,
+        is_use_convex_decomposition: bool,
+        transformation: glam::Mat4,
+    ) -> crate::error::Result<Physics> {
+        let deltas = Isometry::identity();
+        let mut vertices: Vec<_> = mesh
+            .vertexes
+            .iter()
+            .map(|x| point![x.position.x, x.position.y, x.position.z])
+            .collect();
+        let aabb = bounding_volume::details::point_cloud_aabb(&deltas, &vertices);
+        let center = aabb.center();
+        let diag = (aabb.maxs - aabb.mins).norm();
+        vertices
+            .iter_mut()
+            .for_each(|p| *p = (*p - center.coords) * 10.0 / diag);
+
+        let mut indices: Vec<_> = vec![];
+        for index in mesh.indexes.chunks(3) {
+            indices
+                .push(<[u32; 3]>::try_from(index).map_err(crate::error::Error::TryFromSliceError)?);
+        }
+
+        let decomposed_shape = if is_use_convex_decomposition {
+            SharedShape::convex_decomposition(&vertices, &indices)
+        } else {
+            SharedShape::trimesh_with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)
+        };
+        let (_, rotation, translation) = transformation.to_scale_rotation_translation();
+        let translation = vector![translation.x, translation.y, translation.z];
+        let (axis, angle) = rotation.to_axis_angle();
+        let collider = ColliderBuilder::new(decomposed_shape)
+            .contact_skin(0.1)
+            .build();
+        let mut builder = RigidBodyBuilder::dynamic();
+        builder = builder.translation(translation);
+        builder.position.rotation = Rotation::from_axis_angle(
+            &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
+            angle,
+        );
+        // builder = builder.enabled_rotations(false, false, false);
+        let rigid_body = builder.build();
+
+        Ok(Physics {
+            collider,
+            rigid_body,
+            rigid_body_handle: RigidBodyHandle::invalid(),
+            is_apply_simulate: true,
+        })
+    }
+
+    pub fn init_physics(
+        &mut self,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
+            return;
+        };
+        let handle = rigid_body_set.insert(physics.rigid_body.clone());
+        collider_set.insert_with_parent(physics.collider.clone(), handle, rigid_body_set);
+        physics.rigid_body_handle = handle;
+    }
+
+    pub fn set_apply_simulate(&mut self, is_apply_simulate: bool) {
+        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
+            return;
+        };
+        physics.is_apply_simulate = is_apply_simulate;
+    }
+
+    pub fn on_post_update_transformation(&mut self, rigid_body_set: Option<&mut RigidBodySet>) {
+        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
+            return;
+        };
+        let Some(rigid_body_set) = rigid_body_set else {
+            return;
+        };
+        let Some(rigid_body) = rigid_body_set.get_mut(physics.rigid_body_handle) else {
+            return;
+        };
+
+        let (_, rotation, translation) = self.transformation.to_scale_rotation_translation();
+        let translation = vector![translation.x, translation.y, translation.z];
+        rigid_body.set_translation(translation, false);
+        let (axis, angle) = rotation.to_axis_angle();
+        rigid_body.set_rotation(
+            Rotation::from_axis_angle(
+                &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
+                angle,
+            ),
+            false,
+        );
+        rigid_body.set_angvel(vector![0.0, 0.0, 0.0], false);
+        rigid_body.set_linvel(vector![0.0, 0.0, 0.0], false);
+        rigid_body.reset_forces(false);
+        rigid_body.reset_torques(false);
+        rigid_body.wake_up(true);
     }
 }

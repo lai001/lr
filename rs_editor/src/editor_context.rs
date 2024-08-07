@@ -4,7 +4,7 @@ use crate::{
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource},
     editor::WindowsManager,
-    editor_ui::EditorUI,
+    editor_ui::{EditorUI, GizmoEvent},
     material_resolve,
     model_loader::ModelLoader,
     project::Project,
@@ -30,7 +30,8 @@ use rs_core_minimal::{file_manager, path_ext::CanonicalizeSlashExt};
 use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
-    content::{content_file_type::EContentFileType, level::DirectionalLight, texture::TextureFile},
+    content::{content_file_type::EContentFileType, texture::TextureFile},
+    directional_light::DirectionalLight,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
 };
@@ -961,9 +962,9 @@ impl EditorContext {
                         );
                     }
                 }
-                EContentFileType::Level(level) => {
-                    let mut level = level.borrow_mut();
-                    level.initialize(engine);
+                EContentFileType::Level(_) => {
+                    // let mut level = level.borrow_mut();
+                    // level.initialize(engine);
                 }
                 EContentFileType::Material(material_content) => {
                     let find = project_context
@@ -1085,13 +1086,15 @@ impl EditorContext {
             self.data_source.level = find_level.cloned();
 
             if let Some(level) = find_level.cloned() {
+                let mut level = level.borrow_mut();
                 if let Some(folder) = &self.data_source.content_data_source.current_folder {
                     Self::add_new_actors(
                         &mut self.engine,
-                        level.borrow().actors.clone(),
+                        level.actors.clone(),
                         &folder.borrow().files,
                     );
                 }
+                level.initialize(&mut self.engine);
             }
         }
         {
@@ -1252,7 +1255,9 @@ impl EditorContext {
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         if let Some(active_level) = self.data_source.level.clone() {
-            let active_level = active_level.borrow();
+            let mut active_level = active_level.borrow_mut();
+            active_level.set_physics_simulate(self.data_source.is_simulate_real_time);
+            active_level.tick();
             if let Some(light) = active_level.directional_lights.first().cloned() {
                 let mut light = light.borrow_mut();
                 light.update(&mut self.engine);
@@ -1271,7 +1276,11 @@ impl EditorContext {
                         static_mesh_component,
                     ) => {
                         let mut static_mesh_component = static_mesh_component.borrow_mut();
-                        static_mesh_component.update(self.engine.get_game_time(), &mut self.engine);
+                        static_mesh_component.update(
+                            self.engine.get_game_time(),
+                            &mut self.engine,
+                            active_level.get_rigid_body_set_mut(),
+                        );
                         for draw_object in static_mesh_component.get_draw_objects() {
                             self.engine.draw2(draw_object);
                         }
@@ -1605,6 +1614,7 @@ impl EditorContext {
         self.process_click_actor_event(click_event.click_actor);
         self.process_project_settings_event(click_event.project_settings_event);
         self.process_object_property_view_event(click_event.object_property_view_event);
+        self.process_gizmo_event(click_event.gizmo_event);
     }
 
     fn get_all_content_names(&self) -> Vec<String> {
@@ -2285,6 +2295,43 @@ impl EditorContext {
                     _ => unimplemented!(),
                 }
             }
+        }
+    }
+
+    fn process_gizmo_event(&mut self, event: Option<GizmoEvent>) {
+        let Some(event) = event else {
+            return;
+        };
+        let Some(active_level) = self.data_source.level.clone() else {
+            return;
+        };
+        let mut active_level = active_level.borrow_mut();
+        let rigid_body_set = active_level
+            .get_physics_mut()
+            .map(|x| &mut x.rigid_body_set);
+
+        match event.selected_object {
+            ESelectedObjectType::Actor(_) => {}
+            ESelectedObjectType::SceneComponent(_) => {}
+            ESelectedObjectType::StaticMeshComponent(component) => {
+                let mut component = component.borrow_mut();
+                let model_matrix = component.get_interactive_transformation();
+                if let Some((_, transforms)) = event.gizmo_result {
+                    let transform = transforms[0];
+                    *model_matrix = glam::DMat4::from_scale_rotation_translation(
+                        transform.scale.into(),
+                        transform.rotation.into(),
+                        transform.translation.into(),
+                    )
+                    .as_mat4();
+                    component.set_apply_simulate(false);
+                    component.on_post_update_transformation(rigid_body_set);
+                } else {
+                    component.set_apply_simulate(true);
+                }
+            }
+            ESelectedObjectType::SkeletonMeshComponent(_) => {}
+            ESelectedObjectType::DirectionalLight(_) => {}
         }
     }
 }

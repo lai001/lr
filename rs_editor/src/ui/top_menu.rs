@@ -3,6 +3,7 @@ use crate::{
     data_source::DataSource,
 };
 use egui::{menu, Button, Context, TopBottomPanel};
+use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
 use std::path::PathBuf;
 
@@ -89,10 +90,16 @@ impl TopMenu {
                             if !recent_project_path.exists() {
                                 continue;
                             }
-                            let p=rs_core_minimal::path_ext::CanonicalizeSlashExt::canonicalize_slash(&recent_project_path).unwrap();
-                            let p = p.to_str().unwrap();
-                            if ui.button(p).clicked() {
-                                click = Some(EClickEventType::OpenRecentProject(recent_project_path.to_path_buf()));
+                            let Ok(path) = recent_project_path.canonicalize_slash() else {
+                                continue;
+                            };
+                            let Some(path) = path.to_str() else {
+                                continue;
+                            };
+                            if ui.button(path).clicked() {
+                                click = Some(EClickEventType::OpenRecentProject(
+                                    recent_project_path.to_path_buf(),
+                                ));
                                 ui.close_menu();
                             }
                         }
@@ -158,27 +165,39 @@ impl TopMenu {
                         ui.close_menu();
                     }
                     ui.menu_button("View Mode", |ui| {
-                        if ui.radio_value(&mut datasource.view_mode, EViewModeType::Wireframe, "Wireframe").clicked(){
+                        if ui
+                            .radio_value(
+                                &mut datasource.view_mode,
+                                EViewModeType::Wireframe,
+                                "Wireframe",
+                            )
+                            .clicked()
+                        {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Wireframe));
                         }
-                        if ui.radio_value(
-                            &mut datasource.view_mode,
-                            EViewModeType::Lit,
-                            "Lit",
-                        ).clicked() {
+                        if ui
+                            .radio_value(&mut datasource.view_mode, EViewModeType::Lit, "Lit")
+                            .clicked()
+                        {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Lit));
                         }
-                        if ui.radio_value(
-                            &mut datasource.view_mode,
-                            EViewModeType::Unlit,
-                            "Unlit",
-                        ).clicked() {
+                        if ui
+                            .radio_value(&mut datasource.view_mode, EViewModeType::Unlit, "Unlit")
+                            .clicked()
+                        {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Unlit));
                         }
                     });
                     ui.menu_button("Debug Shading", |ui| {
                         for ty in rs_render::global_uniform::EDebugShadingType::all_types() {
-                            if ui.radio_value(&mut datasource.debug_shading_type, ty.clone(), format!("{:?}", ty)).clicked() {
+                            if ui
+                                .radio_value(
+                                    &mut datasource.debug_shading_type,
+                                    ty.clone(),
+                                    format!("{:?}", ty),
+                                )
+                                .clicked()
+                            {
                                 click = Some(EClickEventType::DebugShading(ty.clone()));
                             }
                         }
@@ -187,6 +206,7 @@ impl TopMenu {
                         click = Some(EClickEventType::Run);
                         ui.close_menu();
                     }
+                    ui.checkbox(&mut datasource.is_simulate_real_time, "Simulate Real Time");
                 });
                 ui.menu_button("Test", |ui| {
                     if ui.add(Button::new("Multiple Draw")).clicked() {

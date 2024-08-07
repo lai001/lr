@@ -47,6 +47,7 @@ uuid = { version = "1.10.0", features = [
 ] }
 rand = { version = "0.8.5" }
 tracy-client = { version = "0.17.1", default-features = false }
+rapier3d = { version = "0.22.0", features = [ "simd-stable" ] }
 rs_foundation = { path = "../rs_foundation" }
 rs_audio = { path = "../rs_audio" }
 rs_artifact = { path = "../rs_artifact" }
