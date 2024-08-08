@@ -87,7 +87,7 @@ impl StaticMeshComponent {
         };
 
         if let Some(find_static_mesh) = find_static_mesh {
-            let draw_object: EDrawObjectType;
+            let mut draw_object: EDrawObjectType;
             if let Some(material) = material.clone() {
                 draw_object = engine.create_material_draw_object_from_static_mesh(
                     &find_static_mesh.vertexes,
@@ -102,7 +102,15 @@ impl StaticMeshComponent {
                     Some(find_static_mesh.name.clone()),
                 );
             }
-
+            match &mut draw_object {
+                EDrawObjectType::Static(draw_object) => {
+                    draw_object.constants.model = self.transformation;
+                }
+                EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                    draw_object.constants.model = self.transformation;
+                }
+                _ => unimplemented!(),
+            }
             let physics =
                 Self::build_physics(find_static_mesh.as_ref(), false, self.transformation).ok();
             self.run_time = Some(StaticMeshComponentRuntime {
@@ -172,6 +180,13 @@ impl StaticMeshComponent {
     pub fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
         match &self.run_time {
             Some(x) => vec![&x.draw_objects],
+            None => vec![],
+        }
+    }
+
+    pub fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
+        match &mut self.run_time {
+            Some(x) => vec![&mut x.draw_objects],
             None => vec![],
         }
     }

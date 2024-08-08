@@ -1,3 +1,4 @@
+use crate::actor::Actor;
 use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
@@ -96,7 +97,7 @@ pub struct Engine {
     render_thread_mode: ERenderThreadMode,
     resource_manager: ResourceManager,
     logger: Logger,
-    level: Option<crate::content::level::Level>,
+    level: Option<SingleThreadMutType<crate::content::level::Level>>,
     // draw_objects: Vec<DrawObject>,
     draw_object_id: u32,
     camera: Camera,
@@ -218,7 +219,7 @@ impl Engine {
 
         let mut camera = Camera::default(surface_width, surface_height);
         camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
-        let mut level: Option<crate::content::level::Level> = None;
+        let mut level: Option<SingleThreadMutType<crate::content::level::Level>> = None;
         (|| {
             let Some(url) = Self::find_first_level(&mut resource_manager) else {
                 return;
@@ -227,7 +228,7 @@ impl Engine {
                 return;
             };
             log::trace!("Load level: {}", _level.url.to_string());
-            level = Some(_level);
+            level = Some(SingleThreadMut::new(_level));
         })();
 
         #[cfg(feature = "editor")]
@@ -579,11 +580,14 @@ impl Engine {
             }
         }
 
-        let Some(level) = self.level.as_mut() else {
-            log::warn!("{}", "No level found.");
-            return;
-        };
-        for actor in level.actors.clone() {
+        let actors: Vec<SingleThreadMutType<Actor>> = (|| {
+            let Some(level) = self.level.as_mut().map(|x| x.borrow_mut()) else {
+                log::warn!("{}", "No level found.");
+                return vec![];
+            };
+            return level.actors.clone();
+        })();
+        for actor in actors {
             let mut actor = actor.borrow_mut();
             let root_scene_node = &mut actor.scene_node;
             let mut root_scene_node = root_scene_node.borrow_mut();
@@ -665,6 +669,11 @@ impl Engine {
                 }
             }
         }
+        if let Some(level) = self.level.clone().as_mut() {
+            let mut level = level.borrow_mut();
+            level.initialize(self);
+            level.set_physics_simulate(true);
+        }
     }
 
     fn find_first_level(resource_manager: &mut ResourceManager) -> Option<url::Url> {
@@ -730,23 +739,40 @@ impl Engine {
         self.global_constants.feedback_bias = virtual_texture_setting.feedback_bias;
         self.update_global_constants();
 
-        if let Some(level) = self.level.as_mut() {
-            for actor in level.actors.clone() {
-                match &mut actor.borrow_mut().scene_node.borrow_mut().component {
-                    EComponentType::SceneComponent(_) => todo!(),
-                    EComponentType::StaticMeshComponent(static_mesh_component) => {
-                        let static_mesh_component = static_mesh_component.borrow_mut();
-                        // static_mesh_component.update(self.get_game_time(), self, todo!());
-                        for draw_object in static_mesh_component.get_draw_objects() {
-                            self.draw2(draw_object);
-                        }
+        let actors: Vec<SingleThreadMutType<Actor>> = (|| {
+            let Some(level) = self.level.as_mut().map(|x| x.borrow_mut()) else {
+                log::warn!("{}", "No level found.");
+                return vec![];
+            };
+            return level.actors.clone();
+        })();
+        let time = self.get_game_time();
+        let mut level = self.level.clone();
+        if let Some(level) = level.clone() {
+            level.borrow_mut().tick();
+        }
+        for actor in actors {
+            match &mut actor.borrow_mut().scene_node.borrow_mut().component {
+                EComponentType::SceneComponent(_) => todo!(),
+                EComponentType::StaticMeshComponent(static_mesh_component) => {
+                    let mut static_mesh_component = static_mesh_component.borrow_mut();
+                    if let Some(level) = level.as_mut() {
+                        let mut level = level.borrow_mut();
+                        let rigid_body_set = level.get_rigid_body_set_mut();
+                        static_mesh_component.update(time, self, rigid_body_set);
+                    } else {
+                        static_mesh_component.update(time, self, None);
                     }
-                    EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
-                        let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
-                        skeleton_mesh_component.update(self.get_game_time(), self);
-                        for draw_object in skeleton_mesh_component.get_draw_objects() {
-                            self.draw2(draw_object);
-                        }
+                    for draw_object in static_mesh_component.get_draw_objects_mut() {
+                        self.update_draw_object(draw_object);
+                        self.draw2(draw_object);
+                    }
+                }
+                EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
+                    let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
+                    skeleton_mesh_component.update(self.get_game_time(), self);
+                    for draw_object in skeleton_mesh_component.get_draw_objects() {
+                        self.draw2(draw_object);
                     }
                 }
             }
