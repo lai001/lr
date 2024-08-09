@@ -23,7 +23,7 @@ profiler = ["tracy-client/default", "rs_render/default"]
 [dependencies]
 md-5 = { version = "0.10.6" }
 anyhow = { version = "1.0.86", optional = true }
-serde = { version = "1.0.204", features = ["derive", "rc"] }
+serde = { version = "1.0.205", features = ["derive", "rc"] }
 serde_json = "1.0.120"
 chrono = "0.4.38"
 log = "0.4.22"

@@ -14,7 +14,7 @@ profiler = [
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-serde = { version = "1.0.204", features = ["derive", "rc"] }
+serde = { version = "1.0.205", features = ["derive", "rc"] }
 wgpu = { version = "0.20.0", features = ["spirv", "naga-ir"] }
 naga = { version = "0.20.0" }
 log = "0.4.22"
