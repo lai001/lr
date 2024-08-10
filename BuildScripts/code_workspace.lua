@@ -65,6 +65,20 @@ local function audio_workspace_file(json)
     json.savefile(path.join(path.absolute("./"), "audio.code-workspace"), audio)
 end
 
+local function build_tool_workspace_file(json)
+    local audio = {
+        ["folders"] = { {
+            ["path"] = path.absolute("./")
+        } },
+        ["settings"] = {
+            ["rust-analyzer.linkedProjects"] = {
+                path.absolute("./rs_build_tool/Cargo.toml"),
+            },
+        }
+    }
+    json.savefile(path.join(path.absolute("./"), "build_tool.code-workspace"), audio)
+end
+
 task("code_workspace") do
     on_run(function(in_plat, in_target, in_mode, in_launch)
         import("core.project.config")
@@ -123,7 +137,7 @@ task("code_workspace") do
         if is_enable_renderdoc then
             table.join2(features, "renderdoc")
         end
-        table.join2(features, "plugin_shared_lib")
+        table.join2(features, "plugin_shared_crate_export")
         table.join2(features, "plugin_dotnet")
         table.join2(features, "plugin_v8")
 
@@ -157,6 +171,7 @@ task("code_workspace") do
         proc_macros_test_workspace_file(json)
         media_cmd_workspace_file(json)
         audio_workspace_file(json)
+        build_tool_workspace_file(json)
     end)
     set_menu {
         usage = "xmake code_workspace",

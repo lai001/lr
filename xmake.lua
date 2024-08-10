@@ -23,6 +23,7 @@ includes("BuildScripts/install_editor.lua")
 includes("BuildScripts/ci.lua")
 includes("BuildScripts/setup.lua")
 includes("BuildScripts/build_3rdparty.lua")
+includes("BuildScripts/compile_build_tool.lua")
 
 option("enable_dotnet")
     set_default(false)
