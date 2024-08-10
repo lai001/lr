@@ -741,7 +741,6 @@ impl Engine {
 
         let actors: Vec<SingleThreadMutType<Actor>> = (|| {
             let Some(level) = self.level.as_mut().map(|x| x.borrow_mut()) else {
-                log::warn!("{}", "No level found.");
                 return vec![];
             };
             return level.actors.clone();
@@ -2339,6 +2338,11 @@ impl Engine {
 
     pub fn get_main_window_id(&self) -> isize {
         self.main_window_id
+    }
+
+    #[track_caller]
+    pub fn log_trace(&self, message: &str) {
+        log::trace!("{}", message);
     }
 }
 

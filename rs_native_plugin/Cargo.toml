@@ -8,7 +8,8 @@ rs_engine = { path = "../rs_engine", optional = true }
 
 [features]
 plugin_shared_lib = []
-plugin_shared_crate = ["dep:rs_engine"]
+plugin_shared_crate_export = ["dep:rs_engine"]
+plugin_shared_crate_import = []
 default = []
 
 [build-dependencies]

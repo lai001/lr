@@ -1,3 +1,5 @@
+#[cfg(feature = "plugin_shared_crate_import")]
+extern crate rs_engine;
 use rs_engine::engine::Engine;
 
 pub trait Plugin {

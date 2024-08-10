@@ -44,7 +44,7 @@ use rs_engine::{
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
-#[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
+#[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
 use rs_native_plugin::Plugin;
 use rs_render::{
     command::{RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
@@ -118,7 +118,7 @@ pub struct EditorContext {
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     editor_ui: EditorUI,
     _plugin_context: Arc<Mutex<PluginContext>>,
-    #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
+    #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
     plugins: Vec<Box<dyn Plugin>>,
     #[cfg(feature = "plugin_v8")]
     v8_runtime: Option<rs_v8_host::v8_runtime::V8Runtime>,
@@ -245,7 +245,7 @@ impl EditorContext {
             virtual_key_code_states: HashMap::new(),
             editor_ui,
             _plugin_context: plugin_context,
-            #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
+            #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
             plugins: vec![],
             #[cfg(feature = "plugin_v8")]
             v8_runtime: Some(v8_runtime),
@@ -284,7 +284,7 @@ impl EditorContext {
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
+                #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
                 self.plugins.clear();
                 self.egui_winit_state.egui_ctx().memory_mut(|writer| {
                     writer.data.clear();
@@ -576,7 +576,7 @@ impl EditorContext {
     }
 
     fn try_load_plugin(&mut self) -> anyhow::Result<()> {
-        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
+        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
         if let Some(project_context) = self.project_context.as_mut() {
             project_context.reload()?;
             let lib = project_context.hot_reload.get_library_reload();
@@ -1306,7 +1306,7 @@ impl EditorContext {
         }
         self.process_ui(window, event_loop_window_target);
 
-        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate"))]
+        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
         if let Some(plugin) = self.plugins.last_mut() {
             #[cfg(feature = "plugin_shared_lib")]
             {
@@ -1314,7 +1314,7 @@ impl EditorContext {
                     unsafe { rs_engine::ffi::engine::Engine::new(&mut self.engine) };
                 plugin.tick(ffi_engine.as_mut() as *mut rs_engine::ffi::engine::Engine as _);
             }
-            #[cfg(feature = "plugin_shared_crate")]
+            #[cfg(feature = "plugin_shared_crate_export")]
             {
                 plugin.tick(&mut self.engine);
             }
