@@ -1164,15 +1164,33 @@ impl EditorContext {
         }
     }
 
-    fn open_project_workspace(file_path: std::path::PathBuf) {
-        std::thread::spawn(move || {
-            let arg = file_path.to_str().unwrap();
-            let _ = Command::new("Code")
+    fn open_project_workspace(file_path: &Path) -> anyhow::Result<()> {
+        // https://github.com/rust-lang/rust/issues/37519#issuecomment-1694489623
+        let arg = file_path
+            .to_str()
+            .ok_or(anyhow!("Not a valid path, {file_path:?}"))?;
+        let result = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+                .args(["/C", "Code"])
                 .arg(arg)
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
-                .spawn();
-        });
+                .spawn()
+        } else {
+            Command::new("sh")
+                .args(["-c", "Code"])
+                .arg(arg)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+        };
+        match result {
+            Ok(child) => match child.stderr {
+                Some(stderr) => Err(anyhow!("{stderr:?}")),
+                None => Ok(()),
+            },
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn open_model_file(&mut self, file_path: PathBuf) -> anyhow::Result<()> {
@@ -1731,7 +1749,8 @@ impl EditorContext {
             top_menu::EClickEventType::OpenVisualStudioCode => {
                 if let Some(project_context) = &self.project_context {
                     let path = project_context.get_project_folder_path();
-                    Self::open_project_workspace(path);
+                    let open_result = Self::open_project_workspace(&path);
+                    log::trace!("{:?}", open_result);
                 }
             }
             top_menu::EClickEventType::Build(build_config) => {

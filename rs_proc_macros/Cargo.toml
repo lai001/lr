@@ -17,4 +17,5 @@ dunce = "1.0.4"
 path-slash = "0.2.1"
 naga = { version = "0.20.0" }
 wgpu = "0.20.0"
+anyhow = { version = "1.0.86" }
 rs_foundation = { path = "../rs_foundation" }

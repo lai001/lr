@@ -2,9 +2,11 @@ use crate::{
     debug_log, get_engine_root_dir_at_compile_time, string_extension::StringExtension,
     token_stream_extension::PrettyPrintStream,
 };
+use anyhow::anyhow;
 use path_slash::PathBufExt;
 use proc_macro::TokenStream;
 use quote::quote;
+use spanned::Spanned;
 use syn::*;
 
 #[derive(Debug)]
@@ -74,7 +76,7 @@ fn pre_process(
     file_parameters: &FileParams,
     defines_parameters: &DefinesParams,
     include_dirs_params: &IncludeDirsParams,
-) -> crate::error::Result<String> {
+) -> anyhow::Result<String> {
     let mut clang = std::process::Command::new("clang");
     clang.arg("-E");
     clang.arg("-P");
@@ -83,7 +85,7 @@ fn pre_process(
     clang.arg("-std=c11");
     for include_dir in include_dirs_params.dirs.iter() {
         let resolve_dir = get_engine_root_dir_at_compile_time().join(include_dir);
-        let resolve_dir = dunce::canonicalize(resolve_dir).unwrap();
+        let resolve_dir = dunce::canonicalize(resolve_dir)?;
         let resolve_dir = resolve_dir.to_slash_lossy();
         clang.arg(format!("-I{}", resolve_dir));
     }
@@ -94,18 +96,19 @@ fn pre_process(
             clang.arg(format!("-D{}", definition));
         }
     }
-    let path_arg = file_parameters.file.to_slash_lossy().to_string();
+    let file_path = &file_parameters.file;
+    let path_arg = file_path
+        .to_slash()
+        .ok_or(anyhow!("Not a valid path, {file_path:?}"))?
+        .to_string();
     clang.arg(path_arg);
-    let output = clang.output();
-    let output = output.map_err(|err| crate::error::Error::IO(err, None))?;
-    let stderr = String::from_utf8(output.stderr);
-    let stdout = String::from_utf8(output.stdout);
-    let stdout = stdout.map_err(|err| crate::error::Error::FromUtf8Error(err))?;
-    let stderr = stderr.map_err(|err| crate::error::Error::FromUtf8Error(err))?;
+    let output = clang.output()?;
+    let stderr = String::from_utf8(output.stderr)?;
+    let stdout = String::from_utf8(output.stdout)?;
     if output.status.success() {
         Ok(stdout.to_string())
     } else {
-        Err(crate::error::Error::ProcessFail(Some(stderr)))
+        return Err(anyhow!(stderr));
     }
 }
 
@@ -146,8 +149,16 @@ pub(crate) fn global_shader_macro_derive_impl(input: TokenStream) -> TokenStream
         None => IncludeDirsParams { dirs: vec![] },
     };
 
-    let shader_source =
-        pre_process(&file_parameters, &defines_parameters, &include_dirs_params).unwrap();
+    let shader_source = pre_process(&file_parameters, &defines_parameters, &include_dirs_params);
+    let shader_source = match shader_source {
+        Ok(shader_source) => shader_source,
+        Err(err) => {
+            return syn::Error::new(ast.span(), err.to_string())
+                .to_compile_error()
+                .into();
+        }
+    };
+
     let module = naga::front::wgsl::parse_str(&shader_source).unwrap();
 
     let output_stream = quote! {};

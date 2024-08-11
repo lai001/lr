@@ -131,7 +131,7 @@ impl Asset for Image {
 
 impl Image {
     pub fn decode(&self) -> image::ImageResult<image::DynamicImage> {
-        let mut reader = image::io::Reader::new(std::io::Cursor::new(&self.data));
+        let mut reader = image::ImageReader::new(std::io::Cursor::new(&self.data));
         reader.set_format(self.image_format.to_external_format());
         reader.decode()
     }
@@ -142,7 +142,7 @@ impl Image {
         })?;
         let buf_reader = std::io::BufReader::new(file);
         let data = buf_reader.buffer().to_vec();
-        let image_reader = image::io::Reader::new(buf_reader);
+        let image_reader = image::ImageReader::new(buf_reader);
         let image_reader = image_reader
             .with_guessed_format()
             .map_err(|err| crate::error::Error::IO(err, Some(format!("Unknow format"))))?;

@@ -1,4 +1,3 @@
-mod error;
 mod multiple_thread_functions_generator;
 mod shader;
 mod string_extension;
