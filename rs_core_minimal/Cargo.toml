@@ -10,9 +10,9 @@ standalone = []
 editor = []
 
 [dependencies]
-dunce = "1.0.4"
+dunce = "1.0.5"
 path-slash = "0.2.1"
-serde = { version = "1.0.205", features = ["derive", "rc"] }
+serde = { version = "1.0.206", features = ["derive", "rc"] }
 glam = { version = "0.28.0", features = ["mint", "serde"] }
 md-5 = { version = "0.10.6" }
 rayon = "1.10.0"

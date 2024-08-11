@@ -12,7 +12,7 @@ Rust 1.78.0
 ```
 xmake download_deps
 xmake build_3rdparty
-xmake compile_build_tool
+xmake compile_tool
 xmake setup
 xmake gen_config
 xmake ci

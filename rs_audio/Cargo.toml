@@ -15,4 +15,4 @@ rs_foundation = { path = "../rs_foundation" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 
 [dev-dependencies]
-env_logger = "0.11.3"
+env_logger = "0.11.5"

@@ -13,7 +13,7 @@ standalone = ["rs_render/standalone", "rs_engine/standalone"]
 [target.'cfg(target_os = "android")'.dependencies]
 glam = { version = "0.28.0", features = ["mint", "serde"] }
 log = "0.4.22"
-env_logger = "0.11.3"
+env_logger = "0.11.5"
 egui = "0.28.1"
 url = { version = "2.5.2", features = ["serde"]}
 jni = "0.21.1"

@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 lazy_static = "1.5.0"
 glam = { version = "0.28.0", features = ["mint"] }
-wgpu = "0.20.0"
-notify = "6.1.0"
+wgpu = "0.20.1"
+notify = "6.1.1"
 notify-debouncer-mini = { version = "0.4.1" }
 walkdir = "2.5.0"
 log = "0.4.22"
@@ -17,4 +17,4 @@ rs_dotnet = { path = "../rs_dotnet" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winit = { version = "0.29.4" }
+winit = { version = "0.29.15" }

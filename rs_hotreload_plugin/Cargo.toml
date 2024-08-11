@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [target.'cfg(target_os = "windows")'.dependencies]
-libloading = "0.8.4"
-notify = "6.1.0"
+libloading = "0.8.5"
+notify = "6.1.1"
 notify-debouncer-mini = { version = "0.4.1" }
 walkdir = "2.5.0"
-regex = "1.10.5"
+regex = "1.10.6"
 log = "0.4.22"
