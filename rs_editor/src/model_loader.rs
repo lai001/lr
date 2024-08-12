@@ -20,6 +20,8 @@ use std::{
     sync::Arc,
 };
 
+use crate::name_generator::NameGenerator;
+
 pub struct MeshCluster {
     pub name: String,
     pub vertex_buffer: Vec<MeshVertex>,
@@ -720,7 +722,12 @@ impl ModelLoader {
         &mut self,
         file_path: &Path,
         asset_reference: String,
+        exist_content_names: Vec<String>,
+        exist_actors_names: Vec<String>,
     ) -> anyhow::Result<LoadResult> {
+        let mut name_generator = NameGenerator::new(exist_content_names);
+        let mut actor_name_generator = NameGenerator::new(exist_actors_names);
+
         let mut props = rs_assimp::property_store::PropertyStore::new();
         props.set_property_bool(
             &rs_assimp::config::AI_CONFIG_FBX_USE_SKELETON_BONE_CONTAINER,
@@ -759,7 +766,8 @@ impl ModelLoader {
         if let Some(armature) = scene.armatures.values().next() {
             let armature = armature.borrow();
             let name = armature.name.clone().replace("|", "_");
-            let url = build_content_file_url(name).context(armature.name.clone())?;
+            let name = name_generator.next(&name);
+            let url: url::Url = build_content_file_url(name).context(armature.name.clone())?;
 
             let asset_url = rs_engine::content::skeleton::Skeleton::make_asset_url(
                 &asset_reference,
@@ -773,6 +781,7 @@ impl ModelLoader {
         for animation in &scene.animations {
             let animation_name = animation.name.clone();
             let name = animation_name.clone().replace("|", "_");
+            let name = name_generator.next(&name);
             let url = build_content_file_url(&name).context(animation_name.clone())?;
             let asset_url =
                 rs_engine::content::skeleton_animation::SkeletonAnimation::make_asset_url(
@@ -788,6 +797,7 @@ impl ModelLoader {
             let imported_mesh = imported_mesh.clone();
             let imported_mesh = imported_mesh.borrow();
             let name = imported_mesh.name.clone().replace("|", "_");
+            let name = name_generator.next(&name);
             let url = build_content_file_url(&name).context(imported_mesh.name.clone())?;
             if imported_mesh.bones.is_empty() {
                 let static_mesh = rs_engine::content::static_mesh::StaticMesh {
@@ -841,7 +851,7 @@ impl ModelLoader {
             );
 
             actor = rs_engine::actor::Actor {
-                name: scene.name.clone(),
+                name: actor_name_generator.next(&scene.name),
                 scene_node: SingleThreadMut::new(rs_engine::scene_node::SceneNode {
                     component: rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                         SingleThreadMut::new(skeleton_mesh_component),
@@ -865,11 +875,11 @@ impl ModelLoader {
                     glam::Mat4::IDENTITY,
                 );
                 actor = rs_engine::actor::Actor {
-                    name: if scene.name.is_empty() {
-                        name
+                    name: actor_name_generator.next(if scene.name.is_empty() {
+                        &name
                     } else {
-                        scene.name.clone()
-                    },
+                        &scene.name
+                    }),
                     scene_node: SingleThreadMut::new(rs_engine::scene_node::SceneNode {
                         component: rs_engine::scene_node::EComponentType::StaticMeshComponent(
                             SingleThreadMut::new(static_mesh_component),

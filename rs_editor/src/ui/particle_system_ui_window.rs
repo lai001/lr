@@ -1,9 +1,7 @@
 use super::misc::update_window_with_input_mode;
 use crate::{
-    custom_event::ECustomEventType,
-    editor::WindowsManager,
-    editor_context::{EWindowType, EditorContext},
-    editor_ui,
+    custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType, editor_ui,
+    name_generator::make_unique_name,
 };
 use anyhow::anyhow;
 use egui::Sense;
@@ -521,7 +519,7 @@ fn handle_event(
     match event {
         EEventType::CreateEmiter(particle_emiter_type) => match particle_emiter_type {
             EParticleEmiterType::Spawn(particle_spawn_emiter_pros) => {
-                let name = EditorContext::make_unique_name(names, particle_spawn_emiter_pros.name);
+                let name = make_unique_name(names, particle_spawn_emiter_pros.name);
                 particle_system_template.add_emiter(
                     name,
                     rs_engine::particle::emiter::ParticleEmiter::Spawn(

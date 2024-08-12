@@ -7,6 +7,7 @@ use crate::{
     editor_ui::{EditorUI, GizmoEvent},
     material_resolve,
     model_loader::ModelLoader,
+    name_generator::make_unique_name,
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
     ui::{
@@ -1194,6 +1195,7 @@ impl EditorContext {
     }
 
     fn open_model_file(&mut self, file_path: PathBuf) -> anyhow::Result<()> {
+        let exist_names = self.get_all_content_names();
         let project_context = self
             .project_context
             .as_mut()
@@ -1213,9 +1215,20 @@ impl EditorContext {
             .to_str()
             .unwrap();
 
-        let load_result = self
-            .model_loader
-            .load_from_file_as_actor(&file_path, asset_reference.to_string())?;
+        let actor_names: Vec<String> = {
+            active_level
+                .borrow()
+                .actors
+                .iter()
+                .map(|x| x.borrow().name.clone())
+                .collect()
+        };
+        let load_result = self.model_loader.load_from_file_as_actor(
+            &file_path,
+            asset_reference.to_string(),
+            exist_names,
+            actor_names,
+        )?;
 
         let content = project_context.project.content.clone();
         let mut content = content.borrow_mut();
@@ -1245,8 +1258,9 @@ impl EditorContext {
             vec![load_result.actor.clone()],
             &content.files,
         );
-
-        active_level.borrow_mut().actors.push(load_result.actor);
+        let mut active_level = active_level.borrow_mut();
+        active_level.init_actor_physics(load_result.actor.clone());
+        active_level.actors.push(load_result.actor);
 
         // let mesh_clusters = ModelLoader::load_from_file(&file_path, &[])?;
         // self.data_source.is_model_hierarchy_open = true;
@@ -1651,44 +1665,6 @@ impl EditorContext {
         names
     }
 
-    fn is_new_content_name_avaliable(names: &[String], new_name: &str) -> bool {
-        names.contains(&new_name.to_string()) == false
-    }
-
-    pub fn make_unique_name(names: Vec<String>, new_name: impl AsRef<str>) -> String {
-        let mut new_name = new_name.as_ref().to_string();
-        let mut current_number: Option<isize> = None;
-
-        loop {
-            if Self::is_new_content_name_avaliable(&names, &new_name) {
-                return new_name.to_string();
-            } else {
-                let re = regex::Regex::new(r"[0-9]\d*$").unwrap();
-                match re.find(&new_name) {
-                    Some(mt) => {
-                        let s = mt.as_str();
-                        let number = s.parse::<isize>().unwrap();
-                        match &mut current_number {
-                            Some(current_number) => {
-                                *current_number = number + 1;
-                            }
-                            None => {
-                                current_number = Some(number);
-                            }
-                        }
-                        new_name = re
-                            .replace(&new_name, current_number.unwrap().to_string())
-                            .to_string();
-                    }
-                    None => {
-                        current_number = Some(0);
-                        new_name = format!("{}_0", new_name);
-                    }
-                }
-            }
-        }
-    }
-
     pub fn copy_file_and_log<P: AsRef<Path> + Clone + Debug>(
         from: P,
         to: P,
@@ -2049,7 +2025,7 @@ impl EditorContext {
             }
             content_browser::EClickEventType::CreateMaterial => {
                 let names = self.get_all_content_names();
-                let name = Self::make_unique_name(
+                let name = make_unique_name(
                     names,
                     &self.data_source.content_data_source.new_material_name,
                 );
@@ -2100,10 +2076,8 @@ impl EditorContext {
             }
             content_browser::EClickEventType::CreateIBL => {
                 let names = self.get_all_content_names();
-                let name = Self::make_unique_name(
-                    names,
-                    &self.data_source.content_data_source.new_ibl_name,
-                );
+                let name =
+                    make_unique_name(names, &self.data_source.content_data_source.new_ibl_name);
 
                 let new_ibl =
                     rs_engine::content::ibl::IBL::new(build_content_file_url(&name).unwrap());
@@ -2120,7 +2094,7 @@ impl EditorContext {
             }
             content_browser::EClickEventType::CreateParticleSystem => {
                 let names = self.get_all_content_names();
-                let name = Self::make_unique_name(
+                let name = make_unique_name(
                     names,
                     &self.data_source.content_data_source.new_content_name,
                 );
@@ -2376,25 +2350,5 @@ mod test {
         );
 
         assert_eq!(EditorContext::is_project_name_valid("name"), true);
-    }
-
-    #[test]
-    fn test_case1() {
-        assert_eq!(
-            EditorContext::make_unique_name(vec!["abc_1".to_string()], "abc_1"),
-            "abc_2"
-        );
-        assert_eq!(
-            EditorContext::make_unique_name(vec!["abc".to_string()], "abc"),
-            "abc_0"
-        );
-        assert_eq!(
-            EditorContext::make_unique_name(vec!["abc0".to_string()], "abc0"),
-            "abc1"
-        );
-        assert_eq!(
-            EditorContext::make_unique_name(vec!["abc".to_string(), "abc_0".to_string()], "abc"),
-            "abc_1"
-        );
     }
 }
