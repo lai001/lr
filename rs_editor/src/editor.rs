@@ -2,7 +2,9 @@ use crate::{
     custom_event::ECustomEventType,
     editor_context::{EWindowType, EditorContext},
 };
+use anyhow::anyhow;
 use clap::*;
+use egui::include_image;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use std::collections::HashMap;
@@ -105,6 +107,7 @@ impl WindowsManager {
         let window_width = (1280 as f64 * scale_factor) as u32;
         let window_height = (720 as f64 * scale_factor) as u32;
         let child_window_builder = winit::window::WindowBuilder::new()
+            .with_window_icon(Some(Editor::default_icon()?))
             .with_decorations(true)
             .with_resizable(true)
             .with_transparent(false)
@@ -240,6 +243,7 @@ impl Editor {
         let window_height = (720 as f64 * scale_factor) as u32;
 
         let window = winit::window::WindowBuilder::new()
+            .with_window_icon(Some(Self::default_icon()?))
             .with_decorations(true)
             .with_resizable(true)
             .with_transparent(false)
@@ -263,5 +267,16 @@ impl Editor {
             }
         });
         Ok(event_loop_result?)
+    }
+
+    fn default_icon() -> anyhow::Result<winit::window::Icon> {
+        let icon_image = image::load_from_memory(include_bytes!("../target/editor.ico"))?;
+        let icon_image = icon_image.as_rgba8().ok_or(anyhow!("Bad icon"))?;
+        let icon = winit::window::Icon::from_rgba(
+            icon_image.to_vec(),
+            icon_image.width(),
+            icon_image.height(),
+        )?;
+        Ok(icon)
     }
 }

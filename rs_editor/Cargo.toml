@@ -97,3 +97,12 @@ opt-level = 2
 [[bin]]
 name = "editor"
 path = "src/main.rs"
+
+[build-dependencies]
+winresource = "0.1"
+svg_to_ico = "0.1"
+rs_core_minimal = { path = "../rs_core_minimal" }
+
+[package.metadata.winresource]
+OriginalFilename = "rs_editor.exe"
+LegalCopyright = "GNU General Public License v2.0"
