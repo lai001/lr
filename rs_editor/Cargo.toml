@@ -88,12 +88,6 @@ rs_v8_host = { path = "../rs_v8_host", optional = true }
 rs_dotnet = { path = "../rs_dotnet", optional = true }
 rs_dotnet_host = { path = "../rs_dotnet_host", optional = true }
 
-[lib]
-crate-type = ["rlib", "dylib"]
-
-[profile.dev.package."*"]
-opt-level = 2
-
 [[bin]]
 name = "editor"
 path = "src/main.rs"

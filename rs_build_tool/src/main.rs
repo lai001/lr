@@ -1,23 +1,14 @@
 use anyhow::anyhow;
-use clap::{command, Args, Parser};
-use rs_build_tool::json_project::{Crate, JsonProject};
+use clap::Parser;
+use rs_build_tool::{
+    build_script::{clean, make_build_script},
+    cli::{Cli, ProjectFilesArgs},
+    json_project::{Crate, JsonProject},
+};
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_foundation::change_working_directory;
 use serde_json::{json, Map, Value};
 use std::{collections::HashMap, path::Path};
-
-#[derive(Debug, Clone, Args)]
-struct ProjectFilesArgs {
-    #[arg(short, long)]
-    project_file: std::path::PathBuf,
-}
-
-#[derive(Parser, Debug, Clone)]
-#[command(author, version, about, long_about = None)]
-#[command(propagate_version = true)]
-enum Cli {
-    ProjectFiles(ProjectFilesArgs),
-}
 
 fn try_write_setting_json_file(settings_path: &Path) -> anyhow::Result<()> {
     if settings_path.is_file() {
@@ -102,7 +93,7 @@ fn fetch_metadata() -> anyhow::Result<Map<String, Value>> {
 
 fn write_rust_project_json_file(
     projcet_folder: &Path,
-    project_files_args: ProjectFilesArgs,
+    project_files_args: &ProjectFilesArgs,
 ) -> anyhow::Result<()> {
     let mut vars = std::env::vars();
     let rustup_home = vars
@@ -365,7 +356,7 @@ fn generate_project_files(project_files_args: ProjectFilesArgs) -> anyhow::Resul
         .parent()
         .ok_or(anyhow!("No parent folder."))?
         .canonicalize_slash()?;
-    write_rust_project_json_file(&projcet_folder, project_files_args)?;
+    write_rust_project_json_file(&projcet_folder, &project_files_args)?;
     let settings_path = projcet_folder.join(".vscode/settings.json");
     try_write_setting_json_file(&settings_path)?;
     write_build_script_file(&projcet_folder)?;
@@ -382,6 +373,13 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli {
         Cli::ProjectFiles(project_files_args) => generate_project_files(project_files_args)?,
+        Cli::Hotreload(hotreload_args) => {
+            if hotreload_args.is_enable {
+                make_build_script(&hotreload_args)?;
+            } else {
+                clean(&hotreload_args)?;
+            }
+        }
     }
 
     Ok(())

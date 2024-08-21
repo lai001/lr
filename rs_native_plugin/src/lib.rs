@@ -13,3 +13,13 @@ pub mod plugin_crate;
     feature = "plugin_shared_crate_import"
 ))]
 pub use crate::plugin_crate::*;
+
+pub mod symbol_name {
+    pub const CREATE_PLUGIN: &str = "create_plugin";
+}
+
+pub mod signature {
+    use super::Plugin;
+
+    pub type CreatePlugin = fn() -> Box<dyn Plugin>;
+}

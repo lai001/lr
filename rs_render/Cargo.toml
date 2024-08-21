@@ -8,9 +8,7 @@ default = ["standalone"]
 renderdoc = ["dep:renderdoc"]
 editor = ["rs_shader_compiler/editor", "rs_core_minimal/editor"]
 standalone = ["rs_shader_compiler/standalone", "rs_core_minimal/standalone"]
-profiler = [
-    "tracy-client/default"
-]
+profiler = ["tracy-client/default"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]

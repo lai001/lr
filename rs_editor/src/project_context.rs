@@ -78,11 +78,12 @@ impl ProjectContext {
         let reader = std::io::BufReader::new(file);
         let project: Project = serde_json::de::from_reader(reader)
             .context("Failed to deserialize JSON data to a project data structure.")?;
-        #[cfg(debug_assertions)]
-        let lib_folder = project_folder_path.join("target").join("debug");
-        #[cfg(not(debug_assertions))]
-        let lib_folder = project_folder_path.join("target").join("release");
-        let hot_reload = HotReload::new(&project_folder_path, &lib_folder, &project.project_name)?;
+        // #[cfg(debug_assertions)]
+        // let lib_folder = project_folder_path.join("target").join("debug");
+        // #[cfg(not(debug_assertions))]
+        // let lib_folder = project_folder_path.join("target").join("release");
+        let lib_folder = std::env::current_dir()?.join("deps");
+        let hot_reload = HotReload::new(&lib_folder, &lib_folder, &project.project_name)?;
         let mut context = ProjectContext {
             project,
             project_file_path: project_file_path.to_path_buf(),

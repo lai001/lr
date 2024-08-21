@@ -377,7 +377,7 @@ impl EditorContext {
                 }
                 if let Some(project_context) = &mut self.project_context {
                     if project_context.is_need_reload_plugin() {
-                        let _ = self.try_load_plugin();
+                        log::trace!("{:?}", self.try_load_plugin());
                     }
                 }
                 let _ = self.try_load_dotnet_plugin();
@@ -1117,7 +1117,7 @@ impl EditorContext {
         self.editor_ui.debug_textures_view.all_texture_urls = rm.get_texture_urls();
 
         self.project_context = Some(project_context);
-        let _ = self.try_load_plugin();
+        log::trace!("{:?}", self.try_load_plugin());
         let _ = self.try_load_dotnet_plugin();
         let _ = self.try_load_js_plugin();
         self.data_source
@@ -1348,7 +1348,7 @@ impl EditorContext {
             }
             #[cfg(feature = "plugin_shared_crate_export")]
             {
-                plugin.tick(&mut self.engine);
+                plugin.tick(&mut self.engine, self.egui_winit_state.egui_ctx().clone());
             }
         }
 

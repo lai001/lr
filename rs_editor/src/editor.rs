@@ -4,7 +4,6 @@ use crate::{
 };
 use anyhow::anyhow;
 use clap::*;
-use egui::include_image;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use std::collections::HashMap;
