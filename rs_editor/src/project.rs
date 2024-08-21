@@ -232,44 +232,43 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-plugin_shared_lib = ["rs_native_plugin/plugin_shared_lib"]
+default = ["editor", "plugin_shared_crate_import"]
+renderdoc = ["rs_engine/renderdoc", "rs_render/renderdoc"]
+editor = ["rs_engine/editor", "rs_render/editor"]
 plugin_shared_crate_import = ["rs_native_plugin/plugin_shared_crate_import"]
-default = ["plugin_shared_crate_import"]
+standalone = ["rs_engine/standalone", "rs_render/standalone"]
+profiler = ["rs_engine/profiler", "rs_render/profiler"]
 
 [dependencies]
-rs_native_plugin = { path = "@engine_path@/rs_native_plugin", default-features = false }
+egui = { version = "0.28.1" }
+log = "0.4.22"
+rs_native_plugin = { path = "@engine_path@/rs_native_plugin" }
+rs_engine = { path = "@engine_path@/rs_engine" }
+rs_render = { path = "@engine_path@/rs_render" }
 
 [lib]
 crate-type = ["dylib"]
+
+[profile.dev.package."*"]
+opt-level = 2
     "#;
 }
 
 #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
 fn get_my_plugin_template() -> &'static str {
-    return r#"#[cfg(feature = "plugin_shared_crate_import")]
-extern crate rs_engine;
-#[cfg(feature = "plugin_shared_crate_import")]
-extern crate rs_render;
-
-#[cfg(feature = "plugin_shared_lib")]
-use rs_native_plugin::plugin::*;
-#[cfg(feature = "plugin_shared_crate_import")]
+    return r#"use rs_engine;
 use rs_native_plugin::plugin_crate::*;
 
 pub struct MyPlugin {}
 
 impl Plugin for MyPlugin {
-    #[cfg(feature = "plugin_shared_lib")]
-    fn tick(&mut self, engine: Engine) {
-        unsafe {
-            let mode = 0;
-            rs_engine_Engine_set_view_mode(engine, mode);
-        }
-    }
-
-    #[cfg(feature = "plugin_shared_crate_import")]
-    fn tick(&mut self, engine: &mut rs_engine::engine::Engine) {
-        engine.set_view_mode(rs_render::view_mode::EViewModeType::Wireframe);
+    fn tick(&mut self, engine: &mut rs_engine::engine::Engine, ctx: egui::Context) {
+        engine.set_view_mode(rs_render::view_mode::EViewModeType::Lit);
+        egui::Window::new("MyPlugin").show(&ctx, |ui| {
+            if ui.button("Click").clicked() {
+                log::error!("Click");
+            }
+        });
     }
 }
 
