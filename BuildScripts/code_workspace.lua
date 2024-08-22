@@ -138,8 +138,8 @@ task("code_workspace") do
             table.join2(features, "renderdoc")
         end
         table.join2(features, "plugin_shared_crate_export")
-        table.join2(features, "plugin_dotnet")
-        table.join2(features, "plugin_v8")
+        -- table.join2(features, "plugin_dotnet")
+        -- table.join2(features, "plugin_v8")
 
         if #features == 0 then
             features = nil
@@ -160,7 +160,8 @@ task("code_workspace") do
                 ["rust-analyzer.cargo.extraEnv"] = extraEnv,
                 ["rust-analyzer.server.extraEnv"] = extraEnv,
                 ["rust-analyzer.check.extraEnv"] = extraEnv,
-                ["rust-analyzer.runnables.extraEnv"] = extraEnv
+                ["rust-analyzer.runnables.extraEnv"] = extraEnv,
+                ["rust-analyzer.checkOnSave"] = false
             }
         }
         local file_name = format("%s_%s_%s.code-workspace", launch_type, plat, target)

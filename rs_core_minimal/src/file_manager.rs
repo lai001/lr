@@ -1,10 +1,10 @@
-use crate::misc::is_run_from_ide;
+use crate::misc::is_dev_mode;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "editor")]
 pub fn get_engine_root_dir() -> PathBuf {
     let path: PathBuf;
-    if is_run_from_ide() {
+    if is_dev_mode() {
         path = Path::new(file!()).join("../../../").to_path_buf();
     } else {
         path = Path::new("../../../").to_path_buf();

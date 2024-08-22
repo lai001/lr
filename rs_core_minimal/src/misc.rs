@@ -1,4 +1,4 @@
-use crate::{file_manager::get_engine_root_dir, frustum::Frustum};
+use crate::frustum::Frustum;
 use glam::Vec4Swizzles;
 
 pub fn calculate_max_mips(length: u32) -> u32 {
@@ -34,10 +34,12 @@ pub fn is_run_from_ide() -> bool {
 
 #[cfg(feature = "editor")]
 pub fn is_dev_mode() -> bool {
-    let is_cargo_exist = get_engine_root_dir().join(".cargo").exists();
-    let is_xmake_exist = get_engine_root_dir().join(".xmake").exists();
-    let is_vscode_exist = get_engine_root_dir().join(".vscode").exists();
-    is_run_from_ide() || is_cargo_exist || is_xmake_exist || is_vscode_exist
+    // let is_cargo_exist = get_engine_root_dir().join(".cargo").exists();
+    // let is_xmake_exist = get_engine_root_dir().join(".xmake").exists();
+    // let is_vscode_exist = get_engine_root_dir().join(".vscode").exists();
+    // is_run_from_ide() || is_cargo_exist || is_xmake_exist || is_vscode_exist
+    let vars = std::env::vars().filter(|x| x.0 == "CARGO_MANIFEST_DIR".to_string());
+    vars.count() != 0
 }
 
 pub fn get_md5_from_string(text: &str) -> String {
