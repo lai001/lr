@@ -371,6 +371,13 @@ impl SkeletonMeshComponent {
         }
     }
 
+    pub fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
+        match &mut self.run_time {
+            Some(x) => x.draw_objects.values_mut().map(|x| x).collect(),
+            None => vec![],
+        }
+    }
+
     pub fn set_material(&mut self, material_url: url::Url, files: &[EContentFileType]) {
         self.material_url = Some(material_url);
         let material = if let Some(material_url) = &self.material_url {

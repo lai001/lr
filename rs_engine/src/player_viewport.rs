@@ -1,13 +1,22 @@
-use crate::build_built_in_resouce_url;
+use crate::camera::Camera;
+use crate::drawable::EDrawObjectType;
 use crate::engine::{Engine, VirtualPassHandle};
 use crate::handle::TextureHandle;
+use crate::resource_manager::ResourceManager;
+use crate::{build_built_in_resouce_url, BUILT_IN_RESOURCE};
 use glam::Vec4Swizzles;
+use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
 use rs_render::antialias_type::{FXAAInfo, MSAAInfo};
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, DrawObject, RenderCommand, TextureDescriptorCreateInfo,
+    BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, RenderCommand, ShadowMapping,
+    TextureDescriptorCreateInfo, UpdateBuffer, VirtualPassSet,
 };
 use rs_render::global_uniform;
+use rs_render::renderer::{EBuiltinPipelineType, EPipelineType, MaterialPipelineType};
+use rs_render::virtual_texture_source::TVirtualTextureSource;
 use rs_render::{antialias_type::EAntialiasType, scene_viewport::SceneViewport};
+use rs_render_types::MaterialOptions;
+use std::collections::HashMap;
 
 pub struct PlayerViewport {
     pub window_id: isize,
@@ -20,6 +29,11 @@ pub struct PlayerViewport {
     pub virtual_pass_handle: Option<VirtualPassHandle>,
     pub shadow_depth_texture_handle: Option<TextureHandle>,
     pub grid_draw_object: Option<DrawObject>,
+    pub draw_objects: Vec<DrawObject>,
+    pub camera: Camera,
+    virtual_texture_source_infos: SingleThreadMutType<
+        HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
+    >,
 }
 
 impl PlayerViewport {
@@ -29,6 +43,9 @@ impl PlayerViewport {
         height: u32,
         global_sampler_handle: crate::handle::SamplerHandle,
         engine: &mut Engine,
+        virtual_texture_source_infos: SingleThreadMutType<
+            HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
+        >,
     ) -> PlayerViewport {
         let scene_viewport = SceneViewport::new();
 
@@ -43,6 +60,8 @@ impl PlayerViewport {
             },
         });
         engine.get_render_thread_mode_mut().send_command(command);
+        let mut camera = Camera::default(width, height);
+        camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
 
         PlayerViewport {
             scene_viewport,
@@ -55,6 +74,9 @@ impl PlayerViewport {
             grid_draw_object: None,
             global_constants,
             global_constants_handle,
+            draw_objects: vec![],
+            camera,
+            virtual_texture_source_infos,
         }
     }
 
@@ -208,4 +230,447 @@ impl PlayerViewport {
     //         ));
     //     self.virtual_pass_handle = Some(handle);
     // }
+
+    pub fn update_global_constants(&mut self, engine: &mut Engine) {
+        let view: glam::Mat4 = self.camera.get_view_matrix();
+        let projection: glam::Mat4 = self.camera.get_projection_matrix();
+        let world_location: glam::Vec3 = self.camera.get_world_location();
+        self.global_constants.view = view;
+        self.global_constants.projection = projection;
+        self.global_constants.view_projection =
+            self.global_constants.projection * self.global_constants.view;
+        self.global_constants.view_position = world_location;
+
+        let command = RenderCommand::UpdateBuffer(UpdateBuffer {
+            handle: *self.global_constants_handle,
+            data: rs_foundation::cast_to_raw_buffer(&vec![self.global_constants]).to_vec(),
+        });
+        engine.get_render_thread_mode_mut().send_command(command);
+    }
+
+    pub fn update_draw_object(&mut self, engine: &mut Engine, object: &mut EDrawObjectType) {
+        match object {
+            EDrawObjectType::Static(object) => {
+                let resource_manager = engine.get_resource_manager();
+                let settings = engine.get_settings();
+                let default_textures = engine.get_default_textures();
+
+                if let Some(texture_url) = object.diffuse_texture_url.as_ref() {
+                    if let Some(_) =
+                        ResourceManager::default().get_virtual_texture_by_url(texture_url)
+                    {
+                        let virtual_texture_source_infos =
+                            self.virtual_texture_source_infos.borrow();
+                        let source = virtual_texture_source_infos.get(texture_url).unwrap();
+                        {
+                            let source = source.lock().unwrap();
+                            let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                                source.get_size().min_element(),
+                            );
+                            let max_lod = max_mips
+                                - settings
+                                    .render_setting
+                                    .virtual_texture_setting
+                                    .tile_size
+                                    .ilog2()
+                                - 1;
+                            object.constants.diffuse_texture_max_lod = max_lod;
+                            object.constants.diffuse_texture_size = source.get_size().as_vec2();
+                        }
+                        object.constants.is_virtual_diffuse_texture = 1;
+                        object.diffuse_texture_resource =
+                            EBindingResource::Texture(*default_textures.get_texture_handle());
+                    } else if let Some(base_texture_handle) =
+                        resource_manager.get_texture_by_url(texture_url)
+                    {
+                        object.constants.is_virtual_diffuse_texture = 0;
+                        object.diffuse_texture_resource =
+                            EBindingResource::Texture(*base_texture_handle);
+                    }
+                }
+
+                engine.update_buffer(
+                    object.constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.constants),
+                );
+            }
+            EDrawObjectType::Skin(object) => {
+                let resource_manager = engine.get_resource_manager();
+                let settings = engine.get_settings();
+                let default_textures = engine.get_default_textures();
+
+                if let Some(texture_url) = object.diffuse_texture_url.as_ref() {
+                    if let Some(_) = resource_manager.get_virtual_texture_by_url(texture_url) {
+                        let virtual_texture_source_infos =
+                            self.virtual_texture_source_infos.borrow();
+                        let source = virtual_texture_source_infos.get(texture_url).unwrap();
+                        {
+                            let source = source.lock().unwrap();
+                            let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                                source.get_size().min_element(),
+                            );
+                            let max_lod = max_mips
+                                - settings
+                                    .render_setting
+                                    .virtual_texture_setting
+                                    .tile_size
+                                    .ilog2()
+                                - 1;
+                            object.constants.diffuse_texture_max_lod = max_lod;
+                            object.constants.diffuse_texture_size = source.get_size().as_vec2();
+                        }
+                        object.constants.is_virtual_diffuse_texture = 1;
+                        object.diffuse_texture_resource =
+                            EBindingResource::Texture(*default_textures.get_texture_handle());
+                    } else if let Some(base_texture_handle) =
+                        resource_manager.get_texture_by_url(texture_url)
+                    {
+                        object.constants.is_virtual_diffuse_texture = 0;
+                        object.diffuse_texture_resource =
+                            EBindingResource::Texture(*base_texture_handle);
+                    }
+                }
+
+                engine.update_buffer(
+                    object.constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.constants),
+                );
+            }
+            EDrawObjectType::SkinMaterial(object) => {
+                let settings = engine.get_settings();
+
+                let material_info = object.material.borrow().get_material_info().clone();
+                let map_textures = &material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap()
+                    .map_textures;
+                for virtual_texture_url in &material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap()
+                    .virtual_textures
+                {
+                    let virtual_texture_source_infos = self.virtual_texture_source_infos.borrow();
+                    let source = virtual_texture_source_infos
+                        .get(virtual_texture_url)
+                        .unwrap();
+                    {
+                        let source = source.lock().unwrap();
+                        let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                            source.get_size().min_element(),
+                        );
+                        let max_lod = max_mips
+                            - settings
+                                .render_setting
+                                .virtual_texture_setting
+                                .tile_size
+                                .ilog2()
+                            - 1;
+                        object.virtual_texture_constants.virtual_texture_max_lod = max_lod;
+                        object.virtual_texture_constants.virtual_texture_size =
+                            source.get_size().as_vec2();
+                    }
+                }
+                engine.update_buffer(
+                    object.constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.constants),
+                );
+                engine.update_buffer(
+                    object.skin_constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.skin_constants),
+                );
+                engine.update_buffer(
+                    object.virtual_texture_constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.virtual_texture_constants),
+                );
+
+                let mut binding_resources: Vec<EBindingResource> =
+                    Vec::with_capacity(map_textures.len());
+                for map_texture in map_textures {
+                    let resource_manager = engine.get_resource_manager();
+
+                    if let Some(handle) =
+                        resource_manager.get_texture_by_url(&map_texture.texture_url)
+                    {
+                        binding_resources.push(EBindingResource::Texture(*handle));
+                    } else {
+                        log::trace!("Can not find {}", map_texture.texture_url.to_string());
+                    }
+                }
+                assert_eq!(binding_resources.len(), map_textures.len());
+                object.user_textures_resources = binding_resources;
+                let resource_manager = engine.get_resource_manager();
+
+                let ibl_textures = resource_manager.get_ibl_textures();
+                let Some((_, ibl_textures)) = ibl_textures.iter().find(|x| {
+                    let url = x.0;
+                    url.scheme() != BUILT_IN_RESOURCE
+                }) else {
+                    return;
+                };
+                object.brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
+                object.pre_filter_cube_map_texture_resource =
+                    EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
+                object.irradiance_texture_resource =
+                    EBindingResource::Texture(*ibl_textures.irradiance);
+            }
+            EDrawObjectType::StaticMeshMaterial(object) => {
+                let settings = engine.get_settings();
+                object.global_constants_resource =
+                    EBindingResource::Constants(*self.global_constants_handle);
+                let material_info = object.material.borrow().get_material_info().clone();
+                let map_textures = &material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap()
+                    .map_textures;
+                for virtual_texture_url in &material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap()
+                    .virtual_textures
+                {
+                    let virtual_texture_source_infos = self.virtual_texture_source_infos.borrow();
+                    let source = virtual_texture_source_infos
+                        .get(virtual_texture_url)
+                        .unwrap();
+                    {
+                        let source = source.lock().unwrap();
+                        let max_mips = rs_core_minimal::misc::calculate_max_mips(
+                            source.get_size().min_element(),
+                        );
+                        let max_lod = max_mips
+                            - settings
+                                .render_setting
+                                .virtual_texture_setting
+                                .tile_size
+                                .ilog2()
+                            - 1;
+                        object.virtual_texture_constants.virtual_texture_max_lod = max_lod;
+                        object.virtual_texture_constants.virtual_texture_size =
+                            source.get_size().as_vec2();
+                    }
+                }
+
+                engine.update_buffer(
+                    object.constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.constants),
+                );
+                engine.update_buffer(
+                    object.virtual_texture_constants_buffer_handle.clone(),
+                    rs_foundation::cast_any_as_u8_slice(&object.virtual_texture_constants),
+                );
+
+                let mut binding_resources: Vec<EBindingResource> =
+                    Vec::with_capacity(map_textures.len());
+                for map_texture in map_textures {
+                    let resource_manager = engine.get_resource_manager();
+                    if let Some(handle) =
+                        resource_manager.get_texture_by_url(&map_texture.texture_url)
+                    {
+                        binding_resources.push(EBindingResource::Texture(*handle));
+                    } else {
+                        log::trace!("Can not find {}", map_texture.texture_url.to_string());
+                    }
+                }
+                assert_eq!(binding_resources.len(), map_textures.len());
+                object.user_textures_resources = binding_resources;
+
+                let ibl_textures = {
+                    let resource_manager = engine.get_resource_manager();
+                    resource_manager.get_ibl_textures()
+                };
+                let Some((_, ibl_textures)) = ibl_textures.iter().find(|x| {
+                    let url = x.0;
+                    url.scheme() != BUILT_IN_RESOURCE
+                }) else {
+                    return;
+                };
+                object.brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
+                object.pre_filter_cube_map_texture_resource =
+                    EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
+                object.irradiance_texture_resource =
+                    EBindingResource::Texture(*ibl_textures.irradiance);
+            }
+            EDrawObjectType::Custom(_) => {}
+        }
+    }
+
+    pub fn push_to_draw_list(&mut self, draw_object: &EDrawObjectType) {
+        match draw_object {
+            EDrawObjectType::Static(static_objcet) => {
+                let static_objcet = static_objcet.clone();
+                let draw_object = DrawObject::new(
+                    static_objcet.id,
+                    static_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                    static_objcet.vertex_count,
+                    EPipelineType::Builtin(EBuiltinPipelineType::StaticMeshPhong),
+                    static_objcet.index_buffer.clone().map(|x| *x),
+                    static_objcet.index_count,
+                    vec![
+                        vec![
+                            static_objcet.global_constants_resource,
+                            static_objcet.base_color_sampler_resource,
+                            static_objcet.physical_texture_resource,
+                            static_objcet.page_table_texture_resource,
+                        ],
+                        vec![
+                            static_objcet.diffuse_texture_resource,
+                            static_objcet.specular_texture_resource,
+                        ],
+                        vec![static_objcet.constants_resource],
+                    ],
+                );
+
+                self.draw_objects.push(draw_object);
+            }
+            EDrawObjectType::Skin(skin_objcet) => {
+                let skin_objcet = skin_objcet.clone();
+
+                let draw_object = DrawObject::new(
+                    skin_objcet.id,
+                    skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                    skin_objcet.vertex_count,
+                    EPipelineType::Builtin(EBuiltinPipelineType::SkinMeshPhong),
+                    skin_objcet.index_buffer.clone().map(|x| *x),
+                    skin_objcet.index_count,
+                    vec![
+                        vec![
+                            skin_objcet.global_constants_resource,
+                            skin_objcet.base_color_sampler_resource,
+                            skin_objcet.physical_texture_resource,
+                            skin_objcet.page_table_texture_resource,
+                        ],
+                        vec![
+                            skin_objcet.diffuse_texture_resource,
+                            skin_objcet.specular_texture_resource,
+                        ],
+                        vec![skin_objcet.constants_resource],
+                    ],
+                );
+                self.draw_objects.push(draw_object);
+            }
+            EDrawObjectType::SkinMaterial(skin_objcet) => {
+                let skin_objcet = skin_objcet.clone();
+                let material = skin_objcet.material.borrow();
+                if let Some(pipeline_handle) = material.get_pipeline_handle() {
+                    let mut draw_object = DrawObject::new(
+                        skin_objcet.id,
+                        skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                        skin_objcet.vertex_count,
+                        EPipelineType::Material(MaterialPipelineType {
+                            handle: *pipeline_handle,
+                            options: MaterialOptions { is_skin: true },
+                        }),
+                        skin_objcet.index_buffer.clone().map(|x| *x),
+                        skin_objcet.index_count,
+                        vec![
+                            vec![
+                                skin_objcet.global_constants_resource.clone(),
+                                skin_objcet.base_color_sampler_resource,
+                                skin_objcet.physical_texture_resource,
+                                skin_objcet.page_table_texture_resource,
+                                skin_objcet.brdflut_texture_resource,
+                                skin_objcet.pre_filter_cube_map_texture_resource,
+                                skin_objcet.irradiance_texture_resource,
+                                skin_objcet.shadow_map_texture_resource,
+                            ],
+                            vec![
+                                skin_objcet.constants_resource.clone(),
+                                skin_objcet.skin_constants_resource.clone(),
+                                skin_objcet.virtual_texture_constants_resource,
+                            ],
+                            skin_objcet.user_textures_resources,
+                        ],
+                    );
+                    draw_object.virtual_pass_set = Some(VirtualPassSet {
+                        vertex_buffers: vec![
+                            *skin_objcet.vertex_buffers[0],
+                            *skin_objcet.vertex_buffers[2],
+                        ],
+                        binding_resources: vec![
+                            vec![skin_objcet.global_constants_resource.clone()],
+                            vec![
+                                skin_objcet.constants_resource.clone(),
+                                skin_objcet.skin_constants_resource.clone(),
+                            ],
+                        ],
+                    });
+                    if let Some(handle) = self.shadow_depth_texture_handle.clone() {
+                        draw_object.shadow_mapping = Some(ShadowMapping {
+                            vertex_buffers: vec![
+                                *skin_objcet.vertex_buffers[0],
+                                *skin_objcet.vertex_buffers[2],
+                            ],
+                            depth_texture_handle: *handle,
+                            binding_resources: vec![vec![
+                                skin_objcet.global_constants_resource.clone(),
+                                skin_objcet.constants_resource.clone(),
+                                skin_objcet.skin_constants_resource.clone(),
+                            ]],
+                            is_skin: true,
+                        });
+                    }
+                    self.draw_objects.push(draw_object);
+                }
+            }
+            EDrawObjectType::StaticMeshMaterial(static_mesh_draw_objcet) => {
+                let static_mesh_draw_objcet = static_mesh_draw_objcet.clone();
+                let material = static_mesh_draw_objcet.material.borrow();
+                if let Some(pipeline_handle) = material.get_pipeline_handle() {
+                    let mut draw_object = DrawObject::new(
+                        static_mesh_draw_objcet.id,
+                        static_mesh_draw_objcet
+                            .vertex_buffers
+                            .iter()
+                            .map(|x| **x)
+                            .collect(),
+                        static_mesh_draw_objcet.vertex_count,
+                        EPipelineType::Material(MaterialPipelineType {
+                            handle: *pipeline_handle,
+                            options: MaterialOptions { is_skin: false },
+                        }),
+                        static_mesh_draw_objcet.index_buffer.clone().map(|x| *x),
+                        static_mesh_draw_objcet.index_count,
+                        vec![
+                            vec![
+                                static_mesh_draw_objcet.global_constants_resource.clone(),
+                                static_mesh_draw_objcet.base_color_sampler_resource,
+                                static_mesh_draw_objcet.physical_texture_resource,
+                                static_mesh_draw_objcet.page_table_texture_resource,
+                                static_mesh_draw_objcet.brdflut_texture_resource,
+                                static_mesh_draw_objcet.pre_filter_cube_map_texture_resource,
+                                static_mesh_draw_objcet.irradiance_texture_resource,
+                                static_mesh_draw_objcet.shadow_map_texture_resource,
+                            ],
+                            vec![
+                                static_mesh_draw_objcet.constants_resource.clone(),
+                                static_mesh_draw_objcet.virtual_texture_constants_resource,
+                            ],
+                            static_mesh_draw_objcet.user_textures_resources,
+                        ],
+                    );
+                    draw_object.virtual_pass_set = Some(VirtualPassSet {
+                        vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
+                        binding_resources: vec![
+                            vec![static_mesh_draw_objcet.global_constants_resource.clone()],
+                            vec![static_mesh_draw_objcet.constants_resource.clone()],
+                        ],
+                    });
+                    if let Some(handle) = self.shadow_depth_texture_handle.clone() {
+                        draw_object.shadow_mapping = Some(ShadowMapping {
+                            vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
+                            depth_texture_handle: *handle,
+                            binding_resources: vec![vec![
+                                static_mesh_draw_objcet.global_constants_resource.clone(),
+                                static_mesh_draw_objcet.constants_resource.clone(),
+                            ]],
+                            is_skin: false,
+                        });
+                    }
+                    self.draw_objects.push(draw_object);
+                }
+            }
+            EDrawObjectType::Custom(custom_objcet) => {
+                self.draw_objects.push(custom_objcet.draw_object.clone());
+            }
+        }
+    }
 }

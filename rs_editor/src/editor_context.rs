@@ -20,6 +20,7 @@ use crate::{
         multiple_draw_ui_window::MultipleDrawUiWindow,
         object_property_view::{self, ESelectedObjectType},
         particle_system_ui_window::ParticleSystemUIWindow,
+        standalone_ui_window::StandaloneUiWindow,
         top_menu,
     },
     watch_shader::WatchShader,
@@ -107,6 +108,7 @@ pub enum EWindowType {
     Media,
     MultipleDraw,
     Particle,
+    Standalone,
 }
 
 pub struct EditorContext {
@@ -131,6 +133,7 @@ pub struct EditorContext {
     mesh_ui_window: Option<MeshUIWindow>,
     media_ui_window: Option<MediaUIWindow>,
     multiple_draw_ui_window: Option<MultipleDrawUiWindow>,
+    standalone_ui_window: Option<StandaloneUiWindow>,
     watch_shader: WatchShader,
     #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
     donet_host: Option<rs_dotnet_host::dotnet_runtime::DotnetRuntime>,
@@ -261,6 +264,7 @@ impl EditorContext {
             watch_shader,
             #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
             donet_host,
+            standalone_ui_window: None,
         };
 
         Ok(editor_context)
@@ -287,6 +291,7 @@ impl EditorContext {
             WindowEvent::CloseRequested => {
                 #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
                 self.plugins.clear();
+                self.standalone_ui_window = None;
                 self.egui_winit_state.egui_ctx().memory_mut(|writer| {
                     writer.data.clear();
                 });
@@ -377,7 +382,14 @@ impl EditorContext {
                 }
                 if let Some(project_context) = &mut self.project_context {
                     if project_context.is_need_reload_plugin() {
-                        log::trace!("{:?}", self.try_load_plugin());
+                        match self.try_create_plugin() {
+                            Ok(plugin) => {
+                                if let Some(window) = &mut self.standalone_ui_window {
+                                    window.reload_plugins(vec![plugin]);
+                                }
+                            }
+                            Err(err) => log::warn!("{}", err),
+                        }
                     }
                 }
                 let _ = self.try_load_dotnet_plugin();
@@ -439,6 +451,9 @@ impl EditorContext {
                     ui_window.device_event_process(event);
                 }
                 if let Some(ui_window) = self.particle_system_ui_window.as_mut() {
+                    ui_window.device_event_process(event);
+                }
+                if let Some(ui_window) = self.standalone_ui_window.as_mut() {
                     ui_window.device_event_process(event);
                 }
                 match event {
@@ -568,6 +583,23 @@ impl EditorContext {
                             &mut *self.window_manager.borrow_mut(),
                         );
                     }
+                    EWindowType::Standalone => {
+                        let ui_window = self
+                            .standalone_ui_window
+                            .as_mut()
+                            .expect("Should not be bull");
+                        ui_window.window_event_process(
+                            window_id,
+                            window,
+                            event,
+                            event_loop_window_target,
+                            &mut self.engine,
+                            &mut *self.window_manager.borrow_mut(),
+                        );
+                        if event == &WindowEvent::CloseRequested {
+                            self.standalone_ui_window = None;
+                        }
+                    }
                 }
             }
             Event::NewEvents(_) => {}
@@ -576,7 +608,13 @@ impl EditorContext {
         }
     }
 
-    fn try_load_plugin(&mut self) -> anyhow::Result<()> {
+    // fn try_load_plugin(&mut self) -> anyhow::Result<()> {
+    //     let plugin = self.try_create_plugin()?;
+    //     self.plugins.push(plugin);
+    //     Ok(())
+    // }
+
+    fn try_create_plugin(&mut self) -> anyhow::Result<Box<dyn Plugin>> {
         #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
         if let Some(project_context) = self.project_context.as_mut() {
             project_context.reload()?;
@@ -586,10 +624,9 @@ impl EditorContext {
                 rs_native_plugin::symbol_name::CREATE_PLUGIN,
             )?;
             let plugin = func();
-            self.plugins.push(plugin);
-            log::trace!("Load plugin.");
+            return Ok(plugin);
         }
-        Ok(())
+        return Err(anyhow!("Can not create plugin"));
     }
 
     fn try_load_dotnet_plugin(&mut self) -> anyhow::Result<()> {
@@ -1047,6 +1084,9 @@ impl EditorContext {
     ) -> anyhow::Result<()> {
         let _span = tracy_client::span!();
         let project_context = ProjectContext::open(&file_path)?;
+        self.engine
+            .get_logger_mut()
+            .add_white_list(project_context.project.project_name.clone());
         window.set_title(&format!("Editor({})", project_context.project.project_name));
         let asset_folder_path = project_context.get_asset_folder_path();
         let asset_folder = Self::build_asset_folder(&asset_folder_path);
@@ -1117,7 +1157,7 @@ impl EditorContext {
         self.editor_ui.debug_textures_view.all_texture_urls = rm.get_texture_urls();
 
         self.project_context = Some(project_context);
-        log::trace!("{:?}", self.try_load_plugin());
+        // log::trace!("{:?}", self.try_load_plugin());
         let _ = self.try_load_dotnet_plugin();
         let _ = self.try_load_js_plugin();
         self.data_source
@@ -1348,7 +1388,14 @@ impl EditorContext {
             }
             #[cfg(feature = "plugin_shared_crate_export")]
             {
-                plugin.tick(&mut self.engine, self.egui_winit_state.egui_ctx().clone());
+                if let Some(level) = &mut self.data_source.level {
+                    let mut level = level.borrow_mut();
+                    plugin.tick(
+                        &mut self.engine,
+                        &mut level,
+                        self.egui_winit_state.egui_ctx().clone(),
+                    );
+                }
             }
         }
 
@@ -1458,6 +1505,29 @@ impl EditorContext {
         )
         .context(anyhow!("Can not write to file {:?}", target_path))?;
         Ok(())
+    }
+
+    fn open_standalone_window(
+        &mut self,
+        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+    ) {
+        let Some(level) = self.data_source.level.clone() else {
+            return;
+        };
+        let active_level = &level.borrow();
+        let plugins = self.try_create_plugin().map_or(vec![], |x| vec![x]);
+        let contents = self.get_all_contents();
+        let ui_window = StandaloneUiWindow::new(
+            self.editor_ui.egui_context.clone(),
+            &mut *self.window_manager.borrow_mut(),
+            event_loop_window_target,
+            &mut self.engine,
+            plugins,
+            active_level,
+            contents,
+        )
+        .expect("Should be opened");
+        self.standalone_ui_window = Some(ui_window);
     }
 
     fn open_particle_window(
@@ -1665,6 +1735,15 @@ impl EditorContext {
         names
     }
 
+    fn get_all_contents(&self) -> Vec<EContentFileType> {
+        let content_data_source = &self.data_source.content_data_source;
+        let Some(current_folder) = &content_data_source.current_folder else {
+            return vec![];
+        };
+        let current_folder = current_folder.borrow();
+        current_folder.files.to_vec()
+    }
+
     pub fn copy_file_and_log<P: AsRef<Path> + Clone + Debug>(
         from: P,
         to: P,
@@ -1839,6 +1918,12 @@ impl EditorContext {
                 log::trace!("{:?}", output);
             }
             top_menu::EClickEventType::DebugShading(ty) => self.engine.set_debug_shading(ty),
+            top_menu::EClickEventType::Standalone => {
+                let Some(_) = self.project_context.as_mut() else {
+                    return;
+                };
+                self.open_standalone_window(event_loop_window_target);
+            }
         }
     }
 

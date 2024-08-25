@@ -66,7 +66,9 @@ pub fn make_build_script(hotreload_args: &HotreloadArgs) -> anyhow::Result<()> {
         let content = std::fs::read_to_string(&editor_manifest_file)?;
         let mut doc = content.parse::<DocumentMut>()?;
 
-        let table = doc["dependencies"].as_table_mut().ok_or(anyhow!("No dependencies"))?;
+        let table = doc["dependencies"]
+            .as_table_mut()
+            .ok_or(anyhow!("No dependencies"))?;
         let mut attributes = Table::default();
         attributes["path"] = value(projcet_folder.canonicalize_slash()?.to_str().unwrap());
         table[project_name] = toml_edit::Item::Table(attributes);
@@ -114,7 +116,11 @@ pub fn make_build_script(hotreload_args: &HotreloadArgs) -> anyhow::Result<()> {
 
     let output = command.output()?;
     if !output.status.success() {
-        return Err(anyhow!("cargo build, {:?}\n{}", output.status.code(), String::from_utf8(output.stderr)?));
+        return Err(anyhow!(
+            "cargo build, {:?}\n{}",
+            output.status.code(),
+            String::from_utf8(output.stderr)?
+        ));
     }
 
     let stderr = String::from_utf8(output.stderr)?;
@@ -125,8 +131,12 @@ pub fn make_build_script(hotreload_args: &HotreloadArgs) -> anyhow::Result<()> {
             && line.contains(&format!("CARGO_CRATE_NAME={}", project_name))
         {
             let line = line.trim_start().trim_end().to_string();
-            let line = line.strip_prefix("Running `").ok_or(anyhow!("strip_prefix error"))?;
-            let line = line.strip_suffix("`").ok_or(anyhow!("strip_suffix error"))?;
+            let line = line
+                .strip_prefix("Running `")
+                .ok_or(anyhow!("strip_prefix error"))?;
+            let line = line
+                .strip_suffix("`")
+                .ok_or(anyhow!("strip_suffix error"))?;
             let contents: String = line.replace("&& ", "\n");
             let mut contents = contents.replace(
                 "--error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat",

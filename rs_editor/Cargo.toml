@@ -12,16 +12,24 @@ editor = [
     "rs_render/editor",
     "rs_core_minimal/editor",
     "rs_engine/editor",
+    "rs_standalone_core/editor",
 ]
 standalone = [
     "rs_shader_compiler/standalone",
     "rs_render/standalone",
     "rs_core_minimal/standalone",
     "rs_engine/standalone",
+    "rs_standalone_core/standalone",
 ]
 profiler = ["tracy-client/default", "rs_render/profiler", "rs_engine/profiler"]
-plugin_shared_lib = ["rs_native_plugin/plugin_shared_lib"]
-plugin_shared_crate_export = ["rs_native_plugin/plugin_shared_crate_export"]
+plugin_shared_lib = [
+    "rs_native_plugin/plugin_shared_lib",
+    "rs_standalone_core/plugin_shared_lib",
+]
+plugin_shared_crate_export = [
+    "rs_native_plugin/plugin_shared_crate_export",
+    "rs_standalone_core/plugin_shared_crate_export",
+]
 plugin_dotnet = ["dep:rs_dotnet", "dep:rs_dotnet_host"]
 plugin_v8 = ["dep:rs_v8_host"]
 
@@ -83,6 +91,7 @@ rs_media = { path = "../rs_media" }
 rs_audio = { path = "../rs_audio" }
 rs_native_plugin = { path = "../rs_native_plugin" }
 rs_v8_host = { path = "../rs_v8_host", optional = true }
+rs_standalone_core = { path = "../rs_standalone_core" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rs_dotnet = { path = "../rs_dotnet", optional = true }
@@ -95,6 +104,7 @@ path = "src/main.rs"
 [build-dependencies]
 winresource = "0.1"
 svg_to_ico = "0.1"
+glob = "0.3.1"
 rs_core_minimal = { path = "../rs_core_minimal" }
 
 [package.metadata.winresource]

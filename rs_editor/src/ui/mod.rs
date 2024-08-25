@@ -15,4 +15,5 @@ pub mod multiple_draw_ui_window;
 pub mod object_property_view;
 pub mod particle_system_ui_window;
 pub mod project_settings;
+pub mod standalone_ui_window;
 pub mod top_menu;

@@ -34,6 +34,7 @@ pub enum EClickEventType {
     Export,
     OpenVisualStudioCode,
     Run,
+    Standalone,
     Build(BuildConfig),
     OpenWindow(EWindowType),
     Tool(EToolType),
@@ -204,6 +205,10 @@ impl TopMenu {
                     });
                     if ui.add(Button::new("Run")).clicked() {
                         click = Some(EClickEventType::Run);
+                        ui.close_menu();
+                    }
+                    if ui.add(Button::new("Standalone Simulation")).clicked() {
+                        click = Some(EClickEventType::Standalone);
                         ui.close_menu();
                     }
                     ui.checkbox(&mut datasource.is_simulate_real_time, "Simulate Real Time");

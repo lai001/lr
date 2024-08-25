@@ -1,5 +1,6 @@
-use rs_engine::engine::Engine;
+use rs_engine::{content::level::Level, engine::Engine};
 
 pub trait Plugin {
-    fn tick(&mut self, engine: &mut Engine, ctx: egui::Context);
+    fn on_init(&mut self, engine: &mut Engine, level: &mut Level);
+    fn tick(&mut self, engine: &mut Engine, level: &mut Level, ctx: egui::Context);
 }

@@ -34,12 +34,16 @@ pub fn is_run_from_ide() -> bool {
 
 #[cfg(feature = "editor")]
 pub fn is_dev_mode() -> bool {
+    let manifest = std::env::current_exe()
+        .map(|x| x.join("../../../Cargo.toml"))
+        .expect("Should be a valid path");
+    let is_exists = manifest.exists();
     // let is_cargo_exist = get_engine_root_dir().join(".cargo").exists();
     // let is_xmake_exist = get_engine_root_dir().join(".xmake").exists();
     // let is_vscode_exist = get_engine_root_dir().join(".vscode").exists();
     // is_run_from_ide() || is_cargo_exist || is_xmake_exist || is_vscode_exist
     let vars = std::env::vars().filter(|x| x.0 == "CARGO_MANIFEST_DIR".to_string());
-    vars.count() != 0
+    vars.count() != 0 || is_exists
 }
 
 pub fn get_md5_from_string(text: &str) -> String {

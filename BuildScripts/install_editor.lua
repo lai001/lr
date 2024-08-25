@@ -16,7 +16,7 @@ task("install_editor") do
             print(format("Create %s folder.", prefix))
             os.mkdir(prefix)
         end
-        os.cp(path.join(engine_root_dir, "rs_editor/target/*/rs_editor.exe"), prefix, {rootdir = engine_root_dir})
+        os.cp(path.join(engine_root_dir, "rs_editor/target/*/*editor.exe"), prefix, {rootdir = engine_root_dir})
         os.cp(path.join(engine_root_dir, "rs_editor/target/*/*.dll"), prefix, {rootdir = engine_root_dir})
         os.cp(path.join(engine_root_dir, "Resource/Editor"), prefix, {rootdir = engine_root_dir})
         os.cp(path.join(engine_root_dir, "Resource/Remote/Font"), prefix, {rootdir = engine_root_dir})

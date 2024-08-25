@@ -109,8 +109,9 @@ pub struct Engine {
     global_constants: rs_render::global_uniform::Constants,
     global_constants_handle: crate::handle::BufferHandle,
     global_sampler_handle: crate::handle::SamplerHandle,
-    virtual_texture_source_infos:
+    virtual_texture_source_infos: SingleThreadMutType<
         HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
+    >,
     console_cmds: SingleThreadMutType<HashMap<String, SingleThreadMutType<ConsoleCmd>>>,
     grid_draw_object: Option<DrawObject>,
     content_files: HashMap<url::Url, EContentFileType>,
@@ -284,7 +285,7 @@ impl Engine {
         audio_device
             .play()
             .map_err(|err| crate::error::Error::AudioError(err))?;
-
+        let virtual_texture_source_infos = SingleThreadMut::new(HashMap::new());
         let mut engine = Engine {
             render_thread_mode,
             resource_manager,
@@ -301,7 +302,7 @@ impl Engine {
             global_constants,
             global_constants_handle: global_constants_handle.clone(),
             global_sampler_handle: global_sampler_handle.clone(),
-            virtual_texture_source_infos: HashMap::new(),
+            virtual_texture_source_infos: virtual_texture_source_infos.clone(),
             console_cmds: SingleThreadMut::new(HashMap::new()),
             grid_draw_object,
             content_files: Self::collect_content_files(),
@@ -319,6 +320,7 @@ impl Engine {
             surface_height,
             global_sampler_handle,
             &mut engine,
+            virtual_texture_source_infos.clone(),
         );
         match &settings.render_setting.antialias_type {
             rs_core_minimal::settings::EAntialiasType::None => {}
@@ -789,6 +791,50 @@ impl Engine {
 
         self.render_thread_mode
             .send_command(RenderCommand::UiOutput(gui_render_output));
+    }
+
+    pub fn present_player_viewport(&mut self, player_viewport: &mut PlayerViewport) {
+        let command = RenderCommand::UpdateBuffer(UpdateBuffer {
+            handle: *player_viewport.global_constants_handle,
+            data: rs_foundation::cast_to_raw_buffer(&vec![player_viewport.global_constants])
+                .to_vec(),
+        });
+        self.render_thread_mode.send_command(command);
+
+        let mut draw_objects: Vec<_> = player_viewport.draw_objects.drain(..).collect();
+        if let Some(grid_draw_object) = &player_viewport.grid_draw_object {
+            draw_objects.push(grid_draw_object.clone());
+        }
+        let virtual_texture_pass = player_viewport.virtual_pass_handle.clone().map(|x| x.key());
+        if let Some(key) = virtual_texture_pass {
+            self.render_thread_mode
+                .send_command(RenderCommand::ClearVirtualTexturePass(key));
+        }
+
+        if let Some(shadow_depth_texture_handle) =
+            player_viewport.shadow_depth_texture_handle.clone()
+        {
+            self.render_thread_mode
+                .send_command(RenderCommand::ClearDepthTexture(ClearDepthTexture {
+                    handle: *shadow_depth_texture_handle,
+                }));
+        }
+
+        let virtual_texture_pass = player_viewport.virtual_pass_handle.clone().map(|x| x.key());
+        self.render_thread_mode
+            .send_command(RenderCommand::Present(PresentInfo {
+                window_id: player_viewport.window_id,
+                draw_objects,
+                virtual_texture_pass,
+                scene_viewport: player_viewport.scene_viewport.clone(),
+            }));
+
+        let pending_destroy_textures = ResourceManager::default().get_pending_destroy_textures();
+        if !pending_destroy_textures.is_empty() {
+            let pending_destroy_textures = pending_destroy_textures.iter().map(|x| **x).collect();
+            self.render_thread_mode
+                .send_command(RenderCommand::DestroyTextures(pending_destroy_textures));
+        }
     }
 
     pub fn present(&mut self, window_id: isize) {
@@ -1497,7 +1543,9 @@ impl Engine {
                         .resource_manager
                         .get_virtual_texture_by_url(texture_url)
                     {
-                        let source = self.virtual_texture_source_infos.get(texture_url).unwrap();
+                        let virtual_texture_source_infos =
+                            self.virtual_texture_source_infos.borrow();
+                        let source = virtual_texture_source_infos.get(texture_url).unwrap();
                         {
                             let source = source.lock().unwrap();
                             let max_mips = rs_core_minimal::misc::calculate_max_mips(
@@ -1536,7 +1584,9 @@ impl Engine {
                         .resource_manager
                         .get_virtual_texture_by_url(texture_url)
                     {
-                        let source = self.virtual_texture_source_infos.get(texture_url).unwrap();
+                        let virtual_texture_source_infos =
+                            self.virtual_texture_source_infos.borrow();
+                        let source = virtual_texture_source_infos.get(texture_url).unwrap();
                         {
                             let source = source.lock().unwrap();
                             let max_mips = rs_core_minimal::misc::calculate_max_mips(
@@ -1580,8 +1630,8 @@ impl Engine {
                     .unwrap()
                     .virtual_textures
                 {
-                    let source = self
-                        .virtual_texture_source_infos
+                    let virtual_texture_source_infos = self.virtual_texture_source_infos.borrow();
+                    let source = virtual_texture_source_infos
                         .get(virtual_texture_url)
                         .unwrap();
                     {
@@ -1653,8 +1703,8 @@ impl Engine {
                     .unwrap()
                     .virtual_textures
                 {
-                    let source = self
-                        .virtual_texture_source_infos
+                    let virtual_texture_source_infos = self.virtual_texture_source_infos.borrow();
+                    let source = virtual_texture_source_infos
                         .get(virtual_texture_url)
                         .unwrap();
                     {
@@ -2026,9 +2076,9 @@ impl Engine {
         url: url::Url,
         source: Box<dyn TVirtualTextureSource>,
     ) {
+        let mut virtual_texture_source_infos = self.virtual_texture_source_infos.borrow_mut();
         let ref_source = MultipleThreadMut::new(source);
-        self.virtual_texture_source_infos
-            .insert(url.clone(), ref_source.clone());
+        virtual_texture_source_infos.insert(url.clone(), ref_source.clone());
         let handle = self.resource_manager.next_virtual_texture(url.clone());
         let command = CreateVirtualTexture {
             handle: *handle,
@@ -2343,6 +2393,25 @@ impl Engine {
     #[track_caller]
     pub fn log_trace(&self, message: &str) {
         log::trace!("{}", message);
+    }
+
+    pub fn get_logger_mut(&mut self) -> &mut Logger {
+        &mut self.logger
+    }
+
+    pub fn get_virtual_texture_source_infos(
+        &self,
+    ) -> SingleThreadMutType<HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>>
+    {
+        self.virtual_texture_source_infos.clone()
+    }
+
+    pub fn get_settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    pub fn get_default_textures(&self) -> &DefaultTextures {
+        &self.default_textures
     }
 }
 

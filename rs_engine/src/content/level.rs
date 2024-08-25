@@ -182,4 +182,12 @@ impl Level {
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
         self.runtime.as_mut().map(|x| &mut x.physics)
     }
+
+    #[cfg(feature = "editor")]
+    pub fn make_copy_for_standalone(&self, engine: &mut Engine) -> Level {
+        let ser_level = serde_json::to_string(self).unwrap();
+        let mut copy_level: Level = serde_json::from_str(&ser_level).unwrap();
+        copy_level.initialize(engine);
+        copy_level
+    }
 }

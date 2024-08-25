@@ -1,8 +1,11 @@
 use std::{
+    collections::HashSet,
     fs::File,
     io::{BufWriter, Write},
     sync::{Arc, RwLock},
 };
+
+use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 
 #[derive(Debug, Clone, Default)]
 pub struct LoggerConfiguration {
@@ -13,6 +16,7 @@ pub struct LoggerConfiguration {
 pub struct Logger {
     world_file: Arc<RwLock<Option<BufWriter<File>>>>,
     cfg: LoggerConfiguration,
+    white_list: MultipleThreadMutType<HashSet<String>>,
 }
 
 impl Logger {
@@ -38,7 +42,7 @@ impl Logger {
         }
 
         let world_file = Arc::new(std::sync::RwLock::new(buf_writer));
-
+        let white_list = MultipleThreadMut::new(HashSet::new());
         let mut builder = env_logger::Builder::new();
         builder.write_style(env_logger::WriteStyle::Auto);
         builder.filter_level(log::LevelFilter::Trace);
@@ -49,9 +53,27 @@ impl Logger {
         builder
             .format({
                 let world_file = world_file.clone();
+                let white_list = white_list.clone();
                 move |buf, record| {
+                    let white_list = {
+                        let list = white_list.lock().unwrap();
+                        list.clone()
+                    };
                     let level = record.level();
-                    if !record.target().starts_with("rs_") && level >= log::Level::Warn {
+                    let is_in_white_list = {
+                        let mut ret = false;
+                        for name in white_list {
+                            if record.target().starts_with(&name) {
+                                ret = true;
+                                break;
+                            }
+                        }
+                        ret
+                    };
+                    if !record.target().starts_with("rs_")
+                        && level >= log::Level::Warn
+                        && !is_in_white_list
+                    {
                         return Err(std::io::ErrorKind::Other.into());
                     }
                     let level_style = buf.default_level_style(level);
@@ -97,7 +119,11 @@ impl Logger {
                 }
             })
             .init();
-        Logger { world_file, cfg }
+        Logger {
+            world_file,
+            cfg,
+            white_list,
+        }
     }
 
     pub fn flush(&self) {
@@ -109,6 +135,11 @@ impl Logger {
             }
             Err(_) => {}
         }
+    }
+
+    pub fn add_white_list(&mut self, name: String) {
+        let mut list = self.white_list.lock().unwrap();
+        list.insert(name);
     }
 }
 
