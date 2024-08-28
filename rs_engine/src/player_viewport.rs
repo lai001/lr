@@ -2,21 +2,32 @@ use crate::camera::Camera;
 use crate::drawable::EDrawObjectType;
 use crate::engine::{Engine, VirtualPassHandle};
 use crate::handle::TextureHandle;
+use crate::physics_debug_render::{PhysicsDebugRender, RenderRigidBodiesBundle};
 use crate::resource_manager::ResourceManager;
 use crate::{build_built_in_resouce_url, BUILT_IN_RESOURCE};
 use glam::Vec4Swizzles;
+use rapier3d::prelude::*;
 use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
 use rs_render::antialias_type::{FXAAInfo, MSAAInfo};
 use rs_render::command::{
     BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, RenderCommand, ShadowMapping,
     TextureDescriptorCreateInfo, UpdateBuffer, VirtualPassSet,
 };
+use rs_render::constants::Constants;
 use rs_render::global_uniform;
 use rs_render::renderer::{EBuiltinPipelineType, EPipelineType, MaterialPipelineType};
+use rs_render::vertex_data_type::mesh_vertex::MeshVertex3;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
 use rs_render::{antialias_type::EAntialiasType, scene_viewport::SceneViewport};
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
+
+bitflags::bitflags! {
+    pub struct DebugFlags: u8 {
+        const Line = 1;
+        const Physics = 1 << 1 | DebugFlags::Line.bits();
+    }
+}
 
 pub struct PlayerViewport {
     pub window_id: isize,
@@ -34,6 +45,9 @@ pub struct PlayerViewport {
     virtual_texture_source_infos: SingleThreadMutType<
         HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
     >,
+    pub debug_draw_objects: Vec<DrawObject>,
+    physics_debug_render: Option<PhysicsDebugRender>,
+    debug_flags: DebugFlags,
 }
 
 impl PlayerViewport {
@@ -62,7 +76,7 @@ impl PlayerViewport {
         engine.get_render_thread_mode_mut().send_command(command);
         let mut camera = Camera::default(width, height);
         camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
-
+        let physics_debug_render = Some(PhysicsDebugRender::new());
         PlayerViewport {
             scene_viewport,
             window_id,
@@ -77,6 +91,9 @@ impl PlayerViewport {
             draw_objects: vec![],
             camera,
             virtual_texture_source_infos,
+            debug_draw_objects: vec![],
+            physics_debug_render,
+            debug_flags: DebugFlags::empty(),
         }
     }
 
@@ -672,5 +689,106 @@ impl PlayerViewport {
                 self.draw_objects.push(custom_objcet.draw_object.clone());
             }
         }
+    }
+
+    pub fn draw_debug_line(
+        &mut self,
+        engine: &mut Engine,
+        start: glam::Vec3,
+        end: glam::Vec3,
+        color: glam::Vec4,
+    ) {
+        let contents = vec![
+            MeshVertex3 {
+                position: start,
+                vertex_color: color,
+            },
+            MeshVertex3 {
+                position: end,
+                vertex_color: color,
+            },
+        ];
+        let vertex_handle =
+            engine.create_vertex_buffer(&contents, Some(String::from("DebugLine.Vertex")));
+        let contents = Constants::default();
+        let constants_handle = engine
+            .create_constants_buffer(&vec![contents], Some(String::from("DebugLine.Constants")));
+        let draw_object = DrawObject::new(
+            0,
+            vec![*vertex_handle],
+            2,
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+            None,
+            None,
+            vec![
+                vec![EBindingResource::Constants(*self.global_constants_handle)],
+                vec![EBindingResource::Constants(*constants_handle)],
+            ],
+        );
+        self.debug_draw_objects.push(draw_object);
+    }
+
+    pub fn draw_debug_lines(&mut self, engine: &mut Engine, bundles: &[RenderRigidBodiesBundle]) {
+        if !self.debug_flags.contains(DebugFlags::Line) {
+            return;
+        }
+        let contents: Vec<MeshVertex3> = bundles
+            .iter()
+            .flat_map(|x| {
+                vec![
+                    MeshVertex3 {
+                        position: x.start,
+                        vertex_color: x.color,
+                    },
+                    MeshVertex3 {
+                        position: x.end,
+                        vertex_color: x.color,
+                    },
+                ]
+            })
+            .collect();
+        let vertex_count = contents.len();
+        let vertex_handle =
+            engine.create_vertex_buffer(&contents, Some(String::from("DebugLine.Vertex")));
+        let contents = Constants::default();
+        let constants_handle = engine
+            .create_constants_buffer(&vec![contents], Some(String::from("DebugLine.Constants")));
+        let draw_object = DrawObject::new(
+            0,
+            vec![*vertex_handle],
+            vertex_count as u32,
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+            None,
+            None,
+            vec![
+                vec![EBindingResource::Constants(*self.global_constants_handle)],
+                vec![EBindingResource::Constants(*constants_handle)],
+            ],
+        );
+        self.debug_draw_objects.push(draw_object);
+    }
+
+    pub fn physics_debug(
+        &mut self,
+        engine: &mut Engine,
+        bodies: &RigidBodySet,
+        colliders: &ColliderSet,
+    ) {
+        if !self.debug_flags.contains(DebugFlags::Physics) {
+            return;
+        }
+        let Some(physics_debug_render) = &mut self.physics_debug_render else {
+            return;
+        };
+        let mut bundles = vec![];
+        let mut rigid_bodies_bundle = physics_debug_render.render_rigid_bodies(bodies);
+        bundles.append(&mut rigid_bodies_bundle);
+        let mut colliders_bundle = physics_debug_render.render_colliders(bodies, colliders);
+        bundles.append(&mut colliders_bundle);
+        self.draw_debug_lines(engine, &bundles);
+    }
+
+    pub fn set_debug_flags(&mut self, debug_flags: DebugFlags) {
+        self.debug_flags = debug_flags;
     }
 }

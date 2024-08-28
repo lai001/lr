@@ -7,7 +7,10 @@ use clap::*;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use std::collections::HashMap;
-use winit::event_loop::{EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
+use winit::{
+    event_loop::{EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget},
+    platform::windows::EventLoopBuilderExtWindows,
+};
 
 pub struct WindowContext {
     pub window_type: EWindowType,
@@ -231,7 +234,9 @@ impl Editor {
     fn run_app(self) -> anyhow::Result<()> {
         let window_manager = SingleThreadMut::new(WindowsManager::new());
 
-        let event_loop = EventLoopBuilder::with_user_event().build()?;
+        let event_loop = EventLoopBuilder::with_user_event()
+            .with_any_thread(true)
+            .build()?;
         let event_loop_proxy: EventLoopProxy<ECustomEventType> = event_loop.create_proxy();
         let scale_factor = event_loop
             .primary_monitor()

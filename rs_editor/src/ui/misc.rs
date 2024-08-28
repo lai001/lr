@@ -14,7 +14,7 @@ pub fn update_window_with_input_mode(window: &Window, input_mode: EInputMode) {
             window.set_cursor_visible(true);
         }
         EInputMode::GameUI => {
-            window.set_cursor_grab(CursorGrabMode::Locked).unwrap();
+            window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
             window.set_cursor_visible(true);
         }
     }

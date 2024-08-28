@@ -1380,23 +1380,24 @@ impl EditorContext {
 
         #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
         if let Some(plugin) = self.plugins.last_mut() {
+            let _ = plugin;
             #[cfg(feature = "plugin_shared_lib")]
             {
                 let mut ffi_engine =
                     unsafe { rs_engine::ffi::engine::Engine::new(&mut self.engine) };
                 plugin.tick(ffi_engine.as_mut() as *mut rs_engine::ffi::engine::Engine as _);
             }
-            #[cfg(feature = "plugin_shared_crate_export")]
-            {
-                if let Some(level) = &mut self.data_source.level {
-                    let mut level = level.borrow_mut();
-                    plugin.tick(
-                        &mut self.engine,
-                        &mut level,
-                        self.egui_winit_state.egui_ctx().clone(),
-                    );
-                }
-            }
+            // #[cfg(feature = "plugin_shared_crate_export")]
+            // {
+            //     if let Some(level) = &mut self.data_source.level {
+            //         let mut level = level.borrow_mut();
+            //         plugin.tick(
+            //             &mut self.engine,
+            //             &mut level,
+            //             self.egui_winit_state.egui_ctx().clone(),
+            //         );
+            //     }
+            // }
         }
 
         #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]

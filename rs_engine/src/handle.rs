@@ -96,6 +96,16 @@ pub struct BufferHandle {
     inner: Arc<u64>,
 }
 
+impl BufferHandle {
+    pub fn strong_cout(&self) -> usize {
+        Arc::strong_count(&self.inner)
+    }
+
+    pub fn only_self(&self) -> bool {
+        self.strong_cout() <= 1
+    }
+}
+
 impl Deref for BufferHandle {
     type Target = u64;
 

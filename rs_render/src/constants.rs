@@ -10,6 +10,18 @@ pub struct Constants {
     _pad_2: u32,
 }
 
+impl Constants {
+    pub fn new(model: glam::Mat4, id: u32) -> Constants {
+        Self {
+            model,
+            id,
+            _pad_0: 0,
+            _pad_1: 0,
+            _pad_2: 0,
+        }
+    }
+}
+
 impl Default for Constants {
     fn default() -> Self {
         Self {

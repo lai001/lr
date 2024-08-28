@@ -7,6 +7,7 @@ use rs_engine::{
     resource_manager::ResourceManager,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
+use rs_native_plugin::EInputType;
 use rs_render::command::{CreateSampler, RenderCommand};
 use std::collections::HashMap;
 
@@ -43,6 +44,8 @@ impl Application {
 
         Self::add_new_actors(engine, current_active_level.actors.to_vec(), &contents);
         current_active_level.initialize(engine);
+        current_active_level.set_physics_simulate(true);
+
         let infos = engine.get_virtual_texture_source_infos();
         let player_view_port = PlayerViewport::new(
             window_id,
@@ -99,25 +102,28 @@ impl Application {
     }
 
     #[cfg(not(target_os = "android"))]
-    pub fn on_keyboard_input(
-        &mut self,
-        virtual_key_code_states: &HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
-    ) {
-        let _ = virtual_key_code_states;
-    }
-
-    #[cfg(not(target_os = "android"))]
-    pub fn on_device_event_process(&mut self, device_event: &winit::event::DeviceEvent) {
-        match device_event {
-            winit::event::DeviceEvent::MouseMotion { delta } => {
-                DefaultCameraInputEventHandle::mouse_motion_handle(
-                    &mut self.player_view_port.camera,
-                    *delta,
-                    self.input_mode,
-                    self.camera_motion_speed,
-                );
+    pub fn on_input(&mut self, ty: EInputType) {
+        match ty {
+            EInputType::Device(device_event) => {
+                //
+                match device_event {
+                    winit::event::DeviceEvent::MouseMotion { delta } => {
+                        DefaultCameraInputEventHandle::mouse_motion_handle(
+                            &mut self.player_view_port.camera,
+                            *delta,
+                            self.input_mode,
+                            self.camera_motion_speed,
+                        );
+                    }
+                    _ => {}
+                }
             }
-            _ => {}
+            EInputType::MouseWheel(_) => {}
+            EInputType::MouseInput(_, _) => {}
+            EInputType::KeyboardInput(_) => {}
+        }
+        for plugin in self.plugins.iter_mut() {
+            plugin.on_input(ty.clone());
         }
     }
 
@@ -140,12 +146,16 @@ impl Application {
         }
 
         for plugin in self.plugins.iter_mut() {
-            plugin.tick(engine, &mut active_level, ctx.clone());
+            plugin.tick(
+                engine,
+                &mut active_level,
+                ctx.clone(),
+                &mut self.player_view_port,
+            );
         }
 
         self.player_view_port.update_global_constants(engine);
 
-        active_level.set_physics_simulate(true);
         active_level.tick();
         if let Some(light) = active_level.directional_lights.first().cloned() {
             let mut light = light.borrow_mut();
@@ -185,6 +195,13 @@ impl Application {
                     }
                 }
             }
+        }
+        if let Some(physics) = active_level.get_physics_mut() {
+            self.player_view_port.physics_debug(
+                engine,
+                &physics.rigid_body_set,
+                &physics.collider_set,
+            );
         }
         engine.present_player_viewport(&mut self.player_view_port);
     }

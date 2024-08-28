@@ -86,7 +86,8 @@ impl StandaloneUiWindow {
     }
 
     pub fn device_event_process(&mut self, device_event: &winit::event::DeviceEvent) {
-        self.application.on_device_event_process(device_event);
+        self.application
+            .on_input(rs_native_plugin::EInputType::Device(device_event));
     }
 
     pub fn window_event_process(
@@ -118,7 +119,17 @@ impl StandaloneUiWindow {
                 self.virtual_key_code_states
                     .insert(virtual_keycode, event.state);
                 self.application
-                    .on_keyboard_input(&self.virtual_key_code_states);
+                    .on_input(rs_native_plugin::EInputType::KeyboardInput(
+                        &self.virtual_key_code_states,
+                    ));
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.application
+                    .on_input(rs_native_plugin::EInputType::MouseWheel(delta));
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.application
+                    .on_input(rs_native_plugin::EInputType::MouseInput(state, button));
             }
             WindowEvent::RedrawRequested => {
                 engine.recv_output_hook();

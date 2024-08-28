@@ -7,6 +7,9 @@ edition = "2021"
 rs_engine = { path = "../rs_engine" }
 egui = { version = "0.28.1" }
 
+[target.'cfg(not(target_os = "android"))'.dependencies]
+winit = { version = "0.29.15" }
+
 [features]
 plugin_shared_lib = []
 plugin_shared_crate_export = []

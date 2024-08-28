@@ -21,6 +21,7 @@ standalone = [
 profiler = ["tracy-client/default", "rs_render/default"]
 
 [dependencies]
+bitflags = "2.6.0"
 md-5 = { version = "0.10.6" }
 anyhow = { version = "1.0.86", optional = true }
 serde = { version = "1.0.206", features = ["derive", "rc"] }

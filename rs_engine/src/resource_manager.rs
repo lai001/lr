@@ -9,6 +9,7 @@ use rs_artifact::{
     artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
 };
 use rs_render::command::IBLTexturesKey;
+use std::collections::VecDeque;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -51,6 +52,8 @@ struct STResourceManager {
     // mesh_buffers: HashMap<url::Url, Arc<MeshBuffer>>,
     // material_render_pipelines: HashMap<url::Url, crate::handle::MaterialRenderPipelineHandle>,
     pending_destroy_textures: Vec<crate::handle::TextureHandle>,
+
+    buffer_handles: VecDeque<crate::handle::BufferHandle>,
 }
 
 impl STResourceManager {
@@ -68,6 +71,7 @@ impl STResourceManager {
             ibl_textures: HashMap::new(),
             ui_textures: HashMap::new(),
             pending_destroy_textures: vec![],
+            buffer_handles: VecDeque::new(),
             // mesh_buffers: HashMap::new(),
             // material_render_pipelines: HashMap::new(),
         }
@@ -336,7 +340,9 @@ impl STResourceManager {
     }
 
     fn next_buffer(&mut self) -> crate::handle::BufferHandle {
-        self.handle_manager.next_buffer()
+        let handle = self.handle_manager.next_buffer();
+        self.buffer_handles.push_back(handle.clone());
+        handle
     }
 
     fn next_sampler(&mut self) -> crate::handle::SamplerHandle {
@@ -372,6 +378,19 @@ impl STResourceManager {
 
     fn get_pending_destroy_textures(&self) -> Vec<crate::handle::TextureHandle> {
         self.pending_destroy_textures.clone()
+    }
+
+    fn collect_buffer_handles_release(&mut self) -> Vec<crate::handle::BufferHandle> {
+        let mut handles = vec![];
+        self.buffer_handles.retain_mut(|handle| {
+            if handle.only_self() {
+                handles.push(handle.clone());
+                false
+            } else {
+                true
+            }
+        });
+        handles
     }
 }
 

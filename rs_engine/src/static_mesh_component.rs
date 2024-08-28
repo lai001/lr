@@ -2,7 +2,7 @@ use crate::{
     content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
     resource_manager::ResourceManager,
 };
-use rapier3d::{parry::bounding_volume, prelude::*};
+use rapier3d::prelude::*;
 use rs_artifact::static_mesh::StaticMesh;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -163,15 +163,18 @@ impl StaticMeshComponent {
                     _ => unimplemented!(),
                 }
             }
-            _ => match &mut run_time.draw_objects {
-                EDrawObjectType::Static(draw_object) => {
-                    draw_object.constants.model = self.transformation;
+            _ => {
+                let transformation = self.transformation;
+                match &mut run_time.draw_objects {
+                    EDrawObjectType::Static(draw_object) => {
+                        draw_object.constants.model = transformation;
+                    }
+                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                        draw_object.constants.model = transformation;
+                    }
+                    _ => unimplemented!(),
                 }
-                EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                    draw_object.constants.model = self.transformation;
-                }
-                _ => unimplemented!(),
-            },
+            }
         }
 
         engine.update_draw_object(&mut run_time.draw_objects);
@@ -237,18 +240,18 @@ impl StaticMeshComponent {
         is_use_convex_decomposition: bool,
         transformation: glam::Mat4,
     ) -> crate::error::Result<Physics> {
-        let deltas = Isometry::identity();
-        let mut vertices: Vec<_> = mesh
+        let vertices: Vec<_> = mesh
             .vertexes
             .iter()
             .map(|x| point![x.position.x, x.position.y, x.position.z])
             .collect();
-        let aabb = bounding_volume::details::point_cloud_aabb(&deltas, &vertices);
-        let center = aabb.center();
-        let diag = (aabb.maxs - aabb.mins).norm();
-        vertices
-            .iter_mut()
-            .for_each(|p| *p = (*p - center.coords) * 10.0 / diag);
+        // let deltas = Isometry::identity();
+        // let aabb = bounding_volume::details::point_cloud_aabb(&deltas, &vertices);
+        // let center = aabb.center();
+        // let diag = (aabb.maxs - aabb.mins).norm();
+        // vertices
+        //     .iter_mut()
+        //     .for_each(|p| *p = (*p - center.coords) * 10.0 / diag);
 
         let mut indices: Vec<_> = vec![];
         for index in mesh.indexes.chunks(3) {

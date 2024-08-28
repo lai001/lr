@@ -24,14 +24,10 @@ pub struct Physics {
     pub query_pipeline: QueryPipeline,
     pub physics_hooks: (),
     pub event_handler: (),
-    pub is_simulate: bool,
 }
 
 impl Physics {
     pub fn step(&mut self) {
-        if !self.is_simulate {
-            return;
-        }
         self.physics_pipeline.step(
             &self.gravity,
             &self.integration_parameters,
@@ -52,6 +48,7 @@ impl Physics {
 
 pub struct Runtime {
     pub physics: Physics,
+    pub is_simulate: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -125,9 +122,11 @@ impl Level {
             query_pipeline,
             physics_hooks,
             event_handler,
-            is_simulate: false,
         };
-        self.runtime = Some(Runtime { physics });
+        self.runtime = Some(Runtime {
+            physics,
+            is_simulate: false,
+        });
         let actors = self.actors.clone();
         for actor in actors {
             self.init_actor_physics(actor.clone());
@@ -162,10 +161,12 @@ impl Level {
     }
 
     pub fn tick(&mut self) {
-        let Some(physics) = self.runtime.as_mut().map(|x| &mut x.physics) else {
+        let Some(runtime) = self.runtime.as_mut() else {
             return;
         };
-        physics.step();
+        if runtime.is_simulate {
+            runtime.physics.step();
+        }
     }
 
     pub fn get_rigid_body_set_mut(&mut self) -> Option<&mut RigidBodySet> {
@@ -173,10 +174,10 @@ impl Level {
     }
 
     pub fn set_physics_simulate(&mut self, enable: bool) {
-        let Some(physics) = self.runtime.as_mut().map(|x| &mut x.physics) else {
+        let Some(runtime) = self.runtime.as_mut() else {
             return;
         };
-        physics.is_simulate = enable;
+        runtime.is_simulate = enable;
     }
 
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
@@ -189,5 +190,12 @@ impl Level {
         let mut copy_level: Level = serde_json::from_str(&ser_level).unwrap();
         copy_level.initialize(engine);
         copy_level
+    }
+
+    pub fn physics_step(&mut self) {
+        let Some(runtime) = self.runtime.as_mut() else {
+            return;
+        };
+        runtime.physics.step();
     }
 }
