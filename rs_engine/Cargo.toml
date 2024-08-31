@@ -25,8 +25,8 @@ plugin_shared_crate = []
 bitflags = "2.6.0"
 md-5 = { version = "0.10.6" }
 anyhow = { version = "1.0.86", optional = true }
-serde = { version = "1.0.206", features = ["derive", "rc"] }
-serde_json = "1.0.122"
+serde = { version = "1.0.209", features = ["derive", "rc"] }
+serde_json = "1.0.127"
 chrono = "0.4.38"
 log = "0.4.22"
 env_logger = "0.11.5"
@@ -48,7 +48,7 @@ uuid = { version = "1.10.0", features = [
     "serde",
 ] }
 rand = { version = "0.8.5" }
-tracy-client = { version = "0.17.1", default-features = false }
+tracy-client = { version = "0.17.3", default-features = false }
 rapier3d = { version = "0.22.0", features = ["simd-stable"] }
 rs_foundation = { path = "../rs_foundation" }
 rs_audio = { path = "../rs_audio" }
