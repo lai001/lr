@@ -260,7 +260,7 @@ impl ProjectContext {
         Ok(path)
     }
 
-    #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+    #[cfg(feature = "plugin_dotnet")]
     pub fn get_dotnet_script_shared_lib_path(&self) -> PathBuf {
         self.project_folder_path.join(format!(
             "dotnet/{}/bin/Debug/{}.dll",

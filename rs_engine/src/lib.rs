@@ -13,8 +13,10 @@ pub mod ffi;
 pub mod file_type;
 pub mod frame_sync;
 pub mod handle;
-pub mod kinematic_component;
 pub mod input_mode;
+#[cfg(not(target_os = "android"))]
+pub mod input_type;
+pub mod kinematic_component;
 pub mod logger;
 pub mod mesh_buffer;
 pub mod mipmap_generator;
@@ -22,13 +24,14 @@ pub mod particle;
 pub mod physics_debug_render;
 pub mod planar_reflection;
 pub mod player_viewport;
+#[cfg(feature = "plugin_shared_crate")]
 pub mod plugin;
-pub mod plugin_context;
 pub mod property;
 pub mod render_thread_mode;
 pub mod resource_manager;
 pub mod rotator;
 pub mod scene_node;
+pub mod standalone;
 pub mod static_mesh_component;
 pub mod static_virtual_texture_source;
 pub mod sync;

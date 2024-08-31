@@ -42,7 +42,7 @@ impl Project {
         Self::create_dotnet_project_file(project_parent_folder, project_name)?;
         Self::create_sln_file(project_parent_folder, project_name)?;
         Self::create_js_script_file(project_parent_folder, project_name)?;
-        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
+        #[cfg(feature = "plugin_shared_crate")]
         Self::create_my_plugin_file(project_parent_folder, project_name)?;
         let project_folder = project_parent_folder.join(project_name);
         let project_file_path =
@@ -119,7 +119,7 @@ impl Project {
         Ok(file.write_fmt(format_args!("{}", content))?)
     }
 
-    #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
+    #[cfg(feature = "plugin_shared_crate")]
     fn create_my_plugin_file(
         project_parent_folder: &Path,
         project_name: &str,
@@ -127,7 +127,7 @@ impl Project {
         let project_folder = project_parent_folder.join(project_name);
         let lib_file_path = project_folder.join(SRC_FOLDER_NAME).join("my_plugin.rs");
         let content =
-            fill_my_plugin_template(project_name, rs_native_plugin::symbol_name::CREATE_PLUGIN);
+            fill_my_plugin_template(project_name, rs_engine::plugin::symbol_name::CREATE_PLUGIN);
         let mut file = std::fs::File::create(lib_file_path)?;
         Ok(file.write_fmt(format_args!("{}", content))?)
     }
@@ -221,7 +221,7 @@ impl Project {
 
 fn get_cargo_config_toml_template() -> &'static str {
     return r#"[build]
-rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
+rustflags = ["-C", "rpath"]
     "#;
 }
 
@@ -232,17 +232,16 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["editor", "plugin_shared_crate_import"]
+default = ["editor", "plugin_shared_crate"]
 renderdoc = ["rs_engine/renderdoc", "rs_render/renderdoc"]
 editor = ["rs_engine/editor", "rs_render/editor"]
-plugin_shared_crate_import = ["rs_native_plugin/plugin_shared_crate_import"]
+plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 standalone = ["rs_engine/standalone", "rs_render/standalone"]
 profiler = ["rs_engine/profiler", "rs_render/profiler"]
 
 [dependencies]
 egui = { version = "0.28.1" }
 log = "0.4.22"
-rs_native_plugin = { path = "@engine_path@/rs_native_plugin" }
 rs_engine = { path = "@engine_path@/rs_engine" }
 rs_render = { path = "@engine_path@/rs_render" }
 
@@ -254,22 +253,15 @@ opt-level = 2
     "#;
 }
 
-#[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
+#[cfg(feature = "plugin_shared_crate")]
 fn get_my_plugin_template() -> &'static str {
     return r#"use rs_engine;
-use rs_native_plugin::plugin_crate::*;
+use rs_engine::plugin::plugin_crate::Plugin;
 
 pub struct MyPlugin {}
 
 impl Plugin for MyPlugin {
-    fn tick(&mut self, engine: &mut rs_engine::engine::Engine, ctx: egui::Context) {
-        engine.set_view_mode(rs_render::view_mode::EViewModeType::Lit);
-        egui::Window::new("MyPlugin").show(&ctx, |ui| {
-            if ui.button("Click").clicked() {
-                log::error!("Click");
-            }
-        });
-    }
+
 }
 
 #[no_mangle]
@@ -285,7 +277,7 @@ fn get_lib_template() -> &'static str {
     "#;
 }
 
-#[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
+#[cfg(feature = "plugin_shared_crate")]
 fn fill_my_plugin_template(name: &str, symbol_name: &str) -> String {
     let mut template = get_my_plugin_template().to_string();
     template = template.replace("@name@", name);

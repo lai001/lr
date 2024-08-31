@@ -4,7 +4,7 @@ use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use toml_edit::{value, Array, DocumentMut, Item, Table};
 
 fn support_crate_names() -> Vec<String> {
-    let crate_names = vec!["rs_engine", "rs_render", "rs_native_plugin"];
+    let crate_names = vec!["rs_engine", "rs_render"];
     crate_names.iter().map(|x| x.to_string()).collect()
 }
 
@@ -112,7 +112,7 @@ pub fn make_build_script(hotreload_args: &HotreloadArgs) -> anyhow::Result<()> {
         .arg("--features")
         .arg("editor")
         .arg("--features")
-        .arg("plugin_shared_crate_export");
+        .arg("plugin_shared_crate");
 
     let output = command.output()?;
     if !output.status.success() {

@@ -1,5 +1,8 @@
-use rs_engine::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
-use rs_engine::{
+#[cfg(not(target_os = "android"))]
+use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
+#[cfg(feature = "plugin_shared_crate")]
+use crate::plugin::plugin_crate::Plugin;
+use crate::{
     content::{content_file_type::EContentFileType, level::Level},
     engine::Engine,
     input_mode::EInputMode,
@@ -7,14 +10,13 @@ use rs_engine::{
     resource_manager::ResourceManager,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
-use rs_native_plugin::EInputType;
 use rs_render::command::{CreateSampler, RenderCommand};
-use std::collections::HashMap;
 
 pub struct Application {
     _window_id: isize,
     player_view_port: PlayerViewport,
-    plugins: Vec<Box<dyn rs_native_plugin::Plugin>>,
+    #[cfg(feature = "plugin_shared_crate")]
+    plugins: Vec<Box<dyn Plugin>>,
     current_active_level: SingleThreadMutType<Level>,
     _contents: Vec<EContentFileType>,
     input_mode: EInputMode,
@@ -29,7 +31,7 @@ impl Application {
         height: u32,
         engine: &mut Engine,
         mut current_active_level: Level,
-        mut plugins: Vec<Box<dyn rs_native_plugin::Plugin>>,
+        #[cfg(feature = "plugin_shared_crate")] mut plugins: Vec<Box<dyn Plugin>>,
         contents: Vec<EContentFileType>,
         input_mode: EInputMode,
     ) -> Application {
@@ -56,6 +58,7 @@ impl Application {
             infos,
         );
 
+        #[cfg(feature = "plugin_shared_crate")]
         for plugin in plugins.iter_mut() {
             plugin.on_init(engine, &mut current_active_level);
         }
@@ -63,6 +66,7 @@ impl Application {
         Application {
             _window_id: window_id,
             player_view_port,
+            #[cfg(feature = "plugin_shared_crate")]
             plugins,
             current_active_level: SingleThreadMut::new(current_active_level),
             _contents: contents,
@@ -73,22 +77,20 @@ impl Application {
     }
 
     fn add_new_actors(
-        engine: &mut rs_engine::engine::Engine,
-        actors: Vec<SingleThreadMutType<rs_engine::actor::Actor>>,
+        engine: &mut Engine,
+        actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
         files: &[EContentFileType],
     ) {
         for actor in actors {
             let actor = actor.borrow_mut();
             let mut root_scene_node = actor.scene_node.borrow_mut();
             match &mut root_scene_node.component {
-                rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                rs_engine::scene_node::EComponentType::StaticMeshComponent(
-                    static_mesh_component,
-                ) => {
+                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
                     let mut static_mesh_component = static_mesh_component.borrow_mut();
                     static_mesh_component.initialize(ResourceManager::default(), engine, files);
                 }
-                rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
+                crate::scene_node::EComponentType::SkeletonMeshComponent(
                     skeleton_mesh_component,
                 ) => {
                     skeleton_mesh_component.borrow_mut().initialize(
@@ -102,7 +104,8 @@ impl Application {
     }
 
     #[cfg(not(target_os = "android"))]
-    pub fn on_input(&mut self, ty: EInputType) {
+    pub fn on_input(&mut self, ty: crate::input_type::EInputType) {
+        use crate::input_type::EInputType;
         match ty {
             EInputType::Device(device_event) => {
                 //
@@ -122,6 +125,7 @@ impl Application {
             EInputType::MouseInput(_, _) => {}
             EInputType::KeyboardInput(_) => {}
         }
+        #[cfg(feature = "plugin_shared_crate")]
         for plugin in self.plugins.iter_mut() {
             plugin.on_input(ty.clone());
         }
@@ -131,10 +135,19 @@ impl Application {
         &mut self,
         engine: &mut Engine,
         ctx: egui::Context,
-        virtual_key_code_states: &HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
+        #[cfg(not(target_os = "android"))] virtual_key_code_states: &std::collections::HashMap<
+            winit::keyboard::KeyCode,
+            winit::event::ElementState,
+        >,
     ) {
+        let _ = ctx;
+        let _ = self.input_mode;
+        let _ = self.camera_movement_speed;
+        let _ = self.camera_motion_speed;
+
         let mut active_level = self.current_active_level.borrow_mut();
 
+        #[cfg(not(target_os = "android"))]
         for (virtual_key_code, element_state) in virtual_key_code_states {
             DefaultCameraInputEventHandle::keyboard_input_handle(
                 &mut self.player_view_port.camera,
@@ -145,6 +158,7 @@ impl Application {
             );
         }
 
+        #[cfg(feature = "plugin_shared_crate")]
         for plugin in self.plugins.iter_mut() {
             plugin.tick(
                 engine,
@@ -167,10 +181,8 @@ impl Application {
             let actor = actor.borrow_mut();
             let mut root_scene_node = actor.scene_node.borrow_mut();
             match &mut root_scene_node.component {
-                rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                rs_engine::scene_node::EComponentType::StaticMeshComponent(
-                    static_mesh_component,
-                ) => {
+                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
                     let mut static_mesh_component = static_mesh_component.borrow_mut();
                     static_mesh_component.update(
                         engine.get_game_time(),
@@ -183,7 +195,7 @@ impl Application {
                         self.player_view_port.push_to_draw_list(draw_object);
                     }
                 }
-                rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
+                crate::scene_node::EComponentType::SkeletonMeshComponent(
                     skeleton_mesh_component,
                 ) => {
                     let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
@@ -211,7 +223,8 @@ impl Application {
         self.player_view_port.camera.set_window_size(width, height);
     }
 
-    pub fn reload_plugins(&mut self, plugins: Vec<Box<dyn rs_native_plugin::Plugin>>) {
+    #[cfg(feature = "plugin_shared_crate")]
+    pub fn reload_plugins(&mut self, plugins: Vec<Box<dyn Plugin>>) {
         self.plugins = plugins;
     }
 }

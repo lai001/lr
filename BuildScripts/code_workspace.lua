@@ -137,7 +137,7 @@ task("code_workspace") do
         if is_enable_renderdoc then
             table.join2(features, "renderdoc")
         end
-        table.join2(features, "plugin_shared_crate_export")
+        table.join2(features, "plugin_shared_crate")
         -- table.join2(features, "plugin_dotnet")
         -- table.join2(features, "plugin_v8")
 

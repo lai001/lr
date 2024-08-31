@@ -30,6 +30,8 @@ use rs_artifact::material::MaterialInfo;
 use rs_core_minimal::{
     file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
 };
+#[cfg(any(feature = "plugin_shared_crate"))]
+use rs_engine::plugin::plugin_crate::Plugin;
 use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
@@ -42,13 +44,10 @@ use rs_engine::{
     drawable::EDrawObjectType,
     file_type::EFileType,
     logger::{Logger, LoggerConfiguration},
-    plugin_context::PluginContext,
     resource_manager::ResourceManager,
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
-#[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
-use rs_native_plugin::Plugin;
 use rs_render::{
     command::{RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
     get_buildin_shader_dir,
@@ -61,7 +60,6 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
-    sync::{Arc, Mutex},
 };
 use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
@@ -121,8 +119,7 @@ pub struct EditorContext {
     draw_objects: HashMap<uuid::Uuid, EDrawObjectType>,
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     editor_ui: EditorUI,
-    _plugin_context: Arc<Mutex<PluginContext>>,
-    #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
+    #[cfg(any(feature = "plugin_shared_crate"))]
     plugins: Vec<Box<dyn Plugin>>,
     #[cfg(feature = "plugin_v8")]
     v8_runtime: Option<rs_v8_host::v8_runtime::V8Runtime>,
@@ -136,7 +133,7 @@ pub struct EditorContext {
     multiple_draw_ui_window: Option<MultipleDrawUiWindow>,
     standalone_ui_window: Option<StandaloneUiWindow>,
     watch_shader: WatchShader,
-    #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+    #[cfg(feature = "plugin_dotnet")]
     donet_host: Option<rs_dotnet_host::dotnet_runtime::DotnetRuntime>,
 }
 
@@ -223,15 +220,11 @@ impl EditorContext {
         data_source.console_cmds = Some(engine.get_console_cmds());
         let editor_ui = EditorUI::new(egui_winit_state.egui_ctx());
 
-        let plugin_context = Arc::new(Mutex::new(PluginContext::new(
-            egui_winit_state.egui_ctx().clone(),
-        )));
-
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
         let watch_shader = WatchShader::new(get_buildin_shader_dir())?;
 
-        #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+        #[cfg(feature = "plugin_dotnet")]
         let donet_host = rs_dotnet_host::dotnet_runtime::DotnetRuntime::default().ok();
         #[cfg(feature = "plugin_v8")]
         let v8_runtime = {
@@ -249,8 +242,7 @@ impl EditorContext {
             draw_objects: HashMap::new(),
             virtual_key_code_states: HashMap::new(),
             editor_ui,
-            _plugin_context: plugin_context,
-            #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
+            #[cfg(feature = "plugin_shared_crate")]
             plugins: vec![],
             #[cfg(feature = "plugin_v8")]
             v8_runtime: Some(v8_runtime),
@@ -263,7 +255,7 @@ impl EditorContext {
             media_ui_window: None,
             multiple_draw_ui_window: None,
             watch_shader,
-            #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+            #[cfg(feature = "plugin_dotnet")]
             donet_host,
             standalone_ui_window: None,
         };
@@ -290,7 +282,7 @@ impl EditorContext {
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
+                #[cfg(feature = "plugin_shared_crate")]
                 self.plugins.clear();
                 self.standalone_ui_window = None;
                 self.egui_winit_state.egui_ctx().memory_mut(|writer| {
@@ -616,13 +608,13 @@ impl EditorContext {
     // }
 
     fn try_create_plugin(&mut self) -> anyhow::Result<Box<dyn Plugin>> {
-        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
+        #[cfg(feature = "plugin_shared_crate")]
         if let Some(project_context) = self.project_context.as_mut() {
             project_context.reload()?;
             let lib = project_context.hot_reload.get_library_reload();
             let lib = lib.lock().unwrap();
-            let func = lib.load_symbol::<rs_native_plugin::signature::CreatePlugin>(
-                rs_native_plugin::symbol_name::CREATE_PLUGIN,
+            let func = lib.load_symbol::<rs_engine::plugin::signature::CreatePlugin>(
+                rs_engine::plugin::symbol_name::CREATE_PLUGIN,
             )?;
             let plugin = func();
             return Ok(plugin);
@@ -631,7 +623,7 @@ impl EditorContext {
     }
 
     fn try_load_dotnet_plugin(&mut self) -> anyhow::Result<()> {
-        #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+        #[cfg(feature = "plugin_dotnet")]
         if let Some(project_context) = self.project_context.as_mut() {
             if let Some(donet_host) = self.donet_host.as_mut() {
                 if !donet_host.is_watching() {
@@ -1379,29 +1371,7 @@ impl EditorContext {
         }
         self.process_ui(window, event_loop_window_target);
 
-        #[cfg(any(feature = "plugin_shared_lib", feature = "plugin_shared_crate_export"))]
-        if let Some(plugin) = self.plugins.last_mut() {
-            let _ = plugin;
-            #[cfg(feature = "plugin_shared_lib")]
-            {
-                let mut ffi_engine =
-                    unsafe { rs_engine::ffi::engine::Engine::new(&mut self.engine) };
-                plugin.tick(ffi_engine.as_mut() as *mut rs_engine::ffi::engine::Engine as _);
-            }
-            // #[cfg(feature = "plugin_shared_crate_export")]
-            // {
-            //     if let Some(level) = &mut self.data_source.level {
-            //         let mut level = level.borrow_mut();
-            //         plugin.tick(
-            //             &mut self.engine,
-            //             &mut level,
-            //             self.egui_winit_state.egui_ctx().clone(),
-            //         );
-            //     }
-            // }
-        }
-
-        #[cfg(all(feature = "plugin_shared_lib", feature = "plugin_dotnet"))]
+        #[cfg(feature = "plugin_dotnet")]
         if let Some(dotnet) = self.donet_host.as_mut() {
             dotnet.application.tick(&mut self.engine);
         }

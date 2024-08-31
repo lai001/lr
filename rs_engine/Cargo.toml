@@ -19,6 +19,7 @@ standalone = [
     "rs_core_minimal/standalone",
 ]
 profiler = ["tracy-client/default", "rs_render/default"]
+plugin_shared_crate = []
 
 [dependencies]
 bitflags = "2.6.0"

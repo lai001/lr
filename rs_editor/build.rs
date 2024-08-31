@@ -31,7 +31,7 @@ fn main() {
         res.set_icon(output.to_str().unwrap());
         res.compile().unwrap();
 
-        #[cfg(feature = "plugin_shared_crate_export")]
+        #[cfg(feature = "plugin_shared_crate")]
         {
             copy_std_lib();
         }

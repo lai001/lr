@@ -139,7 +139,7 @@ fn write_rust_project_json_file(
             .to_string(),
         vec![
             "editor".to_string(),
-            "plugin_shared_crate_export".to_string(),
+            "plugin_shared_crate".to_string(),
             "plugin_dotnet".to_string(),
         ],
     );

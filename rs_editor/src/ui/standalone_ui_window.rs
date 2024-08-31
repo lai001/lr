@@ -7,18 +7,20 @@ use rs_engine::{
     engine::Engine,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
+    input_type::EInputType,
+    plugin::plugin_crate::Plugin,
+    standalone::application::Application,
 };
 use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
-use rs_standalone_core::application::Application;
 use std::collections::HashMap;
-use winit::event::WindowEvent;
+use winit::{event::WindowEvent, keyboard::KeyCode};
 
 pub struct StandaloneUiWindow {
+    application: Application,
     pub egui_winit_state: State,
     frame_sync: FrameSync,
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     input_mode: EInputMode,
-    application: Application,
 }
 
 impl StandaloneUiWindow {
@@ -27,7 +29,7 @@ impl StandaloneUiWindow {
         window_manager: &mut WindowsManager,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
         engine: &mut Engine,
-        plugins: Vec<Box<dyn rs_native_plugin::Plugin>>,
+        plugins: Vec<Box<dyn Plugin>>,
         active_level: &Level,
         contents: Vec<EContentFileType>,
     ) -> anyhow::Result<StandaloneUiWindow> {
@@ -86,8 +88,7 @@ impl StandaloneUiWindow {
     }
 
     pub fn device_event_process(&mut self, device_event: &winit::event::DeviceEvent) {
-        self.application
-            .on_input(rs_native_plugin::EInputType::Device(device_event));
+        self.application.on_input(EInputType::Device(device_event));
     }
 
     pub fn window_event_process(
@@ -116,20 +117,29 @@ impl StandaloneUiWindow {
                 let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
                     return;
                 };
+                if virtual_keycode == KeyCode::Escape {
+                    let event = WindowEvent::CloseRequested;
+                    self.window_event_process(
+                        window_id,
+                        window,
+                        &event,
+                        event_loop_window_target,
+                        engine,
+                        window_manager,
+                    );
+                    return;
+                }
                 self.virtual_key_code_states
                     .insert(virtual_keycode, event.state);
                 self.application
-                    .on_input(rs_native_plugin::EInputType::KeyboardInput(
-                        &self.virtual_key_code_states,
-                    ));
+                    .on_input(EInputType::KeyboardInput(&self.virtual_key_code_states));
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.application
-                    .on_input(rs_native_plugin::EInputType::MouseWheel(delta));
+                self.application.on_input(EInputType::MouseWheel(delta));
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 self.application
-                    .on_input(rs_native_plugin::EInputType::MouseInput(state, button));
+                    .on_input(EInputType::MouseInput(state, button));
             }
             WindowEvent::RedrawRequested => {
                 engine.recv_output_hook();
@@ -192,7 +202,7 @@ impl StandaloneUiWindow {
         gui_render_output
     }
 
-    pub fn reload_plugins(&mut self, plugins: Vec<Box<dyn rs_native_plugin::Plugin>>) {
+    pub fn reload_plugins(&mut self, plugins: Vec<Box<dyn Plugin>>) {
         self.application.reload_plugins(plugins);
     }
 }
