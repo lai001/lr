@@ -164,6 +164,7 @@ fn draw_content(
                     }
                     EItemType::File(file) => {
                         let name = file.get_name().clone();
+                        let url = file.get_url();
                         let response = ui
                             .push_id(name.clone(), |ui| {
                                 ui.vertical(|ui| {
@@ -259,6 +260,12 @@ fn draw_content(
                         if response.double_clicked() {
                             click = Some(EClickEventType::OpenFile(file.clone()));
                         }
+                        response.context_menu(|ui| {
+                            if ui.button("Copy Reference").clicked() {
+                                ui.output_mut(|p| p.copied_text = url.to_string());
+                                ui.close_menu();
+                            }
+                        });
                     }
                 }
             }

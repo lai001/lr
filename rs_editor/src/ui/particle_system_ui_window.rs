@@ -1,13 +1,12 @@
 use super::misc::update_window_with_input_mode;
 use crate::{
     custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType, editor_ui,
-    name_generator::make_unique_name,
 };
 use anyhow::anyhow;
 use egui::Sense;
 use egui_winit::State;
 use glam::Vec4Swizzles;
-use rs_core_minimal::primitive_data::PrimitiveData;
+use rs_core_minimal::{name_generator::make_unique_name, primitive_data::PrimitiveData};
 use rs_engine::{
     camera::Camera,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},

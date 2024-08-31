@@ -1,4 +1,8 @@
-use rs_engine::{content::level::Level, engine::Engine, player_viewport::PlayerViewport};
+use rs_engine::{
+    content::{content_file_type::EContentFileType, level::Level},
+    engine::Engine,
+    player_viewport::PlayerViewport,
+};
 
 #[derive(Clone)]
 pub enum EInputType<'a> {
@@ -21,6 +25,7 @@ pub trait Plugin {
         level: &mut Level,
         ctx: egui::Context,
         player_viewport: &mut PlayerViewport,
+        files: &[EContentFileType],
     );
     #[cfg(not(target_os = "android"))]
     fn on_input(&mut self, ty: EInputType);

@@ -13,6 +13,7 @@ pub mod ffi;
 pub mod file_type;
 pub mod frame_sync;
 pub mod handle;
+pub mod kinematic_component;
 pub mod input_mode;
 pub mod logger;
 pub mod mesh_buffer;

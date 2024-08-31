@@ -4,6 +4,7 @@ use rs_artifact::{
     mesh_vertex::MeshVertex,
     skin_mesh::{SkinMesh, SkinMeshVertex},
 };
+use rs_core_minimal::name_generator::NameGenerator;
 use rs_engine::{
     build_content_file_url, resource_manager::ResourceManager,
     static_mesh_component::StaticMeshComponent,
@@ -19,8 +20,6 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
-
-use crate::name_generator::NameGenerator;
 
 pub struct MeshCluster {
     pub name: String,

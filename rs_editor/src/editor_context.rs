@@ -7,7 +7,6 @@ use crate::{
     editor_ui::{EditorUI, GizmoEvent},
     material_resolve,
     model_loader::ModelLoader,
-    name_generator::make_unique_name,
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
     ui::{
@@ -28,7 +27,9 @@ use crate::{
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use rs_artifact::material::MaterialInfo;
-use rs_core_minimal::{file_manager, path_ext::CanonicalizeSlashExt};
+use rs_core_minimal::{
+    file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
+};
 use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},

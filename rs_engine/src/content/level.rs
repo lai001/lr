@@ -1,12 +1,16 @@
+use super::content_file_type::EContentFileType;
 use crate::actor::Actor;
 use crate::directional_light::DirectionalLight;
 use crate::engine::Engine;
+use crate::resource_manager::ResourceManager;
 use crate::{build_content_file_url, url_extension::UrlExtension};
 use rapier3d::prelude::*;
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
+use rs_core_minimal::name_generator::make_unique_name;
 use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 pub struct Physics {
@@ -23,7 +27,11 @@ pub struct Physics {
     pub ccd_solver: CCDSolver,
     pub query_pipeline: QueryPipeline,
     pub physics_hooks: (),
-    pub event_handler: (),
+    pub event_handler: ChannelEventCollector,
+    pub collision_recv: rapier3d::crossbeam::channel::Receiver<CollisionEvent>,
+    pub contact_force_recv: rapier3d::crossbeam::channel::Receiver<ContactForceEvent>,
+    pub collision_events: VecDeque<CollisionEvent>,
+    pub contact_force_events: VecDeque<ContactForceEvent>,
 }
 
 impl Physics {
@@ -43,6 +51,14 @@ impl Physics {
             &self.physics_hooks,
             &self.event_handler,
         );
+
+        while let Ok(collision_event) = self.collision_recv.try_recv() {
+            self.collision_events.push_back(collision_event);
+        }
+
+        while let Ok(contact_force_event) = self.contact_force_recv.try_recv() {
+            self.contact_force_events.push_back(contact_force_event);
+        }
     }
 }
 
@@ -105,7 +121,9 @@ impl Level {
         let ccd_solver: CCDSolver = CCDSolver::new();
         let query_pipeline: QueryPipeline = QueryPipeline::new();
         let physics_hooks: () = ();
-        let event_handler: () = ();
+        let (collision_send, collision_recv) = rapier3d::crossbeam::channel::unbounded();
+        let (contact_force_send, contact_force_recv) = rapier3d::crossbeam::channel::unbounded();
+        let event_handler = ChannelEventCollector::new(collision_send, contact_force_send);
 
         let physics = Physics {
             rigid_body_set,
@@ -122,6 +140,10 @@ impl Level {
             query_pipeline,
             physics_hooks,
             event_handler,
+            collision_recv,
+            contact_force_recv,
+            collision_events: VecDeque::new(),
+            contact_force_events: VecDeque::new(),
         };
         self.runtime = Some(Runtime {
             physics,
@@ -155,6 +177,33 @@ impl Level {
             crate::scene_node::EComponentType::StaticMeshComponent(component) => {
                 let mut component = component.borrow_mut();
                 component.init_physics(rigid_body_set, collider_set);
+            }
+            crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
+        }
+    }
+
+    pub fn update_actor_physics(&mut self, actor: SingleThreadMutType<Actor>) {
+        let physics = self.get_physics_mut().unwrap();
+        let rigid_body_set = &mut physics.rigid_body_set;
+        let collider_set = &mut physics.collider_set;
+        let actor = actor.borrow_mut();
+        let mut scene_node = actor.scene_node.borrow_mut();
+        for child_scene_node in scene_node.childs.iter_mut() {
+            let mut child_scene_node = child_scene_node.borrow_mut();
+            match &mut child_scene_node.component {
+                crate::scene_node::EComponentType::SceneComponent(_) => {}
+                crate::scene_node::EComponentType::StaticMeshComponent(component) => {
+                    let mut component = component.borrow_mut();
+                    component.update_physics(rigid_body_set, collider_set);
+                }
+                crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
+            }
+        }
+        match &mut scene_node.component {
+            crate::scene_node::EComponentType::SceneComponent(_) => {}
+            crate::scene_node::EComponentType::StaticMeshComponent(component) => {
+                let mut component = component.borrow_mut();
+                component.update_physics(rigid_body_set, collider_set);
             }
             crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
         }
@@ -197,5 +246,49 @@ impl Level {
             return;
         };
         runtime.physics.step();
+    }
+
+    pub fn make_actor_name(&self, new_name: &str) -> String {
+        let names = self
+            .actors
+            .iter()
+            .map(|x| x.borrow().name.clone())
+            .collect();
+        let name = make_unique_name(names, new_name);
+        name
+    }
+
+    pub fn add_new_actors(
+        &mut self,
+        engine: &mut crate::engine::Engine,
+        mut actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
+        files: &[EContentFileType],
+    ) {
+        for actor in actors.clone() {
+            let actor = actor.borrow_mut();
+            let mut root_scene_node = actor.scene_node.borrow_mut();
+            match &mut root_scene_node.component {
+                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
+                    let mut static_mesh_component = static_mesh_component.borrow_mut();
+                    static_mesh_component.initialize(ResourceManager::default(), engine, files);
+                }
+                crate::scene_node::EComponentType::SkeletonMeshComponent(
+                    skeleton_mesh_component,
+                ) => {
+                    skeleton_mesh_component.borrow_mut().initialize(
+                        ResourceManager::default(),
+                        engine,
+                        files,
+                    );
+                }
+            }
+        }
+
+        for actor in actors.clone() {
+            self.init_actor_physics(actor.clone());
+        }
+
+        self.actors.append(&mut actors);
     }
 }

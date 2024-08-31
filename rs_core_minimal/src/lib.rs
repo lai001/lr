@@ -2,6 +2,7 @@ pub mod error;
 pub mod file_manager;
 pub mod frustum;
 pub mod misc;
+pub mod name_generator;
 pub mod path_ext;
 pub mod primitive_data;
 pub mod settings;

@@ -151,6 +151,7 @@ impl Application {
                 &mut active_level,
                 ctx.clone(),
                 &mut self.player_view_port,
+                &self._contents,
             );
         }
 

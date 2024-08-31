@@ -10,16 +10,16 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct Physics {
     collider: Collider,
-    rigid_body: RigidBody,
+    pub rigid_body: RigidBody,
     rigid_body_handle: RigidBodyHandle,
     is_apply_simulate: bool,
 }
 
 #[derive(Clone)]
-struct StaticMeshComponentRuntime {
+pub struct StaticMeshComponentRuntime {
     draw_objects: EDrawObjectType,
     _mesh: Arc<StaticMesh>,
-    physics: Option<Physics>,
+    pub physics: Option<Physics>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -30,7 +30,7 @@ pub struct StaticMeshComponent {
     pub material_url: Option<url::Url>,
 
     #[serde(skip)]
-    run_time: Option<StaticMeshComponentRuntime>,
+    pub run_time: Option<StaticMeshComponentRuntime>,
 }
 
 impl StaticMeshComponent {
@@ -269,6 +269,7 @@ impl StaticMeshComponent {
         let (axis, angle) = rotation.to_axis_angle();
         let collider = ColliderBuilder::new(decomposed_shape)
             .contact_skin(0.1)
+            .active_events(ActiveEvents::COLLISION_EVENTS)
             .build();
         let mut builder = RigidBodyBuilder::dynamic();
         builder = builder.translation(translation);
@@ -298,6 +299,25 @@ impl StaticMeshComponent {
         let handle = rigid_body_set.insert(physics.rigid_body.clone());
         collider_set.insert_with_parent(physics.collider.clone(), handle, rigid_body_set);
         physics.rigid_body_handle = handle;
+    }
+
+    pub fn update_physics(
+        &mut self,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
+            return;
+        };
+        let Some(rigid_body) = rigid_body_set.get_mut(physics.rigid_body_handle) else {
+            return;
+        };
+        for handle in rigid_body.colliders() {
+            if let Some(collider) = collider_set.get_mut(*handle) {
+                collider.copy_from(&physics.collider);
+            }
+        }
+        rigid_body.copy_from(&physics.rigid_body);
     }
 
     pub fn set_apply_simulate(&mut self, is_apply_simulate: bool) {
@@ -334,5 +354,9 @@ impl StaticMeshComponent {
         rigid_body.reset_forces(false);
         rigid_body.reset_torques(false);
         rigid_body.wake_up(true);
+    }
+
+    pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
+        self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten()
     }
 }

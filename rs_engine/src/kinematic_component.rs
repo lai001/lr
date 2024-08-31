@@ -1,0 +1,74 @@
+use crate::content::level;
+use rapier3d::{control::KinematicCharacterController, math::Vector, na::Vector3, prelude::*};
+
+pub struct KinematicComponent {
+    pub character_body: RigidBodyHandle,
+    pub speed: f32,
+    pub rigid_body: RigidBody,
+}
+
+impl KinematicComponent {
+    pub fn from_builder(builder: RigidBodyBuilder) -> KinematicComponent {
+        let rigid_body = builder.build();
+        KinematicComponent {
+            character_body: RigidBodyHandle::invalid(),
+            speed: 0.1,
+            rigid_body,
+        }
+    }
+
+    pub fn get_location(&self) -> glam::Vec3 {
+        let translation = self.rigid_body.position().translation;
+        glam::vec3(translation.x, translation.y, translation.z)
+    }
+
+    pub fn init_physics(
+        &mut self,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let _ = collider_set;
+        self.character_body = rigid_body_set.insert(self.rigid_body.clone());
+    }
+
+    pub fn update(&mut self, desired_movement: &glam::Vec3, physics: &mut level::Physics) {
+        let character_handle = self.character_body;
+        let mut desired_movement =
+            Vector3::new(desired_movement.x, desired_movement.y, desired_movement.z);
+
+        desired_movement *= self.speed;
+        desired_movement -= Vector::y() * self.speed;
+
+        let controller = KinematicCharacterController::default();
+        let character_body = &physics.rigid_body_set[character_handle];
+        let character_collider = &physics.collider_set[character_body.colliders()[0]];
+        let character_mass = character_body.mass();
+
+        let mut collisions = vec![];
+        let mvt = controller.move_shape(
+            physics.integration_parameters.dt,
+            &physics.rigid_body_set,
+            &physics.collider_set,
+            &physics.query_pipeline,
+            character_collider.shape(),
+            character_collider.position(),
+            desired_movement.cast::<f32>(),
+            QueryFilter::new().exclude_rigid_body(character_handle),
+            |c| collisions.push(c),
+        );
+        controller.solve_character_collision_impulses(
+            physics.integration_parameters.dt,
+            &mut physics.rigid_body_set,
+            &physics.collider_set,
+            &physics.query_pipeline,
+            character_collider.shape(),
+            character_mass,
+            &*collisions,
+            QueryFilter::new().exclude_rigid_body(character_handle),
+        );
+
+        let character_body = &mut physics.rigid_body_set[character_handle];
+        let pos = character_body.position();
+        character_body.set_next_kinematic_translation(pos.translation.vector + mvt.translation);
+    }
+}
