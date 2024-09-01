@@ -1,5 +1,5 @@
+use crate::audio_mixer_node::AudioMixerNode;
 use crate::audio_node::AudioNode;
-use crate::audio_node::AudioOutputNode;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use lazy_static::lazy_static;
 use rs_core_audio::audio_format::{AudioFormat, EAudioSampleType};
@@ -66,16 +66,13 @@ impl AudioDevice {
             cpal::SampleFormat::F64 => todo!(),
             _ => unimplemented!(),
         };
-
-        set_global_output_node(AudioOutputNode::new(
-            "MainOutput".to_string(),
-            AudioFormat::from(
-                config.sample_rate().0,
-                config.channels() as u32,
-                sample_type,
-                false,
-            ),
-        ));
+        let expect_audio_format: AudioFormat = AudioFormat::from(
+            config.sample_rate().0,
+            config.channels() as u32,
+            sample_type,
+            false,
+        );
+        set_global_output_node(AudioMixerNode::new("MainOutput".to_string()));
 
         let stream = match sample_format {
             cpal::SampleFormat::I8 => unimplemented!(),
@@ -97,10 +94,10 @@ impl AudioDevice {
                             let channels = stream_config.channels as usize;
                             let samples = data.len() / channels;
                             let mut output_node = output_node.lock().unwrap();
-                            match output_node.next_buffer(samples, channels) {
+                            match output_node.next_buffer(samples, expect_audio_format) {
                                 Some(next_buffer) => {
                                     let mut source_data: Vec<&[f32]> = vec![];
-                                    for i in 0..next_buffer.get_audio_format().channels_per_frame {
+                                    for i in 0..next_buffer.get_channel_data().len() {
                                         let data =
                                             next_buffer.get_channel_data_view::<f32>(i as usize);
                                         source_data.push(data);
@@ -129,9 +126,11 @@ impl AudioDevice {
     }
 
     pub fn play(&mut self) -> crate::error::Result<()> {
-        self.stream
+        let result = self
+            .stream
             .play()
-            .map_err(|err| crate::error::Error::PlayStreamError(err))
+            .map_err(|err| crate::error::Error::PlayStreamError(err));
+        result
     }
 
     pub fn get_config(&self) -> cpal::StreamConfig {
@@ -140,17 +139,14 @@ impl AudioDevice {
 }
 
 lazy_static! {
-    static ref GLOBAL_OUTPUT_NODE: MultipleThreadMutType<AudioOutputNode> =
-        MultipleThreadMut::new(AudioOutputNode::new(
-            String::from("None"),
-            AudioFormat::from(44100, 2, EAudioSampleType::Float32, false)
-        ));
+    static ref GLOBAL_OUTPUT_NODE: MultipleThreadMutType<AudioMixerNode> =
+        MultipleThreadMut::new(AudioMixerNode::new(String::from("None"),));
 }
 
-pub(crate) fn get_global_output_node() -> MultipleThreadMutType<AudioOutputNode> {
+pub(crate) fn get_global_output_node() -> MultipleThreadMutType<AudioMixerNode> {
     GLOBAL_OUTPUT_NODE.clone()
 }
 
-fn set_global_output_node(node: AudioOutputNode) {
+fn set_global_output_node(node: AudioMixerNode) {
     *GLOBAL_OUTPUT_NODE.lock().unwrap() = node;
 }

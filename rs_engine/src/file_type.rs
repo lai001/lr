@@ -12,6 +12,8 @@ pub enum EFileType {
     Blend,
     Dae,
     Mp4,
+    WAV,
+    MP3,
 }
 
 impl ToString for EFileType {
@@ -45,6 +47,8 @@ impl EFileType {
             "blend" => Some(EFileType::Blend),
             "dae" => Some(EFileType::Dae),
             "mp4" => Some(EFileType::Mp4),
+            "wav" => Some(EFileType::WAV),
+            "mp3" => Some(EFileType::MP3),
             _ => None,
         }
     }
@@ -61,6 +65,8 @@ impl EFileType {
             EFileType::Blend => "blend",
             EFileType::Dae => "dae",
             EFileType::Mp4 => "mp4",
+            EFileType::WAV => "wav",
+            EFileType::MP3 => "mp3",
         }
     }
 }

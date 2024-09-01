@@ -321,6 +321,7 @@ impl Engine {
             global_sampler_handle,
             &mut engine,
             virtual_texture_source_infos.clone(),
+            EInputMode::Game,
         );
         match &settings.render_setting.antialias_type {
             rs_core_minimal::settings::EAntialiasType::None => {}
@@ -438,6 +439,7 @@ impl Engine {
                         }
                         EContentType::MediaSource => todo!(),
                         EContentType::ParticleSystem => todo!(),
+                        EContentType::Sound => todo!(),
                     },
                     _ => {}
                 }

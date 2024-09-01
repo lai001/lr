@@ -72,6 +72,14 @@ impl AudioPcmbuffer {
         }
         unsafe { std::slice::from_raw_parts_mut(channel_data.as_mut_ptr() as *mut T, len) }
     }
+
+    pub fn get_channel_data(&self) -> &Vec<Box<Vec<u8>>> {
+        &self.channel_data
+    }
+
+    pub fn get_frame_capacity(&self) -> usize {
+        self.frame_capacity
+    }
 }
 
 #[cfg(test)]

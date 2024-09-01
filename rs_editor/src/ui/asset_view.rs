@@ -12,6 +12,7 @@ pub enum EClickItemType {
     SingleClickFile(AssetFile),
     CreateTexture(AssetFile),
     CreateMediaSource(AssetFile),
+    PlaySound(AssetFile),
     Back,
 }
 
@@ -149,6 +150,11 @@ fn draw_content(
                                         );
                                         ui.allocate_space(ui.available_rect_before_wrap().size());
                                     }
+                                    EFileType::WAV | EFileType::MP3 => {
+                                        ui.image(egui::include_image!(
+                                            "../../../Resource/Editor/sound.svg"
+                                        ));
+                                    }
                                 }
                                 let response = ui.button(file.name.clone());
                                 if response.clicked() {
@@ -162,7 +168,9 @@ fn draw_content(
                                     EFileType::Fbx
                                     | EFileType::Glb
                                     | EFileType::Blend
-                                    | EFileType::Dae => {}
+                                    | EFileType::Dae
+                                    | EFileType::WAV
+                                    | EFileType::MP3 => {}
                                     EFileType::Jpeg
                                     | EFileType::Jpg
                                     | EFileType::Png

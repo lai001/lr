@@ -28,6 +28,7 @@ pub struct StaticMeshComponent {
     pub static_mesh: Option<url::Url>,
     pub transformation: glam::Mat4,
     pub material_url: Option<url::Url>,
+    pub is_visible: bool,
 
     #[serde(skip)]
     pub run_time: Option<StaticMeshComponentRuntime>,
@@ -50,6 +51,7 @@ impl StaticMeshComponent {
             material_url,
             run_time: None,
             static_mesh: static_mesh_url,
+            is_visible: true,
         }
     }
 
@@ -181,6 +183,9 @@ impl StaticMeshComponent {
     }
 
     pub fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
+        if !self.is_visible {
+            return vec![];
+        }
         match &self.run_time {
             Some(x) => vec![&x.draw_objects],
             None => vec![],
@@ -188,6 +193,9 @@ impl StaticMeshComponent {
     }
 
     pub fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
+        if !self.is_visible {
+            return vec![];
+        }
         match &mut self.run_time {
             Some(x) => vec![&mut x.draw_objects],
             None => vec![],

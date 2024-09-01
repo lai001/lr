@@ -1,5 +1,3 @@
-#[cfg(not(target_os = "android"))]
-use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 #[cfg(feature = "plugin_shared_crate")]
 use crate::plugin::plugin_crate::Plugin;
 use crate::{
@@ -19,9 +17,6 @@ pub struct Application {
     plugins: Vec<Box<dyn Plugin>>,
     current_active_level: SingleThreadMutType<Level>,
     _contents: Vec<EContentFileType>,
-    input_mode: EInputMode,
-    camera_movement_speed: f32,
-    camera_motion_speed: f32,
 }
 
 impl Application {
@@ -56,6 +51,7 @@ impl Application {
             global_sampler_handle,
             engine,
             infos,
+            input_mode,
         );
 
         #[cfg(feature = "plugin_shared_crate")]
@@ -70,9 +66,6 @@ impl Application {
             plugins,
             current_active_level: SingleThreadMut::new(current_active_level),
             _contents: contents,
-            input_mode,
-            camera_movement_speed: 0.1,
-            camera_motion_speed: 0.1,
         }
     }
 
@@ -105,26 +98,8 @@ impl Application {
 
     #[cfg(not(target_os = "android"))]
     pub fn on_input(&mut self, ty: crate::input_type::EInputType) {
-        use crate::input_type::EInputType;
-        match ty {
-            EInputType::Device(device_event) => {
-                //
-                match device_event {
-                    winit::event::DeviceEvent::MouseMotion { delta } => {
-                        DefaultCameraInputEventHandle::mouse_motion_handle(
-                            &mut self.player_view_port.camera,
-                            *delta,
-                            self.input_mode,
-                            self.camera_motion_speed,
-                        );
-                    }
-                    _ => {}
-                }
-            }
-            EInputType::MouseWheel(_) => {}
-            EInputType::MouseInput(_, _) => {}
-            EInputType::KeyboardInput(_) => {}
-        }
+        self.player_view_port.on_input(ty.clone());
+
         #[cfg(feature = "plugin_shared_crate")]
         for plugin in self.plugins.iter_mut() {
             plugin.on_input(ty.clone());
@@ -141,22 +116,14 @@ impl Application {
         >,
     ) {
         let _ = ctx;
-        let _ = self.input_mode;
-        let _ = self.camera_movement_speed;
-        let _ = self.camera_motion_speed;
 
         let mut active_level = self.current_active_level.borrow_mut();
 
         #[cfg(not(target_os = "android"))]
-        for (virtual_key_code, element_state) in virtual_key_code_states {
-            DefaultCameraInputEventHandle::keyboard_input_handle(
-                &mut self.player_view_port.camera,
-                virtual_key_code,
-                element_state,
-                self.input_mode,
-                self.camera_movement_speed,
-            );
-        }
+        self.player_view_port
+            .on_input(crate::input_type::EInputType::KeyboardInput(
+                virtual_key_code_states,
+            ));
 
         #[cfg(feature = "plugin_shared_crate")]
         for plugin in self.plugins.iter_mut() {

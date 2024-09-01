@@ -90,11 +90,18 @@ lazy_static! {
         m.extend(SUPPORT_ASSET_IMAGE_FILE_TYPES.iter());
         m.extend(SUPPORT_ASSET_MODEL_FILE_TYPES.iter());
         m.extend(SUPPORT_ASSET_MEDIA_FILE_TYPES.iter());
+        m.extend(SUPPORT_ASSET_SOUND_FILE_TYPES.iter());
         m
     };
     static ref SUPPORT_ASSET_MEDIA_FILE_TYPES: HashSet<EFileType> = {
         let mut m = HashSet::new();
         m.insert(EFileType::Mp4);
+        m
+    };
+    static ref SUPPORT_ASSET_SOUND_FILE_TYPES: HashSet<EFileType> = {
+        let mut m = HashSet::new();
+        m.insert(EFileType::WAV);
+        m.insert(EFileType::MP3);
         m
     };
 }
@@ -1077,6 +1084,7 @@ impl EditorContext {
     ) -> anyhow::Result<()> {
         let _span = tracy_client::span!();
         let project_context = ProjectContext::open(&file_path)?;
+        file_manager::set_current_project_dir(&project_context.get_project_folder_path());
         self.engine
             .get_logger_mut()
             .add_white_list(project_context.project.project_name.clone());
@@ -2228,6 +2236,10 @@ impl EditorContext {
                 }
             }
             asset_view::EClickItemType::CreateMediaSource(_) => todo!(),
+            asset_view::EClickItemType::PlaySound(sound_file) => {
+                //
+                todo!()
+            }
         }
     }
 

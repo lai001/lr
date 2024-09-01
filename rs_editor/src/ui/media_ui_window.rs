@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use egui::{load::SizedTexture, TextureId};
 use egui_winit::State;
 use image::GenericImage;
-use rs_audio::{audio_engine::AudioEngine, audio_node::AudioFilePlayerNode};
+use rs_audio::{audio_engine::AudioEngine, audio_file_player_node::AudioFilePlayerNode};
 use rs_engine::{
     build_built_in_resouce_url,
     engine::Engine,
@@ -196,9 +196,7 @@ impl MediaUIWindow {
         let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path));
         self.audio_player_node = Some(audio_player_node.clone());
         audio_player_node.lock().unwrap().start();
-        let default_output_node = self.audio_engine.get_default_output_node();
-        let mut default_output_node = default_output_node.lock().unwrap();
-        default_output_node.connect(audio_player_node);
+        self.audio_engine.connect(audio_player_node);
 
         Ok(())
     }
@@ -309,13 +307,5 @@ impl MediaUIWindow {
             size: egui::vec2(width as f32, height as f32),
         };
         *cache_sized_texture = Some(sized_texture);
-    }
-}
-
-impl Drop for MediaUIWindow {
-    fn drop(&mut self) {
-        let default_output_node = self.audio_engine.get_default_output_node();
-        let mut default_output_node = default_output_node.lock().unwrap();
-        default_output_node.disconnect();
     }
 }

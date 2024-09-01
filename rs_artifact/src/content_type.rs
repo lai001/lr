@@ -12,4 +12,5 @@ pub enum EContentType {
     IBL,
     MediaSource,
     ParticleSystem,
+    Sound,
 }

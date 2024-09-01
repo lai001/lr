@@ -1,4 +1,6 @@
 use crate::misc::is_dev_mode;
+use lazy_static::lazy_static;
+use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "editor")]
@@ -45,4 +47,23 @@ pub fn create_editor_tmp_folder() -> PathBuf {
 #[cfg(feature = "editor")]
 pub fn get_gpmetis_program_path() -> PathBuf {
     get_engine_root_dir().join("build/windows/x64/release/gpmetis.exe")
+}
+
+lazy_static! {
+    static ref GLOBAL_CURRENT_PROJECT_DIR: MultipleThreadMutType<PathBuf> =
+        MultipleThreadMut::new(Path::new("").to_path_buf());
+}
+
+#[cfg(feature = "editor")]
+pub fn get_current_project_dir() -> PathBuf {
+    GLOBAL_CURRENT_PROJECT_DIR
+        .clone()
+        .lock()
+        .unwrap()
+        .to_path_buf()
+}
+
+#[cfg(feature = "editor")]
+pub fn set_current_project_dir(path: &Path) {
+    *GLOBAL_CURRENT_PROJECT_DIR.lock().unwrap() = path.to_path_buf();
 }

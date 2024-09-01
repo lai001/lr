@@ -2,6 +2,7 @@ use crate::camera::Camera;
 use crate::drawable::EDrawObjectType;
 use crate::engine::{Engine, VirtualPassHandle};
 use crate::handle::TextureHandle;
+use crate::input_mode::EInputMode;
 use crate::physics_debug_render::{PhysicsDebugRender, RenderRigidBodiesBundle};
 use crate::resource_manager::ResourceManager;
 use crate::{build_built_in_resouce_url, BUILT_IN_RESOURCE};
@@ -48,6 +49,10 @@ pub struct PlayerViewport {
     pub debug_draw_objects: Vec<DrawObject>,
     physics_debug_render: Option<PhysicsDebugRender>,
     debug_flags: DebugFlags,
+    input_mode: EInputMode,
+    camera_movement_speed: f32,
+    camera_motion_speed: f32,
+    pub is_use_default_input_process: bool,
 }
 
 impl PlayerViewport {
@@ -60,6 +65,7 @@ impl PlayerViewport {
         virtual_texture_source_infos: SingleThreadMutType<
             HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
         >,
+        input_mode: EInputMode,
     ) -> PlayerViewport {
         let scene_viewport = SceneViewport::new();
 
@@ -94,6 +100,10 @@ impl PlayerViewport {
             debug_draw_objects: vec![],
             physics_debug_render,
             debug_flags: DebugFlags::empty(),
+            input_mode,
+            camera_movement_speed: 0.1,
+            camera_motion_speed: 0.1,
+            is_use_default_input_process: true,
         }
     }
 
@@ -790,5 +800,56 @@ impl PlayerViewport {
 
     pub fn set_debug_flags(&mut self, debug_flags: DebugFlags) {
         self.debug_flags = debug_flags;
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub fn on_input(&mut self, ty: crate::input_type::EInputType) {
+        use crate::{
+            camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
+            input_type::EInputType,
+        };
+        use winit::event::MouseScrollDelta;
+        if !self.is_use_default_input_process {
+            return;
+        }
+        match ty {
+            EInputType::Device(device_event) => {
+                //
+                match device_event {
+                    winit::event::DeviceEvent::MouseMotion { delta } => {
+                        DefaultCameraInputEventHandle::mouse_motion_handle(
+                            &mut self.camera,
+                            *delta,
+                            self.input_mode,
+                            self.camera_motion_speed,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            EInputType::MouseWheel(delta) => {
+                //
+                match delta {
+                    MouseScrollDelta::LineDelta(_, up) => {
+                        self.camera_movement_speed += up * 0.005;
+                        self.camera_movement_speed = self.camera_movement_speed.max(0.0);
+                    }
+                    MouseScrollDelta::PixelDelta(_) => todo!(),
+                }
+            }
+
+            EInputType::MouseInput(_, _) => {}
+            EInputType::KeyboardInput(virtual_key_code_states) => {
+                for (virtual_key_code, element_state) in virtual_key_code_states {
+                    DefaultCameraInputEventHandle::keyboard_input_handle(
+                        &mut self.camera,
+                        virtual_key_code,
+                        element_state,
+                        self.input_mode,
+                        self.camera_movement_speed,
+                    );
+                }
+            }
+        }
     }
 }

@@ -5,3 +5,9 @@ edition = "2021"
 
 [dependencies]
 bitflags = "2.6.0"
+log = "0.4.22"
+dasp = { version = "0.11.0", features = ["all"] }
+
+[dev-dependencies]
+log = "0.4.22"
+env_logger = "0.11.5"
