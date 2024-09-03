@@ -4,31 +4,27 @@ use crate::{
 };
 use anyhow::anyhow;
 use egui::Sense;
+use egui_extras::{Column, TableBuilder};
 use egui_winit::State;
-use glam::Vec4Swizzles;
-use rs_core_minimal::{name_generator::make_unique_name, primitive_data::PrimitiveData};
+use rs_core_minimal::name_generator::{self, make_unique_name};
 use rs_engine::{
     camera::Camera,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
     content::particle_system::{EParticleEmiterType, ParticleSpawnEmiterPros},
     engine::Engine,
     frame_sync::{EOptions, FrameSync},
-    handle::BufferHandle,
     input_mode::EInputMode,
+    particle::emiter_render::EmiterRender,
     resource_manager::ResourceManager,
 };
 use rs_foundation::new::SingleThreadMutType;
 use rs_render::{
     command::{
-        BufferCreateInfo, CreateBuffer, Draw, DrawObject, EBindingResource, EDrawCallType,
-        PresentInfo, RenderCommand, UpdateBuffer,
+        BufferCreateInfo, CreateBuffer, DrawObject, PresentInfo, RenderCommand, UpdateBuffer,
     },
-    renderer::{EBuiltinPipelineType, EPipelineType},
     scene_viewport::SceneViewport,
-    vertex_data_type::mesh_vertex::{Instance0, MeshVertex0},
 };
 use std::collections::HashMap;
-use wgpu::BufferUsages;
 use winit::{
     dpi::PhysicalSize,
     event::{MouseButton, MouseScrollDelta, WindowEvent},
@@ -37,6 +33,7 @@ use winit::{
 pub struct DataSource {
     pub particle_system: SingleThreadMutType<rs_engine::content::particle_system::ParticleSystem>,
     pub particle_system_template: rs_engine::particle::system::ParticleSystem,
+    pub current_monitor: Option<String>,
 }
 
 pub struct BaseUIWindow {
@@ -217,8 +214,7 @@ pub struct ParticleSystemUIWindow {
     pub data_source: DataSource,
     pub context: egui::Context,
     base_ui_window: BaseUIWindow,
-    vertex_buffer_handle: BufferHandle,
-    index_buffer_handle: BufferHandle,
+    emiter_render: EmiterRender,
 }
 
 impl ParticleSystemUIWindow {
@@ -232,56 +228,27 @@ impl ParticleSystemUIWindow {
         let window_context =
             window_manager.spwan_new_window(EWindowType::Particle, event_loop_window_target)?;
 
-        let particle_system_template = particle_system.borrow().new_template_instance();
+        let particle_system_template = {
+            let particle_system = particle_system.borrow();
+            let system_name = particle_system.get_name();
+            particle_system.new_template_instance(system_name)
+        };
         let data_source = DataSource {
             particle_system,
             particle_system_template,
+            current_monitor: None,
         };
         let base_ui_window = BaseUIWindow::new(window_context, context.clone(), engine)?;
 
-        let rm = ResourceManager::default();
-        let vertex_buffer_handle = rm.next_buffer();
-        let index_buffer_handle = rm.next_buffer();
-
-        let quad = PrimitiveData::quad();
-
-        let command = rs_render::command::RenderCommand::CreateBuffer(CreateBuffer {
-            handle: *vertex_buffer_handle,
-            buffer_create_info: BufferCreateInfo {
-                label: Some(format!("VertexBuffer")),
-                contents: rs_foundation::cast_to_raw_buffer(
-                    &quad
-                        .into_iter()
-                        .map(|x| MeshVertex0 {
-                            position: (glam::Mat4::from_rotation_x(90_f32.to_radians())
-                                * glam::vec4(x.1.x, x.1.y, x.1.z, 1.0))
-                            .xyz(),
-                            tex_coord: *x.5,
-                        })
-                        .collect::<Vec<MeshVertex0>>(),
-                )
-                .to_vec(),
-                usage: BufferUsages::COPY_DST | BufferUsages::VERTEX,
-            },
-        });
-        engine.send_render_command(command);
-
-        let command = rs_render::command::RenderCommand::CreateBuffer(CreateBuffer {
-            handle: *index_buffer_handle,
-            buffer_create_info: BufferCreateInfo {
-                label: Some(format!("IndexBuffer")),
-                contents: rs_foundation::cast_to_raw_buffer(&quad.indices).to_vec(),
-                usage: BufferUsages::INDEX,
-            },
-        });
-        engine.send_render_command(command);
+        let emiter_render =
+            EmiterRender::new(engine, base_ui_window.global_constants_handle.clone());
 
         Ok(ParticleSystemUIWindow {
             data_source,
             context,
             base_ui_window,
-            vertex_buffer_handle,
-            index_buffer_handle,
+
+            emiter_render,
         })
     }
 
@@ -338,7 +305,7 @@ impl ParticleSystemUIWindow {
                         None => {}
                     }
 
-                    self.data_source.particle_system_template.tick(1.0 / 30.0);
+                    self.data_source.particle_system_template.tick(1.0 / 60.0);
 
                     let full_output = egui_winit_state.egui_ctx().end_frame();
 
@@ -357,75 +324,17 @@ impl ParticleSystemUIWindow {
 
                 engine.send_render_command(RenderCommand::UiOutput(gui_render_output));
 
-                let quad = PrimitiveData::quad();
-                let rm = ResourceManager::default();
+                let mut emiter_draw_objects = self
+                    .emiter_render
+                    .collect_emiter_render(&self.data_source.particle_system_template, engine);
+                let mut draw_objects = vec![];
 
-                let position_colors: Vec<(glam::Vec3, glam::Vec4)> = (0..self
-                    .data_source
-                    .particle_system_template
-                    .particle_parameters
-                    .get_count())
-                    .filter_map(|i| {
-                        let is_alive = self
-                            .data_source
-                            .particle_system_template
-                            .particle_parameters
-                            .is_alive[i];
-                        if is_alive {
-                            Some((
-                                self.data_source
-                                    .particle_system_template
-                                    .particle_parameters
-                                    .positions[i]
-                                    .clone(),
-                                self.data_source
-                                    .particle_system_template
-                                    .particle_parameters
-                                    .colors[i]
-                                    .clone(),
-                            ))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                let instances: Vec<Instance0> = position_colors
-                    .iter()
-                    .map(|(position, color)| Instance0 {
-                        position: *position,
-                        color: *color,
-                    })
-                    .collect();
-
-                let instance_buffer_handle = rm.next_buffer();
-                let command = rs_render::command::RenderCommand::CreateBuffer(CreateBuffer {
-                    handle: *instance_buffer_handle,
-                    buffer_create_info: BufferCreateInfo {
-                        label: Some(format!("InstanceBuffer")),
-                        contents: rs_foundation::cast_to_raw_buffer(&instances).to_vec(),
-                        usage: BufferUsages::COPY_DST | BufferUsages::VERTEX,
-                    },
-                });
-                engine.send_render_command(command);
-                let mut draw_object = DrawObject::new(
-                    0,
-                    vec![*self.vertex_buffer_handle, *instance_buffer_handle],
-                    quad.vertex_positions.len() as u32,
-                    EPipelineType::Builtin(EBuiltinPipelineType::Particle),
-                    Some(*self.index_buffer_handle),
-                    Some(quad.indices.len() as u32),
-                    vec![vec![EBindingResource::Constants(
-                        *self.base_ui_window.global_constants_handle,
-                    )]],
-                );
-                draw_object.draw_call_type = EDrawCallType::Draw(Draw {
-                    instances: 0..(instances.len() as u32),
-                });
+                draw_objects.append(&mut emiter_draw_objects);
+                draw_objects.push(self.base_ui_window.grid_draw_object.clone());
 
                 engine.send_render_command(RenderCommand::Present(PresentInfo {
                     window_id,
-                    draw_objects: vec![draw_object, self.base_ui_window.grid_draw_object.clone()],
-                    // draw_objects: vec![draw_object],
+                    draw_objects,
                     virtual_texture_pass: None,
                     scene_viewport: SceneViewport::new(),
                 }));
@@ -474,27 +383,58 @@ impl ParticleSystemView {
             .resizable(true)
             .show(context, |ui| match emiter {
                 rs_engine::particle::emiter::ParticleEmiter::Spawn(emiter) => {
-                    ui.label(format!("Rate: {}", emiter.rate));
-                    ui.label(format!("Count: {}", emiter.count));
+                    ui.label(format!("Rate: {}", emiter.spawn_rate));
+                    ui.label(format!("Count: {}", emiter.count_per_spawn));
                     ui.label(format!("Time Range: {}", emiter.time_range));
                 }
             });
         }
 
         egui::SidePanel::left("system").show(context, |ui| {
-            ui.label(&name);
+            ui.label(format!("{} {}", &name, template.time));
+            let _ = ui.separator();
+            for (name, emiter) in &template.emiters {
+                if ui.button(name).clicked() {
+                    match emiter {
+                        rs_engine::particle::emiter::ParticleEmiter::Spawn(emiter) => {
+                            data_source.current_monitor = Some(emiter.name.clone());
+                        }
+                    }
+                }
+            }
         });
+
+        if let Some(name) = data_source.current_monitor.as_ref() {
+            let emiter = template.emiters.iter().find(|x| x.0 == name);
+            if let Some((_, emiter)) = emiter {
+                match emiter {
+                    rs_engine::particle::emiter::ParticleEmiter::Spawn(emiter) => {
+                        Self::monitor(context, emiter);
+                    }
+                }
+            }
+        }
 
         egui::Area::new(egui::Id::new("my_area")).show(context, |ui| {
             let response = ui.allocate_response(ui.available_size(), Sense::click());
             response.context_menu(|ui| {
                 if ui.button("Create Emiter").clicked() {
+                    let mut name_generator = name_generator::NameGenerator::new(
+                        data_source
+                            .particle_system_template
+                            .emiters
+                            .keys()
+                            .into_iter()
+                            .map(|x| x.clone())
+                            .collect(),
+                    );
+                    let name = name_generator.next("Untitled");
                     event = Some(EEventType::CreateEmiter(EParticleEmiterType::Spawn(
                         ParticleSpawnEmiterPros {
                             rate: 1.0,
                             count: 50,
                             time_range: glam::vec2(0.0, 10.0),
-                            name: format!("Untitled"),
+                            name,
                         },
                     )));
                     ui.close_menu();
@@ -503,6 +443,69 @@ impl ParticleSystemView {
         });
 
         event
+    }
+
+    fn monitor(context: &egui::Context, emiter: &rs_engine::particle::emiter::ParticleSpawnEmiter) {
+        let name = format!("{} Monitor", emiter.name.clone());
+        editor_ui::EditorUI::new_window(
+            &format!("{}", name),
+            rs_engine::input_mode::EInputMode::UI,
+        )
+        .open(&mut true)
+        .vscroll(true)
+        .hscroll(true)
+        .resizable(true)
+        .show(context, |ui| {
+            let text_height = egui::TextStyle::Body
+                .resolve(ui.style())
+                .size
+                .max(ui.spacing().interact_size.y);
+            let available_height = ui.available_height();
+            let table = TableBuilder::new(ui)
+                .striped(true)
+                .resizable(true)
+                .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                .column(Column::auto())
+                .column(Column::auto())
+                .column(Column::auto())
+                .min_scrolled_height(0.0)
+                .max_scroll_height(available_height);
+            table
+                .header(20.0, |mut header| {
+                    header.col(|ui| {
+                        ui.strong("Index");
+                    });
+                    header.col(|ui| {
+                        ui.strong("Lifetime");
+                    });
+                    header.col(|ui| {
+                        ui.strong("Is alive");
+                    });
+                })
+                .body(|body| {
+                    body.rows(
+                        text_height,
+                        emiter.particle_parameters.get_count(),
+                        |mut row| {
+                            let row_index = row.index();
+
+                            row.col(|ui| {
+                                ui.label(row_index.to_string());
+                            });
+
+                            let lifetime = emiter.particle_parameters.lifetimes[row_index];
+                            row.col(|ui| {
+                                ui.label(lifetime.to_string());
+                            });
+
+                            let is_alive = emiter.particle_parameters.is_alive[row_index];
+                            row.col(|ui| {
+                                ui.label(is_alive.to_string());
+                            });
+                        },
+                    );
+                });
+        });
     }
 }
 
@@ -520,12 +523,14 @@ fn handle_event(
             EParticleEmiterType::Spawn(particle_spawn_emiter_pros) => {
                 let name = make_unique_name(names, particle_spawn_emiter_pros.name);
                 particle_system_template.add_emiter(
-                    name,
                     rs_engine::particle::emiter::ParticleEmiter::Spawn(
                         rs_engine::particle::emiter::ParticleSpawnEmiter::new(
+                            name,
                             particle_spawn_emiter_pros.rate,
                             particle_spawn_emiter_pros.count,
                             particle_spawn_emiter_pros.time_range,
+                            1000,
+                            glam::vec3(0.0, 0.0, 0.0),
                         ),
                     ),
                 );

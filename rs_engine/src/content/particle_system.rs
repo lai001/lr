@@ -37,8 +37,8 @@ impl ParticleSystem {
         self.url.get_name_in_editor()
     }
 
-    pub fn new_template_instance(&self) -> crate::particle::system::ParticleSystem {
-        crate::particle::system::ParticleSystem::new(self.max_particles)
+    pub fn new_template_instance(&self, name: String) -> crate::particle::system::ParticleSystem {
+        crate::particle::system::ParticleSystem::new(name)
     }
 }
 

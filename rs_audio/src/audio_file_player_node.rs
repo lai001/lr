@@ -12,6 +12,7 @@ pub struct AudioFilePlayerNode {
     channel_data: Vec<VecDeque<u8>>,
     is_playing: bool,
     audio_format: AudioFormat,
+    is_loop: bool,
 }
 
 fn calculate_read_frames(
@@ -52,13 +53,14 @@ impl AudioNode for AudioFilePlayerNode {
 }
 
 impl AudioFilePlayerNode {
-    pub fn new(path: impl AsRef<Path>) -> AudioFilePlayerNode {
+    pub fn new(path: impl AsRef<Path>, is_loop: bool) -> AudioFilePlayerNode {
         let audio_player_item = AudioPlayerItem::new(path.as_ref().to_path_buf()).ok();
         AudioFilePlayerNode {
             audio_player_item,
             channel_data: vec![],
             is_playing: false,
             audio_format: AudioFormat::from(44100, 2, EAudioSampleType::Float32, true),
+            is_loop,
         }
     }
 
@@ -83,8 +85,17 @@ impl AudioFilePlayerNode {
         let Some(audio_player_item) = self.audio_player_item.as_mut() else {
             return;
         };
-        let Ok(audio_frame) = audio_player_item.try_recv() else {
-            return;
+        let audio_frame = match audio_player_item.try_recv() {
+            Ok(audio_frame) => audio_frame,
+            Err(err) => match err {
+                rs_media::error::Error::EndOfFile => {
+                    if self.is_loop {
+                        self.seek(0.0);
+                    }
+                    return;
+                }
+                _ => return,
+            },
         };
         self.audio_format = *audio_frame.pcm_buffer.get_audio_format();
 

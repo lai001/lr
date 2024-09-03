@@ -804,6 +804,7 @@ impl Engine {
         self.render_thread_mode.send_command(command);
         let mut draw_objects: Vec<_> = player_viewport.debug_draw_objects.drain(..).collect();
         draw_objects.append(&mut player_viewport.draw_objects.drain(..).collect());
+        draw_objects.append(&mut player_viewport.particle_draw_objects.drain(..).collect());
         // let mut draw_objects: Vec<_> = player_viewport.draw_objects.drain(..).collect();
         if let Some(grid_draw_object) = &player_viewport.grid_draw_object {
             draw_objects.push(grid_draw_object.clone());

@@ -42,6 +42,7 @@ pub struct PlayerViewport {
     pub shadow_depth_texture_handle: Option<TextureHandle>,
     pub grid_draw_object: Option<DrawObject>,
     pub draw_objects: Vec<DrawObject>,
+    pub particle_draw_objects: Vec<DrawObject>,
     pub camera: Camera,
     virtual_texture_source_infos: SingleThreadMutType<
         HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
@@ -104,6 +105,7 @@ impl PlayerViewport {
             camera_movement_speed: 0.1,
             camera_motion_speed: 0.1,
             is_use_default_input_process: true,
+            particle_draw_objects: vec![],
         }
     }
 

@@ -193,7 +193,7 @@ impl MediaUIWindow {
         video_frame_player.start();
         self.video_frame_player = Some(video_frame_player);
 
-        let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path));
+        let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path, false));
         self.audio_player_node = Some(audio_player_node.clone());
         audio_player_node.lock().unwrap().start();
         self.audio_engine.connect(audio_player_node);

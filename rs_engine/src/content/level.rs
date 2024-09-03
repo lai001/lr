@@ -60,6 +60,15 @@ impl Physics {
             self.contact_force_events.push_back(contact_force_event);
         }
     }
+
+    pub fn find_the_contact_pair(
+        &mut self,
+        collider_handle1: ColliderHandle,
+        collider_handle2: ColliderHandle,
+    ) -> Option<&ContactPair> {
+        self.narrow_phase
+            .contact_pair(collider_handle1, collider_handle2)
+    }
 }
 
 pub struct Runtime {

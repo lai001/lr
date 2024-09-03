@@ -17,6 +17,7 @@ pub struct AudioPlayerItem {
     filepath: PathBuf,
     audio_receiver: Option<Receiver<Protocol>>,
     user_sender: Option<Sender<Protocol>>,
+    duration: f32,
 }
 
 impl AudioPlayerItem {
@@ -25,6 +26,7 @@ impl AudioPlayerItem {
             filepath,
             audio_receiver: None,
             user_sender: None,
+            duration: 0.0,
         };
         player.init()?;
         Ok(player)
@@ -38,7 +40,7 @@ impl AudioPlayerItem {
         let audio_sender_clone = audio_sender.clone();
 
         let mut audio_frame_extractor = AudioFrameExtractor::new(&self.filepath)?;
-
+        self.duration = audio_frame_extractor.get_duration();
         std::thread::spawn(move || {
             let mut resp_protocols: VecDeque<Protocol> = VecDeque::new();
 
@@ -187,5 +189,9 @@ impl AudioPlayerItem {
             eof: None,
             frame: None,
         });
+    }
+
+    pub fn get_duration(&self) -> f32 {
+        self.duration
     }
 }

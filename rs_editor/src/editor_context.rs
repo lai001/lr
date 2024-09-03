@@ -1043,7 +1043,9 @@ impl EditorContext {
                     let result = Self::load_ibl_content_resource(engine, project_context, ibl);
                     log::trace!("{:?}", result);
                 }
-                EContentFileType::ParticleSystem(_) => todo!(),
+                EContentFileType::ParticleSystem(_) => {
+                    // todo!()
+                }
             }
         }
     }
@@ -2236,7 +2238,7 @@ impl EditorContext {
                 }
             }
             asset_view::EClickItemType::CreateMediaSource(_) => todo!(),
-            asset_view::EClickItemType::PlaySound(sound_file) => {
+            asset_view::EClickItemType::PlaySound(_) => {
                 //
                 todo!()
             }

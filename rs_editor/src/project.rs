@@ -234,9 +234,13 @@ edition = "2021"
 [features]
 default = ["editor", "plugin_shared_crate"]
 renderdoc = ["rs_engine/renderdoc", "rs_render/renderdoc"]
-editor = ["rs_engine/editor", "rs_render/editor"]
+editor = ["rs_engine/editor", "rs_render/editor", "rs_core_minimal/editor"]
 plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
-standalone = ["rs_engine/standalone", "rs_render/standalone"]
+standalone = [
+    "rs_engine/standalone",
+    "rs_render/standalone",
+    "rs_core_minimal/standalone",
+]
 profiler = ["rs_engine/profiler", "rs_render/profiler"]
 
 [dependencies]
@@ -244,6 +248,9 @@ egui = { version = "0.28.1" }
 log = "0.4.22"
 rs_engine = { path = "@engine_path@/rs_engine" }
 rs_render = { path = "@engine_path@/rs_render" }
+rs_audio = { path = "@engine_path@/rs_audio" }
+rs_core_minimal = { path = "@engine_path@/rs_core_minimal" }
+rs_foundation = { path = "@engine_path@/rs_foundation" }
 
 [lib]
 crate-type = ["dylib"]

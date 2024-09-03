@@ -15,6 +15,8 @@ pub struct AudioFrameExtractor {
     audio_decoder: ffmpeg_next::codec::decoder::Audio,
     audio_stream_index: usize,
     time_base: ffmpeg_next::Rational,
+    duration: f32,
+    current_seek_time: f32,
 }
 
 #[derive(Debug)]
@@ -53,11 +55,14 @@ impl AudioFrameExtractor {
             .audio()
             .map_err(|err| crate::error::Error::FFMpeg(err))?;
         unsafe { (*audio_decoder.as_mut_ptr()).pkt_timebase = time_base.into() };
+        let duration = input_stream.duration() as f32 / input_stream.time_base().1 as f32;
         let mut item = AudioFrameExtractor {
             format_input,
             audio_decoder,
             audio_stream_index,
             time_base,
+            duration,
+            current_seek_time: 0.0,
         };
         item.seek(0.0);
         Ok(item)
@@ -65,6 +70,10 @@ impl AudioFrameExtractor {
 
     pub fn get_stream_time_base(&self) -> ffmpeg_next::Rational {
         self.time_base
+    }
+
+    pub fn get_duration(&self) -> f32 {
+        self.duration
     }
 
     pub fn seek(&mut self, second: f32) {
@@ -87,6 +96,7 @@ impl AudioFrameExtractor {
                 }
             }
         };
+        self.current_seek_time = seek_time;
     }
 
     fn find_next_packet(&mut self) -> Option<(ffmpeg_next::Stream, ffmpeg_next::Packet)> {
@@ -192,5 +202,9 @@ impl AudioFrameExtractor {
             }
             None => None,
         }
+    }
+
+    pub fn get_current_seek_time(&self) -> f32 {
+        self.current_seek_time
     }
 }
