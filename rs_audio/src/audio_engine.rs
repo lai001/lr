@@ -53,7 +53,8 @@ mod test {
         let path = file_manager::get_engine_resource("Remote/sample-15s.mp3");
 
         let mut audio_engine = AudioEngine::new();
-        let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path.clone()));
+        let audio_player_node =
+            MultipleThreadMut::new(AudioFilePlayerNode::new(path.clone(), false));
         audio_engine.connect(audio_player_node.clone());
         audio_player_node.lock().unwrap().start();
         sleep(Duration::from_secs_f32(10.0));
@@ -70,12 +71,14 @@ mod test {
         let mut audio_engine = AudioEngine::new();
 
         let path = file_manager::get_engine_resource("Remote/sample-15s_8000.mp3");
-        let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path.clone()));
+        let audio_player_node =
+            MultipleThreadMut::new(AudioFilePlayerNode::new(path.clone(), false));
         audio_engine.connect(audio_player_node.clone());
         audio_player_node.lock().unwrap().start();
 
         let path = file_manager::get_engine_resource("Remote/bgm_48000.mp3");
-        let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path.clone()));
+        let audio_player_node =
+            MultipleThreadMut::new(AudioFilePlayerNode::new(path.clone(), false));
         audio_engine.connect(audio_player_node.clone());
         audio_player_node.lock().unwrap().start();
 
