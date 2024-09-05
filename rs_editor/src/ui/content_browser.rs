@@ -248,6 +248,11 @@ fn draw_content(
                                                 "../../../Resource/Editor/particle.svg"
                                             ));
                                         }
+                                        EContentFileType::Sound(_) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/sound.svg"
+                                            ));
+                                        }
                                     }
                                     let _ = ui.button(name.clone());
                                 })

@@ -99,6 +99,7 @@ impl StandaloneUiWindow {
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
+        is_close: &mut bool,
     ) {
         let _ = event_loop_window_target;
         let _ = self.egui_winit_state.on_window_event(window, event);
@@ -118,6 +119,7 @@ impl StandaloneUiWindow {
                     return;
                 };
                 if virtual_keycode == KeyCode::Escape {
+                    *is_close = true;
                     let event = WindowEvent::CloseRequested;
                     self.window_event_process(
                         window_id,
@@ -126,6 +128,7 @@ impl StandaloneUiWindow {
                         event_loop_window_target,
                         engine,
                         window_manager,
+                        &mut true,
                     );
                     return;
                 }

@@ -8,7 +8,7 @@ use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use rs_artifact::{
     artifact::ArtifactAssetEncoder, material::MaterialInfo, shader_source_code::ShaderSourceCode,
-    EEndianType,
+    sound::ESoundFileType, EEndianType,
 };
 use rs_engine::{
     content::content_file_type::EContentFileType, resource_manager::ResourceManager,
@@ -314,6 +314,12 @@ impl ProjectContext {
         let mut materials: HashMap<url::Url, rs_artifact::material::Material> = HashMap::new();
         let mut material_contents: HashMap<url::Url, rs_engine::content::material::Material> =
             HashMap::new();
+        let mut particle_systems: HashMap<
+            url::Url,
+            rs_engine::content::particle_system::ParticleSystem,
+        > = HashMap::new();
+        let mut sound_resources: HashMap<url::Url, rs_artifact::sound::Sound> = HashMap::new();
+        let mut sounds: HashMap<url::Url, rs_engine::content::sound::Sound> = HashMap::new();
 
         for file in &self.project.content.borrow().files {
             match file {
@@ -483,7 +489,24 @@ impl ProjectContext {
                         ibl_bakings.insert(ibl_baking.url.clone(), ibl_baking);
                     }
                 }
-                EContentFileType::ParticleSystem(_) => todo!(),
+                EContentFileType::ParticleSystem(particle_system) => {
+                    let particle_system = particle_system.borrow();
+                    particle_systems.insert(particle_system.url.clone(), particle_system.clone());
+                }
+                EContentFileType::Sound(sound) => {
+                    let sound = sound.borrow();
+                    sounds.insert(sound.url.clone(), sound.clone());
+                    let path = self
+                        .get_asset_folder_path()
+                        .join(&sound.asset_info.relative_path);
+                    let data = std::fs::read(path)?;
+                    let sound_resource = rs_artifact::sound::Sound {
+                        url: sound.asset_info.get_url(),
+                        sound_file_type: ESoundFileType::Unknow,
+                        data,
+                    };
+                    sound_resources.insert(sound.asset_info.get_url(), sound_resource);
+                }
             }
         }
 
@@ -526,7 +549,15 @@ impl ProjectContext {
         for asset in material_contents.values() {
             artifact_asset_encoder.encode(asset);
         }
-
+        for asset in particle_systems.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in sound_resources.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in sounds.values() {
+            artifact_asset_encoder.encode(asset);
+        }
         let _ = artifact_asset_encoder.finish()?;
         Ok(output_folder_path.join(output_filename))
     }

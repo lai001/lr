@@ -3,15 +3,22 @@ use rs_artifact::{artifact::ArtifactReader, EEndianType};
 use rs_engine::{
     engine::Engine,
     frame_sync::{EOptions, FrameSync},
+    input_mode::EInputMode,
+    input_type::EInputType,
     logger::{Logger, LoggerConfiguration},
 };
+use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
 use std::{collections::HashMap, path::Path};
-use winit::event::{Event, MouseScrollDelta, WindowEvent};
+use winit::event::{Event, WindowEvent};
+
+include!("../target/generated/load_plugins.generated");
 
 pub struct ApplicationContext {
     engine: Engine,
     egui_winit_state: egui_winit::State,
     frame_sync: FrameSync,
+    app: rs_engine::standalone::application::Application,
+    virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
 }
 
 impl ApplicationContext {
@@ -58,7 +65,7 @@ impl ApplicationContext {
         )
         .unwrap();
 
-        engine.init_level();
+        engine.init_resources();
 
         window
             .set_cursor_grab(winit::window::CursorGrabMode::Confined)
@@ -66,10 +73,31 @@ impl ApplicationContext {
         window.set_cursor_visible(false);
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
+        let current_active_level = engine.new_main_level().unwrap();
+        let contents = engine
+            .content_files
+            .iter()
+            .map(|(_, x)| x.clone())
+            .collect();
+
+        let plugins = LoadPlugins::load();
+        let app = rs_engine::standalone::application::Application::new(
+            window_id,
+            window_width,
+            window_height,
+            &mut engine,
+            current_active_level,
+            plugins,
+            contents,
+            EInputMode::Game,
+        );
+
         let application_context = Self {
             engine,
             egui_winit_state,
             frame_sync,
+            app,
+            virtual_key_code_states: HashMap::new(),
         };
 
         application_context
@@ -82,54 +110,55 @@ impl ApplicationContext {
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
         _: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
+        let _ = event_loop_proxy;
         match event {
             Event::DeviceEvent { event, .. } => {
-                self.engine.process_device_event(event.clone());
+                self.app.on_input(EInputType::Device(event));
             }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => {
-                    self.quit_app();
-                }
-                WindowEvent::KeyboardInput {
-                    device_id,
-                    event,
-                    is_synthetic,
-                } => {
-                    self.engine
-                        .process_keyboard_input(*device_id, event.clone(), *is_synthetic);
-                }
-                WindowEvent::MouseWheel { delta, .. } => match delta {
-                    MouseScrollDelta::LineDelta(_, up) => {
-                        let mut speed = self.engine.get_camera_movement_speed();
-                        speed += up * 0.005;
-                        speed = speed.max(0.0);
-                        self.engine.set_camera_movement_speed(speed);
+            Event::WindowEvent { event, .. } => {
+                let _ = self.egui_winit_state.on_window_event(window, event);
+                Engine::update_window_with_input_mode(window, EInputMode::Game);
+                match event {
+                    WindowEvent::CloseRequested => {
+                        self.quit_app();
                     }
-                    MouseScrollDelta::PixelDelta(_) => todo!(),
-                },
-                WindowEvent::RedrawRequested => {
-                    let window_id = u64::from(window.id()) as isize;
-                    let full_output = self.process_ui(window, event_loop_proxy);
-                    let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
-                        textures_delta: full_output.textures_delta,
-                        clipped_primitives: self
-                            .egui_winit_state
-                            .egui_ctx()
-                            .tessellate(full_output.shapes, full_output.pixels_per_point),
-                        window_id,
-                    };
-                    self.engine.tick();
-                    self.engine.redraw(gui_render_output);
-                    self.engine.present(window_id);
-                    let wait = self
-                        .frame_sync
-                        .tick()
-                        .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-                    std::thread::sleep(wait);
-                    window.request_redraw();
+                    WindowEvent::KeyboardInput { event, .. } => {
+                        let winit::keyboard::PhysicalKey::Code(virtual_keycode) =
+                            event.physical_key
+                        else {
+                            return;
+                        };
+                        self.virtual_key_code_states
+                            .insert(virtual_keycode, event.state);
+                        self.app
+                            .on_input(EInputType::KeyboardInput(&self.virtual_key_code_states));
+                    }
+                    WindowEvent::MouseWheel { delta, .. } => {
+                        self.app.on_input(EInputType::MouseWheel(delta));
+                    }
+                    WindowEvent::MouseInput { state, button, .. } => {
+                        self.app.on_input(EInputType::MouseInput(state, button));
+                    }
+                    WindowEvent::RedrawRequested => {
+                        let window_id = u64::from(window.id()) as isize;
+                        self.ui_begin(window);
+
+                        self.engine.tick();
+
+                        self.app.on_redraw_requested(
+                            &mut self.engine,
+                            self.egui_winit_state.egui_ctx().clone(),
+                            &self.virtual_key_code_states,
+                        );
+
+                        let output = self.ui_end(window, window_id);
+                        self.engine
+                            .send_render_command(RenderCommand::UiOutput(output));
+                        self.sync(window);
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+            }
             _ => {}
         }
     }
@@ -138,14 +167,46 @@ impl ApplicationContext {
         std::process::exit(0);
     }
 
-    fn process_ui(
-        &mut self,
-        window: &mut winit::window::Window,
-        _: winit::event_loop::EventLoopProxy<ECustomEventType>,
-    ) -> egui::FullOutput {
-        let new_input = self.egui_winit_state.take_egui_input(window);
-        self.egui_winit_state.egui_ctx().begin_frame(new_input);
-        let full_output = self.egui_winit_state.egui_ctx().end_frame();
-        full_output
+    fn sync(&mut self, window: &mut winit::window::Window) {
+        let wait = self
+            .frame_sync
+            .tick()
+            .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
+        std::thread::sleep(wait);
+        window.request_redraw();
+    }
+
+    fn ui_begin(&mut self, window: &mut winit::window::Window) {
+        let egui_winit_state = &mut self.egui_winit_state;
+
+        let ctx = egui_winit_state.egui_ctx().clone();
+        let viewport_id = egui_winit_state.egui_input().viewport_id;
+        let viewport_info: &mut egui::ViewportInfo = egui_winit_state
+            .egui_input_mut()
+            .viewports
+            .get_mut(&viewport_id)
+            .unwrap();
+        egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
+
+        let new_input = egui_winit_state.take_egui_input(window);
+        egui_winit_state.egui_ctx().begin_frame(new_input);
+        egui_winit_state.egui_ctx().clear_animations();
+    }
+
+    fn ui_end(&mut self, window: &mut winit::window::Window, window_id: isize) -> EGUIRenderOutput {
+        let egui_winit_state = &mut self.egui_winit_state;
+
+        let full_output = egui_winit_state.egui_ctx().end_frame();
+
+        egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
+
+        let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+            textures_delta: full_output.textures_delta,
+            clipped_primitives: egui_winit_state
+                .egui_ctx()
+                .tessellate(full_output.shapes, full_output.pixels_per_point),
+            window_id,
+        };
+        gui_render_output
     }
 }

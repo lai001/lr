@@ -12,5 +12,6 @@ pub enum EResourceType {
     Binary,
     Skeleton,
     Material,
+    Sound,
     Content(EContentType),
 }

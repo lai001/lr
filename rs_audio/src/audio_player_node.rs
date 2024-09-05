@@ -7,7 +7,7 @@ use rs_core_audio::{
 use rs_media::audio_player_item::AudioPlayerItem;
 use std::{collections::VecDeque, path::Path};
 
-pub struct AudioFilePlayerNode {
+pub struct AudioPlayerNode {
     audio_player_item: Option<AudioPlayerItem>,
     channel_data: Vec<VecDeque<u8>>,
     is_playing: bool,
@@ -23,7 +23,7 @@ fn calculate_read_frames(
     (source_len as f32 / source_sample_rate as f32 * target_sample_rate as f32) as usize
 }
 
-impl AudioNode for AudioFilePlayerNode {
+impl AudioNode for AudioPlayerNode {
     fn next_buffer(
         &mut self,
         expect_samples_per_channel: usize,
@@ -52,10 +52,21 @@ impl AudioNode for AudioFilePlayerNode {
     }
 }
 
-impl AudioFilePlayerNode {
-    pub fn new(path: impl AsRef<Path>, is_loop: bool) -> AudioFilePlayerNode {
-        let audio_player_item = AudioPlayerItem::new(path.as_ref().to_path_buf()).ok();
-        AudioFilePlayerNode {
+impl AudioPlayerNode {
+    pub fn from_path(path: impl AsRef<Path>, is_loop: bool) -> AudioPlayerNode {
+        let audio_player_item = AudioPlayerItem::from_path(path.as_ref().to_path_buf()).ok();
+        AudioPlayerNode {
+            audio_player_item,
+            channel_data: vec![],
+            is_playing: false,
+            audio_format: AudioFormat::from(44100, 2, EAudioSampleType::Float32, true),
+            is_loop,
+        }
+    }
+
+    pub fn from_data(data: Vec<u8>, is_loop: bool) -> AudioPlayerNode {
+        let audio_player_item = AudioPlayerItem::from_data(data).ok();
+        AudioPlayerNode {
             audio_player_item,
             channel_data: vec![],
             is_playing: false,

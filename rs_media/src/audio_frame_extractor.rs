@@ -1,4 +1,8 @@
-use crate::time_range::TimeRangeRational;
+use crate::{
+    custom_io_input::{self, CleanClosure},
+    media_stream::MediaStream,
+    time_range::TimeRangeRational,
+};
 use ffmpeg_next::{
     ffi::{av_rescale_q_rnd, av_seek_frame, AVRational, AVRounding, AVSEEK_FLAG_BACKWARD},
     util::format,
@@ -9,15 +13,6 @@ use rs_core_audio::{
 };
 use rs_foundation::TimeRange;
 use std::path::Path;
-
-pub struct AudioFrameExtractor {
-    format_input: ffmpeg_next::format::context::Input,
-    audio_decoder: ffmpeg_next::codec::decoder::Audio,
-    audio_stream_index: usize,
-    time_base: ffmpeg_next::Rational,
-    duration: f32,
-    current_seek_time: f32,
-}
 
 #[derive(Debug)]
 pub struct AudioFrame {
@@ -35,10 +30,37 @@ impl AudioFrame {
     }
 }
 
+pub struct AudioFrameExtractor {
+    format_input: ffmpeg_next::format::context::Input,
+    audio_decoder: ffmpeg_next::codec::decoder::Audio,
+    audio_stream_index: usize,
+    time_base: ffmpeg_next::Rational,
+    duration: f32,
+    current_seek_time: f32,
+    clean: Option<CleanClosure>,
+}
+
 impl AudioFrameExtractor {
-    pub fn new(filepath: impl AsRef<Path>) -> crate::error::Result<AudioFrameExtractor> {
+    pub fn from_path(filepath: impl AsRef<Path>) -> crate::error::Result<AudioFrameExtractor> {
         let format_input = ffmpeg_next::format::input(&filepath)
             .map_err(|err| crate::error::Error::FFMpeg(err))?;
+        Self::from_input(format_input, None)
+    }
+
+    pub fn from_data(data: Vec<u8>) -> crate::error::Result<AudioFrameExtractor> {
+        let stream = MediaStream::new(data);
+        let create_custom_ioresult = custom_io_input::input_with_custom_read_io(Box::new(stream))
+            .map_err(|err| crate::error::Error::FFMpeg(err))?;
+        Self::from_input(
+            create_custom_ioresult.input,
+            Some(create_custom_ioresult.clean),
+        )
+    }
+
+    fn from_input(
+        format_input: ffmpeg_next::format::context::Input,
+        clean: Option<CleanClosure>,
+    ) -> crate::error::Result<AudioFrameExtractor> {
         let input_stream = format_input
             .streams()
             .best(ffmpeg_next::media::Type::Audio)
@@ -63,6 +85,7 @@ impl AudioFrameExtractor {
             time_base,
             duration,
             current_seek_time: 0.0,
+            clean,
         };
         item.seek(0.0);
         Ok(item)
@@ -206,5 +229,13 @@ impl AudioFrameExtractor {
 
     pub fn get_current_seek_time(&self) -> f32 {
         self.current_seek_time
+    }
+}
+
+impl Drop for AudioFrameExtractor {
+    fn drop(&mut self) {
+        if let Some(clean) = self.clean.as_mut() {
+            (clean.clean)();
+        }
     }
 }

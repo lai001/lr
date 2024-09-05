@@ -13,33 +13,50 @@ struct Protocol {
     eof: Option<bool>,
 }
 
+enum ESourceType {
+    Path(PathBuf),
+    Data(Vec<u8>),
+}
+
 pub struct AudioPlayerItem {
-    filepath: PathBuf,
     audio_receiver: Option<Receiver<Protocol>>,
     user_sender: Option<Sender<Protocol>>,
     duration: f32,
 }
 
 impl AudioPlayerItem {
-    pub fn new(filepath: PathBuf) -> crate::error::Result<AudioPlayerItem> {
+    pub fn from_path(filepath: PathBuf) -> crate::error::Result<AudioPlayerItem> {
         let mut player = AudioPlayerItem {
-            filepath,
             audio_receiver: None,
             user_sender: None,
             duration: 0.0,
         };
-        player.init()?;
+        player.init(ESourceType::Path(filepath))?;
         Ok(player)
     }
 
-    fn init(&mut self) -> crate::error::Result<()> {
+    pub fn from_data(data: Vec<u8>) -> crate::error::Result<AudioPlayerItem> {
+        let mut player = AudioPlayerItem {
+            audio_receiver: None,
+            user_sender: None,
+            duration: 0.0,
+        };
+        player.init(ESourceType::Data(data))?;
+        Ok(player)
+    }
+
+    fn init(&mut self, source_type: ESourceType) -> crate::error::Result<()> {
         let (audio_sender, audio_receiver) = std::sync::mpsc::channel();
         let (user_sender, user_receiver): (Sender<Protocol>, Receiver<Protocol>) =
             std::sync::mpsc::channel();
 
         let audio_sender_clone = audio_sender.clone();
 
-        let mut audio_frame_extractor = AudioFrameExtractor::new(&self.filepath)?;
+        let mut audio_frame_extractor = match source_type {
+            ESourceType::Path(path) => AudioFrameExtractor::from_path(&path)?,
+            ESourceType::Data(data) => AudioFrameExtractor::from_data(data)?,
+        };
+
         self.duration = audio_frame_extractor.get_duration();
         std::thread::spawn(move || {
             let mut resp_protocols: VecDeque<Protocol> = VecDeque::new();

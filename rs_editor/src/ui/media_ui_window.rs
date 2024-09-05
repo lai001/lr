@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use egui::{load::SizedTexture, TextureId};
 use egui_winit::State;
 use image::GenericImage;
-use rs_audio::{audio_engine::AudioEngine, audio_file_player_node::AudioFilePlayerNode};
+use rs_audio::{audio_engine::AudioEngine, audio_player_node::AudioPlayerNode};
 use rs_engine::{
     build_built_in_resouce_url,
     engine::Engine,
@@ -42,7 +42,7 @@ pub struct MediaUIWindow {
     cache_sized_texture: Option<SizedTexture>,
     composition_info: Option<CompositionInfo>,
     audio_engine: AudioEngine,
-    audio_player_node: Option<MultipleThreadMutType<AudioFilePlayerNode>>,
+    audio_player_node: Option<MultipleThreadMutType<AudioPlayerNode>>,
 }
 
 impl MediaUIWindow {
@@ -193,7 +193,7 @@ impl MediaUIWindow {
         video_frame_player.start();
         self.video_frame_player = Some(video_frame_player);
 
-        let audio_player_node = MultipleThreadMut::new(AudioFilePlayerNode::new(path, false));
+        let audio_player_node = MultipleThreadMut::new(AudioPlayerNode::from_path(path, false));
         self.audio_player_node = Some(audio_player_node.clone());
         audio_player_node.lock().unwrap().start();
         self.audio_engine.connect(audio_player_node);

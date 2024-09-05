@@ -26,7 +26,7 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
-use rs_artifact::material::MaterialInfo;
+use rs_artifact::{material::MaterialInfo, sound::ESoundFileType};
 use rs_core_minimal::{
     file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
 };
@@ -60,6 +60,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
+    sync::Arc,
 };
 use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
@@ -588,6 +589,7 @@ impl EditorContext {
                             .standalone_ui_window
                             .as_mut()
                             .expect("Should not be bull");
+                        let mut is_close = false;
                         ui_window.window_event_process(
                             window_id,
                             window,
@@ -595,8 +597,9 @@ impl EditorContext {
                             event_loop_window_target,
                             &mut self.engine,
                             &mut *self.window_manager.borrow_mut(),
+                            &mut is_close,
                         );
-                        if event == &WindowEvent::CloseRequested {
+                        if event == &WindowEvent::CloseRequested || is_close {
                             self.standalone_ui_window = None;
                         }
                     }
@@ -1045,6 +1048,23 @@ impl EditorContext {
                 }
                 EContentFileType::ParticleSystem(_) => {
                     // todo!()
+                }
+                EContentFileType::Sound(sound) => {
+                    let sound = sound.borrow_mut();
+                    let url = sound.asset_info.get_url();
+                    let path = project_context
+                        .get_asset_folder_path()
+                        .join(&sound.asset_info.relative_path);
+                    let Ok(data) = std::fs::read(path) else {
+                        return;
+                    };
+                    let sound_resouce = rs_artifact::sound::Sound {
+                        url: url.clone(),
+                        sound_file_type: ESoundFileType::Unknow,
+                        data,
+                    };
+                    let rm = ResourceManager::default();
+                    rm.add_sound(url, Arc::new(sound_resouce));
                 }
             }
         }
@@ -2085,6 +2105,7 @@ impl EditorContext {
                     EContentFileType::ParticleSystem(particle_system) => {
                         self.open_particle_window(event_loop_window_target, particle_system);
                     }
+                    EContentFileType::Sound(_) => todo!(),
                 }
             }
             content_browser::EClickEventType::SingleClickFile(file) => {
@@ -2241,6 +2262,44 @@ impl EditorContext {
             asset_view::EClickItemType::PlaySound(_) => {
                 //
                 todo!()
+            }
+            asset_view::EClickItemType::CreateSound(asset_file) => {
+                let names = self.get_all_content_names();
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+                let Some(current_folder) = &self.data_source.content_data_source.current_folder
+                else {
+                    return;
+                };
+                let asset_folder_path = project_context.get_asset_folder_path();
+
+                let relative_path: PathBuf = {
+                    if asset_file.path.starts_with(asset_folder_path.clone()) {
+                        asset_file
+                            .path
+                            .strip_prefix(asset_folder_path)
+                            .unwrap()
+                            .to_path_buf()
+                    } else {
+                        asset_file.path
+                    }
+                };
+                let new_name = make_unique_name(names, &asset_file.name);
+
+                let mut current_folder = current_folder.borrow_mut();
+                let folder_url = current_folder.get_url();
+                let url = folder_url.join(&new_name).unwrap();
+
+                let sound = rs_engine::content::sound::Sound::new(url, relative_path);
+                let content = EContentFileType::Sound(Rc::new(RefCell::new(sound)));
+                Self::content_load_resources(
+                    &mut self.engine,
+                    &mut self.model_loader,
+                    project_context,
+                    vec![content.clone()],
+                );
+                current_folder.files.push(content);
             }
         }
     }

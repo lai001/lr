@@ -56,7 +56,7 @@ impl Application {
             std::collections::HashMap::new(),
         )
         .map_err(|err| crate::error::Error::Engine(err))?;
-        engine.init_level();
+        engine.init_resources();
         Ok(Application {
             native_window,
             raw_input,

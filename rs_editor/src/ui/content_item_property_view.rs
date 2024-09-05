@@ -145,6 +145,7 @@ impl ContentItemPropertyView {
                     });
             }
             EContentFileType::ParticleSystem(_) => {}
+            EContentFileType::Sound(_) => {}
         }
     }
 }

@@ -13,6 +13,7 @@ pub enum EClickItemType {
     CreateTexture(AssetFile),
     CreateMediaSource(AssetFile),
     PlaySound(AssetFile),
+    CreateSound(AssetFile),
     Back,
 }
 
@@ -168,9 +169,18 @@ fn draw_content(
                                     EFileType::Fbx
                                     | EFileType::Glb
                                     | EFileType::Blend
-                                    | EFileType::Dae
-                                    | EFileType::WAV
-                                    | EFileType::MP3 => {}
+                                    | EFileType::Dae => {}
+                                    EFileType::WAV | EFileType::MP3 => {
+                                        response.context_menu(|ui| {
+                                            highlight_item =
+                                                Some(EClickItemType::SingleClickFile(file.clone()));
+                                            if ui.button("Create sound").clicked() {
+                                                click_item =
+                                                    Some(EClickItemType::CreateSound(file.clone()));
+                                                ui.close_menu();
+                                            }
+                                        });
+                                    }
                                     EFileType::Jpeg
                                     | EFileType::Jpg
                                     | EFileType::Png

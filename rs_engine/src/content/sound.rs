@@ -25,6 +25,13 @@ pub struct Sound {
 }
 
 impl Sound {
+    pub fn new(url: url::Url, relative_path: PathBuf) -> Sound {
+        Sound {
+            url,
+            asset_info: AssetInfo { relative_path },
+        }
+    }
+
     pub fn get_name(&self) -> String {
         self.url.get_name_in_editor()
     }

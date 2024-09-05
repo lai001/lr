@@ -1,4 +1,3 @@
-use crate::actor::Actor;
 use crate::camera::Camera;
 #[cfg(not(target_os = "android"))]
 use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
@@ -15,7 +14,6 @@ use crate::handle::{EGUITextureHandle, TextureHandle};
 use crate::input_mode::EInputMode;
 use crate::player_viewport::PlayerViewport;
 use crate::render_thread_mode::ERenderThreadMode;
-use crate::scene_node::EComponentType;
 use crate::{build_built_in_resouce_url, BUILT_IN_RESOURCE};
 use crate::{logger::Logger, resource_manager::ResourceManager};
 use rs_artifact::artifact::ArtifactReader;
@@ -97,7 +95,7 @@ pub struct Engine {
     render_thread_mode: ERenderThreadMode,
     resource_manager: ResourceManager,
     logger: Logger,
-    level: Option<SingleThreadMutType<crate::content::level::Level>>,
+    // level: Option<SingleThreadMutType<crate::content::level::Level>>,
     // draw_objects: Vec<DrawObject>,
     draw_object_id: u32,
     camera: Camera,
@@ -114,7 +112,7 @@ pub struct Engine {
     >,
     console_cmds: SingleThreadMutType<HashMap<String, SingleThreadMutType<ConsoleCmd>>>,
     grid_draw_object: Option<DrawObject>,
-    content_files: HashMap<url::Url, EContentFileType>,
+    pub content_files: HashMap<url::Url, EContentFileType>,
     main_window_id: isize,
     draw_objects: HashMap<isize, Vec<DrawObject>>,
     default_textures: DefaultTextures,
@@ -166,7 +164,7 @@ impl Engine {
             }
         })();
 
-        let mut resource_manager = ResourceManager::default();
+        let resource_manager = ResourceManager::default();
         resource_manager.set_artifact_reader(artifact_reader);
         resource_manager.load_static_meshs();
 
@@ -220,17 +218,17 @@ impl Engine {
 
         let mut camera = Camera::default(surface_width, surface_height);
         camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
-        let mut level: Option<SingleThreadMutType<crate::content::level::Level>> = None;
-        (|| {
-            let Some(url) = Self::find_first_level(&mut resource_manager) else {
-                return;
-            };
-            let Ok(_level) = resource_manager.get_level(&url) else {
-                return;
-            };
-            log::trace!("Load level: {}", _level.url.to_string());
-            level = Some(SingleThreadMut::new(_level));
-        })();
+        // let mut level: Option<SingleThreadMutType<crate::content::level::Level>> = None;
+        // (|| {
+        //     let Some(url) = Self::find_first_level(&mut resource_manager) else {
+        //         return;
+        //     };
+        //     let Ok(_level) = resource_manager.get_level(&url) else {
+        //         return;
+        //     };
+        //     log::trace!("Load level: {}", _level.url.to_string());
+        //     level = Some(SingleThreadMut::new(_level));
+        // })();
 
         #[cfg(feature = "editor")]
         let mut draw_object_id: u32 = 0;
@@ -290,7 +288,7 @@ impl Engine {
             render_thread_mode,
             resource_manager,
             logger,
-            level,
+            // level,
             draw_objects: HashMap::new(),
             camera,
             state: State::default(),
@@ -357,326 +355,288 @@ impl Engine {
         }
     }
 
+    pub fn new_main_level(&self) -> Option<crate::content::level::Level> {
+        let mut level: Option<crate::content::level::Level> = None;
+        (|| {
+            let mut resource_manager = ResourceManager::default();
+            let Some(url) = Self::find_first_level(&mut resource_manager) else {
+                return;
+            };
+            let Ok(_level) = resource_manager.get_level(&url) else {
+                return;
+            };
+            log::trace!("Load level: {}", _level.url.to_string());
+            level = Some(_level);
+        })();
+        level
+    }
+
     fn collect_content_files() -> HashMap<url::Url, EContentFileType> {
         let resource_manager = ResourceManager::default();
         let mut files: HashMap<url::Url, EContentFileType> = HashMap::new();
-        if let Ok(resource_map) = resource_manager.get_resource_map() {
-            for (url, v) in resource_map.iter() {
-                match v.resource_type {
-                    EResourceType::Content(content_ty) => match content_ty {
-                        EContentType::StaticMesh => {
-                            match resource_manager
-                                .get_resource::<crate::content::static_mesh::StaticMesh>(
-                                    url,
-                                    Some(EResourceType::Content(EContentType::StaticMesh)),
-                                ) {
-                                Ok(static_mesh) => {
-                                    files.insert(
-                                        url.clone(),
-                                        EContentFileType::StaticMesh(SingleThreadMut::new(
-                                            static_mesh,
-                                        )),
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("{err}");
-                                }
-                            }
-                        }
-                        EContentType::SkeletonMesh => {}
-                        EContentType::SkeletonAnimation => {}
-                        EContentType::Skeleton => {
-                            match resource_manager
-                                .get_resource::<crate::content::skeleton::Skeleton>(
-                                    url,
-                                    Some(EResourceType::Content(EContentType::Skeleton)),
-                                ) {
-                                Ok(content_skeleton) => {
-                                    files.insert(
-                                        url.clone(),
-                                        EContentFileType::Skeleton(SingleThreadMut::new(
-                                            content_skeleton,
-                                        )),
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("{err}");
-                                }
-                            }
-                        }
-                        EContentType::Texture => {}
-                        EContentType::Level => {}
-                        EContentType::Material => {
-                            match resource_manager
-                                .get_resource::<crate::content::material::Material>(url, None)
-                            {
-                                Ok(f) => {
-                                    files.insert(
-                                        url.clone(),
-                                        EContentFileType::Material(SingleThreadMut::new(f)),
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("{}", err);
-                                }
-                            }
-                        }
-                        EContentType::IBL => {
-                            match resource_manager.get_resource::<crate::content::ibl::IBL>(
+        let Ok(resource_map) = resource_manager.get_resource_map() else {
+            return files;
+        };
+        for (url, v) in resource_map.iter() {
+            match v.resource_type {
+                EResourceType::Content(content_ty) => match content_ty {
+                    EContentType::StaticMesh => {
+                        match resource_manager
+                            .get_resource::<crate::content::static_mesh::StaticMesh>(
                                 url,
-                                Some(EResourceType::Content(EContentType::IBL)),
+                                Some(EResourceType::Content(EContentType::StaticMesh)),
                             ) {
-                                Ok(ibl) => {
-                                    files.insert(
-                                        url.clone(),
-                                        EContentFileType::IBL(SingleThreadMut::new(ibl)),
-                                    );
-                                }
-                                Err(err) => {
-                                    log::warn!("{err}");
-                                }
+                            Ok(static_mesh) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::StaticMesh(SingleThreadMut::new(static_mesh)),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
                             }
                         }
-                        EContentType::MediaSource => todo!(),
-                        EContentType::ParticleSystem => todo!(),
-                        EContentType::Sound => todo!(),
+                    }
+                    EContentType::SkeletonMesh => {}
+                    EContentType::SkeletonAnimation => {}
+                    EContentType::Skeleton => {
+                        match resource_manager.get_resource::<crate::content::skeleton::Skeleton>(
+                            url,
+                            Some(EResourceType::Content(EContentType::Skeleton)),
+                        ) {
+                            Ok(content_skeleton) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::Skeleton(SingleThreadMut::new(
+                                        content_skeleton,
+                                    )),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
+                        }
+                    }
+                    EContentType::Texture => {}
+                    EContentType::Level => {}
+                    EContentType::Material => {
+                        match resource_manager
+                            .get_resource::<crate::content::material::Material>(url, None)
+                        {
+                            Ok(f) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::Material(SingleThreadMut::new(f)),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{}", err);
+                            }
+                        }
+                    }
+                    EContentType::IBL => {
+                        match resource_manager.get_resource::<crate::content::ibl::IBL>(
+                            url,
+                            Some(EResourceType::Content(EContentType::IBL)),
+                        ) {
+                            Ok(ibl) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::IBL(SingleThreadMut::new(ibl)),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
+                        }
+                    }
+                    EContentType::MediaSource => todo!(),
+                    EContentType::ParticleSystem => {
+                        match resource_manager
+                            .get_resource::<crate::content::particle_system::ParticleSystem>(
+                                url,
+                                Some(EResourceType::Content(EContentType::ParticleSystem)),
+                            ) {
+                            Ok(particle_system) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::ParticleSystem(SingleThreadMut::new(
+                                        particle_system,
+                                    )),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
+                        }
+                    }
+                    EContentType::Sound => match resource_manager
+                        .get_resource::<crate::content::sound::Sound>(
+                            url,
+                            Some(EResourceType::Content(EContentType::Sound)),
+                        ) {
+                        Ok(sound) => {
+                            files.insert(
+                                url.clone(),
+                                EContentFileType::Sound(SingleThreadMut::new(sound)),
+                            );
+                        }
+                        Err(err) => {
+                            log::warn!("{err}");
+                        }
                     },
-                    _ => {}
-                }
+                },
+                _ => {}
             }
         }
         files
     }
 
-    pub fn init_level(&mut self) {
-        if let Ok(resource_map) = self.resource_manager.get_resource_map() {
-            for (url, resource_info) in resource_map {
-                match resource_info.resource_type {
-                    rs_artifact::resource_type::EResourceType::SkinMesh => {
-                        if let Ok(skin_mesh) = self
-                            .resource_manager
-                            .get_resource::<rs_artifact::skin_mesh::SkinMesh>(
+    pub fn init_resources(&mut self) {
+        let Ok(resource_map) = self.resource_manager.get_resource_map() else {
+            return;
+        };
+
+        for (url, resource_info) in resource_map {
+            match resource_info.resource_type {
+                rs_artifact::resource_type::EResourceType::SkinMesh => {
+                    if let Ok(skin_mesh) = self
+                        .resource_manager
+                        .get_resource::<rs_artifact::skin_mesh::SkinMesh>(
+                            &url,
+                            Some(resource_info.resource_type),
+                        )
+                    {
+                        self.resource_manager
+                            .add_skin_mesh(url.clone(), Arc::new(skin_mesh));
+                    }
+                }
+                rs_artifact::resource_type::EResourceType::StaticMesh => {
+                    if let Ok(static_mesh) = self
+                        .resource_manager
+                        .get_resource::<rs_artifact::static_mesh::StaticMesh>(
+                        &url,
+                        Some(resource_info.resource_type),
+                    ) {
+                        self.resource_manager
+                            .add_static_mesh(url.clone(), Arc::new(static_mesh));
+                    }
+                }
+                rs_artifact::resource_type::EResourceType::SkeletonAnimation => {
+                    if let Ok(skeleton_animation) =
+                        self.resource_manager
+                            .get_resource::<rs_artifact::skeleton_animation::SkeletonAnimation>(
                                 &url,
                                 Some(resource_info.resource_type),
                             )
-                        {
-                            self.resource_manager
-                                .add_skin_mesh(url.clone(), Arc::new(skin_mesh));
-                        }
+                    {
+                        self.resource_manager
+                            .add_skeleton_animation(url.clone(), Arc::new(skeleton_animation));
                     }
-                    rs_artifact::resource_type::EResourceType::StaticMesh => {
-                        if let Ok(static_mesh) = self
-                            .resource_manager
-                            .get_resource::<rs_artifact::static_mesh::StaticMesh>(
+                }
+                rs_artifact::resource_type::EResourceType::Skeleton => {
+                    if let Ok(skeleton) = self
+                        .resource_manager
+                        .get_resource::<rs_artifact::skeleton::Skeleton>(
                             &url,
                             Some(resource_info.resource_type),
-                        ) {
-                            self.resource_manager
-                                .add_static_mesh(url.clone(), Arc::new(static_mesh));
+                        )
+                    {
+                        self.resource_manager
+                            .add_skeleton(url.clone(), Arc::new(skeleton));
+                    }
+                }
+                rs_artifact::resource_type::EResourceType::IBLBaking => {
+                    if let Ok(ibl_baking) = self
+                        .resource_manager
+                        .get_resource::<rs_artifact::ibl_baking::IBLBaking>(
+                            &url,
+                            Some(resource_info.resource_type),
+                        )
+                    {
+                        self.upload_prebake_ibl(ibl_baking.url.clone(), ibl_baking);
+                    }
+                }
+                rs_artifact::resource_type::EResourceType::Material => {
+                    if let Ok(material) = self
+                        .resource_manager
+                        .get_resource::<rs_artifact::material::Material>(
+                            &url,
+                            Some(resource_info.resource_type),
+                        )
+                    {
+                        let material_content = self.content_files.values().find_map(|x| match x {
+                            EContentFileType::Material(material_content) => {
+                                if material_content.borrow().asset_url == material.url {
+                                    Some(material_content.clone())
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        });
+
+                        if let Some(material_content) = material_content {
+                            let pipeline_handle = self.create_material(material.code);
+                            let mut material_content = material_content.borrow_mut();
+                            material_content.set_pipeline_handle(pipeline_handle);
+                            material_content.set_material_info(material.material_info);
                         }
                     }
-                    rs_artifact::resource_type::EResourceType::SkeletonAnimation => {
-                        if let Ok(skeleton_animation) =
-                            self.resource_manager
-                                .get_resource::<rs_artifact::skeleton_animation::SkeletonAnimation>(
+                }
+                rs_artifact::resource_type::EResourceType::Sound => {
+                    if let Ok(sound) = self
+                        .resource_manager
+                        .get_resource::<rs_artifact::sound::Sound>(
+                            &url,
+                            Some(resource_info.resource_type),
+                        )
+                    {
+                        let url = sound.url.clone();
+                        self.resource_manager.add_sound(url, Arc::new(sound));
+                    }
+                }
+                rs_artifact::resource_type::EResourceType::Content(content_type) => {
+                    match content_type {
+                        EContentType::Texture => {
+                            let result: crate::error::Result<()> = (|| {
+                                let texture = self
+                                    .resource_manager
+                                    .get_resource::<crate::content::texture::TextureFile>(
                                     &url,
                                     Some(resource_info.resource_type),
-                                )
-                        {
-                            self.resource_manager
-                                .add_skeleton_animation(url.clone(), Arc::new(skeleton_animation));
-                        }
-                    }
-                    rs_artifact::resource_type::EResourceType::Skeleton => {
-                        if let Ok(skeleton) = self
-                            .resource_manager
-                            .get_resource::<rs_artifact::skeleton::Skeleton>(
-                                &url,
-                                Some(resource_info.resource_type),
-                            )
-                        {
-                            self.resource_manager
-                                .add_skeleton(url.clone(), Arc::new(skeleton));
-                        }
-                    }
-                    rs_artifact::resource_type::EResourceType::IBLBaking => {
-                        if let Ok(ibl_baking) = self
-                            .resource_manager
-                            .get_resource::<rs_artifact::ibl_baking::IBLBaking>(
-                            &url,
-                            Some(resource_info.resource_type),
-                        ) {
-                            self.upload_prebake_ibl(ibl_baking.url.clone(), ibl_baking);
-                        }
-                    }
-                    rs_artifact::resource_type::EResourceType::Material => {
-                        if let Ok(material) = self
-                            .resource_manager
-                            .get_resource::<rs_artifact::material::Material>(
-                                &url,
-                                Some(resource_info.resource_type),
-                            )
-                        {
-                            let material_content =
-                                self.content_files.values().find_map(|x| match x {
-                                    EContentFileType::Material(material_content) => {
-                                        if material_content.borrow().asset_url == material.url {
-                                            Some(material_content.clone())
-                                        } else {
-                                            None
-                                        }
-                                    }
-                                    _ => None,
-                                });
+                                )?;
 
-                            if let Some(material_content) = material_content {
-                                let pipeline_handle = self.create_material(material.code);
-                                let mut material_content = material_content.borrow_mut();
-                                material_content.set_pipeline_handle(pipeline_handle);
-                                material_content.set_material_info(material.material_info);
-                            }
-                        }
-                    }
-                    rs_artifact::resource_type::EResourceType::Content(content_type) => {
-                        match content_type {
-                            EContentType::Texture => {
-                                let result: crate::error::Result<()> = (|| {
-                                    let texture = self
-                                        .resource_manager
-                                        .get_resource::<crate::content::texture::TextureFile>(
-                                        &url,
-                                        Some(resource_info.resource_type),
+                                let image_reference = texture.image_reference.ok_or(
+                                    crate::error::Error::NullReference(Some(
+                                        "No image reference".to_string(),
+                                    )),
+                                )?;
+                                log::trace!("Image reference: {}", image_reference.to_string());
+                                let image = self
+                                    .resource_manager
+                                    .get_resource::<rs_artifact::image::Image>(
+                                        &image_reference,
+                                        Some(EResourceType::Image),
                                     )?;
 
-                                    let image_reference = texture.image_reference.ok_or(
-                                        crate::error::Error::NullReference(Some(
-                                            "No image reference".to_string(),
-                                        )),
-                                    )?;
-                                    log::trace!("Image reference: {}", image_reference.to_string());
-                                    let image = self
-                                        .resource_manager
-                                        .get_resource::<rs_artifact::image::Image>(
-                                            &image_reference,
-                                            Some(EResourceType::Image),
-                                        )?;
-
-                                    let dyn_image =
-                                        image::load_from_memory(&image.data).map_err(|err| {
-                                            crate::error::Error::ImageError(err, None)
-                                        })?;
-                                    let rgba_image = match dyn_image.as_rgba8() {
-                                        Some(_) => dyn_image.as_rgba8().unwrap().clone(),
-                                        None => dyn_image.to_rgba8(),
-                                    };
-                                    log::trace!("{:?}", image.image_format);
-                                    self.create_texture_from_image(&url, &rgba_image)?;
-                                    Ok(())
-                                })(
-                                );
-                                log::trace!("Laod texture: {}, {:?}", url.to_string(), result);
-                            }
-                            _ => {}
+                                let dyn_image = image::load_from_memory(&image.data)
+                                    .map_err(|err| crate::error::Error::ImageError(err, None))?;
+                                let rgba_image = match dyn_image.as_rgba8() {
+                                    Some(_) => dyn_image.as_rgba8().unwrap().clone(),
+                                    None => dyn_image.to_rgba8(),
+                                };
+                                log::trace!("{:?}", image.image_format);
+                                self.create_texture_from_image(&url, &rgba_image)?;
+                                Ok(())
+                            })();
+                            log::trace!("Laod texture: {}, {:?}", url.to_string(), result);
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
+                _ => {}
             }
-        }
-
-        let actors: Vec<SingleThreadMutType<Actor>> = (|| {
-            let Some(level) = self.level.as_mut().map(|x| x.borrow_mut()) else {
-                log::warn!("{}", "No level found.");
-                return vec![];
-            };
-            return level.actors.clone();
-        })();
-        for actor in actors {
-            let mut actor = actor.borrow_mut();
-            let root_scene_node = &mut actor.scene_node;
-            let mut root_scene_node = root_scene_node.borrow_mut();
-            match &mut root_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
-                    let mut static_mesh_component = static_mesh_component.borrow_mut();
-                    let files: Vec<EContentFileType> =
-                        self.content_files.values().map(|x| x.clone()).collect();
-                    static_mesh_component.initialize(ResourceManager::default(), self, &files);
-                }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(
-                    skeleton_mesh_component,
-                ) => {
-                    let mut files: Vec<EContentFileType> = vec![];
-                    if let Some(url) = skeleton_mesh_component.borrow().skeleton_url.as_ref() {
-                        match self
-                            .resource_manager
-                            .get_resource::<crate::content::skeleton::Skeleton>(
-                                url,
-                                Some(EResourceType::Content(EContentType::Skeleton)),
-                            ) {
-                            Ok(content_skeleton) => {
-                                files.push(EContentFileType::Skeleton(SingleThreadMut::new(
-                                    content_skeleton,
-                                )));
-                            }
-                            Err(err) => {
-                                log::warn!("{err}");
-                            }
-                        }
-                    }
-                    if let Some(url) = skeleton_mesh_component.borrow().animation_url.as_ref() {
-                        match self
-                            .resource_manager
-                            .get_resource::<crate::content::skeleton_animation::SkeletonAnimation>(
-                            url,
-                            Some(EResourceType::Content(EContentType::SkeletonAnimation)),
-                        ) {
-                            Ok(skeleton_animation) => {
-                                files.push(EContentFileType::SkeletonAnimation(
-                                    SingleThreadMut::new(skeleton_animation),
-                                ));
-                            }
-                            Err(err) => {
-                                log::warn!("{err}");
-                            }
-                        }
-                    }
-
-                    for url in &skeleton_mesh_component.borrow().skeleton_mesh_urls {
-                        match self
-                            .resource_manager
-                            .get_resource::<crate::content::skeleton_mesh::SkeletonMesh>(
-                                url,
-                                Some(EResourceType::Content(EContentType::SkeletonMesh)),
-                            ) {
-                            Ok(skeleton_mesh) => {
-                                files.push(EContentFileType::SkeletonMesh(SingleThreadMut::new(
-                                    skeleton_mesh,
-                                )));
-                            }
-                            Err(err) => {
-                                log::warn!("{err}");
-                            }
-                        }
-                    }
-                    files.extend(
-                        self.content_files
-                            .values()
-                            .cloned()
-                            .collect::<Vec<EContentFileType>>(),
-                    );
-                    skeleton_mesh_component.borrow_mut().initialize(
-                        ResourceManager::default(),
-                        self,
-                        &files,
-                    );
-                }
-            }
-        }
-        if let Some(level) = self.level.clone().as_mut() {
-            let mut level = level.borrow_mut();
-            level.initialize(self);
-            level.set_physics_simulate(true);
         }
     }
 
@@ -742,54 +702,6 @@ impl Engine {
         self.global_constants.scene_factor = virtual_texture_setting.feed_back_texture_div as f32;
         self.global_constants.feedback_bias = virtual_texture_setting.feedback_bias;
         self.update_global_constants();
-
-        let actors: Vec<SingleThreadMutType<Actor>> = (|| {
-            let Some(level) = self.level.as_mut().map(|x| x.borrow_mut()) else {
-                return vec![];
-            };
-            return level.actors.clone();
-        })();
-        let time = self.get_game_time();
-        let mut level = self.level.clone();
-        if let Some(level) = level.clone() {
-            level.borrow_mut().tick();
-        }
-        for actor in actors {
-            match &mut actor.borrow_mut().scene_node.borrow_mut().component {
-                EComponentType::SceneComponent(_) => todo!(),
-                EComponentType::StaticMeshComponent(static_mesh_component) => {
-                    let mut static_mesh_component = static_mesh_component.borrow_mut();
-                    if let Some(level) = level.as_mut() {
-                        let mut level = level.borrow_mut();
-                        let rigid_body_set = level.get_rigid_body_set_mut();
-                        static_mesh_component.update(time, self, rigid_body_set);
-                    } else {
-                        static_mesh_component.update(time, self, None);
-                    }
-                    for draw_object in static_mesh_component.get_draw_objects_mut() {
-                        self.update_draw_object(draw_object);
-                        self.draw2(draw_object);
-                    }
-                }
-                EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
-                    let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
-                    skeleton_mesh_component.update(self.get_game_time(), self);
-                    for draw_object in skeleton_mesh_component.get_draw_objects() {
-                        self.draw2(draw_object);
-                    }
-                }
-            }
-        }
-
-        // for draw_object in &self.draw_objects {
-        //     self.render_thread_mode
-        //         .send_command(RenderCommand::DrawObject(draw_object.clone()));
-        // }
-
-        // if let Some(grid_draw_object) = &self.grid_draw_object {
-        //     self.render_thread_mode
-        //         .send_command(RenderCommand::DrawObject(grid_draw_object.clone()));
-        // }
 
         self.render_thread_mode
             .send_command(RenderCommand::UiOutput(gui_render_output));
@@ -2416,6 +2328,25 @@ impl Engine {
 
     pub fn get_default_textures(&self) -> &DefaultTextures {
         &self.default_textures
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub fn update_window_with_input_mode(window: &winit::window::Window, input_mode: EInputMode) {
+        use winit::window::CursorGrabMode;
+        match input_mode {
+            EInputMode::Game => {
+                window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
+                window.set_cursor_visible(false);
+            }
+            EInputMode::UI => {
+                window.set_cursor_grab(CursorGrabMode::None).unwrap();
+                window.set_cursor_visible(true);
+            }
+            EInputMode::GameUI => {
+                window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
+                window.set_cursor_visible(true);
+            }
+        }
     }
 }
 

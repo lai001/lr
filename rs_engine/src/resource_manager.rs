@@ -4,6 +4,7 @@ use crate::{error::Result, handle::HandleManager};
 use lazy_static::lazy_static;
 use rs_artifact::asset::Asset;
 use rs_artifact::resource_info::ResourceInfo;
+use rs_artifact::sound::Sound;
 use rs_artifact::static_mesh::StaticMesh;
 use rs_artifact::{
     artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
@@ -54,6 +55,8 @@ struct STResourceManager {
     pending_destroy_textures: Vec<crate::handle::TextureHandle>,
 
     buffer_handles: VecDeque<crate::handle::BufferHandle>,
+
+    sounds: HashMap<url::Url, Arc<Sound>>,
 }
 
 impl STResourceManager {
@@ -72,9 +75,18 @@ impl STResourceManager {
             ui_textures: HashMap::new(),
             pending_destroy_textures: vec![],
             buffer_handles: VecDeque::new(),
+            sounds: HashMap::new(),
             // mesh_buffers: HashMap::new(),
             // material_render_pipelines: HashMap::new(),
         }
+    }
+
+    fn add_sound(&mut self, url: url::Url, sound: Arc<Sound>) -> Option<Arc<Sound>> {
+        self.sounds.insert(url, sound)
+    }
+
+    fn get_sound(&self, url: &url::Url) -> Option<Arc<Sound>> {
+        self.sounds.get(url).cloned()
     }
 
     fn add_skin_mesh(

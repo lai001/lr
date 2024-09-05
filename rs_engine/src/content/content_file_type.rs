@@ -1,7 +1,7 @@
 use super::{
     ibl::IBL, level::Level, material::Material, particle_system::ParticleSystem,
     skeleton::Skeleton, skeleton_animation::SkeletonAnimation, skeleton_mesh::SkeletonMesh,
-    static_mesh::StaticMesh, texture::TextureFile,
+    sound::Sound, static_mesh::StaticMesh, texture::TextureFile,
 };
 use rs_artifact::asset::Asset;
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,7 @@ pub enum EContentFileType {
     Material(Rc<RefCell<Material>>),
     IBL(Rc<RefCell<IBL>>),
     ParticleSystem(Rc<RefCell<ParticleSystem>>),
+    Sound(Rc<RefCell<Sound>>),
 }
 
 impl EContentFileType {
@@ -32,6 +33,7 @@ impl EContentFileType {
             EContentFileType::Material(_) => "Material".to_string(),
             EContentFileType::IBL(_) => "IBL".to_string(),
             EContentFileType::ParticleSystem(_) => "ParticleSystem".to_string(),
+            EContentFileType::Sound(_) => "Sound".to_string(),
         }
     }
 
@@ -46,6 +48,7 @@ impl EContentFileType {
             EContentFileType::Material(content) => content.borrow().get_name(),
             EContentFileType::IBL(content) => content.borrow().get_name(),
             EContentFileType::ParticleSystem(content) => content.borrow().get_name(),
+            EContentFileType::Sound(content) => content.borrow().get_name(),
         }
     }
 
@@ -60,6 +63,7 @@ impl EContentFileType {
             EContentFileType::Material(content) => content.borrow().get_url(),
             EContentFileType::IBL(content) => content.borrow().get_url(),
             EContentFileType::ParticleSystem(content) => content.borrow().get_url(),
+            EContentFileType::Sound(content) => content.borrow().get_url(),
         }
     }
 }

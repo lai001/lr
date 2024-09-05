@@ -50,9 +50,9 @@ pub struct PlayerViewport {
     pub debug_draw_objects: Vec<DrawObject>,
     physics_debug_render: Option<PhysicsDebugRender>,
     debug_flags: DebugFlags,
-    input_mode: EInputMode,
-    camera_movement_speed: f32,
-    camera_motion_speed: f32,
+    _input_mode: EInputMode,
+    _camera_movement_speed: f32,
+    _camera_motion_speed: f32,
     pub is_use_default_input_process: bool,
 }
 
@@ -101,9 +101,9 @@ impl PlayerViewport {
             debug_draw_objects: vec![],
             physics_debug_render,
             debug_flags: DebugFlags::empty(),
-            input_mode,
-            camera_movement_speed: 0.1,
-            camera_motion_speed: 0.1,
+            _input_mode: input_mode,
+            _camera_movement_speed: 0.1,
+            _camera_motion_speed: 0.1,
             is_use_default_input_process: true,
             particle_draw_objects: vec![],
         }
@@ -822,8 +822,8 @@ impl PlayerViewport {
                         DefaultCameraInputEventHandle::mouse_motion_handle(
                             &mut self.camera,
                             *delta,
-                            self.input_mode,
-                            self.camera_motion_speed,
+                            self._input_mode,
+                            self._camera_motion_speed,
                         );
                     }
                     _ => {}
@@ -833,8 +833,8 @@ impl PlayerViewport {
                 //
                 match delta {
                     MouseScrollDelta::LineDelta(_, up) => {
-                        self.camera_movement_speed += up * 0.005;
-                        self.camera_movement_speed = self.camera_movement_speed.max(0.0);
+                        self._camera_movement_speed += up * 0.005;
+                        self._camera_movement_speed = self._camera_movement_speed.max(0.0);
                     }
                     MouseScrollDelta::PixelDelta(_) => todo!(),
                 }
@@ -847,8 +847,8 @@ impl PlayerViewport {
                         &mut self.camera,
                         virtual_key_code,
                         element_state,
-                        self.input_mode,
-                        self.camera_movement_speed,
+                        self._input_mode,
+                        self._camera_movement_speed,
                     );
                 }
             }
