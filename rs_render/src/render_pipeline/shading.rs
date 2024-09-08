@@ -28,7 +28,7 @@ pub struct Constants {
 }
 
 pub struct ShadingPipeline {
-    base_render_pipeline: BaseRenderPipeline,
+    pub base_render_pipeline: BaseRenderPipeline,
 }
 
 impl ShadingPipeline {

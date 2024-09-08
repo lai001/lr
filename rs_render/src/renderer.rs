@@ -7,9 +7,7 @@ use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::prebake_ibl::PrebakeIBL;
-use crate::render_pipeline::attachment_pipeline::{
-    AttachmentPipeline, ClearAll, ClearColor, ClearDepth, EClearType,
-};
+use crate::render_pipeline::attachment_pipeline::{AttachmentPipeline, ClearDepth, EClearType};
 use crate::render_pipeline::fxaa::FXAAPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
 use crate::render_pipeline::material_pipeline::VariantMaterialRenderPipeline;
@@ -67,8 +65,6 @@ pub struct Renderer {
     shader_library: ShaderLibrary,
     create_iblbake_commands: VecDeque<CreateIBLBake>,
     create_uitexture_commands: Vec<CreateUITexture>,
-    create_buffer_commands: Vec<CreateBuffer>,
-    update_buffer_commands: Vec<UpdateBuffer>,
     update_texture_commands: Vec<UpdateTexture>,
     // draw_object_commands: Vec<DrawObject>,
     ui_output_commands: VecDeque<crate::egui_render::EGUIRenderOutput>,
@@ -76,6 +72,7 @@ pub struct Renderer {
     task_commands: VecDeque<TaskType>,
 
     textures: HashMap<u64, Texture>,
+    texture_views: HashMap<u64, TextureView>,
     buffers: HashMap<u64, Arc<Buffer>>,
     ui_textures: HashMap<u64, egui::TextureId>,
     ibl_bakes: HashMap<IBLTexturesKey, AccelerationBaker>,
@@ -245,8 +242,6 @@ impl Renderer {
             shader_library,
             create_iblbake_commands: VecDeque::new(),
             create_uitexture_commands: Vec::new(),
-            create_buffer_commands: Vec::new(),
-            update_buffer_commands: Vec::new(),
             update_texture_commands: Vec::new(),
             // draw_object_commands: Vec::new(),
             ui_output_commands: VecDeque::new(),
@@ -280,6 +275,7 @@ impl Renderer {
             particle_pipeline,
             is_enable_multiple_thread,
             primitive_render_pipeline,
+            texture_views: HashMap::new(),
         };
         Ok(renderer)
     }
@@ -414,43 +410,6 @@ impl Renderer {
         // }
 
         let mut render_output = RenderOutput::default();
-
-        for create_buffer_command in &self.create_buffer_commands {
-            let device = self.wgpu_context.get_device();
-            let descriptor = BufferInitDescriptor {
-                label: create_buffer_command.buffer_create_info.label.as_deref(),
-                contents: &create_buffer_command.buffer_create_info.contents,
-                usage: create_buffer_command.buffer_create_info.usage,
-            };
-            let new_buffer = device.create_buffer_init(&descriptor);
-            let handle = create_buffer_command.handle;
-            render_output.create_buffer_handles.insert(handle);
-            self.buffers.insert(handle, Arc::new(new_buffer));
-            self.buffer_infos
-                .insert(handle, create_buffer_command.buffer_create_info.clone());
-        }
-        self.create_buffer_commands.clear();
-
-        for update_buffer_command in &self.update_buffer_commands {
-            let device = self.wgpu_context.get_device();
-            if let Some(buffer) = self.buffers.get(&update_buffer_command.handle) {
-                let (sender, receiver) = std::sync::mpsc::channel();
-                buffer.slice(..).map_async(wgpu::MapMode::Write, {
-                    move |result| {
-                        sender.send(result).unwrap();
-                    }
-                });
-                device.poll(wgpu::Maintain::Wait);
-                if let Ok(Ok(_)) = receiver.recv() {
-                    let mut padded_buffer_view = buffer.slice(..).get_mapped_range_mut();
-                    let padded_buffer = padded_buffer_view.as_mut();
-                    padded_buffer.copy_from_slice(&update_buffer_command.data);
-                    drop(padded_buffer_view);
-                }
-                buffer.unmap();
-            }
-        }
-        self.update_buffer_commands.clear();
 
         for update_texture_command in &self.update_texture_commands {
             let queue = self.wgpu_context.get_queue();
@@ -657,19 +616,19 @@ impl Renderer {
                     .map(|x| x.create_view(&TextureViewDescriptor::default())),
             };
 
-        if let (Some(msaa_texture_view), Some(msaa_depth_texture_view)) =
-            (msaa_texture_view.as_ref(), msaa_depth_texture_view.as_ref())
-        {
-            self.clear_buffer(
-                &output_view,
-                &msaa_depth_texture_view,
-                Some(msaa_texture_view),
-            );
-        } else {
-            let depth_texture = self.depth_textures.get(&window_id).expect("Not null");
-            let depth_texture_view = depth_texture.get_view();
-            self.clear_buffer(&output_view, &depth_texture_view, None);
-        }
+        // if let (Some(msaa_texture_view), Some(msaa_depth_texture_view)) =
+        //     (msaa_texture_view.as_ref(), msaa_depth_texture_view.as_ref())
+        // {
+        //     self.clear_buffer(
+        //         &output_view,
+        //         &msaa_depth_texture_view,
+        //         Some(msaa_texture_view),
+        //     );
+        // } else {
+        //     let depth_texture = self.depth_textures.get(&window_id).expect("Not null");
+        //     let depth_texture_view = depth_texture.get_view();
+        //     self.clear_buffer(&output_view, &depth_texture_view, None);
+        // }
         self.vt_pass(&present_info);
         self.shadow_for_draw_objects(present_info.draw_objects.as_slice());
 
@@ -690,6 +649,70 @@ impl Renderer {
                 .get(&window_id)
                 .expect("Not null")
                 .get_view();
+            let mut mesh_buffers: Vec<GpuVertexBufferImp> =
+                Vec::with_capacity(present_info.draw_objects.len());
+            let mut g_vertex_buffers: Vec<Vec<&Buffer>> =
+                Vec::with_capacity(present_info.draw_objects.len());
+            let mut g_index_buffers: Vec<Option<&wgpu::Buffer>> =
+                Vec::with_capacity(present_info.draw_objects.len());
+
+            for draw_object_command in &present_info.draw_objects {
+                let mut index_buffer: Option<&wgpu::Buffer> = None;
+                if let Some(handle) = draw_object_command.index_buffer {
+                    if let Some(buffer) = self.buffers.get(&handle) {
+                        index_buffer = Some(buffer);
+                    }
+                }
+                g_index_buffers.push(index_buffer);
+            }
+
+            for draw_object_command in &present_info.draw_objects {
+                let mut vertex_buffers: Vec<&Buffer> = Vec::<&Buffer>::new();
+
+                for vertex_buffer in &draw_object_command.vertex_buffers {
+                    if let Some(vertex_buffer) = self.buffers.get(&vertex_buffer) {
+                        vertex_buffers.push(vertex_buffer);
+                    }
+                }
+                if vertex_buffers.is_empty() {
+                    panic!("Vertex buffers is empty");
+                }
+                g_vertex_buffers.push(vertex_buffers);
+            }
+
+            for (i, draw_object_command) in present_info.draw_objects.iter().enumerate() {
+                let vertex_buffers = &g_vertex_buffers[i];
+                let index_buffer = &g_index_buffers[i];
+
+                let mesh_buffer = GpuVertexBufferImp {
+                    vertex_buffers: &vertex_buffers,
+                    vertex_count: draw_object_command.vertex_count,
+                    index_buffer: *index_buffer,
+                    index_count: draw_object_command.index_count,
+                    draw_type: match &draw_object_command.draw_call_type {
+                        EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                            let indirect_buffer = self
+                                .buffers
+                                .get(&multi_draw_indirect.indirect_buffer_handle)
+                                .unwrap();
+                            crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
+                                crate::gpu_vertex_buffer::MultiDrawIndirect {
+                                    indirect_buffer,
+                                    indirect_offset: multi_draw_indirect.indirect_offset,
+                                    count: multi_draw_indirect.count,
+                                },
+                            )
+                        }
+                        EDrawCallType::Draw(draw) => crate::gpu_vertex_buffer::EDrawCallType::Draw(
+                            crate::gpu_vertex_buffer::Draw {
+                                instances: draw.instances.clone(),
+                            },
+                        ),
+                    },
+                };
+                mesh_buffers.push(mesh_buffer);
+            }
+
             self.draw_objects(
                 color_texture.width(),
                 color_texture.height(),
@@ -698,6 +721,7 @@ impl Renderer {
                 &present_info.draw_objects,
                 msaa_texture_view.as_ref(),
                 msaa_depth_texture_view.as_ref(),
+                mesh_buffers,
             );
         }
 
@@ -777,34 +801,34 @@ impl Renderer {
         return Some(render_output);
     }
 
-    fn clear_buffer(
-        &self,
-        surface_texture_view: &TextureView,
-        depth_texture_view: &TextureView,
-        resolve_target: Option<&TextureView>,
-    ) {
-        let _span = tracy_client::span!();
+    // fn clear_buffer(
+    //     &self,
+    //     surface_texture_view: &TextureView,
+    //     depth_texture_view: &TextureView,
+    //     resolve_target: Option<&TextureView>,
+    // ) {
+    //     let _span = tracy_client::span!();
 
-        self.attachment_pipeline.draw(
-            self.wgpu_context.get_device(),
-            self.wgpu_context.get_queue(),
-            EClearType::Both(ClearAll {
-                clear_color: ClearColor {
-                    view: surface_texture_view,
-                    resolve_target,
-                    color: Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 0.0,
-                    },
-                },
-                clear_depth: ClearDepth {
-                    view: depth_texture_view,
-                },
-            }),
-        );
-    }
+    //     self.attachment_pipeline.draw(
+    //         self.wgpu_context.get_device(),
+    //         self.wgpu_context.get_queue(),
+    //         EClearType::Both(ClearAll {
+    //             clear_color: ClearColor {
+    //                 view: surface_texture_view,
+    //                 resolve_target,
+    //                 color: Color {
+    //                     r: 0.0,
+    //                     g: 0.0,
+    //                     b: 0.0,
+    //                     a: 0.0,
+    //                 },
+    //             },
+    //             clear_depth: ClearDepth {
+    //                 view: depth_texture_view,
+    //             },
+    //         }),
+    //     );
+    // }
 
     fn clear_shadow_depth_texture(&self, depth_texture_view: &TextureView) {
         self.attachment_pipeline.draw(
@@ -843,6 +867,10 @@ impl Renderer {
                     );
                 }
                 let handle = create_texture_command.handle;
+                self.texture_views.insert(
+                    handle,
+                    texture.create_view(&TextureViewDescriptor::default()),
+                );
                 self.textures.insert(handle, texture);
                 self.texture_descriptors.insert(
                     handle,
@@ -856,8 +884,55 @@ impl Renderer {
                 });
             }
             RenderCommand::CreateUITexture(command) => self.create_uitexture_commands.push(command),
-            RenderCommand::CreateBuffer(command) => self.create_buffer_commands.push(command),
-            RenderCommand::UpdateBuffer(command) => self.update_buffer_commands.push(command),
+            RenderCommand::CreateBuffer(create_buffer_command) => {
+                let span = tracy_client::span!("create_buffer_command");
+                span.emit_text(
+                    &create_buffer_command
+                        .buffer_create_info
+                        .label
+                        .clone()
+                        .unwrap_or_default(),
+                );
+                let device = self.wgpu_context.get_device();
+                let descriptor = BufferInitDescriptor {
+                    label: create_buffer_command.buffer_create_info.label.as_deref(),
+                    contents: &create_buffer_command.buffer_create_info.contents,
+                    usage: create_buffer_command.buffer_create_info.usage,
+                };
+                let new_buffer = device.create_buffer_init(&descriptor);
+                let handle = create_buffer_command.handle;
+                // render_output.create_buffer_handles.insert(handle);
+                self.buffers.insert(handle, Arc::new(new_buffer));
+                self.buffer_infos
+                    .insert(handle, create_buffer_command.buffer_create_info.clone());
+                return Some(RenderOutput2 {
+                    ty: ERenderOutputType::CreateBuffer(handle),
+                    error: None,
+                });
+                // self.create_buffer_commands.push(command)
+            }
+            RenderCommand::UpdateBuffer(update_buffer_command) => {
+                let _span = tracy_client::span!("update_buffer_command");
+                let device = self.wgpu_context.get_device();
+                if let Some(buffer) = self.buffers.get(&update_buffer_command.handle) {
+                    let (sender, receiver) = std::sync::mpsc::channel();
+                    buffer.slice(..).map_async(wgpu::MapMode::Write, {
+                        move |result| {
+                            sender.send(result).unwrap();
+                        }
+                    });
+                    device.poll(wgpu::Maintain::Wait);
+                    if let Ok(Ok(_)) = receiver.recv() {
+                        let mut padded_buffer_view = buffer.slice(..).get_mapped_range_mut();
+                        let padded_buffer = padded_buffer_view.as_mut();
+                        padded_buffer.copy_from_slice(&update_buffer_command.data);
+                        drop(padded_buffer_view);
+                    }
+                    buffer.unmap();
+                }
+                //
+                // self.update_buffer_commands.push(command)
+            }
             RenderCommand::UpdateTexture(command) => self.update_texture_commands.push(command),
             // RenderCommand::DrawObject(command) => self.draw_object_commands.push(command),
             RenderCommand::UiOutput(command) => self.ui_output_commands.push_back(command),
@@ -1245,8 +1320,8 @@ impl Renderer {
         virtual_texture_pass.update_indirec_table(self.wgpu_context.get_queue(), indirect_map);
     }
 
-    fn draw_object(
-        &mut self,
+    fn _draw_object(
+        &self,
         width: u32,
         height: u32,
         surface_texture_view: &wgpu::TextureView,
@@ -1306,29 +1381,22 @@ impl Renderer {
             },
         };
 
-        let mut tmp_texture_views: HashMap<u64, TextureView> = HashMap::new();
+        let mut tmp_texture_views: HashMap<u64, &TextureView> = HashMap::new();
 
         for (group, binding_resource) in draw_object_command.binding_resources.iter().enumerate() {
             for (binding, binding_resource_type) in binding_resource.iter().enumerate() {
                 match binding_resource_type {
                     EBindingResource::Texture(handle) => {
-                        let mut texture_view: Option<TextureView> = None;
-                        if let Some(find_texture) = self.textures.get(handle) {
-                            let texture_view_descriptor = TextureViewDescriptor::default();
-                            texture_view = Some(find_texture.create_view(&texture_view_descriptor));
+                        let mut texture_view: Option<&TextureView> = None;
+                        if let Some(find_texture) = self.texture_views.get(handle) {
+                            texture_view = Some(find_texture);
                         } else {
                             for (key, pass) in &self.virtual_texture_pass {
                                 if key.page_table_texture_handle == *handle {
-                                    texture_view = Some(
-                                        pass.get_indirect_table()
-                                            .create_view(&TextureViewDescriptor::default()),
-                                    );
+                                    texture_view = Some(pass.get_indirect_table_view());
                                     break;
                                 } else if key.physical_texture_handle == *handle {
-                                    texture_view = Some(
-                                        pass.get_physical_texture()
-                                            .create_view(&TextureViewDescriptor::default()),
-                                    );
+                                    texture_view = Some(pass.get_physical_texture_view());
                                     break;
                                 }
                             }
@@ -1520,7 +1588,7 @@ impl Renderer {
     }
 
     fn draw_objects(
-        &mut self,
+        &self,
         width: u32,
         height: u32,
         surface_texture_view: &wgpu::TextureView,
@@ -1528,26 +1596,368 @@ impl Renderer {
         draw_object_commands: &Vec<DrawObject>,
         resolve_target: Option<&TextureView>,
         resolve_depth_target: Option<&TextureView>,
+        mesh_buffers: Vec<GpuVertexBufferImp>,
     ) {
+        let _ = width;
+        let _ = height;
         let _span = tracy_client::span!();
+        _span.emit_text(&format!("{}", draw_object_commands.len()));
 
-        for draw_object_command in draw_object_commands {
-            let draw_result = self.draw_object(
-                width,
-                height,
-                surface_texture_view,
-                depth_texture_view,
-                draw_object_command,
-                resolve_target,
-                resolve_depth_target,
-            );
-            match draw_result {
-                Ok(_) => {}
-                Err(err) => {
-                    log::trace!("{}, {}", draw_object_command.id, err);
+        let device = self.wgpu_context.get_device();
+        let queue = self.wgpu_context.get_queue();
+        let tag = "Render scene";
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some(&format!("{} command encoder", tag)),
+        });
+        let depth_stencil_attachment = RenderPassDepthStencilAttachment {
+            view: resolve_depth_target.unwrap_or(depth_texture_view),
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(1.0),
+                store: StoreOp::Store,
+            }),
+            stencil_ops: None,
+        };
+        let color_attachments = vec![Some(RenderPassColorAttachment {
+            ops: Operations {
+                load: LoadOp::Clear(Color {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                }),
+                store: StoreOp::Store,
+            },
+            view: resolve_target.unwrap_or(surface_texture_view),
+            resolve_target: if resolve_target.is_none() {
+                None
+            } else {
+                Some(surface_texture_view)
+            },
+        })];
+        let mut all_bind_groups: Vec<Vec<BindGroup>> =
+            Vec::with_capacity(draw_object_commands.len());
+        {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some(&format!("{} render pass", tag)),
+                color_attachments: &color_attachments,
+                depth_stencil_attachment: Some(depth_stencil_attachment),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            {
+                for draw_object_command in draw_object_commands {
+                    let mut tmp_texture_views: HashMap<u64, &TextureView> = HashMap::new();
+                    {
+                        for (group, binding_resource) in
+                            draw_object_command.binding_resources.iter().enumerate()
+                        {
+                            for (binding, binding_resource_type) in
+                                binding_resource.iter().enumerate()
+                            {
+                                match binding_resource_type {
+                                    EBindingResource::Texture(handle) => {
+                                        let mut texture_view: Option<&TextureView> = None;
+                                        if let Some(find_texture) = self.texture_views.get(handle) {
+                                            texture_view = Some(find_texture);
+                                        } else {
+                                            for (key, pass) in &self.virtual_texture_pass {
+                                                if key.page_table_texture_handle == *handle {
+                                                    texture_view =
+                                                        Some(pass.get_indirect_table_view());
+                                                    break;
+                                                } else if key.physical_texture_handle == *handle {
+                                                    texture_view =
+                                                        Some(pass.get_physical_texture_view());
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if texture_view.is_none() {
+                                            for (key, value) in &self.prebake_ibls {
+                                                if key.brdflut_texture == *handle {
+                                                    texture_view =
+                                                        Some(value.get_brdflut_texture_view());
+                                                } else if key.pre_filter_cube_map_texture == *handle
+                                                {
+                                                    texture_view = Some(
+                                                        value
+                                                            .get_pre_filter_cube_map_texture_view(),
+                                                    );
+                                                } else if key.irradiance_texture == *handle {
+                                                    texture_view =
+                                                        Some(value.get_irradiance_texture_view());
+                                                }
+                                            }
+                                        }
+
+                                        if texture_view.is_none() {
+                                            for (key, value) in &self.ibl_bakes {
+                                                if key.brdflut_texture == *handle {
+                                                    texture_view =
+                                                        Some(value.get_brdflut_texture_view());
+                                                } else if key.pre_filter_cube_map_texture == *handle
+                                                {
+                                                    texture_view = Some(
+                                                        value
+                                                            .get_pre_filter_cube_map_texture_view(),
+                                                    );
+                                                } else if key.irradiance_texture == *handle {
+                                                    texture_view =
+                                                        Some(value.get_irradiance_texture_view());
+                                                }
+                                            }
+                                        }
+
+                                        let texture_view = texture_view
+                                            .ok_or(crate::error::Error::Other(Some(format!(
+                                                "{}, {}, texture view is null",
+                                                group, binding
+                                            ))))
+                                            .expect("Texture should not be null");
+                                        tmp_texture_views.insert(*handle, texture_view);
+                                    }
+                                    EBindingResource::Constants(_) => {}
+                                    EBindingResource::Sampler(_) => {}
+                                }
+                            }
+                        }
+                    }
+
+                    let mut group_binding_resource: Vec<Vec<BindingResource>> =
+                        Vec::with_capacity(draw_object_command.binding_resources.len());
+                    for (group, binding_resource) in
+                        draw_object_command.binding_resources.iter().enumerate()
+                    {
+                        let mut binding_resources: Vec<BindingResource> =
+                            Vec::with_capacity(binding_resource.len());
+                        for (binding, binding_resource_type) in binding_resource.iter().enumerate()
+                        {
+                            match binding_resource_type {
+                                EBindingResource::Texture(handle) => {
+                                    let texture_view = tmp_texture_views
+                                        .get(handle)
+                                        .ok_or(crate::error::Error::Other(Some(format!(
+                                            "{}, {}, texture view is null",
+                                            group, binding
+                                        ))))
+                                        .expect("Texture should not be null");
+                                    binding_resources
+                                        .push(BindingResource::TextureView(texture_view));
+                                }
+                                EBindingResource::Constants(buffer_handle) => {
+                                    let buffer = self
+                                        .buffers
+                                        .get(buffer_handle)
+                                        .ok_or(crate::error::Error::Other(Some(format!(
+                                            "{}, {}, constants is null",
+                                            group, binding
+                                        ))))
+                                        .expect("Texture should not be null")
+                                        .as_entire_binding();
+                                    binding_resources.push(buffer);
+                                }
+                                EBindingResource::Sampler(handle) => {
+                                    let sampler = self
+                                        .samplers
+                                        .get(handle)
+                                        .ok_or(crate::error::Error::Other(Some(format!(
+                                            "{}, {}, sampler is null",
+                                            group, binding
+                                        ))))
+                                        .expect("Texture should not be null");
+                                    binding_resources.push(BindingResource::Sampler(sampler));
+                                }
+                            }
+                        }
+                        group_binding_resource.push(binding_resources);
+                    }
+
+                    let pipeline = match &draw_object_command.pipeline {
+                        EPipelineType::Builtin(ty) => match ty {
+                            EBuiltinPipelineType::SkinMeshPhong => self
+                                .skin_mesh_shading_pipeline
+                                .base_render_pipeline
+                                .as_ref(),
+                            EBuiltinPipelineType::StaticMeshPhong => {
+                                &self.shading_pipeline.base_render_pipeline
+                            }
+                            EBuiltinPipelineType::Grid => {
+                                self.grid_render_pipeline.base_render_pipeline.as_ref()
+                            }
+                            EBuiltinPipelineType::MeshView => {
+                                &self.mesh_view_pipeline.base_render_pipeline
+                            }
+                            EBuiltinPipelineType::MeshViewMultipleDraw => {
+                                &self.mesh_view_multiple_draw_pipeline.base_render_pipeline
+                            }
+                            EBuiltinPipelineType::ShadowDepthSkinMesh => unimplemented!(),
+                            EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
+                            EBuiltinPipelineType::Particle => {
+                                &self.particle_pipeline.base_render_pipeline
+                            }
+                            EBuiltinPipelineType::Primitive => {
+                                &self.primitive_render_pipeline.base_render_pipeline
+                            }
+                        },
+                        EPipelineType::Material(material_pipeline) => {
+                            match self
+                                .material_render_pipelines
+                                .get(&material_pipeline.handle)
+                            {
+                                Some(pipeline) => match pipeline.get(&material_pipeline.options) {
+                                    Some(render_pipeline) => {
+                                        render_pipeline.base_render_pipeline.as_ref()
+                                    }
+                                    None => {
+                                        // log::warn!("{} no match options", &material_pipeline.handle);
+                                        panic!("{} no match options", &material_pipeline.handle);
+                                    }
+                                },
+                                None => {
+                                    // log::warn!("{} is not found", &material_pipeline.handle);.
+                                    panic!("{} is not found", &material_pipeline.handle);
+                                }
+                            }
+                        }
+                    };
+
+                    let bind_groups =
+                        pipeline.make_bind_groups_binding_resources(device, group_binding_resource);
+                    all_bind_groups.push(bind_groups);
+                }
+            }
+            for (i, draw_object_command) in draw_object_commands.iter().enumerate() {
+                let pipeline = match &draw_object_command.pipeline {
+                    EPipelineType::Builtin(ty) => match ty {
+                        EBuiltinPipelineType::SkinMeshPhong => self
+                            .skin_mesh_shading_pipeline
+                            .base_render_pipeline
+                            .as_ref(),
+                        EBuiltinPipelineType::StaticMeshPhong => {
+                            &self.shading_pipeline.base_render_pipeline
+                        }
+                        EBuiltinPipelineType::Grid => {
+                            self.grid_render_pipeline.base_render_pipeline.as_ref()
+                        }
+                        EBuiltinPipelineType::MeshView => {
+                            &self.mesh_view_pipeline.base_render_pipeline
+                        }
+                        EBuiltinPipelineType::MeshViewMultipleDraw => {
+                            &self.mesh_view_multiple_draw_pipeline.base_render_pipeline
+                        }
+                        EBuiltinPipelineType::ShadowDepthSkinMesh => unimplemented!(),
+                        EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
+                        EBuiltinPipelineType::Particle => {
+                            &self.particle_pipeline.base_render_pipeline
+                        }
+                        EBuiltinPipelineType::Primitive => {
+                            &self.primitive_render_pipeline.base_render_pipeline
+                        }
+                    },
+                    EPipelineType::Material(material_pipeline) => {
+                        match self
+                            .material_render_pipelines
+                            .get(&material_pipeline.handle)
+                        {
+                            Some(pipeline) => match pipeline.get(&material_pipeline.options) {
+                                Some(render_pipeline) => {
+                                    render_pipeline.base_render_pipeline.as_ref()
+                                }
+                                None => {
+                                    // log::warn!("{} no match options", &material_pipeline.handle);
+                                    panic!("{} no match options", &material_pipeline.handle);
+                                }
+                            },
+                            None => {
+                                // log::warn!("{} is not found", &material_pipeline.handle);.
+                                panic!("{} is not found", &material_pipeline.handle);
+                            }
+                        }
+                    }
+                };
+
+                if let Some(rect) = &draw_object_command.scissor_rect {
+                    render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
+                }
+                if let Some(viewport) = &draw_object_command.viewport {
+                    let rect = &viewport.rect;
+                    let depth_range = &viewport.depth_range;
+                    render_pass.set_viewport(
+                        rect.x,
+                        rect.y,
+                        rect.z,
+                        rect.w,
+                        depth_range.start,
+                        depth_range.end,
+                    );
+                }
+                render_pass.set_pipeline(&pipeline.render_pipeline);
+
+                for (index, bind_group) in all_bind_groups[i].iter().enumerate() {
+                    render_pass.set_bind_group(index as u32, bind_group, &[]);
+                }
+
+                for mesh_buffer in vec![mesh_buffers[i].clone()] {
+                    for (slot, vertex_buffer) in mesh_buffer.vertex_buffers.iter().enumerate() {
+                        render_pass.set_vertex_buffer(slot as u32, vertex_buffer.slice(..));
+                    }
+                    if let (Some(index_buffer), Some(index_count)) =
+                        (mesh_buffer.index_buffer, mesh_buffer.index_count)
+                    {
+                        render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
+                        match &mesh_buffer.draw_type {
+                            crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
+                                multi_draw_indirect,
+                            ) => {
+                                render_pass.multi_draw_indexed_indirect(
+                                    multi_draw_indirect.indirect_buffer,
+                                    multi_draw_indirect.indirect_offset,
+                                    multi_draw_indirect.count,
+                                );
+                            }
+                            crate::gpu_vertex_buffer::EDrawCallType::Draw(draw) => {
+                                render_pass.draw_indexed(0..index_count, 0, draw.instances.clone());
+                            }
+                        }
+                    } else {
+                        match &mesh_buffer.draw_type {
+                            crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
+                                multi_draw_indirect,
+                            ) => {
+                                render_pass.multi_draw_indirect(
+                                    multi_draw_indirect.indirect_buffer,
+                                    multi_draw_indirect.indirect_offset,
+                                    multi_draw_indirect.count,
+                                );
+                            }
+                            crate::gpu_vertex_buffer::EDrawCallType::Draw(draw) => {
+                                render_pass
+                                    .draw(0..mesh_buffer.vertex_count, draw.instances.clone());
+                            }
+                        }
+                    }
                 }
             }
         }
+        queue.submit(vec![encoder.finish()]);
+
+        // for draw_object_command in draw_object_commands {
+        //     let draw_result = self.draw_object(
+        //         width,
+        //         height,
+        //         surface_texture_view,
+        //         depth_texture_view,
+        //         draw_object_command,
+        //         resolve_target,
+        //         resolve_depth_target,
+        //     );
+        //     match draw_result {
+        //         Ok(_) => {}
+        //         Err(err) => {
+        //             log::trace!("{}, {}", draw_object_command.id, err);
+        //         }
+        //     }
+        // }
     }
 
     fn draw_objects_multiple_thread(
@@ -1606,7 +2016,7 @@ impl Renderer {
                 label: Some(&format!("{} command encoder", &tag)),
             });
 
-            let mut tmp_texture_views: HashMap<u64, TextureView> = HashMap::new();
+            let mut tmp_texture_views: HashMap<u64, &TextureView> = HashMap::new();
 
             for (group, binding_resource) in
                 draw_object_command.binding_resources.iter().enumerate()
@@ -1614,24 +2024,16 @@ impl Renderer {
                 for (binding, binding_resource_type) in binding_resource.iter().enumerate() {
                     match binding_resource_type {
                         EBindingResource::Texture(handle) => {
-                            let mut texture_view: Option<TextureView> = None;
-                            if let Some(find_texture) = self.textures.get(handle) {
-                                let texture_view_descriptor = TextureViewDescriptor::default();
-                                texture_view =
-                                    Some(find_texture.create_view(&texture_view_descriptor));
+                            let mut texture_view: Option<&TextureView> = None;
+                            if let Some(find_texture) = self.texture_views.get(handle) {
+                                texture_view = Some(find_texture);
                             } else {
                                 for (key, pass) in &self.virtual_texture_pass {
                                     if key.page_table_texture_handle == *handle {
-                                        texture_view = Some(
-                                            pass.get_indirect_table()
-                                                .create_view(&TextureViewDescriptor::default()),
-                                        );
+                                        texture_view = Some(pass.get_indirect_table_view());
                                         break;
                                     } else if key.physical_texture_handle == *handle {
-                                        texture_view = Some(
-                                            pass.get_physical_texture()
-                                                .create_view(&TextureViewDescriptor::default()),
-                                        );
+                                        texture_view = Some(pass.get_physical_texture_view());
                                         break;
                                     }
                                 }

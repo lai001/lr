@@ -14,7 +14,7 @@ use type_layout::TypeLayout;
 use wgpu::*;
 
 pub struct MeshViewMultipleDrawPipeline {
-    base_render_pipeline: Arc<BaseRenderPipeline>,
+    pub base_render_pipeline: Arc<BaseRenderPipeline>,
 }
 
 impl MeshViewMultipleDrawPipeline {

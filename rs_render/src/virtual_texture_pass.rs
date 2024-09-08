@@ -44,8 +44,10 @@ pub struct VirtualTexturePass {
     feed_back_size: glam::UVec2,
     feed_back_texture_format: TextureFormat,
     physical_texture: Texture,
+    physical_texture_view: TextureView,
     textures_cache: HashMap<u64, HashMap<glam::UVec3, Texture>>,
     indirect_table: Texture,
+    indirect_table_view: TextureView,
     indirect_table_datas: Vec<Vec<glam::UVec2>>,
     output_feeb_back: (Buffer, BufferDimensions),
     pub virtual_texture_sources: HashMap<TextureHandle, VirtualTextureSource>,
@@ -103,7 +105,8 @@ impl VirtualTexturePass {
             None,
             Some("output_feeb_back"),
         )?;
-
+        let physical_texture_view = Self::create_physical_texture_view(&physical_texture);
+        let indirect_table_view = Self::create_indirect_table_texture_view(&indirect_table);
         Ok(Self {
             settings,
             feeb_back_pipeline,
@@ -117,7 +120,9 @@ impl VirtualTexturePass {
             indirect_table,
             indirect_table_datas,
             output_feeb_back,
-            static_mesh_feed_back_pipeline: static_mesh_feed_back_pipeline,
+            static_mesh_feed_back_pipeline,
+            physical_texture_view,
+            indirect_table_view,
         })
     }
 
@@ -534,29 +539,57 @@ impl VirtualTexturePass {
         }
     }
 
-    pub fn get_physical_texture_view(&self) -> TextureView {
-        self.physical_texture.create_view(&TextureViewDescriptor {
+    pub fn get_physical_texture_view(&self) -> &TextureView {
+        &self.physical_texture_view
+        // self.physical_texture.create_view(&TextureViewDescriptor {
+        //     label: Some("physical_texture_view"),
+        //     format: Some(self.physical_texture.format()),
+        //     dimension: Some(TextureViewDimension::D2),
+        //     aspect: TextureAspect::All,
+        //     base_mip_level: 0,
+        //     mip_level_count: Some(self.physical_texture.mip_level_count()),
+        //     base_array_layer: 0,
+        //     array_layer_count: Some(self.physical_texture.depth_or_array_layers()),
+        // })
+    }
+
+    pub fn create_physical_texture_view(physical_texture: &Texture) -> TextureView {
+        physical_texture.create_view(&TextureViewDescriptor {
             label: Some("physical_texture_view"),
-            format: Some(self.physical_texture.format()),
+            format: Some(physical_texture.format()),
             dimension: Some(TextureViewDimension::D2),
             aspect: TextureAspect::All,
             base_mip_level: 0,
-            mip_level_count: Some(self.physical_texture.mip_level_count()),
+            mip_level_count: Some(physical_texture.mip_level_count()),
             base_array_layer: 0,
-            array_layer_count: Some(self.physical_texture.depth_or_array_layers()),
+            array_layer_count: Some(physical_texture.depth_or_array_layers()),
         })
     }
 
-    pub fn get_indirect_table_view(&self) -> TextureView {
-        self.indirect_table.create_view(&TextureViewDescriptor {
+    pub fn get_indirect_table_view(&self) -> &TextureView {
+        &self.indirect_table_view
+        // self.indirect_table.create_view(&TextureViewDescriptor {
+        //     label: Some("indirect_table_view"),
+        //     format: Some(self.indirect_table.format()),
+        //     dimension: Some(TextureViewDimension::D2),
+        //     aspect: TextureAspect::All,
+        //     base_mip_level: 0,
+        //     mip_level_count: Some(self.indirect_table.mip_level_count()),
+        //     base_array_layer: 0,
+        //     array_layer_count: Some(self.indirect_table.depth_or_array_layers()),
+        // })
+    }
+
+    fn create_indirect_table_texture_view(indirect_table: &Texture) -> TextureView {
+        indirect_table.create_view(&TextureViewDescriptor {
             label: Some("indirect_table_view"),
-            format: Some(self.indirect_table.format()),
+            format: Some(indirect_table.format()),
             dimension: Some(TextureViewDimension::D2),
             aspect: TextureAspect::All,
             base_mip_level: 0,
-            mip_level_count: Some(self.indirect_table.mip_level_count()),
+            mip_level_count: Some(indirect_table.mip_level_count()),
             base_array_layer: 0,
-            array_layer_count: Some(self.indirect_table.depth_or_array_layers()),
+            array_layer_count: Some(indirect_table.depth_or_array_layers()),
         })
     }
 

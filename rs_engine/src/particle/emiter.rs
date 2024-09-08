@@ -180,3 +180,11 @@ impl ParticleSpawnEmiter {
 pub enum ParticleEmiter {
     Spawn(ParticleSpawnEmiter),
 }
+
+impl ParticleEmiter {
+    pub fn get_name(&self) -> &str {
+        match self {
+            ParticleEmiter::Spawn(x) => &x.name,
+        }
+    }
+}

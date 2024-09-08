@@ -2,9 +2,13 @@ use std::sync::Arc;
 use wgpu::*;
 
 pub struct PrebakeIBL {
-    brdflut_texture: Arc<wgpu::Texture>,
-    irradiance_texture: Arc<wgpu::Texture>,
-    pre_filter_texture: Arc<wgpu::Texture>,
+    _brdflut_texture: Arc<wgpu::Texture>,
+    _irradiance_texture: Arc<wgpu::Texture>,
+    _pre_filter_texture: Arc<wgpu::Texture>,
+
+    brdflut_texture_view: TextureView,
+    irradiance_texture_view: TextureView,
+    pre_filter_cube_map_texture_view: TextureView,
 }
 
 impl PrebakeIBL {
@@ -60,10 +64,18 @@ impl PrebakeIBL {
             view_formats: &[],
         });
 
+        let brdflut_texture_view = Self::create_brdflut_texture_view(&brdflut_texture);
+        let irradiance_texture_view = Self::create_irradiance_texture_view(&irradiance_texture);
+        let pre_filter_cube_map_texture_view =
+            Self::create_pre_filter_cube_map_texture_view(&pre_filter_texture);
+
         Ok(PrebakeIBL {
-            brdflut_texture: Arc::new(brdflut_texture),
-            irradiance_texture: Arc::new(irradiance_texture),
-            pre_filter_texture: Arc::new(pre_filter_texture),
+            _brdflut_texture: Arc::new(brdflut_texture),
+            _irradiance_texture: Arc::new(irradiance_texture),
+            _pre_filter_texture: Arc::new(pre_filter_texture),
+            brdflut_texture_view,
+            irradiance_texture_view,
+            pre_filter_cube_map_texture_view,
         })
     }
 
@@ -184,51 +196,100 @@ impl PrebakeIBL {
             );
         }
 
+        let brdflut_texture_view = Self::create_brdflut_texture_view(&brdflut_texture);
+        let irradiance_texture_view = Self::create_irradiance_texture_view(&irradiance_texture);
+        let pre_filter_cube_map_texture_view =
+            Self::create_pre_filter_cube_map_texture_view(&pre_filter_texture);
+
         Ok(PrebakeIBL {
-            brdflut_texture: Arc::new(brdflut_texture),
-            irradiance_texture: Arc::new(irradiance_texture),
-            pre_filter_texture: Arc::new(pre_filter_texture),
+            _brdflut_texture: Arc::new(brdflut_texture),
+            _irradiance_texture: Arc::new(irradiance_texture),
+            _pre_filter_texture: Arc::new(pre_filter_texture),
+            brdflut_texture_view,
+            irradiance_texture_view,
+            pre_filter_cube_map_texture_view,
         })
     }
 
-    pub fn get_brdflut_texture_view(&self) -> wgpu::TextureView {
-        self.brdflut_texture
-            .create_view(&wgpu::TextureViewDescriptor::default())
+    pub fn get_brdflut_texture_view(&self) -> &wgpu::TextureView {
+        &self.brdflut_texture_view
+        // self.brdflut_texture
+        //     .create_view(&wgpu::TextureViewDescriptor::default())
     }
 
-    pub fn get_irradiance_texture_view(&self) -> wgpu::TextureView {
-        let mip_level_count = self.irradiance_texture.mip_level_count();
-        let array_layer_count = self.irradiance_texture.depth_or_array_layers();
-        let format = self.irradiance_texture.format();
-        return self
-            .irradiance_texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                label: None,
-                format: Some(format),
-                dimension: Some(wgpu::TextureViewDimension::Cube),
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                mip_level_count: Some(mip_level_count),
-                base_array_layer: 0,
-                array_layer_count: Some(array_layer_count),
-            });
+    pub fn get_irradiance_texture_view(&self) -> &wgpu::TextureView {
+        &self.irradiance_texture_view
+        // let mip_level_count = self.irradiance_texture.mip_level_count();
+        // let array_layer_count = self.irradiance_texture.depth_or_array_layers();
+        // let format = self.irradiance_texture.format();
+        // return self
+        //     .irradiance_texture
+        //     .create_view(&wgpu::TextureViewDescriptor {
+        //         label: None,
+        //         format: Some(format),
+        //         dimension: Some(wgpu::TextureViewDimension::Cube),
+        //         aspect: wgpu::TextureAspect::All,
+        //         base_mip_level: 0,
+        //         mip_level_count: Some(mip_level_count),
+        //         base_array_layer: 0,
+        //         array_layer_count: Some(array_layer_count),
+        //     });
     }
 
-    pub fn get_pre_filter_cube_map_texture_view(&self) -> wgpu::TextureView {
-        let mip_level_count = self.pre_filter_texture.mip_level_count();
-        let array_layer_count = self.pre_filter_texture.depth_or_array_layers();
-        let format = self.pre_filter_texture.format();
-        return self
-            .pre_filter_texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                label: None,
-                format: Some(format),
-                dimension: Some(wgpu::TextureViewDimension::Cube),
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                mip_level_count: Some(mip_level_count),
-                base_array_layer: 0,
-                array_layer_count: Some(array_layer_count),
-            });
+    pub fn get_pre_filter_cube_map_texture_view(&self) -> &wgpu::TextureView {
+        &self.pre_filter_cube_map_texture_view
+        // let mip_level_count = self.pre_filter_texture.mip_level_count();
+        // let array_layer_count = self.pre_filter_texture.depth_or_array_layers();
+        // let format = self.pre_filter_texture.format();
+        // return self
+        //     .pre_filter_texture
+        //     .create_view(&wgpu::TextureViewDescriptor {
+        //         label: None,
+        //         format: Some(format),
+        //         dimension: Some(wgpu::TextureViewDimension::Cube),
+        //         aspect: wgpu::TextureAspect::All,
+        //         base_mip_level: 0,
+        //         mip_level_count: Some(mip_level_count),
+        //         base_array_layer: 0,
+        //         array_layer_count: Some(array_layer_count),
+        //     });
+    }
+
+    pub fn create_brdflut_texture_view(brdflut_texture: &Texture) -> wgpu::TextureView {
+        brdflut_texture.create_view(&wgpu::TextureViewDescriptor::default())
+    }
+
+    pub fn create_irradiance_texture_view(irradiance_texture: &Texture) -> wgpu::TextureView {
+        let mip_level_count = irradiance_texture.mip_level_count();
+        let array_layer_count = irradiance_texture.depth_or_array_layers();
+        let format = irradiance_texture.format();
+        return irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: None,
+            format: Some(format),
+            dimension: Some(wgpu::TextureViewDimension::Cube),
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: Some(mip_level_count),
+            base_array_layer: 0,
+            array_layer_count: Some(array_layer_count),
+        });
+    }
+
+    pub fn create_pre_filter_cube_map_texture_view(
+        pre_filter_texture: &Texture,
+    ) -> wgpu::TextureView {
+        let mip_level_count = pre_filter_texture.mip_level_count();
+        let array_layer_count = pre_filter_texture.depth_or_array_layers();
+        let format = pre_filter_texture.format();
+        return pre_filter_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: None,
+            format: Some(format),
+            dimension: Some(wgpu::TextureViewDimension::Cube),
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: Some(mip_level_count),
+            base_array_layer: 0,
+            array_layer_count: Some(array_layer_count),
+        });
     }
 }

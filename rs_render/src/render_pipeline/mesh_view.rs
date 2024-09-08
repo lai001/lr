@@ -18,7 +18,7 @@ pub struct Constants {
 }
 
 pub struct MeshViewPipeline {
-    base_render_pipeline: Arc<BaseRenderPipeline>,
+    pub base_render_pipeline: Arc<BaseRenderPipeline>,
 }
 
 impl MeshViewPipeline {

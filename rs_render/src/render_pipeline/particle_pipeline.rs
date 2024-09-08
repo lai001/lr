@@ -18,7 +18,7 @@ pub struct Constants {
 }
 
 pub struct ParticlePipeline {
-    base_render_pipeline: Arc<BaseRenderPipeline>,
+    pub base_render_pipeline: Arc<BaseRenderPipeline>,
 }
 
 impl ParticlePipeline {

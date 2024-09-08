@@ -68,46 +68,47 @@ impl EmiterRender {
         let rm = ResourceManager::default();
         let quad = PrimitiveData::quad();
         let mut draw_objects = vec![];
+        let mut position_colors: Vec<(glam::Vec3, glam::Vec4)> = vec![];
         for (_, emiter) in &particle_system.emiters {
             match emiter {
                 crate::particle::emiter::ParticleEmiter::Spawn(emiter) => {
-                    let position_colors: Vec<(glam::Vec3, glam::Vec4)> = emiter.get_parameters();
-                    let instances: Vec<Instance0> = position_colors
-                        .iter()
-                        .map(|(position, color)| Instance0 {
-                            position: *position,
-                            color: *color,
-                        })
-                        .collect();
-                    let instance_buffer_handle = rm.next_buffer();
-                    let command = rs_render::command::RenderCommand::CreateBuffer(CreateBuffer {
-                        handle: *instance_buffer_handle,
-                        buffer_create_info: BufferCreateInfo {
-                            label: Some(format!("InstanceBuffer")),
-                            contents: rs_foundation::cast_to_raw_buffer(&instances).to_vec(),
-                            usage: BufferUsages::COPY_DST | BufferUsages::VERTEX,
-                        },
-                    });
-                    engine.send_render_command(command);
-                    let mut draw_object = DrawObject::new(
-                        0,
-                        vec![*self.vertex_buffer_handle, *instance_buffer_handle],
-                        quad.vertex_positions.len() as u32,
-                        EPipelineType::Builtin(EBuiltinPipelineType::Particle),
-                        Some(*self.index_buffer_handle),
-                        Some(quad.indices.len() as u32),
-                        vec![vec![EBindingResource::Constants(
-                            *self.global_constants_handle,
-                        )]],
-                    );
-                    draw_object.draw_call_type = EDrawCallType::Draw(Draw {
-                        instances: 0..(instances.len() as u32),
-                    });
-
-                    draw_objects.push(draw_object);
+                    position_colors.append(&mut emiter.get_parameters());
                 }
             }
         }
+        let instances: Vec<Instance0> = position_colors
+            .iter()
+            .map(|(position, color)| Instance0 {
+                position: *position,
+                color: *color,
+            })
+            .collect();
+        let instance_buffer_handle = rm.next_buffer();
+        let command = rs_render::command::RenderCommand::CreateBuffer(CreateBuffer {
+            handle: *instance_buffer_handle,
+            buffer_create_info: BufferCreateInfo {
+                label: Some(format!("InstanceBuffer")),
+                contents: rs_foundation::cast_to_raw_buffer(&instances).to_vec(),
+                usage: BufferUsages::COPY_DST | BufferUsages::VERTEX,
+            },
+        });
+        engine.send_render_command(command);
+        let mut draw_object = DrawObject::new(
+            0,
+            vec![*self.vertex_buffer_handle, *instance_buffer_handle],
+            quad.vertex_positions.len() as u32,
+            EPipelineType::Builtin(EBuiltinPipelineType::Particle),
+            Some(*self.index_buffer_handle),
+            Some(quad.indices.len() as u32),
+            vec![vec![EBindingResource::Constants(
+                *self.global_constants_handle,
+            )]],
+        );
+        draw_object.draw_call_type = EDrawCallType::Draw(Draw {
+            instances: 0..(instances.len() as u32),
+        });
+
+        draw_objects.push(draw_object);
         draw_objects
     }
 }

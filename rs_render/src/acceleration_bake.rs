@@ -6,12 +6,14 @@ use crate::{
         pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapComputePipeline,
     },
     global_shaders::pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader,
+    prebake_ibl,
     shader_library::ShaderLibrary,
     texture_loader::TextureLoader,
     texture_readback,
 };
 use rs_core_minimal::misc::calculate_max_mips;
 use std::{path::Path, sync::Arc};
+use wgpu::TextureView;
 
 pub struct AccelerationBaker {
     bake_info: BakeInfo,
@@ -21,6 +23,10 @@ pub struct AccelerationBaker {
     irradiance_cube_map_texture: Arc<Option<wgpu::Texture>>,
     pre_filter_cube_map_textures: Arc<Option<Vec<wgpu::Texture>>>,
     pre_filter_cube_map_lod_texture: Arc<Option<wgpu::Texture>>,
+
+    brdflut_texture_view: Option<TextureView>,
+    irradiance_texture_view: Option<TextureView>,
+    pre_filter_cube_map_texture_view: Option<TextureView>,
 }
 
 impl AccelerationBaker {
@@ -57,6 +63,9 @@ impl AccelerationBaker {
                 irradiance_cube_map_texture: Arc::new(None),
                 pre_filter_cube_map_textures: Arc::new(None),
                 pre_filter_cube_map_lod_texture: Arc::new(None),
+                brdflut_texture_view: None,
+                irradiance_texture_view: None,
+                pre_filter_cube_map_texture_view: None,
             },
             Err(error) => {
                 log::warn!("{:?}", error);
@@ -73,8 +82,13 @@ impl AccelerationBaker {
     ) {
         if self.bake_info.is_bake_pre_filter {
             let cube_map_textures = self.bake_pre_filter_cube_maps(device, queue, shader_library);
-            self.pre_filter_cube_map_lod_texture =
-                Arc::new(Some(Self::convert(device, queue, &cube_map_textures)));
+            let pre_filter_cube_map_lod_texture = Self::convert(device, queue, &cube_map_textures);
+            self.pre_filter_cube_map_texture_view = Some(
+                prebake_ibl::PrebakeIBL::create_pre_filter_cube_map_texture_view(
+                    &pre_filter_cube_map_lod_texture,
+                ),
+            );
+            self.pre_filter_cube_map_lod_texture = Arc::new(Some(pre_filter_cube_map_lod_texture));
             self.pre_filter_cube_map_textures = Arc::new(Some(cube_map_textures));
         }
         if self.bake_info.is_bake_environment {
@@ -83,11 +97,18 @@ impl AccelerationBaker {
         }
         if self.bake_info.is_bake_brdflut {
             let brdflut_texture = self.bake_brdflut_image(device, queue, shader_library);
+            self.brdflut_texture_view = Some(prebake_ibl::PrebakeIBL::create_brdflut_texture_view(
+                &brdflut_texture,
+            ));
             self.brdflut_texture = Arc::new(Some(brdflut_texture));
         }
         if self.bake_info.is_bake_irradiance {
             let irradiance_cube_map_texture =
                 self.bake_irradiance_cube_map(device, queue, shader_library);
+            self.irradiance_texture_view =
+                Some(prebake_ibl::PrebakeIBL::create_irradiance_texture_view(
+                    &irradiance_cube_map_texture,
+                ));
             self.irradiance_cube_map_texture = Arc::new(Some(irradiance_cube_map_texture));
         }
     }
@@ -262,61 +283,67 @@ impl AccelerationBaker {
         self.pre_filter_cube_map_textures.clone()
     }
 
-    pub fn get_brdflut_texture_view(&self) -> wgpu::TextureView {
-        match self.brdflut_texture.as_ref() {
-            Some(brdflut_texture) => {
-                brdflut_texture.create_view(&wgpu::TextureViewDescriptor::default())
-            }
-            None => {
-                panic!()
-            }
-        }
+    pub fn get_brdflut_texture_view(&self) -> &wgpu::TextureView {
+        // if self.brdflut_texture_view.is_none() {
+        //     self.brdflut_texture_view = Some(prebake_ibl::PrebakeIBL::create_brdflut_texture_view(&self.brdflut_texture.unwrap()));
+        // }
+        self.brdflut_texture_view.as_ref().unwrap()
+        // match self.brdflut_texture.as_ref() {
+        //     Some(brdflut_texture) => {
+        //         brdflut_texture.create_view(&wgpu::TextureViewDescriptor::default())
+        //     }
+        //     None => {
+        //         panic!()
+        //     }
+        // }
     }
 
-    pub fn get_irradiance_texture_view(&self) -> wgpu::TextureView {
-        match self.irradiance_cube_map_texture.as_ref() {
-            Some(irradiance_texture) => {
-                let mip_level_count = irradiance_texture.mip_level_count();
-                let array_layer_count = irradiance_texture.depth_or_array_layers();
-                let format = irradiance_texture.format();
-                return irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
-                    label: None,
-                    format: Some(format),
-                    dimension: Some(wgpu::TextureViewDimension::Cube),
-                    aspect: wgpu::TextureAspect::All,
-                    base_mip_level: 0,
-                    mip_level_count: Some(mip_level_count),
-                    base_array_layer: 0,
-                    array_layer_count: Some(array_layer_count),
-                });
-            }
-            None => {
-                panic!()
-            }
-        }
+    pub fn get_irradiance_texture_view(&self) -> &wgpu::TextureView {
+        self.irradiance_texture_view.as_ref().unwrap()
+        // match self.irradiance_cube_map_texture.as_ref() {
+        //     Some(irradiance_texture) => {
+        //         let mip_level_count = irradiance_texture.mip_level_count();
+        //         let array_layer_count = irradiance_texture.depth_or_array_layers();
+        //         let format = irradiance_texture.format();
+        //         return irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
+        //             label: None,
+        //             format: Some(format),
+        //             dimension: Some(wgpu::TextureViewDimension::Cube),
+        //             aspect: wgpu::TextureAspect::All,
+        //             base_mip_level: 0,
+        //             mip_level_count: Some(mip_level_count),
+        //             base_array_layer: 0,
+        //             array_layer_count: Some(array_layer_count),
+        //         });
+        //     }
+        //     None => {
+        //         panic!()
+        //     }
+        // }
     }
 
-    pub fn get_pre_filter_cube_map_texture_view(&self) -> wgpu::TextureView {
-        match self.pre_filter_cube_map_lod_texture.as_ref() {
-            Some(pre_filter_cube_map_texture) => {
-                let mip_level_count = pre_filter_cube_map_texture.mip_level_count();
-                let array_layer_count = pre_filter_cube_map_texture.depth_or_array_layers();
-                let format = pre_filter_cube_map_texture.format();
-                return pre_filter_cube_map_texture.create_view(&wgpu::TextureViewDescriptor {
-                    label: None,
-                    format: Some(format),
-                    dimension: Some(wgpu::TextureViewDimension::Cube),
-                    aspect: wgpu::TextureAspect::All,
-                    base_mip_level: 0,
-                    mip_level_count: Some(mip_level_count),
-                    base_array_layer: 0,
-                    array_layer_count: Some(array_layer_count),
-                });
-            }
-            None => {
-                panic!()
-            }
-        }
+    pub fn get_pre_filter_cube_map_texture_view(&self) -> &wgpu::TextureView {
+        self.pre_filter_cube_map_texture_view.as_ref().unwrap()
+        // match self.pre_filter_cube_map_lod_texture.as_ref() {
+        //     Some(pre_filter_cube_map_texture) => {
+        //         let mip_level_count = pre_filter_cube_map_texture.mip_level_count();
+        //         let array_layer_count = pre_filter_cube_map_texture.depth_or_array_layers();
+        //         let format = pre_filter_cube_map_texture.format();
+        //         return pre_filter_cube_map_texture.create_view(&wgpu::TextureViewDescriptor {
+        //             label: None,
+        //             format: Some(format),
+        //             dimension: Some(wgpu::TextureViewDimension::Cube),
+        //             aspect: wgpu::TextureAspect::All,
+        //             base_mip_level: 0,
+        //             mip_level_count: Some(mip_level_count),
+        //             base_array_layer: 0,
+        //             array_layer_count: Some(array_layer_count),
+        //         });
+        //     }
+        //     None => {
+        //         panic!()
+        //     }
+        // }
     }
 
     pub fn get_bake_info(&self) -> BakeInfo {

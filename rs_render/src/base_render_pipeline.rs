@@ -175,6 +175,44 @@ impl BaseRenderPipeline {
         }
     }
 
+    pub fn make_bind_groups(
+        &self,
+        device: &Device,
+        entries: Vec<Vec<BindGroupEntry>>,
+    ) -> Vec<BindGroup> {
+        let mut bind_groups: Vec<BindGroup> = Vec::with_capacity(entries.len());
+        let label = format!("{} bind group", self.tag);
+        for (entry_vec, bind_group_layout) in entries.iter().zip(self.bind_group_layouts.iter()) {
+            let bind_group = device.create_bind_group(&BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &entry_vec,
+                label: Some(&label),
+            });
+            bind_groups.push(bind_group);
+        }
+        bind_groups
+    }
+
+    pub fn make_bind_groups_binding_resources(
+        &self,
+        device: &Device,
+        binding_resources: Vec<Vec<BindingResource>>,
+    ) -> Vec<BindGroup> {
+        let entries = binding_resources
+            .iter()
+            .map(|x| {
+                x.iter()
+                    .enumerate()
+                    .map(|(binding, resource)| wgpu::BindGroupEntry {
+                        binding: binding as u32,
+                        resource: resource.clone(),
+                    })
+                    .collect()
+            })
+            .collect();
+        self.make_bind_groups(device, entries)
+    }
+
     pub fn draw(
         &self,
         device: &Device,

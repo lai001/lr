@@ -71,6 +71,9 @@ impl EGUIRenderer {
             clipped_primitives,
             window_id,
         } = gui_render_output;
+        if clipped_primitives.is_empty() {
+            return;
+        }
         for (id, image_delta) in &textures_delta.set {
             self.egui_wgpu_renderer
                 .update_texture(&device, &queue, *id, image_delta);

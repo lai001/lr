@@ -142,7 +142,7 @@ impl ApplicationContext {
                     WindowEvent::RedrawRequested => {
                         let window_id = u64::from(window.id()) as isize;
                         self.ui_begin(window);
-
+                        self.engine.recv_output_hook();
                         self.engine.tick();
 
                         self.app.on_redraw_requested(
