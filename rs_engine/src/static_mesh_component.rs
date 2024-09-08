@@ -12,7 +12,14 @@ pub struct Physics {
     collider: Collider,
     pub rigid_body: RigidBody,
     rigid_body_handle: RigidBodyHandle,
+    collider_handle: ColliderHandle,
     is_apply_simulate: bool,
+}
+
+impl Physics {
+    pub fn get_collider_handle(&self) -> ColliderHandle {
+        self.collider_handle
+    }
 }
 
 #[derive(Clone)]
@@ -293,6 +300,7 @@ impl StaticMeshComponent {
             rigid_body,
             rigid_body_handle: RigidBodyHandle::invalid(),
             is_apply_simulate: true,
+            collider_handle: ColliderHandle::invalid(),
         })
     }
 
@@ -305,7 +313,8 @@ impl StaticMeshComponent {
             return;
         };
         let handle = rigid_body_set.insert(physics.rigid_body.clone());
-        collider_set.insert_with_parent(physics.collider.clone(), handle, rigid_body_set);
+        physics.collider_handle =
+            collider_set.insert_with_parent(physics.collider.clone(), handle, rigid_body_set);
         physics.rigid_body_handle = handle;
     }
 

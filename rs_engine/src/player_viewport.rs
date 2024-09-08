@@ -710,6 +710,23 @@ impl PlayerViewport {
         end: glam::Vec3,
         color: glam::Vec4,
     ) {
+        let draw_object = Self::create_draw_debug_line(
+            engine,
+            self.global_constants_handle.clone(),
+            start,
+            end,
+            color,
+        );
+        self.debug_draw_objects.push(draw_object);
+    }
+
+    pub fn create_draw_debug_line(
+        engine: &mut Engine,
+        global_constants_handle: crate::handle::BufferHandle,
+        start: glam::Vec3,
+        end: glam::Vec3,
+        color: glam::Vec4,
+    ) -> DrawObject {
         let contents = vec![
             MeshVertex3 {
                 position: start,
@@ -733,11 +750,11 @@ impl PlayerViewport {
             None,
             None,
             vec![
-                vec![EBindingResource::Constants(*self.global_constants_handle)],
+                vec![EBindingResource::Constants(*global_constants_handle)],
                 vec![EBindingResource::Constants(*constants_handle)],
             ],
         );
-        self.debug_draw_objects.push(draw_object);
+        draw_object
     }
 
     pub fn draw_debug_lines(&mut self, engine: &mut Engine, bundles: &[RenderRigidBodiesBundle]) {

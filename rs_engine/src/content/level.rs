@@ -1,8 +1,11 @@
 use super::content_file_type::EContentFileType;
 use crate::actor::Actor;
+use crate::camera::Camera;
 use crate::directional_light::DirectionalLight;
 use crate::engine::Engine;
 use crate::resource_manager::ResourceManager;
+use crate::scene_node::SceneNode;
+use crate::static_mesh_component::StaticMeshComponent;
 use crate::{build_content_file_url, url_extension::UrlExtension};
 use rapier3d::prelude::*;
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
@@ -59,6 +62,10 @@ impl Physics {
         while let Ok(contact_force_event) = self.contact_force_recv.try_recv() {
             self.contact_force_events.push_back(contact_force_event);
         }
+    }
+
+    pub fn query_update(&mut self) {
+        self.query_pipeline.update(&self.collider_set);
     }
 
     pub fn find_the_contact_pair(
@@ -224,6 +231,8 @@ impl Level {
         };
         if runtime.is_simulate {
             runtime.physics.step();
+        } else {
+            runtime.physics.query_update();
         }
     }
 
@@ -299,5 +308,80 @@ impl Level {
         }
 
         self.actors.append(&mut actors);
+    }
+
+    pub fn ray_cast_find_component(
+        &self,
+        cursor_position: &glam::Vec2,
+        window_size: &glam::Vec2,
+        camera: &mut Camera,
+    ) -> Option<SingleThreadMutType<StaticMeshComponent>> {
+        let Some(physics) = self.runtime.as_ref().map(|x| &x.physics) else {
+            return None;
+        };
+        let ndc_cursor = glam::vec2(
+            cursor_position.x / window_size.x * 2.0 - 1.0,
+            1.0 - cursor_position.y / window_size.y * 2.0,
+        );
+        let ndc_to_world = camera.get_projection_matrix() * camera.get_view_matrix();
+        let ndc_to_world = ndc_to_world.inverse();
+        let ray_pt1 = ndc_to_world.project_point3(glam::vec3(ndc_cursor.x, ndc_cursor.y, 0.0));
+        let ray_pt2 = ndc_to_world.project_point3(glam::vec3(ndc_cursor.x, ndc_cursor.y, 1.0));
+        let ray_dir = ray_pt2 - ray_pt1;
+        let ray_origin = rapier3d::na::Point3::new(ray_pt1.x, ray_pt1.y, ray_pt1.z);
+        let ray_dir = rapier3d::na::Vector3::new(ray_dir.x, ray_dir.y, ray_dir.z);
+        let ray = rapier3d::prelude::Ray::new(ray_origin, ray_dir);
+        let hit = physics.query_pipeline.cast_ray(
+            &physics.rigid_body_set,
+            &physics.collider_set,
+            &ray,
+            f32::MAX,
+            true,
+            QueryFilter::only_dynamic(),
+        );
+        if let Some((handle, _)) = hit {
+            let mut componenet: Option<SingleThreadMutType<StaticMeshComponent>> = None;
+            for actor in self.actors.clone() {
+                let actor = actor.borrow_mut();
+                self.find_component(actor.scene_node.clone(), handle, &mut componenet);
+            }
+            return componenet;
+        }
+
+        return None;
+    }
+
+    pub fn find_component(
+        &self,
+        scene_node: SingleThreadMutType<SceneNode>,
+        handle: ColliderHandle,
+        componenet: &mut Option<SingleThreadMutType<StaticMeshComponent>>,
+    ) {
+        if componenet.is_some() {
+            return;
+        }
+        let scene_node = scene_node.borrow();
+        match &scene_node.component {
+            crate::scene_node::EComponentType::SceneComponent(_) => {}
+            crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
+                let is_find = (|| {
+                    let mut component = static_mesh_component.borrow_mut();
+                    if let Some(physics) = component.get_physics_mut() {
+                        if physics.get_collider_handle() == handle {
+                            return true;
+                        }
+                    }
+                    false
+                })();
+                if is_find {
+                    *componenet = Some(static_mesh_component.clone());
+                    return;
+                }
+            }
+            crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
+        }
+        for child in scene_node.childs.clone() {
+            self.find_component(child, handle, componenet);
+        }
     }
 }

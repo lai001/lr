@@ -118,6 +118,11 @@ pub enum EWindowType {
     Standalone,
 }
 
+struct MouseState {
+    is_focus: bool,
+    position: glam::Vec2,
+}
+
 pub struct EditorContext {
     event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     engine: rs_engine::engine::Engine,
@@ -143,6 +148,7 @@ pub struct EditorContext {
     watch_shader: WatchShader,
     #[cfg(feature = "plugin_dotnet")]
     donet_host: Option<rs_dotnet_host::dotnet_runtime::DotnetRuntime>,
+    mosue_state: MouseState,
 }
 
 impl EditorContext {
@@ -266,6 +272,10 @@ impl EditorContext {
             #[cfg(feature = "plugin_dotnet")]
             donet_host,
             standalone_ui_window: None,
+            mosue_state: MouseState {
+                is_focus: false,
+                position: glam::vec2(0.0, 0.0),
+            },
         };
 
         Ok(editor_context)
@@ -289,6 +299,16 @@ impl EditorContext {
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         match event {
+            WindowEvent::CursorEntered { .. } => {
+                self.mosue_state.is_focus = true;
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.mosue_state.is_focus = false;
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.mosue_state.position.x = position.x as f32;
+                self.mosue_state.position.y = position.y as f32;
+            }
             WindowEvent::CloseRequested => {
                 #[cfg(feature = "plugin_shared_crate")]
                 self.plugins.clear();
@@ -335,6 +355,29 @@ impl EditorContext {
                         winit::event::ElementState::Released => {
                             self.engine
                                 .set_input_mode(rs_engine::input_mode::EInputMode::UI);
+                        }
+                    }
+                }
+                if *button == winit::event::MouseButton::Left
+                    && !self.egui_winit_state.egui_ctx().is_pointer_over_area()
+                    && self.mosue_state.is_focus
+                    && *state == winit::event::ElementState::Released
+                {
+                    if let Some(level) = self.data_source.level.as_ref() {
+                        let level = level.borrow();
+                        let componenet = level.ray_cast_find_component(
+                            &self.mosue_state.position,
+                            &glam::vec2(
+                                window.inner_size().width as f32,
+                                window.inner_size().height as f32,
+                            ),
+                            self.engine.get_camera_mut(),
+                        );
+                        if let Some(componenet) = componenet {
+                            self.editor_ui.object_property_view.selected_object =
+                                Some(ESelectedObjectType::StaticMeshComponent(componenet));
+                        } else {
+                            self.editor_ui.object_property_view.selected_object = None;
                         }
                     }
                 }
