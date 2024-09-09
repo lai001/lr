@@ -206,6 +206,7 @@ impl EditorContext {
         let window_width = window_size.width;
         let window_height = window_size.height;
         let egui_context = egui::Context::default();
+        egui_context.set_embed_viewports(false);
         egui_context.set_fonts(Self::load_font());
         let style = egui::Style::default().clone();
         egui_context.set_style(style);
@@ -1452,6 +1453,22 @@ impl EditorContext {
         #[cfg(feature = "plugin_v8")]
         if let Some(v8_runtime) = self.v8_runtime.as_mut() {
             let _ = v8_runtime.tick(&mut self.engine);
+        }
+
+        if let Some(ui_window) = &mut self.particle_system_ui_window {
+            ui_window
+                .base_ui_window
+                .egui_winit_state
+                .egui_ctx()
+                .show_viewport_deferred(
+                    ui_window
+                        .base_ui_window
+                        .egui_winit_state
+                        .egui_input()
+                        .viewport_id,
+                    egui::ViewportBuilder::default(),
+                    |_, _| {},
+                );
         }
 
         let gui_render_output = (|| {

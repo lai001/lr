@@ -213,7 +213,7 @@ impl BaseUIWindow {
 pub struct ParticleSystemUIWindow {
     pub data_source: DataSource,
     pub context: egui::Context,
-    base_ui_window: BaseUIWindow,
+    pub base_ui_window: BaseUIWindow,
     emiter_render: EmiterRender,
 }
 
