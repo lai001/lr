@@ -132,8 +132,8 @@ pub struct EditorContext {
     draw_objects: HashMap<uuid::Uuid, EDrawObjectType>,
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     editor_ui: EditorUI,
-    #[cfg(any(feature = "plugin_shared_crate"))]
-    plugins: Vec<Box<dyn Plugin>>,
+    // #[cfg(any(feature = "plugin_shared_crate"))]
+    // plugins: Vec<Box<dyn Plugin>>,
     #[cfg(feature = "plugin_v8")]
     v8_runtime: Option<rs_v8_host::v8_runtime::V8Runtime>,
     frame_sync: FrameSync,
@@ -257,8 +257,8 @@ impl EditorContext {
             draw_objects: HashMap::new(),
             virtual_key_code_states: HashMap::new(),
             editor_ui,
-            #[cfg(feature = "plugin_shared_crate")]
-            plugins: vec![],
+            // #[cfg(feature = "plugin_shared_crate")]
+            // plugins: vec![],
             #[cfg(feature = "plugin_v8")]
             v8_runtime: Some(v8_runtime),
             frame_sync,
@@ -311,8 +311,8 @@ impl EditorContext {
                 self.mosue_state.position.y = position.y as f32;
             }
             WindowEvent::CloseRequested => {
-                #[cfg(feature = "plugin_shared_crate")]
-                self.plugins.clear();
+                // #[cfg(feature = "plugin_shared_crate")]
+                // self.plugins.clear();
                 self.standalone_ui_window = None;
                 self.egui_winit_state.egui_ctx().memory_mut(|writer| {
                     writer.data.clear();
@@ -366,7 +366,7 @@ impl EditorContext {
                 {
                     if let Some(level) = self.data_source.level.as_ref() {
                         let level = level.borrow();
-                        let componenet = level.ray_cast_find_component(
+                        let componenet_type = level.ray_cast_find_component(
                             &self.mosue_state.position,
                             &glam::vec2(
                                 window.inner_size().width as f32,
@@ -374,9 +374,20 @@ impl EditorContext {
                             ),
                             self.engine.get_camera_mut(),
                         );
-                        if let Some(componenet) = componenet {
-                            self.editor_ui.object_property_view.selected_object =
-                                Some(ESelectedObjectType::StaticMeshComponent(componenet));
+                        if let Some(componenet_type) = componenet_type {
+                            use rs_engine::scene_node::EComponentType;
+                            match componenet_type {
+                                EComponentType::SceneComponent(_) => {}
+                                EComponentType::StaticMeshComponent(componenet) => {
+                                    self.editor_ui.object_property_view.selected_object =
+                                        Some(ESelectedObjectType::StaticMeshComponent(componenet));
+                                }
+                                EComponentType::SkeletonMeshComponent(componenet) => {
+                                    self.editor_ui.object_property_view.selected_object = Some(
+                                        ESelectedObjectType::SkeletonMeshComponent(componenet),
+                                    );
+                                }
+                            }
                         } else {
                             self.editor_ui.object_property_view.selected_object = None;
                         }
@@ -682,7 +693,13 @@ impl EditorContext {
             if let Some(donet_host) = self.donet_host.as_mut() {
                 if !donet_host.is_watching() {
                     let file_path = project_context.get_dotnet_script_shared_lib_path();
-                    donet_host.start_watch(file_path)?;
+                    let folder = file_path.parent().ok_or(anyhow!("No parent folder"))?;
+                    let file_name = file_path
+                        .file_name()
+                        .map(|x| x.to_str())
+                        .flatten()
+                        .ok_or(anyhow!("No file name"))?;
+                    donet_host.start_watch(folder, file_name)?;
                     donet_host.reload_script()?;
                 }
                 if donet_host.is_need_reload() {
@@ -1115,32 +1132,12 @@ impl EditorContext {
     }
 
     fn add_new_actors(
+        level: &mut rs_engine::content::level::Level,
         engine: &mut rs_engine::engine::Engine,
         actors: Vec<Rc<RefCell<rs_engine::actor::Actor>>>,
         files: &[EContentFileType],
     ) {
-        for actor in actors {
-            let actor = actor.borrow_mut();
-            let mut root_scene_node = actor.scene_node.borrow_mut();
-            match &mut root_scene_node.component {
-                rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                rs_engine::scene_node::EComponentType::StaticMeshComponent(
-                    static_mesh_component,
-                ) => {
-                    let mut static_mesh_component = static_mesh_component.borrow_mut();
-                    static_mesh_component.initialize(ResourceManager::default(), engine, files);
-                }
-                rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
-                    skeleton_mesh_component,
-                ) => {
-                    skeleton_mesh_component.borrow_mut().initialize(
-                        ResourceManager::default(),
-                        engine,
-                        files,
-                    );
-                }
-            }
-        }
+        level.add_new_actors(engine, actors, files);
     }
 
     fn open_project(
@@ -1196,13 +1193,8 @@ impl EditorContext {
             if let Some(level) = find_level.cloned() {
                 let mut level = level.borrow_mut();
                 if let Some(folder) = &self.data_source.content_data_source.current_folder {
-                    Self::add_new_actors(
-                        &mut self.engine,
-                        level.actors.clone(),
-                        &folder.borrow().files,
-                    );
+                    level.initialize(&mut self.engine, &folder.borrow().files);
                 }
-                level.initialize(&mut self.engine);
             }
         }
         {
@@ -1359,15 +1351,16 @@ impl EditorContext {
             add_files.clone(),
         );
         content.files.append(&mut add_files);
+        let mut active_level = active_level.borrow_mut();
 
         Self::add_new_actors(
+            &mut active_level,
             &mut self.engine,
             vec![load_result.actor.clone()],
             &content.files,
         );
-        let mut active_level = active_level.borrow_mut();
-        active_level.init_actor_physics(load_result.actor.clone());
-        active_level.actors.push(load_result.actor);
+        // active_level.init_actor_physics(load_result.actor.clone());
+        // active_level.actors.push(load_result.actor);
 
         // let mesh_clusters = ModelLoader::load_from_file(&file_path, &[])?;
         // self.data_source.is_model_hierarchy_open = true;
@@ -2312,9 +2305,15 @@ impl EditorContext {
                         // texture_file.image_reference = Some(image_reference);
                         texture_file.set_image_reference_path(image_reference);
                         log::trace!("Create texture: {:?}", &texture_file.url.as_str());
-                        current_folder.files.push(EContentFileType::Texture(Rc::new(
-                            RefCell::new(texture_file),
-                        )));
+                        let texture_file =
+                            EContentFileType::Texture(Rc::new(RefCell::new(texture_file)));
+                        Self::content_load_resources(
+                            &mut self.engine,
+                            &mut self.model_loader,
+                            project_context,
+                            vec![texture_file.clone()],
+                        );
+                        current_folder.files.push(texture_file.clone());
                     }
                 }
             }
@@ -2474,6 +2473,19 @@ impl EditorContext {
                             update_material.new,
                             &files,
                         );
+                    }
+                    ESelectedObjectType::SkeletonMeshComponent(static_mesh_component) => {
+                        let files = if let Some(folder) =
+                            &self.data_source.content_data_source.current_folder
+                        {
+                            folder.borrow().files.clone()
+                        } else {
+                            vec![]
+                        };
+                        let mut static_mesh_component = static_mesh_component.borrow_mut();
+                        if let Some(url) = update_material.new {
+                            static_mesh_component.set_material(&mut self.engine, url, &files);
+                        }
                     }
                     _ => unimplemented!(),
                 }

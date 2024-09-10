@@ -5,20 +5,20 @@ use crate::{
 use rapier3d::prelude::*;
 use rs_artifact::static_mesh::StaticMesh;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{iter::zip, sync::Arc};
 
 #[derive(Clone)]
 pub struct Physics {
-    collider: Collider,
+    pub colliders: Vec<Collider>,
     pub rigid_body: RigidBody,
-    rigid_body_handle: RigidBodyHandle,
-    collider_handle: ColliderHandle,
-    is_apply_simulate: bool,
+    pub rigid_body_handle: RigidBodyHandle,
+    pub collider_handles: Vec<ColliderHandle>,
+    pub is_apply_simulate: bool,
 }
 
 impl Physics {
-    pub fn get_collider_handle(&self) -> ColliderHandle {
-        self.collider_handle
+    pub fn get_collider_handles(&self) -> Vec<ColliderHandle> {
+        self.collider_handles.clone()
     }
 }
 
@@ -296,11 +296,11 @@ impl StaticMeshComponent {
         let rigid_body = builder.build();
 
         Ok(Physics {
-            collider,
+            colliders: vec![collider],
             rigid_body,
             rigid_body_handle: RigidBodyHandle::invalid(),
             is_apply_simulate: true,
-            collider_handle: ColliderHandle::invalid(),
+            collider_handles: vec![],
         })
     }
 
@@ -313,8 +313,10 @@ impl StaticMeshComponent {
             return;
         };
         let handle = rigid_body_set.insert(physics.rigid_body.clone());
-        physics.collider_handle =
-            collider_set.insert_with_parent(physics.collider.clone(), handle, rigid_body_set);
+        for collider in physics.colliders.clone() {
+            let collider_handle = collider_set.insert_with_parent(collider, handle, rigid_body_set);
+            physics.collider_handles.push(collider_handle);
+        }
         physics.rigid_body_handle = handle;
     }
 
@@ -329,10 +331,11 @@ impl StaticMeshComponent {
         let Some(rigid_body) = rigid_body_set.get_mut(physics.rigid_body_handle) else {
             return;
         };
-        for handle in rigid_body.colliders() {
-            if let Some(collider) = collider_set.get_mut(*handle) {
-                collider.copy_from(&physics.collider);
-            }
+        for (handle, collider) in zip(physics.collider_handles.clone(), physics.colliders.clone()) {
+            collider_set
+                .get_mut(handle)
+                .expect("Should not be null")
+                .copy_from(&collider);
         }
         rigid_body.copy_from(&physics.rigid_body);
     }

@@ -13,10 +13,10 @@ use rs_render::command::{CreateSampler, RenderCommand};
 pub struct Application {
     _window_id: isize,
     player_view_port: PlayerViewport,
-    #[cfg(feature = "plugin_shared_crate")]
-    plugins: Vec<Box<dyn Plugin>>,
     current_active_level: SingleThreadMutType<Level>,
     _contents: Vec<EContentFileType>,
+    #[cfg(feature = "plugin_shared_crate")]
+    plugins: Vec<Box<dyn Plugin>>,
 }
 
 impl Application {
@@ -26,9 +26,9 @@ impl Application {
         height: u32,
         engine: &mut Engine,
         mut current_active_level: Level,
-        #[cfg(feature = "plugin_shared_crate")] mut plugins: Vec<Box<dyn Plugin>>,
         contents: Vec<EContentFileType>,
         input_mode: EInputMode,
+        #[cfg(feature = "plugin_shared_crate")] mut plugins: Vec<Box<dyn Plugin>>,
     ) -> Application {
         let resource_manager = ResourceManager::default();
 
@@ -39,8 +39,7 @@ impl Application {
         });
         engine.send_render_command(command);
 
-        Self::add_new_actors(engine, current_active_level.actors.to_vec(), &contents);
-        current_active_level.initialize(engine);
+        current_active_level.initialize(engine, &contents);
         current_active_level.set_physics_simulate(true);
 
         let infos = engine.get_virtual_texture_source_infos();
@@ -66,33 +65,6 @@ impl Application {
             plugins,
             current_active_level: SingleThreadMut::new(current_active_level),
             _contents: contents,
-        }
-    }
-
-    fn add_new_actors(
-        engine: &mut Engine,
-        actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
-        files: &[EContentFileType],
-    ) {
-        for actor in actors {
-            let actor = actor.borrow_mut();
-            let mut root_scene_node = actor.scene_node.borrow_mut();
-            match &mut root_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
-                    let mut static_mesh_component = static_mesh_component.borrow_mut();
-                    static_mesh_component.initialize(ResourceManager::default(), engine, files);
-                }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(
-                    skeleton_mesh_component,
-                ) => {
-                    skeleton_mesh_component.borrow_mut().initialize(
-                        ResourceManager::default(),
-                        engine,
-                        files,
-                    );
-                }
-            }
         }
     }
 

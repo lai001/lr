@@ -66,7 +66,7 @@ impl StandaloneUiWindow {
         let input_mode = EInputMode::Game;
         update_window_with_input_mode(window, input_mode);
 
-        let level = active_level.make_copy_for_standalone(engine);
+        let level = active_level.make_copy_for_standalone(engine, &contents);
 
         let application = Application::new(
             window_id,
@@ -74,9 +74,9 @@ impl StandaloneUiWindow {
             window.inner_size().height,
             engine,
             level,
-            plugins,
             contents,
             input_mode,
+            plugins,
         );
         Ok(StandaloneUiWindow {
             egui_winit_state,

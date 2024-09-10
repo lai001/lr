@@ -80,6 +80,7 @@ impl ApplicationContext {
             .map(|(_, x)| x.clone())
             .collect();
 
+        #[cfg(feature = "plugin_shared_crate")]
         let plugins = LoadPlugins::load();
         let app = rs_engine::standalone::application::Application::new(
             window_id,
@@ -87,9 +88,10 @@ impl ApplicationContext {
             window_height,
             &mut engine,
             current_active_level,
-            plugins,
             contents,
             EInputMode::Game,
+            #[cfg(feature = "plugin_shared_crate")]
+            plugins,
         );
 
         let application_context = Self {

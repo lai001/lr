@@ -15,7 +15,8 @@ use std::{
 struct ScriptWatcher {
     receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>,
     _debouncer: Debouncer<ReadDirectoryChangesWatcher>,
-    watch_path: PathBuf,
+    watch_folder_path: PathBuf,
+    watch_file_name: String,
 }
 pub struct DotnetRuntime {
     pub application: RuntimeApplication,
@@ -88,12 +89,14 @@ impl DotnetRuntime {
     }
 
     pub fn reload_script(&mut self) -> crate::error::Result<()> {
-        let watch_path = self
+        let script_watcher = self
             .script_watcher
             .as_mut()
-            .map(|x| x.watch_path.clone())
             .ok_or(crate::error::Error::Other(format!("Did not start watch")))?;
-        self.reload_script_internal(&watch_path)
+        let path = script_watcher
+            .watch_folder_path
+            .join(&script_watcher.watch_file_name);
+        self.reload_script_internal(path)
     }
 
     fn reload_script_internal(&mut self, path: impl AsRef<Path>) -> crate::error::Result<()> {
@@ -140,7 +143,11 @@ impl DotnetRuntime {
         Ok(())
     }
 
-    pub fn start_watch(&mut self, file_path: impl AsRef<Path>) -> crate::error::Result<()> {
+    pub fn start_watch(
+        &mut self,
+        folder: impl AsRef<Path>,
+        file_name: &str,
+    ) -> crate::error::Result<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
         let mut debouncer =
             notify_debouncer_mini::new_debouncer(std::time::Duration::from_millis(1000), sender)
@@ -148,12 +155,13 @@ impl DotnetRuntime {
 
         debouncer
             .watcher()
-            .watch(file_path.as_ref(), notify::RecursiveMode::Recursive)
+            .watch(folder.as_ref(), notify::RecursiveMode::Recursive)
             .map_err(|err| crate::error::Error::Debouncer(err))?;
         let script_watcher = ScriptWatcher {
             receiver,
             _debouncer: debouncer,
-            watch_path: file_path.as_ref().to_path_buf(),
+            watch_folder_path: folder.as_ref().to_path_buf(),
+            watch_file_name: file_name.to_string(),
         };
         self.script_watcher = Some(script_watcher);
         Ok(())
@@ -163,8 +171,18 @@ impl DotnetRuntime {
         if let Some(watcher) = self.script_watcher.as_ref() {
             let mut is_need_reload = false;
             for events in watcher.receiver.try_iter().filter(|x| x.is_ok()).flatten() {
-                if !is_need_reload {
-                    is_need_reload = events.is_empty() == false;
+                for debounced_event in events {
+                    if debounced_event
+                        .path
+                        .file_name()
+                        .map(|x| x.to_str())
+                        .unwrap_or_default()
+                        .unwrap_or_default()
+                        == watcher.watch_file_name
+                    {
+                        is_need_reload = true;
+                        break;
+                    }
                 }
             }
             return is_need_reload;

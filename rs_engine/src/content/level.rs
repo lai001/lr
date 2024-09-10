@@ -4,8 +4,7 @@ use crate::camera::Camera;
 use crate::directional_light::DirectionalLight;
 use crate::engine::Engine;
 use crate::resource_manager::ResourceManager;
-use crate::scene_node::SceneNode;
-use crate::static_mesh_component::StaticMeshComponent;
+use crate::scene_node::{EComponentType, SceneNode};
 use crate::{build_content_file_url, url_extension::UrlExtension};
 use rapier3d::prelude::*;
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
@@ -117,7 +116,7 @@ impl Level {
         self.url.get_name_in_editor()
     }
 
-    pub fn initialize(&mut self, engine: &mut Engine) {
+    pub fn initialize(&mut self, engine: &mut Engine, files: &[EContentFileType]) {
         for light in self.directional_lights.iter_mut() {
             let mut light = light.borrow_mut();
             light.initialize(engine);
@@ -166,8 +165,38 @@ impl Level {
             is_simulate: false,
         });
         let actors = self.actors.clone();
+        self.init_actors(engine, actors, files);
+        let actors = self.actors.clone();
         for actor in actors {
             self.init_actor_physics(actor.clone());
+        }
+    }
+
+    pub fn init_actors(
+        &mut self,
+        engine: &mut crate::engine::Engine,
+        actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
+        files: &[EContentFileType],
+    ) {
+        for actor in actors {
+            let actor = actor.borrow_mut();
+            let mut root_scene_node = actor.scene_node.borrow_mut();
+            match &mut root_scene_node.component {
+                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
+                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
+                    let mut static_mesh_component = static_mesh_component.borrow_mut();
+                    static_mesh_component.initialize(ResourceManager::default(), engine, files);
+                }
+                crate::scene_node::EComponentType::SkeletonMeshComponent(
+                    skeleton_mesh_component,
+                ) => {
+                    skeleton_mesh_component.borrow_mut().initialize(
+                        ResourceManager::default(),
+                        engine,
+                        files,
+                    );
+                }
+            }
         }
     }
 
@@ -185,7 +214,10 @@ impl Level {
                     let mut component = component.borrow_mut();
                     component.init_physics(rigid_body_set, collider_set);
                 }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
+                crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                    let mut component = component.borrow_mut();
+                    component.init_physics(rigid_body_set, collider_set);
+                }
             }
         }
         match &mut scene_node.component {
@@ -194,7 +226,10 @@ impl Level {
                 let mut component = component.borrow_mut();
                 component.init_physics(rigid_body_set, collider_set);
             }
-            crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
+            crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                let mut component = component.borrow_mut();
+                component.init_physics(rigid_body_set, collider_set);
+            }
         }
     }
 
@@ -212,7 +247,10 @@ impl Level {
                     let mut component = component.borrow_mut();
                     component.update_physics(rigid_body_set, collider_set);
                 }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
+                crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                    let mut component = component.borrow_mut();
+                    component.update_physics(rigid_body_set, collider_set);
+                }
             }
         }
         match &mut scene_node.component {
@@ -221,7 +259,10 @@ impl Level {
                 let mut component = component.borrow_mut();
                 component.update_physics(rigid_body_set, collider_set);
             }
-            crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
+            crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                let mut component = component.borrow_mut();
+                component.update_physics(rigid_body_set, collider_set);
+            }
         }
     }
 
@@ -252,10 +293,14 @@ impl Level {
     }
 
     #[cfg(feature = "editor")]
-    pub fn make_copy_for_standalone(&self, engine: &mut Engine) -> Level {
+    pub fn make_copy_for_standalone(
+        &self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+    ) -> Level {
         let ser_level = serde_json::to_string(self).unwrap();
         let mut copy_level: Level = serde_json::from_str(&ser_level).unwrap();
-        copy_level.initialize(engine);
+        copy_level.initialize(engine, files);
         copy_level
     }
 
@@ -282,26 +327,7 @@ impl Level {
         mut actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
         files: &[EContentFileType],
     ) {
-        for actor in actors.clone() {
-            let actor = actor.borrow_mut();
-            let mut root_scene_node = actor.scene_node.borrow_mut();
-            match &mut root_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
-                    let mut static_mesh_component = static_mesh_component.borrow_mut();
-                    static_mesh_component.initialize(ResourceManager::default(), engine, files);
-                }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(
-                    skeleton_mesh_component,
-                ) => {
-                    skeleton_mesh_component.borrow_mut().initialize(
-                        ResourceManager::default(),
-                        engine,
-                        files,
-                    );
-                }
-            }
-        }
+        self.init_actors(engine, actors.clone(), files);
 
         for actor in actors.clone() {
             self.init_actor_physics(actor.clone());
@@ -315,7 +341,7 @@ impl Level {
         cursor_position: &glam::Vec2,
         window_size: &glam::Vec2,
         camera: &mut Camera,
-    ) -> Option<SingleThreadMutType<StaticMeshComponent>> {
+    ) -> Option<EComponentType> {
         let Some(physics) = self.runtime.as_ref().map(|x| &x.physics) else {
             return None;
         };
@@ -340,7 +366,7 @@ impl Level {
             QueryFilter::only_dynamic(),
         );
         if let Some((handle, _)) = hit {
-            let mut componenet: Option<SingleThreadMutType<StaticMeshComponent>> = None;
+            let mut componenet: Option<EComponentType> = None;
             for actor in self.actors.clone() {
                 let actor = actor.borrow_mut();
                 self.find_component(actor.scene_node.clone(), handle, &mut componenet);
@@ -355,7 +381,7 @@ impl Level {
         &self,
         scene_node: SingleThreadMutType<SceneNode>,
         handle: ColliderHandle,
-        componenet: &mut Option<SingleThreadMutType<StaticMeshComponent>>,
+        componenet: &mut Option<EComponentType>,
     ) {
         if componenet.is_some() {
             return;
@@ -367,18 +393,36 @@ impl Level {
                 let is_find = (|| {
                     let mut component = static_mesh_component.borrow_mut();
                     if let Some(physics) = component.get_physics_mut() {
-                        if physics.get_collider_handle() == handle {
+                        if physics.get_collider_handles().contains(&handle) {
                             return true;
                         }
                     }
                     false
                 })();
                 if is_find {
-                    *componenet = Some(static_mesh_component.clone());
+                    *componenet = Some(EComponentType::StaticMeshComponent(
+                        static_mesh_component.clone(),
+                    ));
                     return;
                 }
             }
-            crate::scene_node::EComponentType::SkeletonMeshComponent(_) => {}
+            crate::scene_node::EComponentType::SkeletonMeshComponent(static_mesh_component) => {
+                let is_find = (|| {
+                    let mut component = static_mesh_component.borrow_mut();
+                    if let Some(physics) = component.get_physics_mut() {
+                        if physics.get_collider_handles().contains(&handle) {
+                            return true;
+                        }
+                    }
+                    false
+                })();
+                if is_find {
+                    *componenet = Some(EComponentType::SkeletonMeshComponent(
+                        static_mesh_component.clone(),
+                    ));
+                    return;
+                }
+            }
         }
         for child in scene_node.childs.clone() {
             self.find_component(child, handle, componenet);

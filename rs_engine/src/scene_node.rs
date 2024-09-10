@@ -1,7 +1,11 @@
 use crate::{
-    content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
-    resource_manager::ResourceManager, static_mesh_component::StaticMeshComponent,
+    content::content_file_type::EContentFileType,
+    drawable::EDrawObjectType,
+    engine::Engine,
+    resource_manager::ResourceManager,
+    static_mesh_component::{Physics, StaticMeshComponent},
 };
+use rapier3d::{na::point, prelude::*};
 use rs_artifact::{
     skeleton::{Skeleton, SkeletonBone},
     skeleton_animation::SkeletonAnimation,
@@ -9,7 +13,7 @@ use rs_artifact::{
 };
 use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, iter::zip, sync::Arc};
 
 const NUM_MAX_BONE: usize = rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE;
 
@@ -31,6 +35,7 @@ struct SkeletonMeshComponentRuntime {
     skeleton: Option<Arc<Skeleton>>,
     skeleton_animation: Option<Arc<SkeletonAnimation>>,
     skin_meshes: Vec<Arc<SkinMesh>>,
+    pub physics: Option<Physics>,
     // material: Option<SingleThreadMutType<crate::content::material::Material>>,
 }
 
@@ -121,6 +126,7 @@ impl SkeletonMeshComponent {
             skeleton: skeleton.clone(),
             skeleton_animation,
             skin_meshes: vec![],
+            physics: None,
             // material: material.clone(),
         });
 
@@ -182,8 +188,16 @@ impl SkeletonMeshComponent {
                 .draw_objects
                 .insert(skin_mesh.name.clone(), draw_object);
 
-            self.run_time.as_mut().unwrap().skin_meshes.push(skin_mesh);
+            run_time.skin_meshes.push(skin_mesh);
         }
+
+        let physics = Self::build_physics(
+            self.run_time.as_mut().unwrap().skin_meshes.clone(),
+            false,
+            self.transformation,
+        )
+        .ok();
+        self.run_time.as_mut().unwrap().physics = physics;
     }
 
     fn walk_skeleton_bone(
@@ -378,7 +392,12 @@ impl SkeletonMeshComponent {
         }
     }
 
-    pub fn set_material(&mut self, material_url: url::Url, files: &[EContentFileType]) {
+    pub fn set_material(
+        &mut self,
+        engine: &mut Engine,
+        material_url: url::Url,
+        files: &[EContentFileType],
+    ) {
         self.material_url = Some(material_url);
         let material = if let Some(material_url) = &self.material_url {
             files.iter().find_map(|x| {
@@ -405,12 +424,111 @@ impl SkeletonMeshComponent {
                 EDrawObjectType::SkinMaterial(material_draw_object) => {
                     material_draw_object.material = material.clone();
                 }
-                EDrawObjectType::StaticMeshMaterial(material_draw_object) => {
-                    material_draw_object.material = material.clone();
+                EDrawObjectType::Skin(_) => {
+                    for skin_mesh in run_time.skin_meshes.clone() {
+                        *draw_object = engine.create_material_draw_object_from_skin_mesh(
+                            &skin_mesh.vertexes,
+                            &skin_mesh.indexes,
+                            Some(skin_mesh.name.clone()),
+                            material.clone(),
+                        );
+                    }
                 }
                 _ => unimplemented!(),
             }
         }
+    }
+
+    fn build_physics(
+        meshes: Vec<Arc<SkinMesh>>,
+        is_use_convex_decomposition: bool,
+        transformation: glam::Mat4,
+    ) -> crate::error::Result<Physics> {
+        let (_, rotation, translation) = transformation.to_scale_rotation_translation();
+        let translation = vector![translation.x, translation.y, translation.z];
+        let (axis, angle) = rotation.to_axis_angle();
+        let mut builder = RigidBodyBuilder::dynamic();
+        builder = builder.translation(translation);
+        builder.position.rotation = Rotation::from_axis_angle(
+            &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
+            angle,
+        );
+        // builder = builder.enabled_rotations(false, false, false);
+        let rigid_body = builder.build();
+        let mut colliders = Vec::with_capacity(meshes.len());
+
+        for mesh in meshes {
+            let vertices: Vec<_> = mesh
+                .vertexes
+                .iter()
+                .map(|x| point![x.position.x, x.position.y, x.position.z])
+                .collect();
+            let mut indices: Vec<_> = vec![];
+            for index in mesh.indexes.chunks(3) {
+                indices.push(
+                    <[u32; 3]>::try_from(index).map_err(crate::error::Error::TryFromSliceError)?,
+                );
+            }
+            let decomposed_shape = if is_use_convex_decomposition {
+                SharedShape::convex_decomposition(&vertices, &indices)
+            } else {
+                SharedShape::trimesh_with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)
+            };
+
+            let collider = ColliderBuilder::new(decomposed_shape)
+                .contact_skin(0.1)
+                .active_events(ActiveEvents::COLLISION_EVENTS)
+                .build();
+            colliders.push(collider);
+        }
+
+        Ok(Physics {
+            colliders,
+            rigid_body,
+            rigid_body_handle: RigidBodyHandle::invalid(),
+            is_apply_simulate: true,
+            collider_handles: vec![],
+        })
+    }
+
+    pub fn init_physics(
+        &mut self,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
+            return;
+        };
+        let handle = rigid_body_set.insert(physics.rigid_body.clone());
+        for collider in physics.colliders.clone() {
+            let collider_handle = collider_set.insert_with_parent(collider, handle, rigid_body_set);
+            physics.collider_handles.push(collider_handle);
+        }
+        physics.rigid_body_handle = handle;
+    }
+
+    pub fn update_physics(
+        &mut self,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
+            return;
+        };
+        let Some(rigid_body) = rigid_body_set.get_mut(physics.rigid_body_handle) else {
+            return;
+        };
+        for (handle, collider) in zip(physics.collider_handles.clone(), physics.colliders.clone()) {
+            collider_set
+                .get_mut(handle)
+                .expect("Should not be null")
+                .copy_from(&collider);
+        }
+        rigid_body.copy_from(&physics.rigid_body);
+    }
+
+    pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
+        self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten()
     }
 }
 
