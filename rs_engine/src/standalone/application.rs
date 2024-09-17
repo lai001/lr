@@ -110,44 +110,42 @@ impl Application {
 
         self.player_view_port.update_global_constants(engine);
 
-        active_level.tick();
-        if let Some(light) = active_level.directional_lights.first().cloned() {
-            let mut light = light.borrow_mut();
-            light.update(engine);
-            engine.update_light(&mut light);
-        }
-        for actor in active_level.actors.clone() {
-            let actor = actor.borrow_mut();
-            let mut root_scene_node = actor.scene_node.borrow_mut();
-            match &mut root_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
-                    let mut static_mesh_component = static_mesh_component.borrow_mut();
-                    static_mesh_component.update(
-                        engine.get_game_time(),
-                        engine,
-                        active_level.get_rigid_body_set_mut(),
-                    );
-                    for draw_object in static_mesh_component.get_draw_objects_mut() {
-                        self.player_view_port
-                            .update_draw_object(engine, draw_object);
-                        self.player_view_port.push_to_draw_list(draw_object);
-                    }
-                }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(
-                    skeleton_mesh_component,
-                ) => {
-                    let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
-                    skeleton_mesh_component.update(engine.get_game_time(), engine);
+        active_level.tick(engine.get_game_time(), engine);
+        let draw_objects = active_level.collect_draw_objects();
+        self.player_view_port.append_to_draw_list(&draw_objects);
 
-                    for draw_object in skeleton_mesh_component.get_draw_objects_mut() {
-                        self.player_view_port
-                            .update_draw_object(engine, draw_object);
-                        self.player_view_port.push_to_draw_list(draw_object);
-                    }
-                }
-            }
-        }
+        // for actor in active_level.actors.clone() {
+        //     let actor = actor.borrow_mut();
+        //     let mut root_scene_node = actor.scene_node.borrow_mut();
+        //     match &mut root_scene_node.component {
+        //         crate::scene_node::EComponentType::SceneComponent(_) => {},
+        //         crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
+        //             let mut static_mesh_component = static_mesh_component.borrow_mut();
+        //             static_mesh_component.update(
+        //                 engine.get_game_time(),
+        //                 engine,
+        //                 active_level.get_rigid_body_set_mut(),
+        //             );
+        //             for draw_object in static_mesh_component.get_draw_objects_mut() {
+        //                 self.player_view_port
+        //                     .update_draw_object(engine, draw_object);
+        //                 self.player_view_port.push_to_draw_list(draw_object);
+        //             }
+        //         }
+        //         crate::scene_node::EComponentType::SkeletonMeshComponent(
+        //             skeleton_mesh_component,
+        //         ) => {
+        //             let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
+        //             skeleton_mesh_component.update(engine.get_game_time(), engine);
+
+        //             for draw_object in skeleton_mesh_component.get_draw_objects_mut() {
+        //                 self.player_view_port
+        //                     .update_draw_object(engine, draw_object);
+        //                 self.player_view_port.push_to_draw_list(draw_object);
+        //             }
+        //         }
+        //     }
+        // }
         if let Some(physics) = active_level.get_physics_mut() {
             self.player_view_port.physics_debug(
                 engine,

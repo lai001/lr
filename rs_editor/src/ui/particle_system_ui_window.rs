@@ -1,6 +1,9 @@
 use super::misc::update_window_with_input_mode;
 use crate::{
-    custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType, editor_ui,
+    custom_event::ECustomEventType,
+    editor_context::EWindowType,
+    editor_ui,
+    windows_manager::{WindowContext, WindowsManager},
 };
 use anyhow::anyhow;
 use egui::Sense;
@@ -51,7 +54,7 @@ pub struct BaseUIWindow {
 
 impl BaseUIWindow {
     pub fn new(
-        window_context: &mut crate::editor::WindowContext,
+        window_context: &mut WindowContext,
         context: egui::Context,
         engine: &mut Engine,
     ) -> anyhow::Result<BaseUIWindow> {

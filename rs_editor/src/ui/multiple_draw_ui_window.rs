@@ -1,7 +1,7 @@
 use super::misc::update_window_with_input_mode;
 use crate::{
-    custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType,
-    ui::misc::random_color3,
+    custom_event::ECustomEventType, editor_context::EWindowType, ui::misc::random_color3,
+    windows_manager::WindowsManager,
 };
 use anyhow::anyhow;
 use egui_winit::State;

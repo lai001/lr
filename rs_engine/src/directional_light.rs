@@ -31,8 +31,12 @@ pub struct DirectionalLight {
 }
 
 impl DirectionalLight {
-    pub fn get_interactive_transformation(&mut self) -> &mut glam::Mat4 {
+    pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
         &mut self.transformation
+    }
+
+    pub fn get_transformation(&mut self) -> &glam::Mat4 {
+        &self.transformation
     }
 
     pub fn new(

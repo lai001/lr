@@ -227,7 +227,7 @@ fn walk_resolve_node(
     material_info: &mut MaterialInfo,
 ) {
     let node = snarl.get_node(node_id).expect("Not null");
-    let line = resolve_node(node_id, node, resolve_context, material_info);
+    let line = resolve_node(node_id, node, resolve_context, material_info, snarl);
     lines.push(line);
     let node_io_info = resolve_context.nodes.get(&node_id).unwrap();
     for (_, out_pin_id) in &node_io_info.inputs {
@@ -246,7 +246,9 @@ fn resolve_node(
     node: &MaterialNode,
     resolve_context: &ResolveContext,
     material_info: &mut MaterialInfo,
+    snarl: &Snarl<MaterialNode>,
 ) -> String {
+    let _ = snarl;
     let var_name = node_var_name(node_id);
     match &node.node_type {
         EMaterialNodeType::Add(v1, v2) => {
@@ -319,6 +321,19 @@ fn resolve_node(
             } else {
                 format!("var {} = vec3<f32>(0.0);", var_name)
             }
+        }
+        EMaterialNodeType::Time => todo!(),
+        EMaterialNodeType::Sin(v1) => {
+            let inputs = &resolve_context
+                .nodes
+                .get(&node_id)
+                .expect("This node should not be null")
+                .inputs;
+            let part_1 = inputs
+                .get(&0)
+                .and_then(|out_pin_id| Some(node_var_name(out_pin_id.node)))
+                .unwrap_or_else(|| v1.literal());
+            format!("var {} = {}", var_name, part_1)
         }
     }
 }

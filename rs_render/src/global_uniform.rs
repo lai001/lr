@@ -38,7 +38,8 @@ pub struct Constants {
     pub scene_factor: f32,
     pub feedback_bias: f32,
     debug_shading: i32,
-    _pad_0: [i32; 3],
+    pub time: f32,
+    _pad_0: [i32; 2],
 }
 
 impl Constants {

@@ -1,3 +1,4 @@
+pub mod actor_ui_window;
 pub mod asset_view;
 pub mod console_cmds_view;
 pub mod content_browser;
@@ -17,3 +18,4 @@ pub mod particle_system_ui_window;
 pub mod project_settings;
 pub mod standalone_ui_window;
 pub mod top_menu;
+pub mod ui_window;

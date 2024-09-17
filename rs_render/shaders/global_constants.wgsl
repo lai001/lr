@@ -21,6 +21,7 @@ struct GlobalConstants {
     scene_factor: f32,
     feedback_bias: f32,
     debug_shading: i32,
+    time: f32,
 };
 
 #endif

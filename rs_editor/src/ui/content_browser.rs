@@ -34,6 +34,7 @@ pub enum EClickEventType {
     CreateParticleSystem,
     OpenFolder(Rc<RefCell<ContentFolder>>),
     OpenFile(EContentFileType),
+    DeleteFile(EContentFileType),
     SingleClickFile(EContentFileType),
     Back,
 }
@@ -268,6 +269,10 @@ fn draw_content(
                         response.context_menu(|ui| {
                             if ui.button("Copy Reference").clicked() {
                                 ui.output_mut(|p| p.copied_text = url.to_string());
+                                ui.close_menu();
+                            }
+                            if ui.button("Delete").clicked() {
+                                click = Some(EClickEventType::DeleteFile(file.clone()));
                                 ui.close_menu();
                             }
                         });

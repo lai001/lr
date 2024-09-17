@@ -117,7 +117,7 @@ impl EditorUI {
             macro_rules! gizmo {
                 ($component:ident) => {
                     let mut component = $component.borrow_mut();
-                    let model_matrix = component.get_interactive_transformation();
+                    let model_matrix = component.get_transformation_mut();
                     let gizmo_result = self.gizmo_view.draw(
                         context,
                         data_source.camera_view_matrix,
@@ -143,7 +143,7 @@ impl EditorUI {
                 }
                 ESelectedObjectType::StaticMeshComponent(component) => {
                     let mut component = component.borrow_mut();
-                    let model_matrix = component.get_interactive_transformation();
+                    let model_matrix = component.get_transformation_mut();
                     let gizmo_result = self.gizmo_view.draw(
                         context,
                         data_source.camera_view_matrix,

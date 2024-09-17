@@ -114,10 +114,10 @@ pub struct Engine {
     grid_draw_object: Option<DrawObject>,
     pub content_files: HashMap<url::Url, EContentFileType>,
     main_window_id: isize,
-    draw_objects: HashMap<isize, Vec<DrawObject>>,
+    pub draw_objects: HashMap<isize, Vec<DrawObject>>,
     default_textures: DefaultTextures,
     virtual_pass_handle: Option<VirtualPassHandle>,
-    shadow_depth_texture_handle: Option<TextureHandle>,
+    pub shadow_depth_texture_handle: Option<TextureHandle>,
     player_viewports: Vec<SingleThreadMutType<PlayerViewport>>,
     _audio_device: Option<AudioDevice>,
 }

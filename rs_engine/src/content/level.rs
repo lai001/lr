@@ -2,6 +2,7 @@ use super::content_file_type::EContentFileType;
 use crate::actor::Actor;
 use crate::camera::Camera;
 use crate::directional_light::DirectionalLight;
+use crate::drawable::EDrawObjectType;
 use crate::engine::Engine;
 use crate::resource_manager::ResourceManager;
 use crate::scene_node::{EComponentType, SceneNode};
@@ -38,6 +39,12 @@ pub struct Physics {
 
 impl Physics {
     pub fn step(&mut self) {
+        let span = tracy_client::span!();
+        span.emit_text(&format!(
+            "collider len: {}, rigid body len: {}",
+            self.collider_set.len(),
+            self.rigid_body_set.len()
+        ));
         self.physics_pipeline.step(
             &self.gravity,
             &self.integration_parameters,
@@ -179,94 +186,32 @@ impl Level {
         files: &[EContentFileType],
     ) {
         for actor in actors {
-            let actor = actor.borrow_mut();
-            let mut root_scene_node = actor.scene_node.borrow_mut();
-            match &mut root_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
-                    let mut static_mesh_component = static_mesh_component.borrow_mut();
-                    static_mesh_component.initialize(ResourceManager::default(), engine, files);
-                }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(
-                    skeleton_mesh_component,
-                ) => {
-                    skeleton_mesh_component.borrow_mut().initialize(
-                        ResourceManager::default(),
-                        engine,
-                        files,
-                    );
-                }
-            }
+            let mut actor = actor.borrow_mut();
+            actor.initialize(ResourceManager::default(), engine, files);
         }
     }
 
     pub fn init_actor_physics(&mut self, actor: SingleThreadMutType<Actor>) {
-        let physics = self.get_physics_mut().unwrap();
+        let Some(physics) = self.get_physics_mut() else {
+            return;
+        };
         let rigid_body_set = &mut physics.rigid_body_set;
         let collider_set = &mut physics.collider_set;
-        let actor = actor.borrow_mut();
-        let mut scene_node = actor.scene_node.borrow_mut();
-        for child_scene_node in scene_node.childs.iter_mut() {
-            let mut child_scene_node = child_scene_node.borrow_mut();
-            match &mut child_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => {}
-                crate::scene_node::EComponentType::StaticMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.init_physics(rigid_body_set, collider_set);
-                }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.init_physics(rigid_body_set, collider_set);
-                }
-            }
-        }
-        match &mut scene_node.component {
-            crate::scene_node::EComponentType::SceneComponent(_) => {}
-            crate::scene_node::EComponentType::StaticMeshComponent(component) => {
-                let mut component = component.borrow_mut();
-                component.init_physics(rigid_body_set, collider_set);
-            }
-            crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                let mut component = component.borrow_mut();
-                component.init_physics(rigid_body_set, collider_set);
-            }
-        }
+        let mut actor = actor.borrow_mut();
+        actor.initialize_physics(rigid_body_set, collider_set);
     }
 
     pub fn update_actor_physics(&mut self, actor: SingleThreadMutType<Actor>) {
-        let physics = self.get_physics_mut().unwrap();
+        let Some(physics) = self.get_physics_mut() else {
+            return;
+        };
         let rigid_body_set = &mut physics.rigid_body_set;
         let collider_set = &mut physics.collider_set;
-        let actor = actor.borrow_mut();
-        let mut scene_node = actor.scene_node.borrow_mut();
-        for child_scene_node in scene_node.childs.iter_mut() {
-            let mut child_scene_node = child_scene_node.borrow_mut();
-            match &mut child_scene_node.component {
-                crate::scene_node::EComponentType::SceneComponent(_) => {}
-                crate::scene_node::EComponentType::StaticMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.update_physics(rigid_body_set, collider_set);
-                }
-                crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.update_physics(rigid_body_set, collider_set);
-                }
-            }
-        }
-        match &mut scene_node.component {
-            crate::scene_node::EComponentType::SceneComponent(_) => {}
-            crate::scene_node::EComponentType::StaticMeshComponent(component) => {
-                let mut component = component.borrow_mut();
-                component.update_physics(rigid_body_set, collider_set);
-            }
-            crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                let mut component = component.borrow_mut();
-                component.update_physics(rigid_body_set, collider_set);
-            }
-        }
+        let mut actor = actor.borrow_mut();
+        actor.tick_physics(rigid_body_set, collider_set);
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, time: f32, engine: &mut Engine) {
         let Some(runtime) = self.runtime.as_mut() else {
             return;
         };
@@ -274,6 +219,18 @@ impl Level {
             runtime.physics.step();
         } else {
             runtime.physics.query_update();
+        }
+        for light in self.directional_lights.clone() {
+            let mut light = light.borrow_mut();
+            light.update(engine);
+            engine.update_light(&mut light);
+        }
+        let rigid_body_set = &mut runtime.physics.rigid_body_set;
+        let collider_set = &mut runtime.physics.collider_set;
+        for actor in self.actors.clone() {
+            let mut actor = actor.borrow_mut();
+            actor.tick(time, engine, Some(rigid_body_set));
+            actor.tick_physics(rigid_body_set, collider_set);
         }
     }
 
@@ -427,5 +384,24 @@ impl Level {
         for child in scene_node.childs.clone() {
             self.find_component(child, handle, componenet);
         }
+    }
+
+    pub fn collect_draw_objects(&self) -> Vec<EDrawObjectType> {
+        let mut draw_objects = vec![];
+        for light in self.directional_lights.clone() {
+            let light = light.borrow_mut();
+            let mut sub_draw_objects = light
+                .get_draw_objects()
+                .iter()
+                .map(|x| (*x).clone())
+                .collect();
+            draw_objects.append(&mut sub_draw_objects);
+        }
+        for actor in self.actors.clone() {
+            let actor = actor.borrow_mut();
+            let mut sub_draw_objects = actor.collect_draw_objects();
+            draw_objects.append(&mut sub_draw_objects);
+        }
+        draw_objects
     }
 }

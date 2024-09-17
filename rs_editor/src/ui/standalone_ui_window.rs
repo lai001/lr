@@ -1,5 +1,7 @@
 use super::misc::update_window_with_input_mode;
-use crate::{custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType};
+use crate::{
+    custom_event::ECustomEventType, editor_context::EWindowType, windows_manager::WindowsManager,
+};
 use anyhow::anyhow;
 use egui_winit::State;
 use rs_engine::{
@@ -11,7 +13,7 @@ use rs_engine::{
     plugin::plugin_crate::Plugin,
     standalone::application::Application,
 };
-use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
+use rs_render::command::RenderCommand;
 use std::collections::HashMap;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
@@ -104,16 +106,19 @@ impl StandaloneUiWindow {
         let _ = event_loop_window_target;
         let _ = self.egui_winit_state.on_window_event(window, event);
         update_window_with_input_mode(window, self.input_mode);
+        super::misc::on_window_event(
+            window_id,
+            EWindowType::Standalone,
+            window,
+            &mut self.frame_sync,
+            event,
+            engine,
+            window_manager,
+            &mut self.virtual_key_code_states,
+            60.0,
+        );
 
         match event {
-            WindowEvent::Resized(size) => {
-                engine.resize(window_id, size.width, size.height);
-                self.application.on_size_changed(size.width, size.height);
-            }
-            WindowEvent::CloseRequested => {
-                window_manager.remove_window(EWindowType::Standalone);
-                engine.remove_window(window_id);
-            }
             WindowEvent::KeyboardInput { event, .. } => {
                 let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
                     return;
@@ -132,8 +137,6 @@ impl StandaloneUiWindow {
                     );
                     return;
                 }
-                self.virtual_key_code_states
-                    .insert(virtual_keycode, event.state);
                 self.application
                     .on_input(EInputType::KeyboardInput(&self.virtual_key_code_states));
             }
@@ -145,64 +148,20 @@ impl StandaloneUiWindow {
                     .on_input(EInputType::MouseInput(state, button));
             }
             WindowEvent::RedrawRequested => {
-                engine.recv_output_hook();
-
-                self.ui_begin(window);
-
+                super::misc::ui_begin(&mut self.egui_winit_state, window);
                 self.application.on_redraw_requested(
                     engine,
                     self.egui_winit_state.egui_ctx().clone(),
                     &self.virtual_key_code_states,
                 );
-
-                engine.send_render_command(RenderCommand::UiOutput(self.ui_end(window, window_id)));
-                self.sync(window);
+                engine.send_render_command(RenderCommand::UiOutput(super::misc::ui_end(
+                    &mut self.egui_winit_state,
+                    window,
+                    window_id,
+                )));
             }
             _ => {}
         }
-    }
-
-    fn sync(&mut self, window: &mut winit::window::Window) {
-        let wait = self
-            .frame_sync
-            .tick()
-            .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-        std::thread::sleep(wait);
-        window.request_redraw();
-    }
-
-    fn ui_begin(&mut self, window: &mut winit::window::Window) {
-        let egui_winit_state = &mut self.egui_winit_state;
-
-        let ctx = egui_winit_state.egui_ctx().clone();
-        let viewport_id = egui_winit_state.egui_input().viewport_id;
-        let viewport_info: &mut egui::ViewportInfo = egui_winit_state
-            .egui_input_mut()
-            .viewports
-            .get_mut(&viewport_id)
-            .unwrap();
-        egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
-
-        let new_input = egui_winit_state.take_egui_input(window);
-        egui_winit_state.egui_ctx().begin_frame(new_input);
-        egui_winit_state.egui_ctx().clear_animations();
-    }
-
-    fn ui_end(&mut self, window: &mut winit::window::Window, window_id: isize) -> EGUIRenderOutput {
-        let egui_winit_state = &mut self.egui_winit_state;
-
-        let full_output = egui_winit_state.egui_ctx().end_frame();
-
-        egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
-
-        let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
-            textures_delta: full_output.textures_delta,
-            clipped_primitives: egui_winit_state
-                .egui_ctx()
-                .tessellate(full_output.shapes, full_output.pixels_per_point),
-            window_id,
-        };
-        gui_render_output
     }
 
     pub fn reload_plugins(&mut self, plugins: Vec<Box<dyn Plugin>>) {

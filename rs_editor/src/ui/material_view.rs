@@ -98,13 +98,7 @@ impl GraphViewer {
 
 impl SnarlViewer<MaterialNode> for GraphViewer {
     fn title(&mut self, node: &MaterialNode) -> String {
-        match node.node_type {
-            EMaterialNodeType::Add(..) => format!("Add"),
-            EMaterialNodeType::Sink(..) => format!("Attribute"),
-            EMaterialNodeType::Texture(_) => format!("Texture"),
-            EMaterialNodeType::TexCoord(_) => format!("TexCoord"),
-            EMaterialNodeType::VirtualTexture(_) => format!("VirtualTexture"),
-        }
+        node.node_type.get_name()
     }
 
     fn outputs(&mut self, node: &MaterialNode) -> usize {
@@ -114,6 +108,8 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::Texture(_) => 1,
             EMaterialNodeType::TexCoord(_) => 1,
             EMaterialNodeType::VirtualTexture(_) => 1,
+            EMaterialNodeType::Time => 1,
+            EMaterialNodeType::Sin(_) => 1,
         }
     }
 
@@ -124,6 +120,8 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::Texture(_) => 2,
             EMaterialNodeType::TexCoord(_) => 0,
             EMaterialNodeType::VirtualTexture(_) => 1,
+            EMaterialNodeType::Time => 0,
+            EMaterialNodeType::Sin(_) => 1,
         }
     }
 
@@ -278,6 +276,19 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
 
                 PinInfo::default()
             }
+            EMaterialNodeType::Time => todo!(),
+            EMaterialNodeType::Sin(v1) => {
+                if !pin.remotes.is_empty() {
+                    return PinInfo::square().with_fill(NODE_IO_COLOR);
+                }
+                match pin.id.input {
+                    0 => {
+                        self.value_type_combo_box("v1", v1, ui);
+                    }
+                    _ => unreachable!(),
+                }
+                PinInfo::square().with_fill(NODE_IO_COLOR)
+            }
         }
     }
 
@@ -315,6 +326,8 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 PinInfo::square().with_fill(NODE_IO_COLOR)
             }
             EMaterialNodeType::VirtualTexture(_) => PinInfo::square().with_fill(NODE_IO_COLOR),
+            EMaterialNodeType::Time => todo!(),
+            EMaterialNodeType::Sin(_) => PinInfo::square().with_fill(NODE_IO_COLOR),
         }
     }
 
@@ -378,35 +391,21 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         _: f32,
         snarl: &mut Snarl<MaterialNode>,
     ) {
-        if ui.button("Add").clicked() {
-            let node = MaterialNode {
-                node_type: EMaterialNodeType::Add(EValueType::F32(0.0), EValueType::F32(0.0)),
-            };
-            snarl.insert_node(pos, node);
-            ui.close_menu();
-        }
-        if ui.button("Texture").clicked() {
-            let node = MaterialNode {
-                node_type: EMaterialNodeType::Texture(None),
-            };
-            snarl.insert_node(pos, node);
-            ui.close_menu();
-        }
+        let node_types = vec![
+            EMaterialNodeType::Add(EValueType::F32(0.0), EValueType::F32(0.0)),
+            EMaterialNodeType::Texture(None),
+            EMaterialNodeType::TexCoord(0),
+            EMaterialNodeType::VirtualTexture(None),
+            EMaterialNodeType::Time,
+            EMaterialNodeType::Sin(EValueType::F32(0.0)),
+        ];
 
-        if ui.button("TexCoord").clicked() {
-            let node = MaterialNode {
-                node_type: EMaterialNodeType::TexCoord(0),
-            };
-            snarl.insert_node(pos, node);
-            ui.close_menu();
-        }
-
-        if ui.button("VirtualTexture").clicked() {
-            let node = MaterialNode {
-                node_type: EMaterialNodeType::VirtualTexture(None),
-            };
-            snarl.insert_node(pos, node);
-            ui.close_menu();
+        for node_type in node_types {
+            if ui.button(node_type.get_name()).clicked() {
+                let node = MaterialNode { node_type };
+                snarl.insert_node(pos, node);
+                ui.close_menu();
+            }
         }
     }
 
@@ -513,6 +512,22 @@ pub enum EMaterialNodeType {
     VirtualTexture(Option<url::Url>),
     TexCoord(i32),
     Sink(Attribute),
+    Time,
+    Sin(EValueType),
+}
+
+impl EMaterialNodeType {
+    pub fn get_name(&self) -> String {
+        match self {
+            EMaterialNodeType::Add(_, _) => format!("Add"),
+            EMaterialNodeType::Texture(_) => format!("Texture"),
+            EMaterialNodeType::VirtualTexture(_) => format!("VirtualTexture"),
+            EMaterialNodeType::TexCoord(_) => format!("TexCoord"),
+            EMaterialNodeType::Sink(_) => format!("Sink"),
+            EMaterialNodeType::Time => format!("Time"),
+            EMaterialNodeType::Sin(_) => format!("Sin"),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -525,6 +540,11 @@ pub enum EEventType {
         Rc<RefCell<crate::material::Material>>,
         HashMap<MaterialOptions, ResolveResult>,
     ),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum EOutputValueType {
+    Value(EValueType),
 }
 
 pub struct MaterialView {

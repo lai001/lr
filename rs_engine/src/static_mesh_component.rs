@@ -27,6 +27,7 @@ pub struct StaticMeshComponentRuntime {
     draw_objects: EDrawObjectType,
     _mesh: Arc<StaticMesh>,
     pub physics: Option<Physics>,
+    pub final_transformation: glam::Mat4,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -42,8 +43,35 @@ pub struct StaticMeshComponent {
 }
 
 impl StaticMeshComponent {
-    pub fn get_interactive_transformation(&mut self) -> &mut glam::Mat4 {
+    pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
         &mut self.transformation
+    }
+
+    pub fn get_transformation(&self) -> &glam::Mat4 {
+        &self.transformation
+    }
+
+    pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.final_transformation = final_transformation;
+        match &mut run_time.draw_objects {
+            EDrawObjectType::Static(draw_object) => {
+                draw_object.constants.model = final_transformation;
+            }
+            EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                draw_object.constants.model = final_transformation;
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_final_transformation(&self) -> glam::Mat4 {
+        self.run_time
+            .as_ref()
+            .map(|x| x.final_transformation)
+            .unwrap_or_default()
     }
 
     pub fn new(
@@ -126,6 +154,7 @@ impl StaticMeshComponent {
                 draw_objects: draw_object,
                 _mesh: find_static_mesh,
                 physics,
+                final_transformation: glam::Mat4::IDENTITY,
             })
         }
     }
@@ -185,7 +214,12 @@ impl StaticMeshComponent {
                 }
             }
         }
+    }
 
+    pub fn submit_to_gpu(&mut self, engine: &mut Engine) {
+        let Some(run_time) = &mut self.run_time else {
+            return;
+        };
         engine.update_draw_object(&mut run_time.draw_objects);
     }
 

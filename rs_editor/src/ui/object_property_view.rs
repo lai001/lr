@@ -1,6 +1,6 @@
 use rs_engine::{
     actor::Actor, directional_light::DirectionalLight, scene_node::*,
-    static_mesh_component::StaticMeshComponent,
+    skeleton_mesh_component::SkeletonMeshComponent, static_mesh_component::StaticMeshComponent,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
@@ -44,31 +44,26 @@ impl ObjectPropertyView {
         let selected_object_clone = selected_object.clone();
         match selected_object {
             ESelectedObjectType::Actor(actor) => {
+                ui.label(format!("Type: Actor"));
                 ui.label(actor.borrow().name.clone());
             }
             ESelectedObjectType::SceneComponent(scene_component) => {
+                ui.label(format!("Type: SceneComponent"));
+
                 let mut component = scene_component.borrow_mut();
                 ui.label(component.name.clone());
-                let (mut scale, rotation, mut translation) =
-                    component.transformation.to_scale_rotation_translation();
-                let mut rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
-                Self::transformation_detail(&mut scale, &mut rotation, &mut translation, ui);
-                let rotation =
-                    glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
-                component.transformation =
-                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+
+                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                Self::transformation_detail(&component.get_final_transformation(), ui);
             }
             ESelectedObjectType::StaticMeshComponent(static_mesh_component) => {
+                ui.label(format!("Type: StaticMeshComponent"));
+
                 let mut component = static_mesh_component.borrow_mut();
                 ui.label(component.name.clone());
-                let (mut scale, rotation, mut translation) =
-                    component.transformation.to_scale_rotation_translation();
-                let mut rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
-                Self::transformation_detail(&mut scale, &mut rotation, &mut translation, ui);
-                let rotation =
-                    glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
-                component.transformation =
-                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+
+                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                Self::transformation_detail(&component.get_final_transformation(), ui);
 
                 egui::ComboBox::from_label("Material")
                     .selected_text(format!("{}", {
@@ -113,16 +108,13 @@ impl ObjectPropertyView {
                     });
             }
             ESelectedObjectType::SkeletonMeshComponent(skeleton_mesh_component) => {
+                ui.label(format!("Type: SkeletonMeshComponent"));
+
                 let mut component = skeleton_mesh_component.borrow_mut();
                 ui.label(component.name.clone());
-                let (mut scale, rotation, mut translation) =
-                    component.transformation.to_scale_rotation_translation();
-                let mut rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
-                Self::transformation_detail(&mut scale, &mut rotation, &mut translation, ui);
-                let rotation =
-                    glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
-                component.transformation =
-                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+
+                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                Self::transformation_detail(&component.get_final_transformation(), ui);
 
                 egui::ComboBox::from_label("Material")
                     .selected_text(format!("{}", {
@@ -167,54 +159,41 @@ impl ObjectPropertyView {
                     });
             }
             ESelectedObjectType::DirectionalLight(directional_light) => {
+                ui.label(format!("Type: DirectionalLight"));
+
                 let mut component = directional_light.borrow_mut();
-                let (mut scale, rotation, mut translation) = component
-                    .get_interactive_transformation()
-                    .to_scale_rotation_translation();
-                let mut rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
-                Self::transformation_detail(&mut scale, &mut rotation, &mut translation, ui);
-                let rotation =
-                    glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
-                *component.get_interactive_transformation() =
-                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
             }
         }
 
         event
     }
 
-    pub fn transformation_detail(
+    pub fn transformation_detail(transformation: &glam::Mat4, ui: &mut egui::Ui) {
+        let (scale, rotation, translation) = transformation.to_scale_rotation_translation();
+        let rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
+        Self::affine_detail(&scale, &rotation, &translation, ui);
+    }
+
+    pub fn transformation_detail_mut(transformation: &mut glam::Mat4, ui: &mut egui::Ui) {
+        let (mut scale, rotation, mut translation) = transformation.to_scale_rotation_translation();
+        let mut rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
+        Self::affine_detail_mut(&mut scale, &mut rotation, &mut translation, ui);
+        let rotation =
+            glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
+        *transformation = glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+    }
+
+    pub fn affine_detail_mut(
         scale: &mut glam::Vec3,
         rotation: &mut glam::Vec3,
         translation: &mut glam::Vec3,
         ui: &mut egui::Ui,
     ) {
         ui.vertical(|ui| {
-            ui.horizontal(|ui| {
-                ui.label("location ");
-                ui.add(
-                    egui::DragValue::new(&mut translation.x)
-                        .speed(0.1)
-                        .prefix("x: "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut translation.y)
-                        .speed(0.1)
-                        .prefix("y: "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut translation.z)
-                        .speed(0.1)
-                        .prefix("z: "),
-                );
-            });
-            ui.horizontal(|ui| {
-                ui.label("scale ");
-                ui.add(egui::DragValue::new(&mut scale.x).speed(0.1).prefix("x: "));
-                ui.add(egui::DragValue::new(&mut scale.y).speed(0.1).prefix("y: "));
-                ui.add(egui::DragValue::new(&mut scale.z).speed(0.1).prefix("z: "));
-            });
-            Self::rotation_detail(rotation, ui);
+            Self::detail_view_mut(translation, ui, "Location");
+            Self::detail_view_mut(scale, ui, "Scale");
+            Self::detail_view_mut(rotation, ui, "Rotation");
         });
         if translation.is_nan() {
             *translation = glam::Vec3::ZERO;
@@ -227,24 +206,34 @@ impl ObjectPropertyView {
         }
     }
 
-    fn rotation_detail(rotation: &mut glam::Vec3, ui: &mut egui::Ui) {
+    pub fn affine_detail(
+        scale: &glam::Vec3,
+        rotation: &glam::Vec3,
+        translation: &glam::Vec3,
+        ui: &mut egui::Ui,
+    ) {
+        ui.vertical(|ui| {
+            Self::detail_view(translation, ui, "Location");
+            Self::detail_view(scale, ui, "Scale");
+            Self::detail_view(rotation, ui, "Rotation");
+        });
+    }
+
+    fn detail_view(value: &glam::Vec3, ui: &mut egui::Ui, label: &str) {
         ui.horizontal(|ui| {
-            ui.label("rotation ");
-            ui.add(
-                egui::DragValue::new(&mut rotation.x)
-                    .speed(0.1)
-                    .prefix("x: "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut rotation.y)
-                    .speed(0.1)
-                    .prefix("y: "),
-            );
-            ui.add(
-                egui::DragValue::new(&mut rotation.z)
-                    .speed(0.1)
-                    .prefix("z: "),
-            );
+            ui.label(format!(
+                "{} x: {}, y: {}, z: {}",
+                label, value.x, value.y, value.z
+            ));
+        });
+    }
+
+    fn detail_view_mut(value: &mut glam::Vec3, ui: &mut egui::Ui, label: &str) {
+        ui.horizontal(|ui| {
+            ui.label(label);
+            ui.add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "));
+            ui.add(egui::DragValue::new(&mut value.y).speed(0.1).prefix("y: "));
+            ui.add(egui::DragValue::new(&mut value.z).speed(0.1).prefix("z: "));
         });
     }
 }

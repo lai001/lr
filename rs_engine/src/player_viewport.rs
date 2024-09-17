@@ -522,7 +522,10 @@ impl PlayerViewport {
         }
     }
 
-    pub fn push_to_draw_list(&mut self, draw_object: &EDrawObjectType) {
+    pub fn to_render_draw_object(
+        draw_object: &EDrawObjectType,
+        shadow_depth_texture_handle: Option<TextureHandle>,
+    ) -> crate::error::Result<DrawObject> {
         match draw_object {
             EDrawObjectType::Static(static_objcet) => {
                 let static_objcet = static_objcet.clone();
@@ -548,7 +551,7 @@ impl PlayerViewport {
                     ],
                 );
 
-                self.draw_objects.push(draw_object);
+                Ok(draw_object)
             }
             EDrawObjectType::Skin(skin_objcet) => {
                 let skin_objcet = skin_objcet.clone();
@@ -574,7 +577,7 @@ impl PlayerViewport {
                         vec![skin_objcet.constants_resource],
                     ],
                 );
-                self.draw_objects.push(draw_object);
+                Ok(draw_object)
             }
             EDrawObjectType::SkinMaterial(skin_objcet) => {
                 let skin_objcet = skin_objcet.clone();
@@ -622,7 +625,7 @@ impl PlayerViewport {
                             ],
                         ],
                     });
-                    if let Some(handle) = self.shadow_depth_texture_handle.clone() {
+                    if let Some(handle) = shadow_depth_texture_handle.clone() {
                         draw_object.shadow_mapping = Some(ShadowMapping {
                             vertex_buffers: vec![
                                 *skin_objcet.vertex_buffers[0],
@@ -637,7 +640,9 @@ impl PlayerViewport {
                             is_skin: true,
                         });
                     }
-                    self.draw_objects.push(draw_object);
+                    Ok(draw_object)
+                } else {
+                    Err(crate::error::Error::Other(None))
                 }
             }
             EDrawObjectType::StaticMeshMaterial(static_mesh_draw_objcet) => {
@@ -683,7 +688,7 @@ impl PlayerViewport {
                             vec![static_mesh_draw_objcet.constants_resource.clone()],
                         ],
                     });
-                    if let Some(handle) = self.shadow_depth_texture_handle.clone() {
+                    if let Some(handle) = shadow_depth_texture_handle.clone() {
                         draw_object.shadow_mapping = Some(ShadowMapping {
                             vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
                             depth_texture_handle: *handle,
@@ -694,13 +699,33 @@ impl PlayerViewport {
                             is_skin: false,
                         });
                     }
-                    self.draw_objects.push(draw_object);
+                    Ok(draw_object)
+                } else {
+                    Err(crate::error::Error::Other(None))
                 }
             }
-            EDrawObjectType::Custom(custom_objcet) => {
-                self.draw_objects.push(custom_objcet.draw_object.clone());
+            EDrawObjectType::Custom(custom_objcet) => Ok(custom_objcet.draw_object.clone()),
+        }
+    }
+
+    pub fn push_to_draw_list(&mut self, draw_object: &EDrawObjectType) {
+        match Self::to_render_draw_object(draw_object, self.shadow_depth_texture_handle.clone()) {
+            Ok(draw_object) => {
+                self.draw_objects.push(draw_object);
+            }
+            Err(err) => {
+                log::warn!("{}", err);
             }
         }
+    }
+
+    pub fn append_to_draw_list(&mut self, draw_objects: &[EDrawObjectType]) {
+        let mut draw_objects = draw_objects
+            .iter()
+            .map(|x| Self::to_render_draw_object(x, self.shadow_depth_texture_handle.clone()))
+            .flatten()
+            .collect();
+        self.draw_objects.append(&mut draw_objects);
     }
 
     pub fn draw_debug_line(

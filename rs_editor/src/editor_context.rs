@@ -3,7 +3,6 @@ use crate::{
     content_folder::ContentFolder,
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource},
-    editor::WindowsManager,
     editor_ui::{EditorUI, GizmoEvent},
     material_resolve,
     model_loader::ModelLoader,
@@ -23,6 +22,7 @@ use crate::{
         top_menu,
     },
     watch_shader::WatchShader,
+    windows_manager::WindowsManager,
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
@@ -39,9 +39,9 @@ use rs_engine::{
     directional_light::DirectionalLight,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
+    player_viewport::PlayerViewport,
 };
 use rs_engine::{
-    drawable::EDrawObjectType,
     file_type::EFileType,
     logger::{Logger, LoggerConfiguration},
     resource_manager::ResourceManager,
@@ -116,6 +116,7 @@ pub enum EWindowType {
     MultipleDraw,
     Particle,
     Standalone,
+    Actor,
 }
 
 struct MouseState {
@@ -129,7 +130,6 @@ pub struct EditorContext {
     egui_winit_state: egui_winit::State,
     data_source: DataSource,
     project_context: Option<ProjectContext>,
-    draw_objects: HashMap<uuid::Uuid, EDrawObjectType>,
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     editor_ui: EditorUI,
     // #[cfg(any(feature = "plugin_shared_crate"))]
@@ -254,7 +254,6 @@ impl EditorContext {
             egui_winit_state,
             data_source,
             project_context: None,
-            draw_objects: HashMap::new(),
             virtual_key_code_states: HashMap::new(),
             editor_ui,
             // #[cfg(feature = "plugin_shared_crate")]
@@ -658,6 +657,7 @@ impl EditorContext {
                             self.standalone_ui_window = None;
                         }
                     }
+                    EWindowType::Actor => todo!(),
                 }
             }
             Event::NewEvents(_) => {}
@@ -1389,53 +1389,19 @@ impl EditorContext {
         if let Some(active_level) = self.data_source.level.clone() {
             let mut active_level = active_level.borrow_mut();
             active_level.set_physics_simulate(self.data_source.is_simulate_real_time);
-            active_level.tick();
-            if let Some(light) = active_level.directional_lights.first().cloned() {
-                let mut light = light.borrow_mut();
-                light.update(&mut self.engine);
-                self.engine.update_light(&mut light);
-                for draw_object in light.get_draw_objects() {
-                    self.engine.draw2(draw_object);
-                }
-            }
-
-            for actor in active_level.actors.clone() {
-                let actor = actor.borrow_mut();
-                let mut root_scene_node = actor.scene_node.borrow_mut();
-                match &mut root_scene_node.component {
-                    rs_engine::scene_node::EComponentType::SceneComponent(_) => todo!(),
-                    rs_engine::scene_node::EComponentType::StaticMeshComponent(
-                        static_mesh_component,
-                    ) => {
-                        let mut static_mesh_component = static_mesh_component.borrow_mut();
-                        static_mesh_component.update(
-                            self.engine.get_game_time(),
-                            &mut self.engine,
-                            active_level.get_rigid_body_set_mut(),
-                        );
-                        for draw_object in static_mesh_component.get_draw_objects() {
-                            self.engine.draw2(draw_object);
-                        }
-                    }
-                    rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
-                        skeleton_mesh_component,
-                    ) => {
-                        let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
-                        skeleton_mesh_component
-                            .update(self.engine.get_game_time(), &mut self.engine);
-
-                        for draw_object in skeleton_mesh_component.get_draw_objects() {
-                            self.engine.draw2(draw_object);
-                        }
-                    }
+            active_level.tick(self.engine.get_game_time(), &mut self.engine);
+            let draw_objects = active_level.collect_draw_objects();
+            let entry = self.engine.draw_objects.entry(window_id).or_default();
+            for draw_object in draw_objects {
+                if let Ok(value) = PlayerViewport::to_render_draw_object(
+                    &draw_object,
+                    self.engine.shadow_depth_texture_handle.clone(),
+                ) {
+                    entry.push(value);
                 }
             }
         }
 
-        for (_, draw_object) in self.draw_objects.iter_mut() {
-            self.engine.update_draw_object(draw_object);
-            self.engine.draw2(draw_object);
-        }
         self.process_ui(window, event_loop_window_target);
 
         #[cfg(feature = "plugin_dotnet")]
@@ -2253,6 +2219,16 @@ impl EditorContext {
                     .files
                     .push(EContentFileType::ParticleSystem(particle_system));
             }
+            content_browser::EClickEventType::DeleteFile(content_file) => {
+                let Some(project_context) = &mut self.project_context else {
+                    return;
+                };
+                let content = project_context.project.content.clone();
+                let mut content = content.borrow_mut();
+                content
+                    .files
+                    .retain(|x| x.get_url() != content_file.get_url());
+            }
         }
     }
 
@@ -2510,7 +2486,7 @@ impl EditorContext {
             ESelectedObjectType::SceneComponent(_) => {}
             ESelectedObjectType::StaticMeshComponent(component) => {
                 let mut component = component.borrow_mut();
-                let model_matrix = component.get_interactive_transformation();
+                let model_matrix = component.get_transformation_mut();
                 if let Some((_, transforms)) = event.gizmo_result {
                     let transform = transforms[0];
                     *model_matrix = glam::DMat4::from_scale_rotation_translation(

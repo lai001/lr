@@ -1,5 +1,7 @@
 use super::material_view::MaterialView;
-use crate::{custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType};
+use crate::{
+    custom_event::ECustomEventType, editor_context::EWindowType, windows_manager::WindowsManager,
+};
 use anyhow::anyhow;
 use egui_winit::State;
 use rs_engine::engine::Engine;

@@ -14,3 +14,4 @@ pub mod project_context;
 pub mod thumbnail_cache;
 pub mod ui;
 pub mod watch_shader;
+pub mod windows_manager;

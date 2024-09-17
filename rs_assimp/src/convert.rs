@@ -43,10 +43,10 @@ impl ConvertToVec3 for aiColor3D {
 impl ConvertToMat4 for aiMatrix4x4 {
     fn to_mat4(&self) -> glam::Mat4 {
         glam::mat4(
-            glam::vec4(self.a1, self.a2, self.a3, self.a4),
-            glam::vec4(self.b1, self.b2, self.b3, self.b4),
-            glam::vec4(self.c1, self.c2, self.c3, self.c4),
-            glam::vec4(self.d1, self.d2, self.d3, self.d4),
+            glam::vec4(self.a1, self.b1, self.c1, self.d1),
+            glam::vec4(self.a2, self.b2, self.c2, self.d2),
+            glam::vec4(self.a3, self.b3, self.c3, self.d3),
+            glam::vec4(self.a4, self.b4, self.c4, self.d4),
         )
     }
 }

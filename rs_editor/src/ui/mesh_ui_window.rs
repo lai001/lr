@@ -1,5 +1,7 @@
 use super::misc::{random_color4, update_window_with_input_mode};
-use crate::{custom_event::ECustomEventType, editor::WindowsManager, editor_context::EWindowType};
+use crate::{
+    custom_event::ECustomEventType, editor_context::EWindowType, windows_manager::WindowsManager,
+};
 use anyhow::anyhow;
 use egui_winit::State;
 use rs_artifact::skin_mesh::SkinMeshVertex;

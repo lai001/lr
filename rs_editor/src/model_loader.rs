@@ -6,7 +6,9 @@ use rs_artifact::{
 };
 use rs_core_minimal::name_generator::NameGenerator;
 use rs_engine::{
-    build_content_file_url, resource_manager::ResourceManager,
+    build_content_file_url,
+    resource_manager::ResourceManager,
+    scene_node::{EComponentType, SceneComponent},
     static_mesh_component::StaticMeshComponent,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
@@ -717,6 +719,62 @@ impl ModelLoader {
         }
     }
 
+    fn node_to_component_type(
+        node: SingleThreadMutType<rs_assimp::node::Node>,
+        static_meshes: &[SingleThreadMutType<rs_engine::content::static_mesh::StaticMesh>],
+    ) -> EComponentType {
+        let node = node.borrow_mut();
+        let name = node.name.clone();
+        let transformation = node.transformation.clone();
+        match node.get_node_type() {
+            rs_assimp::node::ENodeType::Axis => {
+                let scene_component =
+                    SingleThreadMut::new(SceneComponent::new(name, transformation));
+                return EComponentType::SceneComponent(scene_component);
+            }
+            rs_assimp::node::ENodeType::Bone => unimplemented!(),
+            rs_assimp::node::ENodeType::Mesh => {
+                let Some(mesh) = node.meshes.first().cloned() else {
+                    unimplemented!();
+                };
+                let mesh_name = {
+                    let mesh = mesh.borrow();
+                    let mesh_name = mesh.name.clone();
+                    mesh_name
+                };
+                let static_mesh_url = static_meshes
+                    .iter()
+                    .find(|x| {
+                        let x = x.borrow();
+                        x.asset_info.path == mesh_name
+                    })
+                    .map(|x| x.borrow().url.clone());
+                let static_mesh_component =
+                    StaticMeshComponent::new(name, static_mesh_url, None, transformation);
+                let static_mesh_component = SingleThreadMut::new(static_mesh_component);
+                return EComponentType::StaticMeshComponent(static_mesh_component);
+            }
+            rs_assimp::node::ENodeType::Armature => unimplemented!(),
+        }
+    }
+
+    fn node_to_scene_node_recursion(
+        node: SingleThreadMutType<rs_assimp::node::Node>,
+        static_meshes: &[SingleThreadMutType<rs_engine::content::static_mesh::StaticMesh>],
+    ) -> SingleThreadMutType<rs_engine::scene_node::SceneNode> {
+        let component_type = Self::node_to_component_type(node.clone(), static_meshes);
+        let scene_node = SingleThreadMut::new(rs_engine::scene_node::SceneNode {
+            component: component_type,
+            childs: vec![],
+        });
+        let node = node.borrow();
+        for child in node.children.clone() {
+            let child_scene_node = Self::node_to_scene_node_recursion(child, static_meshes);
+            scene_node.borrow_mut().childs.push(child_scene_node);
+        }
+        scene_node
+    }
+
     pub fn load_from_file_as_actor(
         &mut self,
         file_path: &Path,
@@ -751,6 +809,10 @@ impl ModelLoader {
         if scene.armatures.len() > 1 {
             log::warn!("Too many armatures");
         }
+        let Some(scene_root_node) = scene.root_node.clone() else {
+            return Err(anyhow::anyhow!("No root node"));
+        };
+        let _ = scene_root_node;
 
         let mut static_meshes: Vec<Rc<RefCell<rs_engine::content::static_mesh::StaticMesh>>> =
             vec![];
@@ -837,17 +899,18 @@ impl ModelLoader {
                 animation_url = None;
             }
 
-            let skeleton_mesh_component = rs_engine::scene_node::SkeletonMeshComponent::new(
-                skeleton.borrow().get_name().clone(),
-                Some(skeleton.borrow().url.clone()),
-                skeleton_meshes
-                    .iter()
-                    .map(|x| x.borrow().url.clone())
-                    .collect(),
-                animation_url,
-                None,
-                glam::Mat4::IDENTITY,
-            );
+            let skeleton_mesh_component =
+                rs_engine::skeleton_mesh_component::SkeletonMeshComponent::new(
+                    skeleton.borrow().get_name().clone(),
+                    Some(skeleton.borrow().url.clone()),
+                    skeleton_meshes
+                        .iter()
+                        .map(|x| x.borrow().url.clone())
+                        .collect(),
+                    animation_url,
+                    None,
+                    glam::Mat4::IDENTITY,
+                );
 
             actor = rs_engine::actor::Actor {
                 name: actor_name_generator.next(&scene.name),
@@ -859,36 +922,21 @@ impl ModelLoader {
                 }),
             };
         } else {
-            if let Some(static_meshe) = static_meshes.first() {
-                let name = file_path
-                    .file_name()
-                    .ok_or(anyhow::anyhow!("Incorrect file path: {:?}", file_path))?
-                    .to_str()
-                    .ok_or(anyhow::anyhow!("Incorrect file path: {:?}", file_path))?
-                    .to_string();
-                let static_meshe = static_meshe.borrow();
-                let static_mesh_component = StaticMeshComponent::new(
-                    name.clone(),
-                    Some(static_meshe.url.clone()),
-                    None,
-                    glam::Mat4::IDENTITY,
-                );
-                actor = rs_engine::actor::Actor {
-                    name: actor_name_generator.next(if scene.name.is_empty() {
-                        &name
-                    } else {
-                        &scene.name
-                    }),
-                    scene_node: SingleThreadMut::new(rs_engine::scene_node::SceneNode {
-                        component: rs_engine::scene_node::EComponentType::StaticMeshComponent(
-                            SingleThreadMut::new(static_mesh_component),
-                        ),
-                        childs: vec![],
-                    }),
-                };
-            } else {
-                return Err(anyhow::anyhow!("Static mesh not found"));
-            }
+            let scene_node = Self::node_to_scene_node_recursion(scene_root_node, &static_meshes);
+            let name = file_path
+                .file_name()
+                .map(|x| x.to_str())
+                .flatten()
+                .map(|x| x.to_string())
+                .ok_or(anyhow::anyhow!("Incorrect file path: {:?}", file_path))?;
+            actor = rs_engine::actor::Actor {
+                name: actor_name_generator.next(if scene.name.is_empty() {
+                    &name
+                } else {
+                    &scene.name
+                }),
+                scene_node,
+            };
         }
 
         Ok(LoadResult {
