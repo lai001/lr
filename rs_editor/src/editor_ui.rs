@@ -114,53 +114,36 @@ impl EditorUI {
         );
 
         if let Some(selected_object) = self.object_property_view.selected_object.as_ref() {
-            macro_rules! gizmo {
-                ($component:ident) => {
-                    let mut component = $component.borrow_mut();
-                    let model_matrix = component.get_transformation_mut();
-                    let gizmo_result = self.gizmo_view.draw(
-                        context,
-                        data_source.camera_view_matrix,
-                        data_source.camera_projection_matrix,
-                        *model_matrix,
-                    );
-                    if let Some((_, transforms)) = gizmo_result {
-                        let transform = transforms[0];
-                        *model_matrix = glam::DMat4::from_scale_rotation_translation(
-                            transform.scale.into(),
-                            transform.rotation.into(),
-                            transform.translation.into(),
-                        )
-                        .as_mat4();
-                    }
-                };
-            }
-
-            match selected_object {
-                ESelectedObjectType::Actor(_) => {}
+            let model_matrix = match selected_object {
+                ESelectedObjectType::Actor(_) => None,
                 ESelectedObjectType::SceneComponent(component) => {
-                    gizmo!(component);
+                    let component = component.borrow();
+                    Some(component.get_final_transformation())
                 }
                 ESelectedObjectType::StaticMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    let model_matrix = component.get_transformation_mut();
-                    let gizmo_result = self.gizmo_view.draw(
-                        context,
-                        data_source.camera_view_matrix,
-                        data_source.camera_projection_matrix,
-                        *model_matrix,
-                    );
-                    click.gizmo_event = Some(GizmoEvent {
-                        selected_object: selected_object.clone(),
-                        gizmo_result,
-                    });
+                    let component = component.borrow();
+                    Some(component.get_final_transformation())
                 }
                 ESelectedObjectType::SkeletonMeshComponent(component) => {
-                    gizmo!(component);
+                    let component = component.borrow();
+                    Some(*component.get_transformation())
                 }
-                ESelectedObjectType::DirectionalLight(light) => {
-                    gizmo!(light);
+                ESelectedObjectType::DirectionalLight(component) => {
+                    let component = component.borrow();
+                    Some(*component.get_transformation())
                 }
+            };
+            if let Some(model_matrix) = model_matrix {
+                let gizmo_result = self.gizmo_view.draw(
+                    context,
+                    data_source.camera_view_matrix,
+                    data_source.camera_projection_matrix,
+                    model_matrix,
+                );
+                click.gizmo_event = Some(GizmoEvent {
+                    selected_object: selected_object.clone(),
+                    gizmo_result,
+                });
             }
         }
         let window = Self::new_window("Gizmo Settings", data_source.input_mode);

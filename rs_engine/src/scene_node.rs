@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 struct SceneComponentRuntime {
+    pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
 }
 
@@ -24,8 +25,30 @@ impl SceneComponent {
             transformation,
             run_time: Some(SceneComponentRuntime {
                 final_transformation: glam::Mat4::IDENTITY,
+                parent_final_transformation: glam::Mat4::IDENTITY,
             }),
         }
+    }
+
+    pub fn initialize(&mut self) {
+        self.run_time = Some(SceneComponentRuntime {
+            final_transformation: glam::Mat4::IDENTITY,
+            parent_final_transformation: glam::Mat4::IDENTITY,
+        });
+    }
+
+    pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.parent_final_transformation = parent_final_transformation;
+    }
+
+    pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
+        let Some(run_time) = self.run_time.as_ref() else {
+            return glam::Mat4::IDENTITY;
+        };
+        run_time.parent_final_transformation
     }
 
     pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
@@ -44,10 +67,12 @@ impl SceneComponent {
     }
 
     pub fn get_final_transformation(&self) -> glam::Mat4 {
-        self.run_time
+        let final_transformation = self
+            .run_time
             .as_ref()
             .map(|x| x.final_transformation)
-            .unwrap_or_default()
+            .unwrap_or_default();
+        final_transformation
     }
 }
 

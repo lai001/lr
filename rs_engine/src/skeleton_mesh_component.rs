@@ -19,6 +19,7 @@ struct SkeletonMeshComponentRuntime {
     skeleton_animation: Option<Arc<SkeletonAnimation>>,
     skin_meshes: Vec<Arc<SkinMesh>>,
     pub physics: Option<Physics>,
+    pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
     // material: Option<SingleThreadMutType<crate::content::material::Material>>,
 }
@@ -42,6 +43,13 @@ impl SkeletonMeshComponent {
 
     pub fn get_transformation(&self) -> &glam::Mat4 {
         &self.transformation
+    }
+
+    pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.parent_final_transformation = parent_final_transformation;
     }
 
     pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
@@ -130,6 +138,7 @@ impl SkeletonMeshComponent {
             skin_meshes: vec![],
             physics: None,
             final_transformation: glam::Mat4::IDENTITY,
+            parent_final_transformation: glam::Mat4::IDENTITY,
             // material: material.clone(),
         });
 

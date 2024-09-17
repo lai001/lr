@@ -1,4 +1,4 @@
-use crate::handle::BufferHandle;
+use crate::{handle::BufferHandle, player_viewport::PlayerViewport};
 use rs_render::command::{DrawObject, EBindingResource};
 use std::{cell::RefCell, rc::Rc};
 
@@ -9,6 +9,29 @@ pub enum EDrawObjectType {
     SkinMaterial(MaterialDrawObject),
     StaticMeshMaterial(StaticMeshMaterialDrawObject),
     Custom(CustomDrawObject),
+}
+
+impl EDrawObjectType {
+    pub fn switch_player_viewport(&mut self, player_viewport: &PlayerViewport) {
+        let resource = EBindingResource::Constants(*player_viewport.global_constants_handle);
+        match self {
+            EDrawObjectType::Static(draw_object) => {
+                draw_object.global_constants_resource = resource;
+            }
+            EDrawObjectType::Skin(draw_object) => {
+                draw_object.global_constants_resource = resource;
+            }
+            EDrawObjectType::SkinMaterial(draw_object) => {
+                draw_object.global_constants_resource = resource;
+            }
+            EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                draw_object.global_constants_resource = resource;
+            }
+            EDrawObjectType::Custom(_) => {
+                unimplemented!()
+            }
+        }
+    }
 }
 
 #[derive(Clone)]

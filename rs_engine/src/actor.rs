@@ -36,7 +36,10 @@ impl Actor {
         Actor::walk_node(
             self.scene_node.clone(),
             &mut |node| match &node.borrow().component {
-                EComponentType::SceneComponent(_) => {}
+                EComponentType::SceneComponent(component) => {
+                    let mut component = component.borrow_mut();
+                    component.initialize();
+                }
                 EComponentType::StaticMeshComponent(component) => {
                     let mut component = component.borrow_mut();
                     component.initialize(resource_manager.clone(), engine, files);
@@ -181,6 +184,7 @@ impl Actor {
                 let mut component = component.borrow_mut();
                 let current_transformation = *component.get_transformation();
                 let final_transformation = parent_transformation * current_transformation;
+                component.set_parent_final_transformation(parent_transformation);
                 component.set_final_transformation(final_transformation);
                 final_transformation
             }
@@ -188,6 +192,7 @@ impl Actor {
                 let mut component = component.borrow_mut();
                 let current_transformation = *component.get_transformation();
                 let final_transformation = parent_transformation * current_transformation;
+                component.set_parent_final_transformation(parent_transformation);
                 component.set_final_transformation(final_transformation);
                 final_transformation
             }
@@ -195,6 +200,7 @@ impl Actor {
                 let mut component = component.borrow_mut();
                 let current_transformation = *component.get_transformation();
                 let final_transformation = parent_transformation * current_transformation;
+                component.set_parent_final_transformation(parent_transformation);
                 component.set_final_transformation(final_transformation);
                 final_transformation
             }
@@ -216,12 +222,12 @@ impl Actor {
             &mut |node| {
                 let node = node.borrow_mut();
                 match &node.component {
-                    crate::scene_node::EComponentType::SceneComponent(_) => {}
-                    crate::scene_node::EComponentType::StaticMeshComponent(component) => {
+                    EComponentType::SceneComponent(_) => {}
+                    EComponentType::StaticMeshComponent(component) => {
                         let mut component = component.borrow_mut();
                         component.submit_to_gpu(engine);
                     }
-                    crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                    EComponentType::SkeletonMeshComponent(component) => {
                         let mut component = component.borrow_mut();
                         component.submit_to_gpu(engine);
                     }

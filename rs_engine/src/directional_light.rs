@@ -35,7 +35,7 @@ impl DirectionalLight {
         &mut self.transformation
     }
 
-    pub fn get_transformation(&mut self) -> &glam::Mat4 {
+    pub fn get_transformation(&self) -> &glam::Mat4 {
         &self.transformation
     }
 

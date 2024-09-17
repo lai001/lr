@@ -297,6 +297,7 @@ impl EditorContext {
         window: &mut winit::window::Window,
         event: &WindowEvent,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        egui_event_response: egui_winit::EventResponse,
     ) {
         match event {
             WindowEvent::CursorEntered { .. } => {
@@ -362,6 +363,7 @@ impl EditorContext {
                     && !self.egui_winit_state.egui_ctx().is_pointer_over_area()
                     && self.mosue_state.is_focus
                     && *state == winit::event::ElementState::Released
+                    && egui_event_response.consumed == false
                 {
                     if let Some(level) = self.data_source.level.as_ref() {
                         let level = level.borrow();
@@ -542,13 +544,14 @@ impl EditorContext {
                     return;
                 };
                 let window = &mut *window.borrow_mut();
-                let _ = Some(self.egui_winit_state.on_window_event(window, event));
+                let egui_event_response = self.egui_winit_state.on_window_event(window, event);
                 match window_type {
                     EWindowType::Main => self.main_window_event_process(
                         window_id,
                         window,
                         event,
                         event_loop_window_target,
+                        egui_event_response,
                     ),
                     EWindowType::Material => {
                         let ui_window = self
@@ -2481,28 +2484,54 @@ impl EditorContext {
             .get_physics_mut()
             .map(|x| &mut x.rigid_body_set);
 
+        let gizmo_final_transformation: Option<glam::Mat4> =
+            event.gizmo_result.map(|(_, transforms)| {
+                let transform = transforms[0];
+                let gizmo_final_transformation = glam::DMat4::from_scale_rotation_translation(
+                    transform.scale.into(),
+                    transform.rotation.into(),
+                    transform.translation.into(),
+                )
+                .as_mat4();
+                gizmo_final_transformation
+            });
+
         match event.selected_object {
             ESelectedObjectType::Actor(_) => {}
-            ESelectedObjectType::SceneComponent(_) => {}
+            ESelectedObjectType::SceneComponent(component) => {
+                let mut component = component.borrow_mut();
+                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                    let parent_final_transformation = component.get_parent_final_transformation();
+                    let model_matrix = component.get_transformation_mut();
+                    *model_matrix =
+                        parent_final_transformation.inverse() * gizmo_final_transformation;
+                }
+            }
             ESelectedObjectType::StaticMeshComponent(component) => {
                 let mut component = component.borrow_mut();
-                let model_matrix = component.get_transformation_mut();
-                if let Some((_, transforms)) = event.gizmo_result {
-                    let transform = transforms[0];
-                    *model_matrix = glam::DMat4::from_scale_rotation_translation(
-                        transform.scale.into(),
-                        transform.rotation.into(),
-                        transform.translation.into(),
-                    )
-                    .as_mat4();
+                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                    let parent_final_transformation = component.get_parent_final_transformation();
+                    let model_matrix = component.get_transformation_mut();
+                    *model_matrix =
+                        parent_final_transformation.inverse() * gizmo_final_transformation;
                     component.set_apply_simulate(false);
                     component.on_post_update_transformation(rigid_body_set);
                 } else {
                     component.set_apply_simulate(true);
                 }
             }
-            ESelectedObjectType::SkeletonMeshComponent(_) => {}
-            ESelectedObjectType::DirectionalLight(_) => {}
+            ESelectedObjectType::SkeletonMeshComponent(component) => {
+                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                    let mut component = component.borrow_mut();
+                    *component.get_transformation_mut() = gizmo_final_transformation;
+                }
+            }
+            ESelectedObjectType::DirectionalLight(component) => {
+                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                    let mut component = component.borrow_mut();
+                    *component.get_transformation_mut() = gizmo_final_transformation;
+                }
+            }
         }
     }
 }

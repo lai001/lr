@@ -29,7 +29,7 @@ fn draw_scene_node(
         }
     };
     let id = ui.make_persistent_id(name.clone());
-    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
         .show_header(ui, |ui| {
             if ui.button(name).clicked() {
                 *event = Some(EClickEventType::SceneNode(scene_node.clone()));
@@ -50,7 +50,7 @@ fn level_node(
     let _actor = actor.as_ref().borrow();
     let name = &_actor.name;
     let id = ui.make_persistent_id(name);
-    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
+    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
         .show_header(ui, |ui| {
             if ui.button(name).clicked() {
                 *event = Some(EClickEventType::Actor(actor.clone()));
