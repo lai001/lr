@@ -132,8 +132,12 @@ impl Editor {
             .build(&event_loop)?;
         window.set_ime_allowed(true);
 
-        let mut editor_context =
-            EditorContext::new(&window, event_loop_proxy.clone(), window_manager.clone())?;
+        let mut editor_context = EditorContext::new(
+            u64::from(window.id()) as isize,
+            &window,
+            event_loop_proxy.clone(),
+            window_manager.clone(),
+        )?;
         window_manager
             .borrow_mut()
             .add_new_window(EWindowType::Main, window);

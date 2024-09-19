@@ -1,7 +1,4 @@
 use rs_render::view_mode::EViewModeType;
-use v8::{Local, Object};
-
-use crate::camera::{camera_set_window_size, NativeCamera};
 
 #[repr(align(2))]
 #[derive(Clone, Copy)]
@@ -48,43 +45,43 @@ pub(crate) fn engine_set_view_mode(
     engine.set_view_mode(mode);
 }
 
-pub(crate) fn engine_get_camera_mut(
-    scope: &mut v8::HandleScope,
-    args: v8::FunctionCallbackArguments,
-    mut retval: v8::ReturnValue,
-) {
-    let pointer = unsafe { args.this().get_aligned_pointer_from_internal_field(0) };
-    let engine: &mut NativeEngine = unsafe { std::mem::transmute(pointer) };
-    let engine: &mut rs_engine::engine::Engine = unsafe { std::mem::transmute(engine.borrow_mut) };
-    let native_camera = unsafe { NativeCamera::new(engine.get_camera_mut()) };
-    let native_camera = Box::new(native_camera);
-    let native_camera = Box::into_raw(native_camera);
+// pub(crate) fn engine_get_camera_mut(
+//     scope: &mut v8::HandleScope,
+//     args: v8::FunctionCallbackArguments,
+//     mut retval: v8::ReturnValue,
+// ) {
+//     let pointer = unsafe { args.this().get_aligned_pointer_from_internal_field(0) };
+//     let engine: &mut NativeEngine = unsafe { std::mem::transmute(pointer) };
+//     let engine: &mut rs_engine::engine::Engine = unsafe { std::mem::transmute(engine.borrow_mut) };
+//     let native_camera = unsafe { NativeCamera::new(engine.get_camera_mut()) };
+//     let native_camera = Box::new(native_camera);
+//     let native_camera = Box::into_raw(native_camera);
 
-    let camera_object: crate::error::Result<Local<Object>> = (|| {
-        let camera_object_template = v8::ObjectTemplate::new(scope);
-        camera_object_template.set_internal_field_count(1);
+//     let camera_object: crate::error::Result<Local<Object>> = (|| {
+//         let camera_object_template = v8::ObjectTemplate::new(scope);
+//         camera_object_template.set_internal_field_count(1);
 
-        let name = v8::String::new(scope, "setWindowSize").ok_or(crate::error::Error::Null(
-            format!("Failed to create string"),
-        ))?;
-        let function = v8::FunctionTemplate::new(scope, camera_set_window_size);
-        camera_object_template.set(name.into(), function.into());
+//         let name = v8::String::new(scope, "setWindowSize").ok_or(crate::error::Error::Null(
+//             format!("Failed to create string"),
+//         ))?;
+//         let function = v8::FunctionTemplate::new(scope, camera_set_window_size);
+//         camera_object_template.set(name.into(), function.into());
 
-        let camera_object =
-            camera_object_template
-                .new_instance(scope)
-                .ok_or(crate::error::Error::Other(format!(
-                    "Failed to create object"
-                )))?;
+//         let camera_object =
+//             camera_object_template
+//                 .new_instance(scope)
+//                 .ok_or(crate::error::Error::Other(format!(
+//                     "Failed to create object"
+//                 )))?;
 
-        camera_object.set_aligned_pointer_in_internal_field(0, native_camera as _);
-        Ok(camera_object)
-    })();
+//         camera_object.set_aligned_pointer_in_internal_field(0, native_camera as _);
+//         Ok(camera_object)
+//     })();
 
-    match camera_object {
-        Ok(camera_object) => {
-            retval.set(camera_object.into());
-        }
-        Err(_) => retval.set_null(),
-    }
-}
+//     match camera_object {
+//         Ok(camera_object) => {
+//             retval.set(camera_object.into());
+//         }
+//         Err(_) => retval.set_null(),
+//     }
+// }

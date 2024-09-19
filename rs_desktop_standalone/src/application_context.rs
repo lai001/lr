@@ -87,7 +87,7 @@ impl ApplicationContext {
             window_width,
             window_height,
             &mut engine,
-            current_active_level,
+            &current_active_level,
             contents,
             EInputMode::Game,
             #[cfg(feature = "plugin_shared_crate")]
@@ -143,8 +143,9 @@ impl ApplicationContext {
                     }
                     WindowEvent::RedrawRequested => {
                         let window_id = u64::from(window.id()) as isize;
+                        self.engine.window_redraw_requested_begin(window_id);
                         self.ui_begin(window);
-                        self.engine.recv_output_hook();
+
                         self.engine.tick();
 
                         self.app.on_redraw_requested(
@@ -157,6 +158,7 @@ impl ApplicationContext {
                         self.engine
                             .send_render_command(RenderCommand::UiOutput(output));
                         self.sync(window);
+                        self.engine.window_redraw_requested_end(window_id);
                     }
                     _ => {}
                 }
@@ -170,11 +172,7 @@ impl ApplicationContext {
     }
 
     fn sync(&mut self, window: &mut winit::window::Window) {
-        let wait = self
-            .frame_sync
-            .tick()
-            .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-        std::thread::sleep(wait);
+        self.frame_sync.sync(60.0);
         window.request_redraw();
     }
 

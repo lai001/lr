@@ -19,6 +19,7 @@ pub struct Application {
     engine: rs_engine::engine::Engine,
     gui_context: egui::Context,
     geometries: Vec<Geometry>,
+    camera: rs_engine::camera::Camera,
 }
 
 impl Application {
@@ -57,6 +58,8 @@ impl Application {
         )
         .map_err(|err| crate::error::Error::Engine(err))?;
         engine.init_resources();
+        let mut camera = rs_engine::camera::Camera::default(width, height);
+        camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
         Ok(Application {
             native_window,
             raw_input,
@@ -65,10 +68,12 @@ impl Application {
             engine,
             gui_context,
             geometries: vec![],
+            camera,
         })
     }
 
     pub fn redraw(&mut self) {
+        self.engine.window_redraw_requested_begin(WINDOW_ID);
         let context = &self.gui_context;
         context.begin_frame(self.raw_input.clone());
 
@@ -89,8 +94,8 @@ impl Application {
             window_id: WINDOW_ID,
         };
         self.engine.tick();
-        self.engine.redraw(gui_render_output);
-        self.engine.present(WINDOW_ID);
+        self.engine.draw_gui(gui_render_output);
+        self.engine.window_redraw_requested_end(WINDOW_ID);
     }
 
     pub fn get_status_bar_height(&self) -> i32 {
@@ -208,7 +213,7 @@ pub fn Application_redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: 
             let delta_x = new_geometry.x - old_geometry.x;
             let delta_y = new_geometry.y - old_geometry.y;
 
-            let camera = application.engine.get_camera_mut();
+            let camera = &mut application.camera;
             if new_geometry.x <= (application.native_window.get_width() / 2) as f32 {
                 let motion_speed = 0.1;
                 camera.add_world_location(glam::vec3(

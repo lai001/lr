@@ -25,7 +25,7 @@ impl Application {
         width: u32,
         height: u32,
         engine: &mut Engine,
-        mut current_active_level: Level,
+        current_active_level: &Level,
         contents: Vec<EContentFileType>,
         input_mode: EInputMode,
         #[cfg(feature = "plugin_shared_crate")] mut plugins: Vec<Box<dyn Plugin>>,
@@ -39,11 +39,8 @@ impl Application {
         });
         engine.send_render_command(command);
 
-        current_active_level.initialize(engine, &contents);
-        current_active_level.set_physics_simulate(true);
-
         let infos = engine.get_virtual_texture_source_infos();
-        let player_view_port = PlayerViewport::new(
+        let mut player_view_port = PlayerViewport::new(
             window_id,
             width,
             height,
@@ -52,6 +49,11 @@ impl Application {
             infos,
             input_mode,
         );
+        let mut current_active_level =
+            current_active_level.make_copy_for_standalone(engine, &contents, &mut player_view_port);
+
+        current_active_level.initialize(engine, &contents, &mut player_view_port);
+        current_active_level.set_physics_simulate(true);
 
         #[cfg(feature = "plugin_shared_crate")]
         for plugin in plugins.iter_mut() {
@@ -110,9 +112,11 @@ impl Application {
 
         self.player_view_port.update_global_constants(engine);
 
-        active_level.tick(engine.get_game_time(), engine);
+        active_level.tick(engine.get_game_time(), engine, &mut self.player_view_port);
         let mut draw_objects = active_level.collect_draw_objects();
         for draw_object in draw_objects.iter_mut() {
+            self.player_view_port
+                .update_draw_object(engine, draw_object);
             draw_object.switch_player_viewport(&self.player_view_port);
         }
         self.player_view_port.append_to_draw_list(&draw_objects);

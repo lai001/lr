@@ -1,9 +1,9 @@
 use super::content_file_type::EContentFileType;
 use crate::actor::Actor;
-use crate::camera::Camera;
 use crate::directional_light::DirectionalLight;
 use crate::drawable::EDrawObjectType;
 use crate::engine::Engine;
+use crate::player_viewport::PlayerViewport;
 use crate::resource_manager::ResourceManager;
 use crate::scene_node::{EComponentType, SceneNode};
 use crate::{build_content_file_url, url_extension::UrlExtension};
@@ -123,10 +123,15 @@ impl Level {
         self.url.get_name_in_editor()
     }
 
-    pub fn initialize(&mut self, engine: &mut Engine, files: &[EContentFileType]) {
+    pub fn initialize(
+        &mut self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
         for light in self.directional_lights.iter_mut() {
             let mut light = light.borrow_mut();
-            light.initialize(engine);
+            light.initialize(engine, player_viewport);
         }
 
         let rigid_body_set: RigidBodySet = RigidBodySet::new();
@@ -172,7 +177,7 @@ impl Level {
             is_simulate: false,
         });
         let actors = self.actors.clone();
-        self.init_actors(engine, actors, files);
+        self.init_actors(engine, actors, files, player_viewport);
         let actors = self.actors.clone();
         for actor in actors {
             self.init_actor_physics(actor.clone());
@@ -184,10 +189,11 @@ impl Level {
         engine: &mut crate::engine::Engine,
         actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
         files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) {
         for actor in actors {
             let mut actor = actor.borrow_mut();
-            actor.initialize(ResourceManager::default(), engine, files);
+            actor.initialize(ResourceManager::default(), engine, files, player_viewport);
         }
     }
 
@@ -211,7 +217,7 @@ impl Level {
         actor.tick_physics(rigid_body_set, collider_set);
     }
 
-    pub fn tick(&mut self, time: f32, engine: &mut Engine) {
+    pub fn tick(&mut self, time: f32, engine: &mut Engine, player_viewport: &mut PlayerViewport) {
         let Some(runtime) = self.runtime.as_mut() else {
             return;
         };
@@ -223,7 +229,7 @@ impl Level {
         for light in self.directional_lights.clone() {
             let mut light = light.borrow_mut();
             light.update(engine);
-            engine.update_light(&mut light);
+            player_viewport.update_light(&mut light);
         }
         let rigid_body_set = &mut runtime.physics.rigid_body_set;
         let collider_set = &mut runtime.physics.collider_set;
@@ -249,15 +255,16 @@ impl Level {
         self.runtime.as_mut().map(|x| &mut x.physics)
     }
 
-    #[cfg(feature = "editor")]
+    // #[cfg(feature = "editor")]
     pub fn make_copy_for_standalone(
         &self,
         engine: &mut Engine,
         files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) -> Level {
         let ser_level = serde_json::to_string(self).unwrap();
         let mut copy_level: Level = serde_json::from_str(&ser_level).unwrap();
-        copy_level.initialize(engine, files);
+        copy_level.initialize(engine, files, player_viewport);
         copy_level
     }
 
@@ -283,8 +290,9 @@ impl Level {
         engine: &mut crate::engine::Engine,
         mut actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
         files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) {
-        self.init_actors(engine, actors.clone(), files);
+        self.init_actors(engine, actors.clone(), files, player_viewport);
 
         for actor in actors.clone() {
             self.init_actor_physics(actor.clone());
@@ -297,7 +305,9 @@ impl Level {
         &self,
         cursor_position: &glam::Vec2,
         window_size: &glam::Vec2,
-        camera: &mut Camera,
+        // camera: &mut Camera,
+        camera_view_matrix: glam::Mat4,
+        camera_projection_matrix: glam::Mat4,
     ) -> Option<EComponentType> {
         let Some(physics) = self.runtime.as_ref().map(|x| &x.physics) else {
             return None;
@@ -306,7 +316,7 @@ impl Level {
             cursor_position.x / window_size.x * 2.0 - 1.0,
             1.0 - cursor_position.y / window_size.y * 2.0,
         );
-        let ndc_to_world = camera.get_projection_matrix() * camera.get_view_matrix();
+        let ndc_to_world = camera_projection_matrix * camera_view_matrix;
         let ndc_to_world = ndc_to_world.inverse();
         let ray_pt1 = ndc_to_world.project_point3(glam::vec3(ndc_cursor.x, ndc_cursor.y, 0.0));
         let ray_pt2 = ndc_to_world.project_point3(glam::vec3(ndc_cursor.x, ndc_cursor.y, 1.0));

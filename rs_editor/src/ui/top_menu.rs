@@ -203,6 +203,17 @@ impl TopMenu {
                             }
                         }
                     });
+                    ui.menu_button("Debug Flags", |ui| {
+                        let mut init_flags = rs_engine::player_viewport::DebugFlags::empty();
+                        for ty in rs_engine::player_viewport::DebugFlags::all() {
+                            let mut checked = datasource.debug_flags.contains(ty);
+                            ui.checkbox(&mut checked, format!("{:?}", ty));
+                            if checked {
+                                init_flags.insert(ty);
+                            }
+                        }
+                        datasource.debug_flags = init_flags;
+                    });
                     if ui.add(Button::new("Run")).clicked() {
                         click = Some(EClickEventType::Run);
                         ui.close_menu();

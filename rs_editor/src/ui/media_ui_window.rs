@@ -123,11 +123,9 @@ impl MediaUIWindow {
                 is_close = true;
             }
             WindowEvent::RedrawRequested => {
-                let wait = self
-                    .frame_sync
-                    .tick()
-                    .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-                std::thread::sleep(wait);
+                self.frame_sync.sync(60.0);
+
+                engine.window_redraw_requested_begin(window_id);
 
                 let gui_render_output =
                     gui_render_output(window_id, window, &mut self.egui_winit_state, |state| {
@@ -178,9 +176,10 @@ impl MediaUIWindow {
                             },
                         );
                     });
+                engine.draw_gui(gui_render_output);
 
-                engine.send_render_command(UiOutput(gui_render_output));
-                engine.present(window_id);
+                engine.window_redraw_requested_end(window_id);
+
                 window.request_redraw();
             }
             _ => {}

@@ -68,14 +68,14 @@ impl StandaloneUiWindow {
         let input_mode = EInputMode::Game;
         update_window_with_input_mode(window, input_mode);
 
-        let level = active_level.make_copy_for_standalone(engine, &contents);
+        // let level = active_level.make_copy_for_standalone(engine, &contents);
 
         let application = Application::new(
             window_id,
             window.inner_size().width,
             window.inner_size().height,
             engine,
-            level,
+            active_level,
             contents,
             input_mode,
             plugins,
@@ -148,6 +148,7 @@ impl StandaloneUiWindow {
                     .on_input(EInputType::MouseInput(state, button));
             }
             WindowEvent::RedrawRequested => {
+                engine.window_redraw_requested_begin(window_id);
                 super::misc::ui_begin(&mut self.egui_winit_state, window);
                 self.application.on_redraw_requested(
                     engine,
@@ -159,6 +160,8 @@ impl StandaloneUiWindow {
                     window,
                     window_id,
                 )));
+
+                engine.window_redraw_requested_end(window_id);
             }
             _ => {}
         }

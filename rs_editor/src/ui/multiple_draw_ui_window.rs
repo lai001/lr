@@ -110,7 +110,7 @@ impl MultipleDrawUiWindow {
         });
         engine.send_render_command(command);
 
-        let grid_draw_object = engine.create_grid_draw_object(0, global_constants_handle.clone());
+        let grid_draw_object = engine.create_grid_draw_object(global_constants_handle.clone());
         let input_mode = EInputMode::UI;
         update_window_with_input_mode(window, input_mode);
         Ok(MultipleDrawUiWindow {
@@ -189,8 +189,7 @@ impl MultipleDrawUiWindow {
                     .insert(virtual_keycode, event.state);
             }
             WindowEvent::RedrawRequested => {
-                engine.recv_output_hook();
-
+                engine.window_redraw_requested_begin(window_id);
                 for (virtual_key_code, element_state) in &self.virtual_key_code_states {
                     DefaultCameraInputEventHandle::keyboard_input_handle(
                         &mut self.camera,
@@ -246,12 +245,8 @@ impl MultipleDrawUiWindow {
                     virtual_texture_pass: None,
                     scene_viewport: SceneViewport::new(),
                 }));
-                let wait = self
-                    .frame_sync
-                    .tick()
-                    .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-                std::thread::sleep(wait);
-
+                self.frame_sync.sync(60.0);
+                engine.window_redraw_requested_end(window_id);
                 window.request_redraw();
             }
             _ => {}

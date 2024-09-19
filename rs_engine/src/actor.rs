@@ -2,6 +2,7 @@ use crate::{
     content::content_file_type::EContentFileType,
     drawable::EDrawObjectType,
     engine::Engine,
+    player_viewport::PlayerViewport,
     resource_manager::ResourceManager,
     scene_node::{EComponentType, SceneNode},
 };
@@ -32,6 +33,7 @@ impl Actor {
         resource_manager: ResourceManager,
         engine: &mut Engine,
         files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) {
         Actor::walk_node(
             self.scene_node.clone(),
@@ -42,11 +44,11 @@ impl Actor {
                 }
                 EComponentType::StaticMeshComponent(component) => {
                     let mut component = component.borrow_mut();
-                    component.initialize(resource_manager.clone(), engine, files);
+                    component.initialize(resource_manager.clone(), engine, files, player_viewport);
                 }
                 EComponentType::SkeletonMeshComponent(component) => {
                     let mut component = component.borrow_mut();
-                    component.initialize(resource_manager.clone(), engine, files);
+                    component.initialize(resource_manager.clone(), engine, files, player_viewport);
                 }
             },
         );
@@ -147,7 +149,6 @@ impl Actor {
             }
         }
         self.update_components_world_transformation();
-        self.submit_to_gpu(engine);
     }
 
     pub fn tick_physics(
@@ -215,24 +216,5 @@ impl Actor {
     pub fn update_components_world_transformation(&mut self) {
         let parent_transformation = glam::Mat4::IDENTITY;
         Self::set_world_transformation_recursion(self.scene_node.clone(), parent_transformation);
-    }
-
-    pub fn submit_to_gpu(&mut self, engine: &mut Engine) {
-        Actor::walk_node(self.scene_node.clone(), {
-            &mut |node| {
-                let node = node.borrow_mut();
-                match &node.component {
-                    EComponentType::SceneComponent(_) => {}
-                    EComponentType::StaticMeshComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        component.submit_to_gpu(engine);
-                    }
-                    EComponentType::SkeletonMeshComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        component.submit_to_gpu(engine);
-                    }
-                }
-            }
-        });
     }
 }

@@ -87,51 +87,18 @@ impl MaterialUIWindow {
                 engine.remove_window(window_id);
             }
             WindowEvent::RedrawRequested => {
-                let gui_render_output = (|| {
-                    let egui_winit_state = &mut self.egui_winit_state;
-                    {
-                        let ctx = egui_winit_state.egui_ctx().clone();
-                        let viewport_id = egui_winit_state.egui_input().viewport_id;
-                        let viewport_info: &mut egui::ViewportInfo = egui_winit_state
-                            .egui_input_mut()
-                            .viewports
-                            .get_mut(&viewport_id)
-                            .unwrap();
-                        egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
-                    }
-
-                    let new_input = egui_winit_state.take_egui_input(window);
-
-                    egui_winit_state.egui_ctx().begin_frame(new_input);
-
-                    self.material_view.draw(
-                        self.data_source.current_open_material.clone(),
-                        &self.context,
-                        &mut self.data_source,
-                    );
-
-                    egui_winit_state.egui_ctx().clear_animations();
-
-                    let full_output = egui_winit_state.egui_ctx().end_frame();
-
-                    egui_winit_state
-                        .handle_platform_output(window, full_output.platform_output.clone());
-
-                    let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
-                        textures_delta: full_output.textures_delta,
-                        clipped_primitives: egui_winit_state
-                            .egui_ctx()
-                            .tessellate(full_output.shapes, full_output.pixels_per_point),
-                        window_id,
-                    };
-                    Some(gui_render_output)
-                })();
-
-                if let Some(gui_render_output) = gui_render_output {
-                    engine.redraw(gui_render_output);
-                    engine.present(window_id);
-                    window.request_redraw();
-                }
+                engine.window_redraw_requested_begin(window_id);
+                crate::ui::misc::ui_begin(&mut self.egui_winit_state, window);
+                self.material_view.draw(
+                    self.data_source.current_open_material.clone(),
+                    &self.context,
+                    &mut self.data_source,
+                );
+                let gui_render_output =
+                    crate::ui::misc::ui_end(&mut self.egui_winit_state, window, window_id);
+                engine.draw_gui(gui_render_output);
+                window.request_redraw();
+                engine.window_redraw_requested_end(window_id);
             }
             _ => {}
         }

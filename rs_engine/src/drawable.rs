@@ -28,7 +28,7 @@ impl EDrawObjectType {
                 draw_object.global_constants_resource = resource;
             }
             EDrawObjectType::Custom(_) => {
-                unimplemented!()
+                // unimplemented!()
             }
         }
     }

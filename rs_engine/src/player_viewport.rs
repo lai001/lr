@@ -24,6 +24,7 @@ use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
 
 bitflags::bitflags! {
+    #[derive(PartialEq, Debug, Copy, Clone, Hash, Eq)]
     pub struct DebugFlags: u8 {
         const Line = 1;
         const Physics = 1 << 1 | DebugFlags::Line.bits();
@@ -84,6 +85,11 @@ impl PlayerViewport {
         let mut camera = Camera::default(width, height);
         camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
         let physics_debug_render = Some(PhysicsDebugRender::new());
+        #[cfg(feature = "editor")]
+        let grid_draw_object =
+            Some(engine.create_grid_draw_object(global_constants_handle.clone()));
+        #[cfg(not(feature = "editor"))]
+        let grid_draw_object = None;
         PlayerViewport {
             scene_viewport,
             window_id,
@@ -92,7 +98,7 @@ impl PlayerViewport {
             global_sampler_handle,
             virtual_pass_handle: None,
             shadow_depth_texture_handle: None,
-            grid_draw_object: None,
+            grid_draw_object,
             global_constants,
             global_constants_handle,
             draw_objects: vec![],
@@ -895,5 +901,35 @@ impl PlayerViewport {
                 }
             }
         }
+    }
+
+    pub fn on_antialias_type_changed(
+        &mut self,
+        antialias_type: rs_core_minimal::settings::EAntialiasType,
+        engine: &mut Engine,
+    ) {
+        match antialias_type {
+            rs_core_minimal::settings::EAntialiasType::None => {
+                self.disable_antialias();
+            }
+            rs_core_minimal::settings::EAntialiasType::FXAA => {
+                self.enable_fxaa(engine);
+            }
+            rs_core_minimal::settings::EAntialiasType::MSAA => {
+                self.enable_msaa(engine);
+            }
+        }
+    }
+
+    pub fn update_light(&mut self, light: &mut crate::directional_light::DirectionalLight) {
+        self.global_constants.light_space_matrix = light.get_light_space_matrix();
+    }
+
+    pub fn set_debug_shading(&mut self, ty: global_uniform::EDebugShadingType) {
+        self.global_constants.set_shading_type(ty);
+    }
+
+    pub fn set_input_mode(&mut self, input_mode: EInputMode) {
+        self._input_mode = input_mode;
     }
 }

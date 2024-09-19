@@ -362,6 +362,8 @@ pub enum RenderCommand {
     DestroyTextures(Vec<TextureHandle>),
     #[cfg(feature = "renderdoc")]
     CaptureFrame,
+    WindowRedrawRequestedBegin(isize),
+    WindowRedrawRequestedEnd(isize),
 }
 
 impl RenderCommand {

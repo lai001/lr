@@ -1,6 +1,7 @@
 use crate::{
     content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
-    resource_manager::ResourceManager, static_mesh_component::Physics,
+    player_viewport::PlayerViewport, resource_manager::ResourceManager,
+    static_mesh_component::Physics,
 };
 use rapier3d::{na::point, prelude::*};
 use rs_artifact::{
@@ -90,6 +91,7 @@ impl SkeletonMeshComponent {
         resource_manager: ResourceManager,
         engine: &mut Engine,
         files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) {
         let mut skeleton: Option<Arc<Skeleton>> = None;
         let mut skeleton_animation: Option<Arc<SkeletonAnimation>> = None;
@@ -178,12 +180,14 @@ impl SkeletonMeshComponent {
                     &skin_mesh.indexes,
                     Some(skin_mesh.name.clone()),
                     material,
+                    player_viewport.global_constants_handle.clone(),
                 );
             } else {
                 draw_object = engine.create_draw_object_from_skin_mesh(
                     &skin_mesh.vertexes,
                     &skin_mesh.indexes,
                     Some(skin_mesh.name.clone()),
+                    player_viewport.global_constants_handle.clone(),
                 );
             }
 
@@ -390,17 +394,6 @@ impl SkeletonMeshComponent {
         }
     }
 
-    pub fn submit_to_gpu(&mut self, engine: &mut Engine) {
-        let Some(run_time) = &mut self.run_time else {
-            return;
-        };
-        for skin_mesh in run_time.skin_meshes.clone() {
-            if let Some(draw_object) = run_time.draw_objects.get_mut(&skin_mesh.name) {
-                engine.update_draw_object(draw_object);
-            }
-        }
-    }
-
     pub fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
         match &self.run_time {
             Some(x) => x.draw_objects.values().map(|x| x).collect(),
@@ -420,6 +413,7 @@ impl SkeletonMeshComponent {
         engine: &mut Engine,
         material_url: url::Url,
         files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) {
         self.material_url = Some(material_url);
         let material = if let Some(material_url) = &self.material_url {
@@ -454,6 +448,7 @@ impl SkeletonMeshComponent {
                             &skin_mesh.indexes,
                             Some(skin_mesh.name.clone()),
                             material.clone(),
+                            player_viewport.global_constants_handle.clone(),
                         );
                     }
                 }

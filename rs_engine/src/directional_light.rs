@@ -1,5 +1,6 @@
 use crate::drawable::{CustomDrawObject, EDrawObjectType};
 use crate::engine::Engine;
+use crate::player_viewport::PlayerViewport;
 use rs_core_minimal::frustum::Frustum;
 use rs_core_minimal::misc::get_orthographic_frustum;
 use rs_render::command::{DrawObject, EBindingResource};
@@ -68,7 +69,7 @@ impl DirectionalLight {
         }
     }
 
-    pub fn initialize(&mut self, engine: &mut Engine) {
+    pub fn initialize(&mut self, engine: &mut Engine, player_viewport: &mut PlayerViewport) {
         let frustum = get_orthographic_frustum(
             self.left,
             self.right,
@@ -78,7 +79,8 @@ impl DirectionalLight {
             self.far,
         );
 
-        let (draw_object, constants_handle) = Self::make_draw_object(engine, &frustum);
+        let (draw_object, constants_handle) =
+            Self::make_draw_object(engine, &frustum, player_viewport);
         let runtime = Runtime {
             draw_object: EDrawObjectType::Custom(CustomDrawObject {
                 draw_object,
@@ -93,6 +95,7 @@ impl DirectionalLight {
     fn make_draw_object(
         engine: &mut Engine,
         frustum: &Frustum,
+        player_viewport: &mut PlayerViewport,
     ) -> (DrawObject, crate::handle::BufferHandle) {
         let lines = frustum.make_lines();
         let mut v1 = lines[0..4]
@@ -164,7 +167,7 @@ impl DirectionalLight {
                 None,
                 vec![
                     vec![EBindingResource::Constants(
-                        *engine.get_global_constants_handle(),
+                        *player_viewport.global_constants_handle,
                     )],
                     vec![EBindingResource::Constants(*constants_handle)],
                 ],

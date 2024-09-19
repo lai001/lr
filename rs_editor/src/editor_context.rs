@@ -34,7 +34,6 @@ use rs_core_minimal::{
 use rs_engine::plugin::plugin_crate::Plugin;
 use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
-    camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
     content::{content_file_type::EContentFileType, texture::TextureFile},
     directional_light::DirectionalLight,
     frame_sync::{EOptions, FrameSync},
@@ -64,7 +63,7 @@ use std::{
 };
 use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
-    event::{ElementState, Event, MouseScrollDelta, WindowEvent},
+    event::{ElementState, Event, WindowEvent},
     keyboard::KeyCode,
 };
 
@@ -149,6 +148,7 @@ pub struct EditorContext {
     #[cfg(feature = "plugin_dotnet")]
     donet_host: Option<rs_dotnet_host::dotnet_runtime::DotnetRuntime>,
     mosue_state: MouseState,
+    player_viewport: PlayerViewport,
 }
 
 impl EditorContext {
@@ -183,6 +183,7 @@ impl EditorContext {
     }
 
     pub fn new(
+        window_id: isize,
         window: &winit::window::Window,
         event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
         window_manager: Rc<RefCell<WindowsManager>>,
@@ -248,6 +249,21 @@ impl EditorContext {
             // let _ = v8_runtime.register_engine_global(&mut editor_context.engine);
             v8_runtime
         };
+
+        let virtual_texture_source_infos = engine.get_virtual_texture_source_infos();
+        let player_viewport = PlayerViewport::new(
+            window_id,
+            window_width,
+            window_height,
+            ResourceManager::default()
+                .get_builtin_resources()
+                .global_sampler_handle
+                .clone(),
+            &mut engine,
+            virtual_texture_source_infos,
+            EInputMode::UI,
+        );
+
         let editor_context = EditorContext {
             event_loop_proxy,
             engine,
@@ -276,6 +292,7 @@ impl EditorContext {
                 is_focus: false,
                 position: glam::vec2(0.0, 0.0),
             },
+            player_viewport,
         };
 
         Ok(editor_context)
@@ -324,9 +341,9 @@ impl EditorContext {
             }
             WindowEvent::Resized(size) => {
                 log::trace!("Main window resized: {:?}", size);
-                self.engine
-                    .get_camera_mut()
-                    .set_window_size(size.width, size.height);
+                self.player_viewport
+                    .size_changed(size.width, size.height, &mut self.engine);
+
                 self.engine.resize(window_id, size.width, size.height);
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -336,26 +353,20 @@ impl EditorContext {
                         new_factor: *scale_factor as f32,
                     }));
             }
-            WindowEvent::MouseWheel { delta, .. } => match delta {
-                MouseScrollDelta::LineDelta(_, up) => {
-                    self.data_source.camera_movement_speed += up * 0.005;
-                    self.data_source.camera_movement_speed =
-                        self.data_source.camera_movement_speed.max(0.0);
-                }
-                MouseScrollDelta::PixelDelta(_) => todo!(),
-            },
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.player_viewport
+                    .on_input(rs_engine::input_type::EInputType::MouseWheel(delta));
+            }
             WindowEvent::MouseInput { state, button, .. } => {
                 if *button == winit::event::MouseButton::Right
                     && !self.egui_winit_state.egui_ctx().is_pointer_over_area()
                 {
                     match state {
                         winit::event::ElementState::Pressed => {
-                            self.engine
-                                .set_input_mode(rs_engine::input_mode::EInputMode::Game);
+                            self.data_source.input_mode = rs_engine::input_mode::EInputMode::Game;
                         }
                         winit::event::ElementState::Released => {
-                            self.engine
-                                .set_input_mode(rs_engine::input_mode::EInputMode::UI);
+                            self.data_source.input_mode = rs_engine::input_mode::EInputMode::UI;
                         }
                     }
                 }
@@ -373,7 +384,8 @@ impl EditorContext {
                                 window.inner_size().width as f32,
                                 window.inner_size().height as f32,
                             ),
-                            self.engine.get_camera_mut(),
+                            self.player_viewport.camera.get_view_matrix(),
+                            self.player_viewport.camera.get_projection_matrix(),
                         );
                         if let Some(componenet_type) = componenet_type {
                             use rs_engine::scene_node::EComponentType;
@@ -416,11 +428,8 @@ impl EditorContext {
                 log::trace!("{:?}", result);
             }
             WindowEvent::RedrawRequested => {
-                let wait = self
-                    .frame_sync
-                    .tick()
-                    .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-                std::thread::sleep(wait);
+                self.frame_sync.sync(60.0);
+
                 let _span = tracy_client::span!();
                 let (is_minimized, is_visible) = {
                     let is_minimized = window.is_minimized().unwrap_or(false);
@@ -432,6 +441,8 @@ impl EditorContext {
                 if !is_visible || is_minimized {
                     return;
                 }
+                self.engine.window_redraw_requested_begin(window_id);
+
                 let changed_results = self.watch_shader.get_changed_results();
                 for changed_result in changed_results {
                     self.engine
@@ -466,27 +477,26 @@ impl EditorContext {
                         }
                     }
                 }
+                self.player_viewport
+                    .set_debug_flags(self.data_source.debug_flags);
+                self.player_viewport
+                    .on_input(rs_engine::input_type::EInputType::KeyboardInput(
+                        &self.virtual_key_code_states,
+                    ));
 
-                for (virtual_key_code, element_state) in &self.virtual_key_code_states {
-                    let input_mode = self.engine.get_input_mode();
-                    DefaultCameraInputEventHandle::keyboard_input_handle(
-                        &mut self.engine.get_camera_mut(),
-                        virtual_key_code,
-                        element_state,
-                        input_mode,
-                        self.data_source.camera_movement_speed,
-                    );
-                }
-                self.data_source.camera_view_matrix =
-                    self.engine.get_camera_mut().get_view_matrix();
+                self.player_viewport
+                    .set_input_mode(self.data_source.input_mode);
+
+                self.player_viewport
+                    .update_global_constants(&mut self.engine);
+                self.data_source.camera_view_matrix = self.player_viewport.camera.get_view_matrix();
                 self.data_source.camera_projection_matrix =
-                    self.engine.get_camera_mut().get_projection_matrix();
+                    self.player_viewport.camera.get_projection_matrix();
 
                 self.process_redraw_request(window_id, window, event_loop_window_target);
 
-                update_window_with_input_mode(window, self.engine.get_input_mode());
-                self.data_source.input_mode = self.engine.get_input_mode();
-
+                update_window_with_input_mode(window, self.data_source.input_mode);
+                self.engine.window_redraw_requested_end(window_id);
                 window.request_redraw();
             }
             WindowEvent::Destroyed => {}
@@ -513,18 +523,8 @@ impl EditorContext {
                 if let Some(ui_window) = self.standalone_ui_window.as_mut() {
                     ui_window.device_event_process(event);
                 }
-                match event {
-                    winit::event::DeviceEvent::MouseMotion { delta } => {
-                        let input_mode = self.engine.get_input_mode();
-                        DefaultCameraInputEventHandle::mouse_motion_handle(
-                            &mut self.engine.get_camera_mut(),
-                            *delta,
-                            input_mode,
-                            self.data_source.camera_motion_speed,
-                        );
-                    }
-                    _ => {}
-                }
+                self.player_viewport
+                    .on_input(rs_engine::input_type::EInputType::Device(event));
             }
             Event::UserEvent(event) => {
                 let window = self.window_manager.borrow_mut().get_main_window();
@@ -881,7 +881,7 @@ impl EditorContext {
                 true,
             ) {
                 self.data_source.debug_shading_type = debug_shading_type;
-                self.engine
+                self.player_viewport
                     .set_debug_shading(self.data_source.debug_shading_type);
             }
         }
@@ -1139,8 +1139,9 @@ impl EditorContext {
         engine: &mut rs_engine::engine::Engine,
         actors: Vec<Rc<RefCell<rs_engine::actor::Actor>>>,
         files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) {
-        level.add_new_actors(engine, actors, files);
+        level.add_new_actors(engine, actors, files, player_viewport);
     }
 
     fn open_project(
@@ -1196,7 +1197,11 @@ impl EditorContext {
             if let Some(level) = find_level.cloned() {
                 let mut level = level.borrow_mut();
                 if let Some(folder) = &self.data_source.content_data_source.current_folder {
-                    level.initialize(&mut self.engine, &folder.borrow().files);
+                    level.initialize(
+                        &mut self.engine,
+                        &folder.borrow().files,
+                        &mut self.player_viewport,
+                    );
                 }
             }
         }
@@ -1361,6 +1366,7 @@ impl EditorContext {
             &mut self.engine,
             vec![load_result.actor.clone()],
             &content.files,
+            &mut self.player_viewport,
         );
         // active_level.init_actor_physics(load_result.actor.clone());
         // active_level.actors.push(load_result.actor);
@@ -1392,20 +1398,32 @@ impl EditorContext {
         if let Some(active_level) = self.data_source.level.clone() {
             let mut active_level = active_level.borrow_mut();
             active_level.set_physics_simulate(self.data_source.is_simulate_real_time);
-            active_level.tick(self.engine.get_game_time(), &mut self.engine);
-            let draw_objects = active_level.collect_draw_objects();
-            let entry = self.engine.draw_objects.entry(window_id).or_default();
-            for draw_object in draw_objects {
-                if let Ok(value) = PlayerViewport::to_render_draw_object(
-                    &draw_object,
-                    self.engine.shadow_depth_texture_handle.clone(),
-                ) {
-                    entry.push(value);
-                }
+            active_level.tick(
+                self.engine.get_game_time(),
+                &mut self.engine,
+                &mut self.player_viewport,
+            );
+
+            let mut draw_objects = active_level.collect_draw_objects();
+            for draw_object in draw_objects.iter_mut() {
+                self.player_viewport
+                    .update_draw_object(&mut self.engine, draw_object);
+                draw_object.switch_player_viewport(&self.player_viewport);
+            }
+            self.player_viewport.append_to_draw_list(&draw_objects);
+
+            if let Some(physics) = active_level.get_physics_mut() {
+                self.player_viewport.physics_debug(
+                    &mut self.engine,
+                    &physics.rigid_body_set,
+                    &physics.collider_set,
+                );
             }
         }
 
-        self.process_ui(window, event_loop_window_target);
+        crate::ui::misc::ui_begin(&mut self.egui_winit_state, window);
+
+        self.process_ui_event(window, event_loop_window_target);
 
         #[cfg(feature = "plugin_dotnet")]
         if let Some(dotnet) = self.donet_host.as_mut() {
@@ -1433,25 +1451,8 @@ impl EditorContext {
                 );
         }
 
-        let gui_render_output = (|| {
-            let egui_winit_state = &mut self.egui_winit_state;
-            let full_output = egui_winit_state.egui_ctx().end_frame();
-
-            egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
-
-            let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
-                textures_delta: full_output.textures_delta,
-                clipped_primitives: egui_winit_state
-                    .egui_ctx()
-                    .tessellate(full_output.shapes, full_output.pixels_per_point),
-                window_id,
-            };
-            Some(gui_render_output)
-        })();
-
-        if let Some(gui_render_output) = gui_render_output {
-            self.engine.redraw(gui_render_output);
-        }
+        let gui_render_output =
+            crate::ui::misc::ui_end(&mut self.egui_winit_state, window, window_id);
 
         self.engine.send_render_task({
             move |renderer| {
@@ -1488,8 +1489,9 @@ impl EditorContext {
                 pipeline.execute(device, queue, &input_texture_view, &output_texture_view, glam::uvec3(1024, 1024, 1));
             }
         });
-
-        self.engine.present(window_id);
+        self.engine
+            .present_player_viewport(&mut self.player_viewport);
+        self.engine.draw_gui(gui_render_output);
     }
 
     pub fn prepreocess_shader() -> anyhow::Result<()> {
@@ -1703,7 +1705,7 @@ impl EditorContext {
             .collect()
     }
 
-    fn process_ui(
+    fn process_ui_event(
         &mut self,
         window: &mut winit::window::Window,
         event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
@@ -1711,19 +1713,6 @@ impl EditorContext {
         let _span = tracy_client::span!();
 
         let egui_winit_state = &mut self.egui_winit_state;
-
-        let ctx = egui_winit_state.egui_ctx().clone();
-        let viewport_id = egui_winit_state.egui_input().viewport_id.clone();
-        let viewport_info: &mut egui::ViewportInfo = egui_winit_state
-            .egui_input_mut()
-            .viewports
-            .get_mut(&viewport_id)
-            .unwrap();
-        egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
-
-        let new_input = egui_winit_state.take_egui_input(window);
-        egui_winit_state.egui_ctx().begin_frame(new_input);
-        egui_winit_state.egui_ctx().clear_animations();
 
         let click_event = self
             .editor_ui
@@ -1941,7 +1930,9 @@ impl EditorContext {
                 let output = command.output();
                 log::trace!("{:?}", output);
             }
-            top_menu::EClickEventType::DebugShading(ty) => self.engine.set_debug_shading(ty),
+            top_menu::EClickEventType::DebugShading(ty) => {
+                self.player_viewport.set_debug_shading(ty);
+            }
             top_menu::EClickEventType::Standalone => {
                 let Some(_) = self.project_context.as_mut() else {
                     return;
@@ -2013,7 +2004,8 @@ impl EditorContext {
         };
         match event {
             crate::ui::project_settings::EEventType::AntialiasType(ty) => {
-                self.engine.on_antialias_type_changed(ty);
+                self.player_viewport
+                    .on_antialias_type_changed(ty, &mut self.engine);
             }
         }
     }
@@ -2053,7 +2045,7 @@ impl EditorContext {
             crate::ui::level_view::EClickEventType::CreateDirectionalLight => {
                 let size = 10.0;
                 let mut light = DirectionalLight::new(-size, size, -size, size, 0.01, 25.0);
-                light.initialize(&mut self.engine);
+                light.initialize(&mut self.engine, &mut self.player_viewport);
                 opened_level
                     .borrow_mut()
                     .directional_lights
@@ -2451,6 +2443,7 @@ impl EditorContext {
                             &mut self.engine,
                             update_material.new,
                             &files,
+                            &mut self.player_viewport,
                         );
                     }
                     ESelectedObjectType::SkeletonMeshComponent(static_mesh_component) => {
@@ -2463,7 +2456,12 @@ impl EditorContext {
                         };
                         let mut static_mesh_component = static_mesh_component.borrow_mut();
                         if let Some(url) = update_material.new {
-                            static_mesh_component.set_material(&mut self.engine, url, &files);
+                            static_mesh_component.set_material(
+                                &mut self.engine,
+                                url,
+                                &files,
+                                &mut self.player_viewport,
+                            );
                         }
                     }
                     _ => unimplemented!(),

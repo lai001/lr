@@ -1,20 +1,16 @@
+use crate::build_built_in_resouce_url;
 use crate::camera::Camera;
-#[cfg(not(target_os = "android"))]
-use crate::camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle};
 use crate::console_cmd::ConsoleCmd;
 use crate::content::content_file_type::EContentFileType;
 use crate::default_textures::DefaultTextures;
-use crate::directional_light::DirectionalLight;
 use crate::drawable::{
     EDrawObjectType, MaterialDrawObject, SkinMeshDrawObject, StaticMeshDrawObject,
     StaticMeshMaterialDrawObject,
 };
 use crate::error::Result;
 use crate::handle::{EGUITextureHandle, TextureHandle};
-use crate::input_mode::EInputMode;
 use crate::player_viewport::PlayerViewport;
 use crate::render_thread_mode::ERenderThreadMode;
-use crate::{build_built_in_resouce_url, BUILT_IN_RESOURCE};
 use crate::{logger::Logger, resource_manager::ResourceManager};
 use rs_artifact::artifact::ArtifactReader;
 use rs_artifact::content_type::EContentType;
@@ -29,13 +25,12 @@ use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
     BufferCreateInfo, ClearDepthTexture, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline,
     CreateSampler, CreateTexture, CreateUITexture, CreateVirtualTexture, CreateVirtualTexturePass,
-    DrawObject, EBindingResource, InitTextureData, PresentInfo, RenderCommand, ShadowMapping,
-    TextureDescriptorCreateInfo, UpdateBuffer, UploadPrebakeIBL, VirtualPassSet,
-    VirtualTexturePassKey, VirtualTexturePassResize,
+    EBindingResource, InitTextureData, PresentInfo, RenderCommand, TextureDescriptorCreateInfo,
+    UpdateBuffer, UploadPrebakeIBL, VirtualTexturePassKey,
 };
 use rs_render::egui_render::EGUIRenderOutput;
-use rs_render::global_uniform::{self, EDebugShadingType};
-use rs_render::renderer::{EBuiltinPipelineType, EPipelineType, MaterialPipelineType, Renderer};
+use rs_render::global_uniform::{self};
+use rs_render::renderer::Renderer;
 use rs_render::sdf2d_generator;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
@@ -45,26 +40,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
-
-struct State {
-    camera_movement_speed: f32,
-    #[cfg(not(target_os = "android"))]
-    camera_motion_speed: f32,
-    #[cfg(not(target_os = "android"))]
-    virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            camera_movement_speed: 0.01,
-            #[cfg(not(target_os = "android"))]
-            camera_motion_speed: 0.1,
-            #[cfg(not(target_os = "android"))]
-            virtual_key_code_states: Default::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct VirtualPassHandle {
@@ -95,30 +70,19 @@ pub struct Engine {
     render_thread_mode: ERenderThreadMode,
     resource_manager: ResourceManager,
     logger: Logger,
-    // level: Option<SingleThreadMutType<crate::content::level::Level>>,
-    // draw_objects: Vec<DrawObject>,
     draw_object_id: u32,
-    camera: Camera,
-    state: State,
     settings: Settings,
     game_time: std::time::Instant,
     game_time_sec: f32,
-    input_mode: EInputMode,
-    global_constants: rs_render::global_uniform::Constants,
-    global_constants_handle: crate::handle::BufferHandle,
-    global_sampler_handle: crate::handle::SamplerHandle,
     virtual_texture_source_infos: SingleThreadMutType<
         HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
     >,
     console_cmds: SingleThreadMutType<HashMap<String, SingleThreadMutType<ConsoleCmd>>>,
-    grid_draw_object: Option<DrawObject>,
     pub content_files: HashMap<url::Url, EContentFileType>,
     main_window_id: isize,
-    pub draw_objects: HashMap<isize, Vec<DrawObject>>,
     default_textures: DefaultTextures,
     virtual_pass_handle: Option<VirtualPassHandle>,
     pub shadow_depth_texture_handle: Option<TextureHandle>,
-    player_viewports: Vec<SingleThreadMutType<PlayerViewport>>,
     _audio_device: Option<AudioDevice>,
 }
 
@@ -218,41 +182,9 @@ impl Engine {
 
         let mut camera = Camera::default(surface_width, surface_height);
         camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
-        // let mut level: Option<SingleThreadMutType<crate::content::level::Level>> = None;
-        // (|| {
-        //     let Some(url) = Self::find_first_level(&mut resource_manager) else {
-        //         return;
-        //     };
-        //     let Ok(_level) = resource_manager.get_level(&url) else {
-        //         return;
-        //     };
-        //     log::trace!("Load level: {}", _level.url.to_string());
-        //     level = Some(SingleThreadMut::new(_level));
-        // })();
 
-        #[cfg(feature = "editor")]
-        let mut draw_object_id: u32 = 0;
-        #[cfg(not(feature = "editor"))]
         let draw_object_id: u32 = 0;
 
-        #[cfg(feature = "editor")]
-        let grid_draw_object = (|| {
-            draw_object_id += 1;
-            Some(Self::internal_create_grid_draw_object(
-                // window_id,
-                draw_object_id,
-                resource_manager.clone(),
-                &mut render_thread_mode,
-                global_constants_handle.clone(),
-            ))
-        })();
-        #[cfg(not(feature = "editor"))]
-        let grid_draw_object = None;
-
-        #[cfg(feature = "editor")]
-        let input_mode = EInputMode::UI;
-        #[cfg(not(feature = "editor"))]
-        let input_mode = EInputMode::Game;
         let default_textures = DefaultTextures::new(ResourceManager::default());
         default_textures.create(&mut render_thread_mode);
 
@@ -288,51 +220,23 @@ impl Engine {
             render_thread_mode,
             resource_manager,
             logger,
-            // level,
-            draw_objects: HashMap::new(),
-            camera,
-            state: State::default(),
+
             settings: settings.clone(),
             draw_object_id,
             game_time: std::time::Instant::now(),
             game_time_sec: 0.0,
-            input_mode,
-            global_constants,
-            global_constants_handle: global_constants_handle.clone(),
-            global_sampler_handle: global_sampler_handle.clone(),
+
             virtual_texture_source_infos: virtual_texture_source_infos.clone(),
             console_cmds: SingleThreadMut::new(HashMap::new()),
-            grid_draw_object,
             content_files: Self::collect_content_files(),
             main_window_id: window_id,
             default_textures,
             virtual_pass_handle,
             shadow_depth_texture_handle: Some(shadow_depth_texture_handle),
-            player_viewports: vec![],
             _audio_device: Some(audio_device),
         };
 
-        let mut player_viewport = PlayerViewport::new(
-            window_id,
-            surface_width,
-            surface_height,
-            global_sampler_handle,
-            &mut engine,
-            virtual_texture_source_infos.clone(),
-            EInputMode::Game,
-        );
-        match &settings.render_setting.antialias_type {
-            rs_core_minimal::settings::EAntialiasType::None => {}
-            rs_core_minimal::settings::EAntialiasType::FXAA => {
-                player_viewport.enable_fxaa(&mut engine);
-            }
-            rs_core_minimal::settings::EAntialiasType::MSAA => {
-                player_viewport.enable_msaa(&mut engine);
-            }
-        }
-        engine
-            .player_viewports
-            .push(SingleThreadMut::new(player_viewport));
+        ResourceManager::default().create_builtin_resources(&mut engine);
 
         Ok(engine)
     }
@@ -666,43 +570,18 @@ impl Engine {
         self.resource_manager.get_resource_map()
     }
 
-    pub fn recv_output_hook(&mut self) {
-        // TODO
+    pub fn window_redraw_requested_begin(&mut self, window_id: isize) {
         self.render_thread_mode.recv_output();
+        self.render_thread_mode
+            .send_command(RenderCommand::WindowRedrawRequestedBegin(window_id));
     }
 
-    pub fn redraw(&mut self, gui_render_output: EGUIRenderOutput) {
-        self.render_thread_mode.recv_output();
-        #[cfg(not(target_os = "android"))]
-        for (virtual_key_code, element_state) in &self.state.virtual_key_code_states {
-            DefaultCameraInputEventHandle::keyboard_input_handle(
-                &mut self.camera,
-                virtual_key_code,
-                element_state,
-                self.input_mode,
-                self.state.camera_movement_speed,
-            );
-        }
+    pub fn window_redraw_requested_end(&mut self, window_id: isize) {
+        self.render_thread_mode
+            .send_command(RenderCommand::WindowRedrawRequestedEnd(window_id));
+    }
 
-        self.camera_did_update(
-            self.camera.get_view_matrix(),
-            self.camera.get_projection_matrix(),
-            self.camera.get_world_location(),
-        );
-
-        let virtual_texture_setting = &self.settings.render_setting.virtual_texture_setting;
-        self.global_constants.physical_texture_size =
-            virtual_texture_setting.physical_texture_size as f32;
-        self.global_constants.is_enable_virtual_texture = if virtual_texture_setting.is_enable {
-            1
-        } else {
-            0
-        };
-        self.global_constants.tile_size = virtual_texture_setting.tile_size as f32;
-        self.global_constants.scene_factor = virtual_texture_setting.feed_back_texture_div as f32;
-        self.global_constants.feedback_bias = virtual_texture_setting.feedback_bias;
-        self.update_global_constants();
-
+    pub fn draw_gui(&mut self, gui_render_output: EGUIRenderOutput) {
         self.render_thread_mode
             .send_command(RenderCommand::UiOutput(gui_render_output));
     }
@@ -753,69 +632,7 @@ impl Engine {
         }
     }
 
-    pub fn present(&mut self, window_id: isize) {
-        let mut draw_objects = self.draw_objects.entry(window_id).or_default().clone();
-        if let Some(grid_draw_object) = &self.grid_draw_object {
-            if window_id == self.main_window_id {
-                draw_objects.push(grid_draw_object.clone());
-            }
-        }
-        let virtual_texture_pass = if window_id == self.main_window_id {
-            self.virtual_pass_handle.clone().map(|x| x.key())
-        } else {
-            None
-        };
-        if let Some(key) = virtual_texture_pass {
-            self.render_thread_mode
-                .send_command(RenderCommand::ClearVirtualTexturePass(key));
-        }
-
-        if let Some(shadow_depth_texture_handle) = if window_id == self.main_window_id {
-            self.shadow_depth_texture_handle.clone()
-        } else {
-            None
-        } {
-            self.render_thread_mode
-                .send_command(RenderCommand::ClearDepthTexture(ClearDepthTexture {
-                    handle: *shadow_depth_texture_handle,
-                }));
-        }
-
-        let player_viewport = self.player_viewports.get(0).unwrap();
-        let player_viewport = player_viewport.borrow();
-
-        self.render_thread_mode
-            .send_command(RenderCommand::Present(PresentInfo {
-                window_id,
-                draw_objects,
-                virtual_texture_pass,
-                scene_viewport: player_viewport.scene_viewport.clone(),
-            }));
-        self.draw_objects.entry(window_id).or_default().clear();
-
-        let pending_destroy_textures = ResourceManager::default().get_pending_destroy_textures();
-        if !pending_destroy_textures.is_empty() {
-            let pending_destroy_textures = pending_destroy_textures.iter().map(|x| **x).collect();
-            self.render_thread_mode
-                .send_command(RenderCommand::DestroyTextures(pending_destroy_textures));
-        }
-    }
-
     pub fn resize(&mut self, window_id: isize, surface_width: u32, surface_height: u32) {
-        let virtual_texture_pass = if window_id == self.main_window_id {
-            self.virtual_pass_handle.clone().map(|x| x.key())
-        } else {
-            None
-        };
-        if let Some(key) = virtual_texture_pass {
-            self.render_thread_mode
-                .send_command(RenderCommand::VirtualTexturePassResize(
-                    VirtualTexturePassResize {
-                        key,
-                        surface_size: glam::uvec2(surface_width, surface_height),
-                    },
-                ));
-        }
         self.render_thread_mode.send_command(RenderCommand::Resize(
             rs_render::command::ResizeInfo {
                 width: surface_width,
@@ -823,10 +640,6 @@ impl Engine {
                 window_id,
             },
         ));
-
-        let player_viewport = self.player_viewports.get(0).unwrap().clone();
-        let mut player_viewport = player_viewport.borrow_mut();
-        player_viewport.size_changed(surface_width, surface_height, self);
     }
 
     pub fn remove_window(&mut self, window_id: isize) {
@@ -924,6 +737,7 @@ impl Engine {
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
         indexes: &[u32],
         name: Option<String>,
+        global_constants_handle: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
         let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
@@ -983,7 +797,10 @@ impl Engine {
         };
         let message = RenderCommand::CreateBuffer(create_buffer);
         self.render_thread_mode.send_command(message);
-
+        let global_sampler_handle = ResourceManager::default()
+            .get_builtin_resources()
+            .global_sampler_handle
+            .clone();
         let object = StaticMeshDrawObject {
             id,
             vertex_buffers: vertex_buffer_handles,
@@ -995,8 +812,8 @@ impl Engine {
             specular_texture_url: Default::default(),
             constants_buffer_handle: constants_buffer_handle.clone(),
             window_id: self.main_window_id,
-            global_constants_resource: EBindingResource::Constants(*self.global_constants_handle),
-            base_color_sampler_resource: EBindingResource::Sampler(*self.global_sampler_handle),
+            global_constants_resource: EBindingResource::Constants(*global_constants_handle),
+            base_color_sampler_resource: EBindingResource::Sampler(*global_sampler_handle),
             physical_texture_resource: EBindingResource::Texture(
                 self.virtual_pass_handle
                     .clone()
@@ -1027,6 +844,7 @@ impl Engine {
         vertexes: &[rs_artifact::skin_mesh::SkinMeshVertex],
         indexes: &[u32],
         name: Option<String>,
+        global_constants_handle: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
         let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
@@ -1090,6 +908,10 @@ impl Engine {
         };
         let message = RenderCommand::CreateBuffer(create_buffer);
         self.render_thread_mode.send_command(message);
+        let global_sampler_handle = ResourceManager::default()
+            .get_builtin_resources()
+            .global_sampler_handle
+            .clone();
 
         let object = SkinMeshDrawObject {
             id,
@@ -1102,8 +924,8 @@ impl Engine {
             specular_texture_url: Default::default(),
             constants_buffer_handle: constants_buffer_handle.clone(),
             window_id: self.main_window_id,
-            global_constants_resource: EBindingResource::Constants(*self.global_constants_handle),
-            base_color_sampler_resource: EBindingResource::Sampler(*self.global_sampler_handle),
+            global_constants_resource: EBindingResource::Constants(*global_constants_handle),
+            base_color_sampler_resource: EBindingResource::Sampler(*global_sampler_handle),
             physical_texture_resource: EBindingResource::Texture(
                 self.virtual_pass_handle
                     .clone()
@@ -1135,6 +957,7 @@ impl Engine {
         indexes: &[u32],
         name: Option<String>,
         material: Rc<RefCell<crate::content::material::Material>>,
+        global_constants_handle: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
         let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
@@ -1215,6 +1038,10 @@ impl Engine {
             )
             .to_vec(),
         );
+        let global_sampler_handle = ResourceManager::default()
+            .get_builtin_resources()
+            .global_sampler_handle
+            .clone();
 
         let object = MaterialDrawObject {
             id,
@@ -1222,8 +1049,8 @@ impl Engine {
             vertex_count: vertexes0.len() as u32,
             index_buffer: Some(index_buffer_handle),
             index_count: Some(indexes.len() as u32),
-            global_constants_resource: EBindingResource::Constants(*self.global_constants_handle),
-            base_color_sampler_resource: EBindingResource::Sampler(*self.global_sampler_handle),
+            global_constants_resource: EBindingResource::Constants(*global_constants_handle),
+            base_color_sampler_resource: EBindingResource::Sampler(*global_sampler_handle),
             physical_texture_resource: EBindingResource::Texture(
                 self.virtual_pass_handle
                     .clone()
@@ -1321,6 +1148,7 @@ impl Engine {
         indexes: &[u32],
         name: Option<String>,
         material: Rc<RefCell<crate::content::material::Material>>,
+        global_constants_handle: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
         let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
@@ -1393,6 +1221,10 @@ impl Engine {
             )
             .to_vec(),
         );
+        let global_sampler_handle = ResourceManager::default()
+            .get_builtin_resources()
+            .global_sampler_handle
+            .clone();
 
         let object = StaticMeshMaterialDrawObject {
             id,
@@ -1400,8 +1232,8 @@ impl Engine {
             vertex_count: vertexes0.len() as u32,
             index_buffer: Some(index_buffer_handle),
             index_count: Some(indexes.len() as u32),
-            global_constants_resource: EBindingResource::Constants(*self.global_constants_handle),
-            base_color_sampler_resource: EBindingResource::Sampler(*self.global_sampler_handle),
+            global_constants_resource: EBindingResource::Constants(*global_constants_handle),
+            base_color_sampler_resource: EBindingResource::Sampler(*global_sampler_handle),
             physical_texture_resource: EBindingResource::Texture(
                 self.virtual_pass_handle
                     .clone()
@@ -1445,484 +1277,6 @@ impl Engine {
             ),
         };
         EDrawObjectType::StaticMeshMaterial(object)
-    }
-
-    pub fn update_draw_object(&mut self, object: &mut EDrawObjectType) {
-        match object {
-            EDrawObjectType::Static(object) => {
-                self.update_buffer(
-                    object.constants_buffer_handle.clone(),
-                    rs_foundation::cast_any_as_u8_slice(&object.constants),
-                );
-                if let Some(texture_url) = object.diffuse_texture_url.as_ref() {
-                    if let Some(_) = self
-                        .resource_manager
-                        .get_virtual_texture_by_url(texture_url)
-                    {
-                        let virtual_texture_source_infos =
-                            self.virtual_texture_source_infos.borrow();
-                        let source = virtual_texture_source_infos.get(texture_url).unwrap();
-                        {
-                            let source = source.lock().unwrap();
-                            let max_mips = rs_core_minimal::misc::calculate_max_mips(
-                                source.get_size().min_element(),
-                            );
-                            let max_lod = max_mips
-                                - self
-                                    .settings
-                                    .render_setting
-                                    .virtual_texture_setting
-                                    .tile_size
-                                    .ilog2()
-                                - 1;
-                            object.constants.diffuse_texture_max_lod = max_lod;
-                            object.constants.diffuse_texture_size = source.get_size().as_vec2();
-                        }
-                        object.constants.is_virtual_diffuse_texture = 1;
-                        object.diffuse_texture_resource =
-                            EBindingResource::Texture(*self.default_textures.get_texture_handle());
-                    } else if let Some(base_texture_handle) =
-                        self.resource_manager.get_texture_by_url(texture_url)
-                    {
-                        object.constants.is_virtual_diffuse_texture = 0;
-                        object.diffuse_texture_resource =
-                            EBindingResource::Texture(*base_texture_handle);
-                    }
-                }
-            }
-            EDrawObjectType::Skin(object) => {
-                self.update_buffer(
-                    object.constants_buffer_handle.clone(),
-                    rs_foundation::cast_any_as_u8_slice(&object.constants),
-                );
-                if let Some(texture_url) = object.diffuse_texture_url.as_ref() {
-                    if let Some(_) = self
-                        .resource_manager
-                        .get_virtual_texture_by_url(texture_url)
-                    {
-                        let virtual_texture_source_infos =
-                            self.virtual_texture_source_infos.borrow();
-                        let source = virtual_texture_source_infos.get(texture_url).unwrap();
-                        {
-                            let source = source.lock().unwrap();
-                            let max_mips = rs_core_minimal::misc::calculate_max_mips(
-                                source.get_size().min_element(),
-                            );
-                            let max_lod = max_mips
-                                - self
-                                    .settings
-                                    .render_setting
-                                    .virtual_texture_setting
-                                    .tile_size
-                                    .ilog2()
-                                - 1;
-                            object.constants.diffuse_texture_max_lod = max_lod;
-                            object.constants.diffuse_texture_size = source.get_size().as_vec2();
-                        }
-                        object.constants.is_virtual_diffuse_texture = 1;
-                        object.diffuse_texture_resource =
-                            EBindingResource::Texture(*self.default_textures.get_texture_handle());
-                    } else if let Some(base_texture_handle) =
-                        self.resource_manager.get_texture_by_url(texture_url)
-                    {
-                        object.constants.is_virtual_diffuse_texture = 0;
-                        object.diffuse_texture_resource =
-                            EBindingResource::Texture(*base_texture_handle);
-                    }
-                }
-            }
-            EDrawObjectType::SkinMaterial(object) => {
-                self.update_buffer(
-                    object.constants_buffer_handle.clone(),
-                    rs_foundation::cast_any_as_u8_slice(&object.constants),
-                );
-                let material_info = object.material.borrow().get_material_info().clone();
-                let map_textures = &material_info
-                    .get(&MaterialOptions { is_skin: true })
-                    .unwrap()
-                    .map_textures;
-                for virtual_texture_url in &material_info
-                    .get(&MaterialOptions { is_skin: true })
-                    .unwrap()
-                    .virtual_textures
-                {
-                    let virtual_texture_source_infos = self.virtual_texture_source_infos.borrow();
-                    let source = virtual_texture_source_infos
-                        .get(virtual_texture_url)
-                        .unwrap();
-                    {
-                        let source = source.lock().unwrap();
-                        let max_mips = rs_core_minimal::misc::calculate_max_mips(
-                            source.get_size().min_element(),
-                        );
-                        let max_lod = max_mips
-                            - self
-                                .settings
-                                .render_setting
-                                .virtual_texture_setting
-                                .tile_size
-                                .ilog2()
-                            - 1;
-                        object.virtual_texture_constants.virtual_texture_max_lod = max_lod;
-                        object.virtual_texture_constants.virtual_texture_size =
-                            source.get_size().as_vec2();
-                    }
-                }
-                self.update_buffer(
-                    object.skin_constants_buffer_handle.clone(),
-                    rs_foundation::cast_any_as_u8_slice(&object.skin_constants),
-                );
-                self.update_buffer(
-                    object.virtual_texture_constants_buffer_handle.clone(),
-                    rs_foundation::cast_any_as_u8_slice(&object.virtual_texture_constants),
-                );
-
-                let mut binding_resources: Vec<EBindingResource> =
-                    Vec::with_capacity(map_textures.len());
-                for map_texture in map_textures {
-                    if let Some(handle) = self
-                        .resource_manager
-                        .get_texture_by_url(&map_texture.texture_url)
-                    {
-                        binding_resources.push(EBindingResource::Texture(*handle));
-                    } else {
-                        log::trace!("Can not find {}", map_texture.texture_url.to_string());
-                    }
-                }
-                assert_eq!(binding_resources.len(), map_textures.len());
-                object.user_textures_resources = binding_resources;
-                let ibl_textures = ResourceManager::default().get_ibl_textures();
-                let Some((_, ibl_textures)) = ibl_textures.iter().find(|x| {
-                    let url = x.0;
-                    url.scheme() != BUILT_IN_RESOURCE
-                }) else {
-                    return;
-                };
-                object.brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
-                object.pre_filter_cube_map_texture_resource =
-                    EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
-                object.irradiance_texture_resource =
-                    EBindingResource::Texture(*ibl_textures.irradiance);
-            }
-            EDrawObjectType::StaticMeshMaterial(object) => {
-                self.update_buffer(
-                    object.constants_buffer_handle.clone(),
-                    rs_foundation::cast_any_as_u8_slice(&object.constants),
-                );
-                let material_info = object.material.borrow().get_material_info().clone();
-                let map_textures = &material_info
-                    .get(&MaterialOptions { is_skin: true })
-                    .unwrap()
-                    .map_textures;
-                for virtual_texture_url in &material_info
-                    .get(&MaterialOptions { is_skin: true })
-                    .unwrap()
-                    .virtual_textures
-                {
-                    let virtual_texture_source_infos = self.virtual_texture_source_infos.borrow();
-                    let source = virtual_texture_source_infos
-                        .get(virtual_texture_url)
-                        .unwrap();
-                    {
-                        let source = source.lock().unwrap();
-                        let max_mips = rs_core_minimal::misc::calculate_max_mips(
-                            source.get_size().min_element(),
-                        );
-                        let max_lod = max_mips
-                            - self
-                                .settings
-                                .render_setting
-                                .virtual_texture_setting
-                                .tile_size
-                                .ilog2()
-                            - 1;
-                        object.virtual_texture_constants.virtual_texture_max_lod = max_lod;
-                        object.virtual_texture_constants.virtual_texture_size =
-                            source.get_size().as_vec2();
-                    }
-                }
-
-                self.update_buffer(
-                    object.virtual_texture_constants_buffer_handle.clone(),
-                    rs_foundation::cast_any_as_u8_slice(&object.virtual_texture_constants),
-                );
-
-                let mut binding_resources: Vec<EBindingResource> =
-                    Vec::with_capacity(map_textures.len());
-                for map_texture in map_textures {
-                    if let Some(handle) = self
-                        .resource_manager
-                        .get_texture_by_url(&map_texture.texture_url)
-                    {
-                        binding_resources.push(EBindingResource::Texture(*handle));
-                    } else {
-                        log::trace!("Can not find {}", map_texture.texture_url.to_string());
-                    }
-                }
-                assert_eq!(binding_resources.len(), map_textures.len());
-                object.user_textures_resources = binding_resources;
-                let ibl_textures = ResourceManager::default().get_ibl_textures();
-                let Some((_, ibl_textures)) = ibl_textures.iter().find(|x| {
-                    let url = x.0;
-                    url.scheme() != BUILT_IN_RESOURCE
-                }) else {
-                    return;
-                };
-                object.brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
-                object.pre_filter_cube_map_texture_resource =
-                    EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
-                object.irradiance_texture_resource =
-                    EBindingResource::Texture(*ibl_textures.irradiance);
-            }
-            EDrawObjectType::Custom(_) => {}
-        }
-    }
-
-    pub fn draw2(&mut self, draw_object: &EDrawObjectType) {
-        match draw_object {
-            EDrawObjectType::Static(static_objcet) => {
-                let static_objcet = static_objcet.clone();
-                let draw_object = DrawObject::new(
-                    static_objcet.id,
-                    static_objcet.vertex_buffers.iter().map(|x| **x).collect(),
-                    static_objcet.vertex_count,
-                    EPipelineType::Builtin(EBuiltinPipelineType::StaticMeshPhong),
-                    static_objcet.index_buffer.clone().map(|x| *x),
-                    static_objcet.index_count,
-                    vec![
-                        vec![
-                            static_objcet.global_constants_resource,
-                            static_objcet.base_color_sampler_resource,
-                            static_objcet.physical_texture_resource,
-                            static_objcet.page_table_texture_resource,
-                        ],
-                        vec![
-                            static_objcet.diffuse_texture_resource,
-                            static_objcet.specular_texture_resource,
-                        ],
-                        vec![static_objcet.constants_resource],
-                    ],
-                );
-
-                self.draw_objects
-                    .entry(static_objcet.window_id)
-                    .or_default()
-                    .push(draw_object);
-            }
-            EDrawObjectType::Skin(skin_objcet) => {
-                let skin_objcet = skin_objcet.clone();
-
-                let draw_object = DrawObject::new(
-                    skin_objcet.id,
-                    skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
-                    skin_objcet.vertex_count,
-                    EPipelineType::Builtin(EBuiltinPipelineType::SkinMeshPhong),
-                    skin_objcet.index_buffer.clone().map(|x| *x),
-                    skin_objcet.index_count,
-                    vec![
-                        vec![
-                            skin_objcet.global_constants_resource,
-                            skin_objcet.base_color_sampler_resource,
-                            skin_objcet.physical_texture_resource,
-                            skin_objcet.page_table_texture_resource,
-                        ],
-                        vec![
-                            skin_objcet.diffuse_texture_resource,
-                            skin_objcet.specular_texture_resource,
-                        ],
-                        vec![skin_objcet.constants_resource],
-                    ],
-                );
-                self.draw_objects
-                    .entry(skin_objcet.window_id)
-                    .or_default()
-                    .push(draw_object);
-            }
-            EDrawObjectType::SkinMaterial(skin_objcet) => {
-                let skin_objcet = skin_objcet.clone();
-                let material = skin_objcet.material.borrow();
-                if let Some(pipeline_handle) = material.get_pipeline_handle() {
-                    let mut draw_object = DrawObject::new(
-                        skin_objcet.id,
-                        skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
-                        skin_objcet.vertex_count,
-                        EPipelineType::Material(MaterialPipelineType {
-                            handle: *pipeline_handle,
-                            options: MaterialOptions { is_skin: true },
-                        }),
-                        skin_objcet.index_buffer.clone().map(|x| *x),
-                        skin_objcet.index_count,
-                        vec![
-                            vec![
-                                skin_objcet.global_constants_resource.clone(),
-                                skin_objcet.base_color_sampler_resource,
-                                skin_objcet.physical_texture_resource,
-                                skin_objcet.page_table_texture_resource,
-                                skin_objcet.brdflut_texture_resource,
-                                skin_objcet.pre_filter_cube_map_texture_resource,
-                                skin_objcet.irradiance_texture_resource,
-                                skin_objcet.shadow_map_texture_resource,
-                            ],
-                            vec![
-                                skin_objcet.constants_resource.clone(),
-                                skin_objcet.skin_constants_resource.clone(),
-                                skin_objcet.virtual_texture_constants_resource,
-                            ],
-                            skin_objcet.user_textures_resources,
-                        ],
-                    );
-                    draw_object.virtual_pass_set = Some(VirtualPassSet {
-                        vertex_buffers: vec![
-                            *skin_objcet.vertex_buffers[0],
-                            *skin_objcet.vertex_buffers[2],
-                        ],
-                        binding_resources: vec![
-                            vec![skin_objcet.global_constants_resource.clone()],
-                            vec![
-                                skin_objcet.constants_resource.clone(),
-                                skin_objcet.skin_constants_resource.clone(),
-                            ],
-                        ],
-                    });
-                    if let Some(handle) = self.shadow_depth_texture_handle.clone() {
-                        draw_object.shadow_mapping = Some(ShadowMapping {
-                            vertex_buffers: vec![
-                                *skin_objcet.vertex_buffers[0],
-                                *skin_objcet.vertex_buffers[2],
-                            ],
-                            depth_texture_handle: *handle,
-                            binding_resources: vec![vec![
-                                skin_objcet.global_constants_resource.clone(),
-                                skin_objcet.constants_resource.clone(),
-                                skin_objcet.skin_constants_resource.clone(),
-                            ]],
-                            is_skin: true,
-                        });
-                    }
-                    self.draw_objects
-                        .entry(skin_objcet.window_id)
-                        .or_default()
-                        .push(draw_object);
-                }
-            }
-            EDrawObjectType::StaticMeshMaterial(static_mesh_draw_objcet) => {
-                let static_mesh_draw_objcet = static_mesh_draw_objcet.clone();
-                let material = static_mesh_draw_objcet.material.borrow();
-                if let Some(pipeline_handle) = material.get_pipeline_handle() {
-                    let mut draw_object = DrawObject::new(
-                        static_mesh_draw_objcet.id,
-                        static_mesh_draw_objcet
-                            .vertex_buffers
-                            .iter()
-                            .map(|x| **x)
-                            .collect(),
-                        static_mesh_draw_objcet.vertex_count,
-                        EPipelineType::Material(MaterialPipelineType {
-                            handle: *pipeline_handle,
-                            options: MaterialOptions { is_skin: false },
-                        }),
-                        static_mesh_draw_objcet.index_buffer.clone().map(|x| *x),
-                        static_mesh_draw_objcet.index_count,
-                        vec![
-                            vec![
-                                static_mesh_draw_objcet.global_constants_resource.clone(),
-                                static_mesh_draw_objcet.base_color_sampler_resource,
-                                static_mesh_draw_objcet.physical_texture_resource,
-                                static_mesh_draw_objcet.page_table_texture_resource,
-                                static_mesh_draw_objcet.brdflut_texture_resource,
-                                static_mesh_draw_objcet.pre_filter_cube_map_texture_resource,
-                                static_mesh_draw_objcet.irradiance_texture_resource,
-                                static_mesh_draw_objcet.shadow_map_texture_resource,
-                            ],
-                            vec![
-                                static_mesh_draw_objcet.constants_resource.clone(),
-                                static_mesh_draw_objcet.virtual_texture_constants_resource,
-                            ],
-                            static_mesh_draw_objcet.user_textures_resources,
-                        ],
-                    );
-                    draw_object.virtual_pass_set = Some(VirtualPassSet {
-                        vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
-                        binding_resources: vec![
-                            vec![static_mesh_draw_objcet.global_constants_resource.clone()],
-                            vec![static_mesh_draw_objcet.constants_resource.clone()],
-                        ],
-                    });
-                    if let Some(handle) = self.shadow_depth_texture_handle.clone() {
-                        draw_object.shadow_mapping = Some(ShadowMapping {
-                            vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
-                            depth_texture_handle: *handle,
-                            binding_resources: vec![vec![
-                                static_mesh_draw_objcet.global_constants_resource.clone(),
-                                static_mesh_draw_objcet.constants_resource.clone(),
-                            ]],
-                            is_skin: false,
-                        });
-                    }
-                    self.draw_objects
-                        .entry(static_mesh_draw_objcet.window_id)
-                        .or_default()
-                        .push(draw_object);
-                }
-            }
-            EDrawObjectType::Custom(custom_objcet) => {
-                self.draw_objects
-                    .entry(custom_objcet.window_id)
-                    .or_default()
-                    .push(custom_objcet.draw_object.clone());
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "android"))]
-    pub fn process_device_event(&mut self, device_event: winit::event::DeviceEvent) {
-        match device_event {
-            winit::event::DeviceEvent::MouseMotion { delta } => {
-                DefaultCameraInputEventHandle::mouse_motion_handle(
-                    &mut self.camera,
-                    delta,
-                    self.input_mode,
-                    self.state.camera_motion_speed,
-                );
-            }
-            _ => {}
-        }
-    }
-
-    #[cfg(not(target_os = "android"))]
-    pub fn process_keyboard_input(
-        &mut self,
-        _device_id: winit::event::DeviceId,
-        event: winit::event::KeyEvent,
-        _is_synthetic: bool,
-    ) {
-        let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
-            return;
-        };
-        self.state
-            .virtual_key_code_states
-            .insert(virtual_keycode, event.state);
-    }
-
-    pub fn camera_did_update(
-        &mut self,
-        view: glam::Mat4,
-        projection: glam::Mat4,
-        world_location: glam::Vec3,
-    ) {
-        self.global_constants.view = view;
-        self.global_constants.projection = projection;
-        self.global_constants.view_projection =
-            self.global_constants.projection * self.global_constants.view;
-        self.global_constants.view_position = world_location;
-    }
-
-    fn update_global_constants(&mut self) {
-        let command = RenderCommand::UpdateBuffer(UpdateBuffer {
-            handle: *self.global_constants_handle,
-            data: rs_foundation::cast_to_raw_buffer(&vec![self.global_constants]).to_vec(),
-        });
-        self.render_thread_mode.send_command(command);
     }
 
     pub fn get_mut_resource_manager(&mut self) -> &mut ResourceManager {
@@ -2068,14 +1422,6 @@ impl Engine {
         self.game_time_sec
     }
 
-    pub fn set_input_mode(&mut self, input_mode: EInputMode) {
-        self.input_mode = input_mode;
-    }
-
-    pub fn get_input_mode(&self) -> EInputMode {
-        self.input_mode
-    }
-
     pub fn set_view_mode(&mut self, view_mode: EViewModeType) {
         self.render_thread_mode
             .send_command(RenderCommand::ChangeViewMode(view_mode));
@@ -2111,10 +1457,6 @@ impl Engine {
         self.render_thread_mode.send_command(message);
     }
 
-    pub fn get_camera_mut(&mut self) -> &mut Camera {
-        &mut self.camera
-    }
-
     pub fn get_console_cmd_mut(&self, key: &str) -> Option<SingleThreadMutType<ConsoleCmd>> {
         self.console_cmds.borrow().get(key).cloned()
     }
@@ -2134,10 +1476,11 @@ impl Engine {
     #[cfg(feature = "editor")]
     pub fn create_grid_draw_object(
         &mut self,
-        id: u32,
+        // id: u32,
         global_constants_handle: crate::handle::BufferHandle,
-    ) -> DrawObject {
+    ) -> rs_render::command::DrawObject {
         let resource_manager = ResourceManager::default();
+        let id = self.next_draw_object_id();
         Self::internal_create_grid_draw_object(
             id,
             resource_manager,
@@ -2153,7 +1496,7 @@ impl Engine {
         resource_manager: ResourceManager,
         render_thread_mode: &mut ERenderThreadMode,
         global_constants_handle: crate::handle::BufferHandle,
-    ) -> DrawObject {
+    ) -> rs_render::command::DrawObject {
         let grid_data = rs_core_minimal::primitive_data::PrimitiveData::quad();
         let name = "Grid";
         let index_buffer_handle = resource_manager.next_buffer();
@@ -2200,24 +1543,18 @@ impl Engine {
             render_thread_mode.send_command(message);
             vertex_buffer_handles.push(vertex_buffer_handle);
         }
-        let draw_object = DrawObject::new(
+        let draw_object = rs_render::command::DrawObject::new(
             id,
             vertex_buffer_handles.iter().map(|x| **x).collect(),
             vertexes0.len() as u32,
-            EPipelineType::Builtin(EBuiltinPipelineType::Grid),
+            rs_render::renderer::EPipelineType::Builtin(
+                rs_render::renderer::EBuiltinPipelineType::Grid,
+            ),
             Some(*index_buffer_handle),
             Some(grid_data.indices.len() as u32),
             vec![vec![EBindingResource::Constants(*global_constants_handle)]],
         );
         draw_object
-    }
-
-    pub fn set_camera_movement_speed(&mut self, new_speed: f32) {
-        self.state.camera_movement_speed = new_speed;
-    }
-
-    pub fn get_camera_movement_speed(&mut self) -> f32 {
-        self.state.camera_movement_speed
     }
 
     pub fn create_material(
@@ -2235,10 +1572,6 @@ impl Engine {
         shader_handle.clone()
     }
 
-    pub fn set_debug_shading(&mut self, ty: EDebugShadingType) {
-        self.global_constants.set_shading_type(ty);
-    }
-
     pub fn sdf2d(&mut self, image: image::RgbaImage) {
         self.render_thread_mode
             .send_command(RenderCommand::create_task(move |renderer| {
@@ -2252,10 +1585,6 @@ impl Engine {
 
     pub fn send_render_command(&mut self, command: RenderCommand) {
         self.render_thread_mode.send_command(command);
-    }
-
-    pub fn update_light(&mut self, light: &mut DirectionalLight) {
-        self.global_constants.light_space_matrix = light.get_light_space_matrix();
     }
 
     pub fn create_ui_texture(
@@ -2276,30 +1605,6 @@ impl Engine {
 
     pub fn get_render_thread_mode_mut(&mut self) -> &mut ERenderThreadMode {
         &mut self.render_thread_mode
-    }
-
-    pub fn on_antialias_type_changed(
-        &mut self,
-        antialias_type: rs_core_minimal::settings::EAntialiasType,
-    ) {
-        for player_viewport in self.player_viewports.clone() {
-            let mut player_viewport = player_viewport.borrow_mut();
-            match antialias_type {
-                rs_core_minimal::settings::EAntialiasType::None => {
-                    player_viewport.disable_antialias();
-                }
-                rs_core_minimal::settings::EAntialiasType::FXAA => {
-                    player_viewport.enable_fxaa(self);
-                }
-                rs_core_minimal::settings::EAntialiasType::MSAA => {
-                    player_viewport.enable_msaa(self);
-                }
-            }
-        }
-    }
-
-    pub fn get_global_constants_handle(&self) -> crate::handle::BufferHandle {
-        self.global_constants_handle.clone()
     }
 
     pub fn get_main_window_id(&self) -> isize {
@@ -2331,18 +1636,21 @@ impl Engine {
     }
 
     #[cfg(not(target_os = "android"))]
-    pub fn update_window_with_input_mode(window: &winit::window::Window, input_mode: EInputMode) {
+    pub fn update_window_with_input_mode(
+        window: &winit::window::Window,
+        input_mode: crate::input_mode::EInputMode,
+    ) {
         use winit::window::CursorGrabMode;
         match input_mode {
-            EInputMode::Game => {
+            crate::input_mode::EInputMode::Game => {
                 window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
                 window.set_cursor_visible(false);
             }
-            EInputMode::UI => {
+            crate::input_mode::EInputMode::UI => {
                 window.set_cursor_grab(CursorGrabMode::None).unwrap();
                 window.set_cursor_visible(true);
             }
-            EInputMode::GameUI => {
+            crate::input_mode::EInputMode::GameUI => {
                 window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
                 window.set_cursor_visible(true);
             }

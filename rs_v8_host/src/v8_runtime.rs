@@ -1,4 +1,4 @@
-use crate::engine::{engine_get_camera_mut, engine_set_view_mode, NativeEngine};
+use crate::engine::{engine_set_view_mode, NativeEngine};
 use crate::{platform_wrapper::PlatformWrapper, util::println_callback};
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::DebouncedEvent;
@@ -247,11 +247,11 @@ impl V8Runtime {
 
         let engine_object_template = v8::ObjectTemplate::new(scope);
         engine_object_template.set_internal_field_count(1);
-        let name = v8::String::new(scope, "getCameraMut").ok_or(crate::error::Error::Null(
-            format!("Failed to create string"),
-        ))?;
-        let function = v8::FunctionTemplate::new(scope, engine_get_camera_mut);
-        engine_object_template.set(name.into(), function.into());
+        // let name = v8::String::new(scope, "getCameraMut").ok_or(crate::error::Error::Null(
+        //     format!("Failed to create string"),
+        // ))?;
+        // let function = v8::FunctionTemplate::new(scope, engine_get_camera_mut);
+        // engine_object_template.set(name.into(), function.into());
 
         let name = v8::String::new(scope, "setViewMode").ok_or(crate::error::Error::Null(
             format!("Failed to create string"),

@@ -27,7 +27,7 @@ use image::{GenericImage, GenericImageView};
 use rs_core_minimal::settings::{self, RenderSettings};
 use rs_core_minimal::thread_pool::ThreadPool;
 use rs_render_types::MaterialOptions;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
@@ -63,13 +63,6 @@ pub struct Renderer {
     wgpu_context: WGPUContext,
     gui_renderer: EGUIRenderer,
     shader_library: ShaderLibrary,
-    create_iblbake_commands: VecDeque<CreateIBLBake>,
-    create_uitexture_commands: Vec<CreateUITexture>,
-    update_texture_commands: Vec<UpdateTexture>,
-    // draw_object_commands: Vec<DrawObject>,
-    ui_output_commands: VecDeque<crate::egui_render::EGUIRenderOutput>,
-    resize_commands: VecDeque<ResizeInfo>,
-    task_commands: VecDeque<TaskType>,
 
     textures: HashMap<u64, Texture>,
     texture_views: HashMap<u64, TextureView>,
@@ -114,6 +107,8 @@ pub struct Renderer {
     fxaa_pipeline: Option<FXAAPipeline>,
 
     is_enable_multiple_thread: bool,
+
+    surface_textures: HashMap<isize, SurfaceTexture>,
 }
 
 impl Renderer {
@@ -240,12 +235,7 @@ impl Renderer {
             gui_renderer: egui_render_pass,
             // screen_descriptor,
             shader_library,
-            create_iblbake_commands: VecDeque::new(),
-            create_uitexture_commands: Vec::new(),
-            update_texture_commands: Vec::new(),
-            // draw_object_commands: Vec::new(),
-            ui_output_commands: VecDeque::new(),
-            resize_commands: VecDeque::new(),
+
             textures: HashMap::new(),
             buffers: HashMap::new(),
             ui_textures: HashMap::new(),
@@ -254,7 +244,7 @@ impl Renderer {
             depth_textures: HashMap::from([(main_window_id, depth_texture)]),
             texture_descriptors: HashMap::new(),
             buffer_infos: HashMap::new(),
-            task_commands: VecDeque::new(),
+
             ibl_bakes: HashMap::new(),
             #[cfg(feature = "renderdoc")]
             render_doc_context: crate::renderdoc::Context::new().ok(),
@@ -276,6 +266,7 @@ impl Renderer {
             is_enable_multiple_thread,
             primitive_render_pipeline,
             texture_views: HashMap::new(),
+            surface_textures: HashMap::new(),
         };
         Ok(renderer)
     }
@@ -375,7 +366,152 @@ impl Renderer {
         }
     }
 
-    pub fn present(&mut self, present_info: PresentInfo) -> Option<RenderOutput> {
+    fn process_create_iblbake_command(
+        &mut self,
+        create_iblbake_command: CreateIBLBake,
+    ) -> IBLTexturesKey {
+        let device = self.wgpu_context.get_device();
+        let queue = self.wgpu_context.get_queue();
+
+        let mut baker = AccelerationBaker::new(
+            device,
+            queue,
+            &create_iblbake_command.file_path,
+            create_iblbake_command.bake_info,
+        );
+        baker.bake(device, queue, &self.shader_library);
+        let merge_cube_map = |x: &CubeMap<image::Rgba<f32>, Vec<f32>>| {
+            let size = x.negative_x.width();
+            let mut merge_image = image::Rgba32FImage::new(size, size * 6);
+            let negative_x = x.negative_x.view(0, 0, size, size);
+            let positive_x = x.positive_x.view(0, 0, size, size);
+            let negative_y = x.negative_y.view(0, 0, size, size);
+            let positive_y = x.positive_y.view(0, 0, size, size);
+            let negative_z = x.negative_z.view(0, 0, size, size);
+            let positive_z = x.positive_z.view(0, 0, size, size);
+            for (index, image) in [
+                negative_x, positive_x, negative_y, positive_y, negative_z, positive_z,
+            ]
+            .iter()
+            .enumerate()
+            {
+                merge_image
+                    .copy_from(image.deref(), 0, size * index as u32)
+                    .map_err(|err| crate::error::Error::ImageError(err))?;
+            }
+            crate::error::Result::Ok(merge_image)
+        };
+        let save_data_as_dds = |data: &[f32],
+                                width: u32,
+                                height: u32,
+                                layers: u32,
+                                mipmaps: u32,
+                                save_dir: &Path,
+                                name: &str| {
+            let surface = image_dds::SurfaceRgba32Float {
+                width,
+                height,
+                depth: 1,
+                layers,
+                mipmaps,
+                data,
+            }
+            .encode(
+                image_dds::ImageFormat::BC6hRgbUfloat,
+                image_dds::Quality::Slow,
+                image_dds::Mipmaps::FromSurface,
+            )
+            .map_err(|err| crate::error::Error::ImageDdsSurface(err))?;
+            let dds = surface
+                .to_dds()
+                .map_err(|err| crate::error::Error::ImageDdsCreateDds(err))?;
+            let path = save_dir.join(format!("{}.dds", name));
+            let file =
+                std::fs::File::create(&path).map_err(|err| crate::error::Error::IO(err, None))?;
+            let mut writer = std::io::BufWriter::new(file);
+            dds.write(&mut writer)
+                .map_err(|err| crate::error::Error::DdsFile(err))?;
+            crate::error::Result::Ok(())
+        };
+
+        let result = (|| {
+            let save_dir = create_iblbake_command
+                .save_dir
+                .ok_or(crate::error::Error::Other(None))?;
+            if !save_dir.exists() {
+                return Err(crate::error::Error::Other(None));
+            }
+
+            let brdflut_image =
+                ibl_readback::IBLReadBack::read_brdflut_texture(&baker, device, queue)?;
+            let brdflut_image = brdflut_image
+                .as_rgba32f()
+                .ok_or(crate::error::Error::Other(None))?;
+            save_data_as_dds(
+                brdflut_image.as_ref(),
+                brdflut_image.width(),
+                brdflut_image.height(),
+                1,
+                1,
+                &save_dir,
+                "brdf",
+            )?;
+
+            let irradiance_image =
+                ibl_readback::IBLReadBack::read_irradiance_cube_map_texture(&baker, device, queue)?;
+            let irradiance_image = merge_cube_map(&irradiance_image)?;
+            save_data_as_dds(
+                irradiance_image.as_ref(),
+                irradiance_image.width(),
+                irradiance_image.height() / 6,
+                6,
+                1,
+                &save_dir,
+                "irradiance",
+            )?;
+
+            let pre_filter_images = ibl_readback::IBLReadBack::read_pre_filter_cube_map_textures(
+                &baker, device, queue,
+            )?;
+            let mut data: Vec<f32> = vec![];
+            macro_rules! merge_face_layer_data {
+                ($face:ident) => {
+                    let mut layer_data: Vec<f32> = vec![];
+                    for cube_map_mipmap in pre_filter_images.iter() {
+                        let data = cube_map_mipmap.$face.as_ref();
+                        layer_data.extend_from_slice(data);
+                    }
+                    data.extend(layer_data);
+                };
+            }
+            merge_face_layer_data!(negative_x);
+            merge_face_layer_data!(negative_y);
+            merge_face_layer_data!(negative_z);
+            merge_face_layer_data!(positive_x);
+            merge_face_layer_data!(positive_y);
+            merge_face_layer_data!(positive_z);
+            save_data_as_dds(
+                data.as_ref(),
+                baker.get_bake_info().pre_filter_cube_map_length,
+                baker.get_bake_info().pre_filter_cube_map_length,
+                6,
+                pre_filter_images.len() as u32,
+                &save_dir,
+                "pre_filter",
+            )?;
+            Ok(())
+        })();
+        match result {
+            Ok(_) => {}
+            Err(err) => log::warn!("{}", err),
+        }
+
+        self.ibl_bakes
+            .insert(create_iblbake_command.key.clone(), baker);
+        create_iblbake_command.key
+    }
+
+    pub fn present(&mut self, present_info: PresentInfo) {
         let _span = tracy_client::span!();
         #[cfg(feature = "renderdoc")]
         let mut is_capture_frame = false;
@@ -394,210 +530,8 @@ impl Renderer {
             }
         }
 
-        while let Some(resize_command) = self.resize_commands.pop_front() {
-            if resize_command.width <= 0 || resize_command.height <= 0 {
-                continue;
-            }
-            self.surface_size_will_change(
-                resize_command.window_id,
-                glam::uvec2(resize_command.width, resize_command.height),
-            );
-        }
-
-        // while let Some(task_command) = self.task_commands.pop_front() {
-        //     let mut task = task_command.lock().unwrap();
-        //     task(self);
-        // }
-
-        let mut render_output = RenderOutput::default();
-
-        for update_texture_command in &self.update_texture_commands {
-            let queue = self.wgpu_context.get_queue();
-            if let Some(texture) = self.textures.get(&update_texture_command.handle) {
-                queue.write_texture(
-                    texture.as_image_copy(),
-                    &update_texture_command.texture_data.data,
-                    update_texture_command.texture_data.data_layout,
-                    update_texture_command.size,
-                );
-            }
-        }
-        self.update_texture_commands.clear();
-
-        for create_uitexture_command in &self.create_uitexture_commands {
-            let device = self.wgpu_context.get_device();
-            if let Some(texture) = self
-                .textures
-                .get(&create_uitexture_command.referencing_texture_handle)
-            {
-                let ui_texture_id = self.gui_renderer.create_image2(
-                    device,
-                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
-                    None,
-                );
-                self.ui_textures
-                    .insert(create_uitexture_command.handle, ui_texture_id);
-            }
-        }
-        self.create_uitexture_commands.clear();
-
-        while let Some(create_iblbake_command) = self.create_iblbake_commands.pop_front() {
-            let device = self.wgpu_context.get_device();
-            let queue = self.wgpu_context.get_queue();
-
-            let mut baker = AccelerationBaker::new(
-                device,
-                queue,
-                &create_iblbake_command.file_path,
-                create_iblbake_command.bake_info,
-            );
-            baker.bake(device, queue, &self.shader_library);
-            let merge_cube_map = |x: &CubeMap<image::Rgba<f32>, Vec<f32>>| {
-                let size = x.negative_x.width();
-                let mut merge_image = image::Rgba32FImage::new(size, size * 6);
-                let negative_x = x.negative_x.view(0, 0, size, size);
-                let positive_x = x.positive_x.view(0, 0, size, size);
-                let negative_y = x.negative_y.view(0, 0, size, size);
-                let positive_y = x.positive_y.view(0, 0, size, size);
-                let negative_z = x.negative_z.view(0, 0, size, size);
-                let positive_z = x.positive_z.view(0, 0, size, size);
-                for (index, image) in [
-                    negative_x, positive_x, negative_y, positive_y, negative_z, positive_z,
-                ]
-                .iter()
-                .enumerate()
-                {
-                    merge_image
-                        .copy_from(image.deref(), 0, size * index as u32)
-                        .map_err(|err| crate::error::Error::ImageError(err))?;
-                }
-                crate::error::Result::Ok(merge_image)
-            };
-            let save_data_as_dds = |data: &[f32],
-                                    width: u32,
-                                    height: u32,
-                                    layers: u32,
-                                    mipmaps: u32,
-                                    save_dir: &Path,
-                                    name: &str| {
-                let surface = image_dds::SurfaceRgba32Float {
-                    width,
-                    height,
-                    depth: 1,
-                    layers,
-                    mipmaps,
-                    data,
-                }
-                .encode(
-                    image_dds::ImageFormat::BC6hRgbUfloat,
-                    image_dds::Quality::Slow,
-                    image_dds::Mipmaps::FromSurface,
-                )
-                .map_err(|err| crate::error::Error::ImageDdsSurface(err))?;
-                let dds = surface
-                    .to_dds()
-                    .map_err(|err| crate::error::Error::ImageDdsCreateDds(err))?;
-                let path = save_dir.join(format!("{}.dds", name));
-                let file = std::fs::File::create(&path)
-                    .map_err(|err| crate::error::Error::IO(err, None))?;
-                let mut writer = std::io::BufWriter::new(file);
-                dds.write(&mut writer)
-                    .map_err(|err| crate::error::Error::DdsFile(err))?;
-                crate::error::Result::Ok(())
-            };
-
-            let result = (|| {
-                let save_dir = create_iblbake_command
-                    .save_dir
-                    .ok_or(crate::error::Error::Other(None))?;
-                if !save_dir.exists() {
-                    return Err(crate::error::Error::Other(None));
-                }
-
-                let brdflut_image =
-                    ibl_readback::IBLReadBack::read_brdflut_texture(&baker, device, queue)?;
-                let brdflut_image = brdflut_image
-                    .as_rgba32f()
-                    .ok_or(crate::error::Error::Other(None))?;
-                save_data_as_dds(
-                    brdflut_image.as_ref(),
-                    brdflut_image.width(),
-                    brdflut_image.height(),
-                    1,
-                    1,
-                    &save_dir,
-                    "brdf",
-                )?;
-
-                let irradiance_image = ibl_readback::IBLReadBack::read_irradiance_cube_map_texture(
-                    &baker, device, queue,
-                )?;
-                let irradiance_image = merge_cube_map(&irradiance_image)?;
-                save_data_as_dds(
-                    irradiance_image.as_ref(),
-                    irradiance_image.width(),
-                    irradiance_image.height() / 6,
-                    6,
-                    1,
-                    &save_dir,
-                    "irradiance",
-                )?;
-
-                let pre_filter_images =
-                    ibl_readback::IBLReadBack::read_pre_filter_cube_map_textures(
-                        &baker, device, queue,
-                    )?;
-                let mut data: Vec<f32> = vec![];
-                macro_rules! merge_face_layer_data {
-                    ($face:ident) => {
-                        let mut layer_data: Vec<f32> = vec![];
-                        for cube_map_mipmap in pre_filter_images.iter() {
-                            let data = cube_map_mipmap.$face.as_ref();
-                            layer_data.extend_from_slice(data);
-                        }
-                        data.extend(layer_data);
-                    };
-                }
-                merge_face_layer_data!(negative_x);
-                merge_face_layer_data!(negative_y);
-                merge_face_layer_data!(negative_z);
-                merge_face_layer_data!(positive_x);
-                merge_face_layer_data!(positive_y);
-                merge_face_layer_data!(positive_z);
-                save_data_as_dds(
-                    data.as_ref(),
-                    baker.get_bake_info().pre_filter_cube_map_length,
-                    baker.get_bake_info().pre_filter_cube_map_length,
-                    6,
-                    pre_filter_images.len() as u32,
-                    &save_dir,
-                    "pre_filter",
-                )?;
-                Ok(())
-            })();
-            match result {
-                Ok(_) => {}
-                Err(err) => log::warn!("{}", err),
-            }
-            render_output
-                .create_ibl_handles
-                .insert(create_iblbake_command.key);
-            self.ibl_bakes.insert(create_iblbake_command.key, baker);
-        }
-
         let window_id = present_info.window_id;
-        let surface_texture = match self.wgpu_context.get_current_surface_texture(window_id) {
-            Ok(texture) => texture,
-            Err(err) => {
-                if err != wgpu::SurfaceError::Outdated {
-                    log::warn!("{}", err);
-                }
-                return None;
-            }
-        };
-        let color_texture = &surface_texture.texture;
 
-        let output_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let msaa_texture_view: Option<TextureView> = match &present_info.scene_viewport.anti_type {
             EAntialiasType::None => None,
             EAntialiasType::FXAA(_) => None,
@@ -631,6 +565,24 @@ impl Renderer {
         // }
         self.vt_pass(&present_info);
         self.shadow_for_draw_objects(present_info.draw_objects.as_slice());
+
+        let color_texture = match self.surface_textures.get(&window_id) {
+            Some(surface_texture) => {
+                let color_texture = &surface_texture.texture;
+                color_texture
+            }
+            None => return,
+        };
+
+        let output_view = match self.surface_textures.get(&window_id) {
+            Some(surface_texture) => {
+                let output_view = surface_texture
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                output_view
+            }
+            None => return,
+        };
 
         if self.is_enable_multiple_thread {
             let depth_texture = &self
@@ -762,33 +714,7 @@ impl Renderer {
                 ]],
             );
         })();
-        // self.draw_object_commands.clear();
 
-        {
-            let _span = tracy_client::span!("egui render");
-
-            for output in self
-                .ui_output_commands
-                .iter()
-                .filter(|x| x.window_id == window_id)
-            {
-                let device = self.wgpu_context.get_device();
-                let queue = self.wgpu_context.get_queue();
-                self.gui_renderer
-                    .render(output, queue, device, &output_view);
-            }
-            self.ui_output_commands.retain(|x| x.window_id != window_id);
-        }
-
-        while let Some(task_command) = self.task_commands.pop_front() {
-            let mut task = task_command.lock().unwrap();
-            task(self);
-        }
-
-        {
-            let _span = tracy_client::span!("present");
-            surface_texture.present();
-        }
         #[cfg(feature = "renderdoc")]
         {
             if is_capture_frame {
@@ -798,7 +724,6 @@ impl Renderer {
                 }
             }
         }
-        return Some(render_output);
     }
 
     // fn clear_buffer(
@@ -851,7 +776,7 @@ impl Renderer {
     pub fn send_command(&mut self, command: RenderCommand) -> Option<RenderOutput2> {
         match command {
             RenderCommand::CreateIBLBake(command) => {
-                self.create_iblbake_commands.push_back(command);
+                self.process_create_iblbake_command(command);
             }
             RenderCommand::CreateTexture(create_texture_command) => {
                 let device = self.wgpu_context.get_device();
@@ -883,7 +808,21 @@ impl Renderer {
                     error: None,
                 });
             }
-            RenderCommand::CreateUITexture(command) => self.create_uitexture_commands.push(command),
+            RenderCommand::CreateUITexture(create_uitexture_command) => {
+                let device = self.wgpu_context.get_device();
+                if let Some(texture) = self
+                    .textures
+                    .get(&create_uitexture_command.referencing_texture_handle)
+                {
+                    let ui_texture_id = self.gui_renderer.create_image2(
+                        device,
+                        &texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                        None,
+                    );
+                    self.ui_textures
+                        .insert(create_uitexture_command.handle, ui_texture_id);
+                }
+            }
             RenderCommand::CreateBuffer(create_buffer_command) => {
                 let span = tracy_client::span!("create_buffer_command");
                 span.emit_text(
@@ -930,20 +869,53 @@ impl Renderer {
                     }
                     buffer.unmap();
                 }
-                //
-                // self.update_buffer_commands.push(command)
             }
-            RenderCommand::UpdateTexture(command) => self.update_texture_commands.push(command),
-            // RenderCommand::DrawObject(command) => self.draw_object_commands.push(command),
-            RenderCommand::UiOutput(command) => self.ui_output_commands.push_back(command),
-            RenderCommand::Resize(command) => self.resize_commands.push_back(command),
-            // RenderCommand::Present(window_id) => {
-            //     self.present(window_id);
-            // }
+            RenderCommand::UpdateTexture(update_texture_command) => {
+                let queue = self.wgpu_context.get_queue();
+                if let Some(texture) = self.textures.get(&update_texture_command.handle) {
+                    queue.write_texture(
+                        texture.as_image_copy(),
+                        &update_texture_command.texture_data.data,
+                        update_texture_command.texture_data.data_layout,
+                        update_texture_command.size,
+                    );
+                }
+            }
+
+            RenderCommand::UiOutput(command) => {
+                let _span = tracy_client::span!("egui render");
+                let output_view = match self.surface_textures.get(&command.window_id) {
+                    Some(surface_texture) => {
+                        let output_view = surface_texture
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        output_view
+                    }
+                    None => return None,
+                };
+                let device = self.wgpu_context.get_device();
+                let queue = self.wgpu_context.get_queue();
+                self.gui_renderer
+                    .render(&command, queue, device, &output_view);
+            }
+            RenderCommand::Resize(resize_command) => {
+                //
+                if resize_command.width <= 0 || resize_command.height <= 0 {
+                    return None;
+                }
+                self.surface_size_will_change(
+                    resize_command.window_id,
+                    glam::uvec2(resize_command.width, resize_command.height),
+                );
+            }
+
             RenderCommand::Present(present_info) => {
                 self.present(present_info);
             }
-            RenderCommand::Task(command) => self.task_commands.push_back(command),
+            RenderCommand::Task(task_command) => {
+                let mut task = task_command.lock().unwrap();
+                task(self);
+            }
             #[cfg(feature = "renderdoc")]
             RenderCommand::CaptureFrame => {
                 if let Some(render_doc_context) = &mut self.render_doc_context {
@@ -1196,6 +1168,27 @@ impl Renderer {
             RenderCommand::ScaleChanged(info) => {
                 self.gui_renderer
                     .change_scale_factor(info.window_id, info.new_factor);
+            }
+            RenderCommand::WindowRedrawRequestedBegin(window_id) => {
+                let surface_texture = match self.wgpu_context.get_current_surface_texture(window_id)
+                {
+                    Ok(texture) => texture,
+                    Err(err) => {
+                        if err != wgpu::SurfaceError::Outdated {
+                            log::warn!("{}", err);
+                        }
+                        return None;
+                    }
+                };
+                let old_surface_texture = self.surface_textures.insert(window_id, surface_texture);
+                assert!(old_surface_texture.is_none());
+            }
+            RenderCommand::WindowRedrawRequestedEnd(window_id) => {
+                let surface_texture = self.surface_textures.remove(&window_id);
+                if let Some(surface_texture) = surface_texture {
+                    let _span = tracy_client::span!("present");
+                    surface_texture.present();
+                }
             }
         }
         return None;

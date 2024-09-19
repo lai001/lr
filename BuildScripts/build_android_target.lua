@@ -22,9 +22,9 @@ do
             jobs = os.meminfo().availsize//2000
         end
         if mode == "debug" then
-            os.exec("cargo build --target %s -j %d", target, jobs)
+            os.exec("cargo build --features standalone --target %s -j %d", target, jobs)
         else
-            os.exec("cargo build --target %s -r -j %d", target, jobs)
+            os.exec("cargo build --features standalone --target %s -r -j %d", target, jobs)
         end
         os.cd(old)
         local target_map = { }

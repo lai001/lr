@@ -54,8 +54,6 @@ pub struct DataSource {
     pub model_view_data: Option<ModelViewData>,
     pub is_level_view_open: bool,
     pub level: Option<Rc<RefCell<rs_engine::content::level::Level>>>,
-    pub camera_movement_speed: f32,
-    pub camera_motion_speed: f32,
     pub camera_view_matrix: glam::Mat4,
     pub camera_projection_matrix: glam::Mat4,
     pub content_data_source: content_browser::DataSource,
@@ -70,6 +68,7 @@ pub struct DataSource {
     pub is_content_item_property_view_open: bool,
     pub is_object_property_view_open: bool,
     pub debug_shading_type: rs_render::global_uniform::EDebugShadingType,
+    pub debug_flags: rs_engine::player_viewport::DebugFlags,
     pub is_debug_texture_view_open: bool,
     pub is_simulate_real_time: bool,
 }
@@ -90,8 +89,6 @@ impl DataSource {
             model_view_data: None,
             is_level_view_open: true,
             level: None,
-            camera_movement_speed: 0.01,
-            camera_motion_speed: 0.1,
             current_asset_folder: None,
             highlight_asset_file: None,
             camera_view_matrix: glam::Mat4::IDENTITY,
@@ -110,6 +107,7 @@ impl DataSource {
             debug_shading_type: rs_render::global_uniform::EDebugShadingType::None,
             is_debug_texture_view_open: false,
             is_simulate_real_time: false,
+            debug_flags: rs_engine::player_viewport::DebugFlags::empty(),
         }
     }
 

@@ -1,4 +1,6 @@
 use crate::content::level::Level;
+use crate::engine::Engine;
+use crate::handle::SamplerHandle;
 use crate::thread_pool::ThreadPool;
 use crate::{error::Result, handle::HandleManager};
 use lazy_static::lazy_static;
@@ -11,10 +13,8 @@ use rs_artifact::{
 };
 use rs_render::command::IBLTexturesKey;
 use std::collections::VecDeque;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::Arc;
+use std::{collections::HashMap, sync::Mutex};
 
 struct LoadResult {
     key: String,
@@ -38,6 +38,11 @@ impl IBLTextures {
     }
 }
 
+#[derive(Clone)]
+pub struct BuiltinResources {
+    pub global_sampler_handle: SamplerHandle,
+}
+
 struct STResourceManager {
     image_sync_cache: moka::sync::Cache<String, Arc<image::DynamicImage>>,
     textures: HashMap<url::Url, crate::handle::TextureHandle>,
@@ -57,6 +62,8 @@ struct STResourceManager {
     buffer_handles: VecDeque<crate::handle::BufferHandle>,
 
     sounds: HashMap<url::Url, Arc<Sound>>,
+
+    builtin_resources: Option<Arc<BuiltinResources>>,
 }
 
 impl STResourceManager {
@@ -76,9 +83,29 @@ impl STResourceManager {
             pending_destroy_textures: vec![],
             buffer_handles: VecDeque::new(),
             sounds: HashMap::new(),
+            builtin_resources: None,
             // mesh_buffers: HashMap::new(),
             // material_render_pipelines: HashMap::new(),
         }
+    }
+
+    fn create_builtin_resources(&mut self, engine: &mut Engine) {
+        assert!(self.builtin_resources.is_none());
+        let global_sampler_handle = self.next_sampler();
+        let command =
+            rs_render::command::RenderCommand::CreateSampler(rs_render::command::CreateSampler {
+                handle: *global_sampler_handle,
+                sampler_descriptor: wgpu::SamplerDescriptor::default(),
+            });
+        engine.send_render_command(command);
+        let builtin_resources = BuiltinResources {
+            global_sampler_handle,
+        };
+        self.builtin_resources = Some(Arc::new(builtin_resources));
+    }
+
+    fn get_builtin_resources(&self) -> Arc<BuiltinResources> {
+        self.builtin_resources.clone().unwrap().clone()
     }
 
     fn add_sound(&mut self, url: url::Url, sound: Arc<Sound>) -> Option<Arc<Sound>> {

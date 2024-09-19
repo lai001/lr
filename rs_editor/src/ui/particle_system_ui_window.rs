@@ -110,7 +110,7 @@ impl BaseUIWindow {
         });
         engine.send_render_command(command);
 
-        let grid_draw_object = engine.create_grid_draw_object(0, global_constants_handle.clone());
+        let grid_draw_object = engine.create_grid_draw_object(global_constants_handle.clone());
         let input_mode = EInputMode::UI;
         update_window_with_input_mode(window, input_mode);
         Ok(BaseUIWindow {
@@ -185,8 +185,6 @@ impl BaseUIWindow {
                     .insert(virtual_keycode, event.state);
             }
             WindowEvent::RedrawRequested => {
-                engine.recv_output_hook();
-
                 for (virtual_key_code, element_state) in &self.virtual_key_code_states {
                     DefaultCameraInputEventHandle::keyboard_input_handle(
                         &mut self.camera,
@@ -278,54 +276,28 @@ impl ParticleSystemUIWindow {
                 window_manager.remove_window(EWindowType::Particle);
             }
             WindowEvent::RedrawRequested => {
-                let gui_render_output = (|| {
-                    let egui_winit_state = &mut self.base_ui_window.egui_winit_state;
-                    {
-                        let ctx = egui_winit_state.egui_ctx().clone();
-                        let viewport_id = egui_winit_state.egui_input().viewport_id;
-                        let viewport_info: &mut egui::ViewportInfo = egui_winit_state
-                            .egui_input_mut()
-                            .viewports
-                            .get_mut(&viewport_id)
-                            .unwrap();
-                        egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
+                engine.window_redraw_requested_begin(window_id);
+                crate::ui::misc::ui_begin(&mut self.base_ui_window.egui_winit_state, window);
+
+                let event = ParticleSystemView::draw(
+                    window_inner_size,
+                    &self.base_ui_window.egui_winit_state.egui_ctx(),
+                    &mut self.data_source,
+                );
+                match event {
+                    Some(event) => {
+                        handle_event(event, &mut self.data_source.particle_system_template);
                     }
+                    None => {}
+                }
 
-                    let new_input = egui_winit_state.take_egui_input(window);
+                self.data_source.particle_system_template.tick(1.0 / 60.0);
 
-                    egui_winit_state.egui_ctx().begin_frame(new_input);
-                    egui_winit_state.egui_ctx().clear_animations();
-
-                    let event = ParticleSystemView::draw(
-                        window_inner_size,
-                        &egui_winit_state.egui_ctx(),
-                        &mut self.data_source,
-                    );
-                    match event {
-                        Some(event) => {
-                            handle_event(event, &mut self.data_source.particle_system_template);
-                        }
-                        None => {}
-                    }
-
-                    self.data_source.particle_system_template.tick(1.0 / 60.0);
-
-                    let full_output = egui_winit_state.egui_ctx().end_frame();
-
-                    egui_winit_state
-                        .handle_platform_output(window, full_output.platform_output.clone());
-
-                    let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
-                        textures_delta: full_output.textures_delta,
-                        clipped_primitives: egui_winit_state
-                            .egui_ctx()
-                            .tessellate(full_output.shapes, full_output.pixels_per_point),
-                        window_id,
-                    };
-                    gui_render_output
-                })();
-
-                engine.send_render_command(RenderCommand::UiOutput(gui_render_output));
+                let gui_render_output = crate::ui::misc::ui_end(
+                    &mut self.base_ui_window.egui_winit_state,
+                    window,
+                    window_id,
+                );
 
                 let mut emiter_draw_objects = self
                     .emiter_render
@@ -342,14 +314,11 @@ impl ParticleSystemUIWindow {
                     scene_viewport: SceneViewport::new(),
                 }));
 
-                let wait = self
-                    .base_ui_window
-                    .frame_sync
-                    .tick()
-                    .unwrap_or(std::time::Duration::from_secs_f32(1.0 / 60.0));
-                std::thread::sleep(wait);
+                engine.send_render_command(RenderCommand::UiOutput(gui_render_output));
 
+                engine.window_redraw_requested_end(window_id);
                 window.request_redraw();
+                self.base_ui_window.frame_sync.sync(60.0);
             }
             _ => {}
         }

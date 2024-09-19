@@ -141,7 +141,6 @@ pub fn on_window_event(
             virtual_key_code_states.insert(virtual_keycode, event.state);
         }
         WindowEvent::RedrawRequested => {
-            engine.recv_output_hook();
             engine.tick();
             frame_sync.sync(taget_fps);
             window.request_redraw();

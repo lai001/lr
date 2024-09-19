@@ -1,6 +1,6 @@
 use crate::{
     content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
-    resource_manager::ResourceManager,
+    player_viewport::PlayerViewport, resource_manager::ResourceManager,
 };
 use rapier3d::prelude::*;
 use rs_artifact::static_mesh::StaticMesh;
@@ -110,6 +110,7 @@ impl StaticMeshComponent {
         resource_manager: ResourceManager,
         engine: &mut Engine,
         files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) {
         let mut find_static_mesh: Option<Arc<StaticMesh>> = None;
 
@@ -146,12 +147,14 @@ impl StaticMeshComponent {
                     &find_static_mesh.indexes,
                     Some(find_static_mesh.name.clone()),
                     material,
+                    player_viewport.global_constants_handle.clone(),
                 );
             } else {
                 draw_object = engine.create_draw_object_from_static_mesh(
                     &find_static_mesh.vertexes,
                     &find_static_mesh.indexes,
                     Some(find_static_mesh.name.clone()),
+                    player_viewport.global_constants_handle.clone(),
                 );
             }
             match &mut draw_object {
@@ -232,13 +235,6 @@ impl StaticMeshComponent {
         }
     }
 
-    pub fn submit_to_gpu(&mut self, engine: &mut Engine) {
-        let Some(run_time) = &mut self.run_time else {
-            return;
-        };
-        engine.update_draw_object(&mut run_time.draw_objects);
-    }
-
     pub fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
         if !self.is_visible {
             return vec![];
@@ -264,6 +260,8 @@ impl StaticMeshComponent {
         engine: &mut Engine,
         new_material_url: Option<url::Url>,
         files: &[EContentFileType],
+
+        player_viewport: &mut PlayerViewport,
     ) {
         self.material_url = new_material_url;
         let material = if let Some(material_url) = &self.material_url {
@@ -288,12 +286,14 @@ impl StaticMeshComponent {
                     &static_mesh.indexes,
                     Some(static_mesh.name.clone()),
                     material,
+                    player_viewport.global_constants_handle.clone(),
                 );
             } else {
                 draw_object = engine.create_draw_object_from_static_mesh(
                     &static_mesh.vertexes,
                     &static_mesh.indexes,
                     Some(static_mesh.name.clone()),
+                    player_viewport.global_constants_handle.clone(),
                 );
             }
             run_time.draw_objects = draw_object;
