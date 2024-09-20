@@ -68,6 +68,7 @@ impl PlayerViewport {
             HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
         >,
         input_mode: EInputMode,
+        is_create_grid: bool,
     ) -> PlayerViewport {
         let scene_viewport = SceneViewport::new();
 
@@ -85,11 +86,19 @@ impl PlayerViewport {
         let mut camera = Camera::default(width, height);
         camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
         let physics_debug_render = Some(PhysicsDebugRender::new());
-        #[cfg(feature = "editor")]
-        let grid_draw_object =
-            Some(engine.create_grid_draw_object(global_constants_handle.clone()));
-        #[cfg(not(feature = "editor"))]
-        let grid_draw_object = None;
+        let grid_draw_object = if is_create_grid {
+            #[cfg(feature = "editor")]
+            {
+                Some(engine.create_grid_draw_object(global_constants_handle.clone()))
+            }
+            #[cfg(not(feature = "editor"))]
+            {
+                None
+            }
+        } else {
+            None
+        };
+
         PlayerViewport {
             scene_viewport,
             window_id,
@@ -208,6 +217,7 @@ impl PlayerViewport {
     pub fn size_changed(&mut self, width: u32, height: u32, engine: &mut Engine) {
         self.width = width;
         self.height = height;
+        self.camera.set_window_size(width, height);
         match self.scene_viewport.anti_type {
             EAntialiasType::None => {}
             EAntialiasType::FXAA(_) => {

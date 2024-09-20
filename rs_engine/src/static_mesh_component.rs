@@ -5,7 +5,7 @@ use crate::{
 use rapier3d::prelude::*;
 use rs_artifact::static_mesh::StaticMesh;
 use serde::{Deserialize, Serialize};
-use std::{iter::zip, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Physics {
@@ -71,15 +71,6 @@ impl StaticMeshComponent {
             return;
         };
         run_time.final_transformation = final_transformation;
-        match &mut run_time.draw_objects {
-            EDrawObjectType::Static(draw_object) => {
-                draw_object.constants.model = final_transformation;
-            }
-            EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                draw_object.constants.model = final_transformation;
-            }
-            _ => unimplemented!(),
-        }
     }
 
     pub fn get_final_transformation(&self) -> glam::Mat4 {
@@ -166,12 +157,11 @@ impl StaticMeshComponent {
                 }
                 _ => unimplemented!(),
             }
-            let physics =
-                Self::build_physics(find_static_mesh.as_ref(), false, self.transformation).ok();
+
             self.run_time = Some(StaticMeshComponentRuntime {
                 draw_objects: draw_object,
                 _mesh: find_static_mesh,
-                physics,
+                physics: None,
                 final_transformation: glam::Mat4::IDENTITY,
                 parent_final_transformation: glam::Mat4::IDENTITY,
             })
@@ -207,7 +197,10 @@ impl StaticMeshComponent {
                 let translation = glam::vec3(translation.x, translation.y, translation.z);
                 let rotation = rigid_body.rotation();
                 let rotation = glam::quat(rotation.i, rotation.j, rotation.k, rotation.w);
-                let scale = self.transformation.to_scale_rotation_translation().0;
+                let scale = run_time
+                    .final_transformation
+                    .to_scale_rotation_translation()
+                    .0;
                 let transformation =
                     glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
                 match &mut run_time.draw_objects {
@@ -221,7 +214,7 @@ impl StaticMeshComponent {
                 }
             }
             _ => {
-                let transformation = self.transformation;
+                let transformation = run_time.final_transformation;
                 match &mut run_time.draw_objects {
                     EDrawObjectType::Static(draw_object) => {
                         draw_object.constants.model = transformation;
@@ -359,7 +352,14 @@ impl StaticMeshComponent {
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
     ) {
-        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
+        let Some(run_time) = &mut self.run_time else {
+            return;
+        };
+        let Ok(mut physics) = Self::build_physics(
+            run_time._mesh.as_ref(),
+            false,
+            run_time.final_transformation,
+        ) else {
             return;
         };
         let handle = rigid_body_set.insert(physics.rigid_body.clone());
@@ -368,26 +368,8 @@ impl StaticMeshComponent {
             physics.collider_handles.push(collider_handle);
         }
         physics.rigid_body_handle = handle;
-    }
 
-    pub fn update_physics(
-        &mut self,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
-        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
-            return;
-        };
-        let Some(rigid_body) = rigid_body_set.get_mut(physics.rigid_body_handle) else {
-            return;
-        };
-        for (handle, collider) in zip(physics.collider_handles.clone(), physics.colliders.clone()) {
-            collider_set
-                .get_mut(handle)
-                .expect("Should not be null")
-                .copy_from(&collider);
-        }
-        rigid_body.copy_from(&physics.rigid_body);
+        run_time.physics = Some(physics);
     }
 
     pub fn set_apply_simulate(&mut self, is_apply_simulate: bool) {
@@ -397,18 +379,33 @@ impl StaticMeshComponent {
         physics.is_apply_simulate = is_apply_simulate;
     }
 
-    pub fn on_post_update_transformation(&mut self, rigid_body_set: Option<&mut RigidBodySet>) {
-        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
-            return;
-        };
-        let Some(rigid_body_set) = rigid_body_set else {
-            return;
-        };
-        let Some(rigid_body) = rigid_body_set.get_mut(physics.rigid_body_handle) else {
+    pub fn on_post_update_transformation(
+        &mut self,
+        level_physics: Option<&mut crate::content::level::Physics>,
+    ) {
+        let Some(run_time) = self.run_time.as_mut() else {
             return;
         };
 
-        let (_, rotation, translation) = self.transformation.to_scale_rotation_translation();
+        let Some(physics) = run_time.physics.as_mut() else {
+            return;
+        };
+        let Some(level_physics) = level_physics else {
+            return;
+        };
+
+        let rigid_body = level_physics
+            .rigid_body_set
+            .get_mut(physics.rigid_body_handle)
+            .unwrap();
+        let collider = level_physics
+            .collider_set
+            .get_mut(physics.collider_handles[0])
+            .unwrap();
+
+        let (_, rotation, translation) = run_time
+            .final_transformation
+            .to_scale_rotation_translation();
         let translation = vector![translation.x, translation.y, translation.z];
         rigid_body.set_translation(translation, false);
         let (axis, angle) = rotation.to_axis_angle();
@@ -424,6 +421,12 @@ impl StaticMeshComponent {
         rigid_body.reset_forces(false);
         rigid_body.reset_torques(false);
         rigid_body.wake_up(true);
+
+        collider.set_position(translation.into());
+        collider.set_rotation(Rotation::from_axis_angle(
+            &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
+            angle,
+        ));
     }
 
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {

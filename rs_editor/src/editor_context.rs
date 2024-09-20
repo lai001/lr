@@ -262,6 +262,7 @@ impl EditorContext {
             &mut engine,
             virtual_texture_source_infos,
             EInputMode::UI,
+            true,
         );
 
         let editor_context = EditorContext {
@@ -2478,9 +2479,7 @@ impl EditorContext {
             return;
         };
         let mut active_level = active_level.borrow_mut();
-        let rigid_body_set = active_level
-            .get_physics_mut()
-            .map(|x| &mut x.rigid_body_set);
+        let level_physics = active_level.get_physics_mut();
 
         let gizmo_final_transformation: Option<glam::Mat4> =
             event.gizmo_result.map(|(_, transforms)| {
@@ -2493,6 +2492,7 @@ impl EditorContext {
                 .as_mat4();
                 gizmo_final_transformation
             });
+        self.data_source.is_object_property_view_open = true;
 
         match event.selected_object {
             ESelectedObjectType::Actor(_) => {}
@@ -2513,7 +2513,7 @@ impl EditorContext {
                     *model_matrix =
                         parent_final_transformation.inverse() * gizmo_final_transformation;
                     component.set_apply_simulate(false);
-                    component.on_post_update_transformation(rigid_body_set);
+                    component.on_post_update_transformation(level_physics);
                 } else {
                     component.set_apply_simulate(true);
                 }

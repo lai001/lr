@@ -48,6 +48,7 @@ impl Application {
             engine,
             infos,
             input_mode,
+            false,
         );
         let mut current_active_level =
             current_active_level.make_copy_for_standalone(engine, &contents, &mut player_view_port);

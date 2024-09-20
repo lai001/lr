@@ -52,6 +52,7 @@ impl Actor {
                 }
             },
         );
+        self.update_components_world_transformation();
     }
 
     pub fn initialize_physics(
@@ -110,6 +111,8 @@ impl Actor {
         engine: &mut Engine,
         rigid_body_set: Option<&mut RigidBodySet>,
     ) {
+        self.update_components_world_transformation();
+
         match rigid_body_set {
             Some(rigid_body_set) => {
                 Actor::walk_node(self.scene_node.clone(), {
@@ -148,7 +151,6 @@ impl Actor {
                 });
             }
         }
-        self.update_components_world_transformation();
     }
 
     pub fn tick_physics(
@@ -161,10 +163,7 @@ impl Actor {
                 let node = node.borrow_mut();
                 match &node.component {
                     crate::scene_node::EComponentType::SceneComponent(_) => {}
-                    crate::scene_node::EComponentType::StaticMeshComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        component.update_physics(rigid_body_set, collider_set);
-                    }
+                    crate::scene_node::EComponentType::StaticMeshComponent(_) => {}
                     crate::scene_node::EComponentType::SkeletonMeshComponent(component) => {
                         let mut component = component.borrow_mut();
                         component.update_physics(rigid_body_set, collider_set);
