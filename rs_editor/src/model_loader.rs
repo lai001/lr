@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use glam::Vec3Swizzles;
 use rs_artifact::{
     mesh_vertex::MeshVertex,
@@ -41,7 +41,7 @@ pub struct LoadResult {
 }
 
 pub struct ModelLoader {
-    scene_cache: HashMap<PathBuf, rs_assimp::scene::Scene<'static>>,
+    scene_cache: HashMap<PathBuf, Rc<rs_assimp::scene::Scene<'static>>>,
 }
 
 impl ModelLoader {
@@ -327,15 +327,23 @@ impl ModelLoader {
             );
             self.scene_cache.insert(
                 file_path.to_path_buf(),
-                rs_assimp::scene::Scene::from_file_with_properties(
+                Rc::new(rs_assimp::scene::Scene::from_file_with_properties(
                     file_path,
                     rs_assimp::post_process_steps::PostProcessSteps::Triangulate
                         | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
                     props,
-                )?,
+                )?),
             );
         }
         Ok(())
+    }
+
+    pub fn get(&self, file_path: &Path) -> anyhow::Result<Rc<rs_assimp::scene::Scene<'static>>> {
+        let cache_scene = self.scene_cache.get(file_path);
+        match cache_scene {
+            Some(cache_scene) => Ok(cache_scene.clone()),
+            None => Err(anyhow!("")),
+        }
     }
 
     pub fn to_runtime_static_mesh(
@@ -793,12 +801,12 @@ impl ModelLoader {
         if !self.scene_cache.contains_key(file_path) {
             self.scene_cache.insert(
                 file_path.to_path_buf(),
-                rs_assimp::scene::Scene::from_file_with_properties(
+                Rc::new(rs_assimp::scene::Scene::from_file_with_properties(
                     file_path,
                     rs_assimp::post_process_steps::PostProcessSteps::Triangulate
                         | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
                     props,
-                )?,
+                )?),
             );
         }
         let scene = self

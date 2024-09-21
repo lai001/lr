@@ -69,4 +69,11 @@ impl EFileType {
             EFileType::MP3 => "mp3",
         }
     }
+
+    pub fn is_model(&self) -> bool {
+        match self {
+            EFileType::Fbx | EFileType::Glb | EFileType::Blend | EFileType::Dae => true,
+            _ => false,
+        }
+    }
 }

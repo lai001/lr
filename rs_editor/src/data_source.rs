@@ -1,4 +1,7 @@
-use crate::{project_context::RecentProjects, ui::content_browser};
+use crate::{
+    project_context::RecentProjects,
+    ui::{content_browser, model_scene_view},
+};
 use rs_core_minimal::settings::Settings;
 use rs_engine::{console_cmd::ConsoleCmd, file_type::EFileType, input_mode::EInputMode};
 use rs_foundation::new::SingleThreadMutType;
@@ -46,12 +49,10 @@ pub struct DataSource {
     pub is_new_project_window_open: bool,
     pub new_project_name: String,
     pub input_method_editor_started: bool,
-    pub is_model_hierarchy_open: bool,
     pub is_asset_folder_open: bool,
     pub asset_folder: Option<AssetFolder>,
     pub current_asset_folder: Option<AssetFolder>,
     pub highlight_asset_file: Option<AssetFile>,
-    pub model_view_data: Option<ModelViewData>,
     pub is_level_view_open: bool,
     pub level: Option<Rc<RefCell<rs_engine::content::level::Level>>>,
     pub camera_view_matrix: glam::Mat4,
@@ -71,6 +72,7 @@ pub struct DataSource {
     pub debug_flags: rs_engine::player_viewport::DebugFlags,
     pub is_debug_texture_view_open: bool,
     pub is_simulate_real_time: bool,
+    pub model_scene_view_data: model_scene_view::DataSource,
 }
 
 impl DataSource {
@@ -85,8 +87,6 @@ impl DataSource {
             input_method_editor_started: false,
             is_asset_folder_open: true,
             asset_folder: None,
-            is_model_hierarchy_open: false,
-            model_view_data: None,
             is_level_view_open: true,
             level: None,
             current_asset_folder: None,
@@ -108,6 +108,7 @@ impl DataSource {
             is_debug_texture_view_open: false,
             is_simulate_real_time: false,
             debug_flags: rs_engine::player_viewport::DebugFlags::empty(),
+            model_scene_view_data: model_scene_view::DataSource::default(),
         }
     }
 

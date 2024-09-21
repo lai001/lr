@@ -12,6 +12,7 @@ pub mod material_view;
 pub mod media_ui_window;
 pub mod mesh_ui_window;
 pub mod misc;
+pub mod model_scene_view;
 pub mod multiple_draw_ui_window;
 pub mod object_property_view;
 pub mod particle_system_ui_window;

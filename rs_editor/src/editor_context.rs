@@ -1715,9 +1715,11 @@ impl EditorContext {
 
         let egui_winit_state = &mut self.egui_winit_state;
 
-        let click_event = self
-            .editor_ui
-            .build(egui_winit_state.egui_ctx(), &mut self.data_source);
+        let click_event = self.editor_ui.build(
+            egui_winit_state.egui_ctx(),
+            &mut self.data_source,
+            &mut self.model_loader,
+        );
 
         self.process_top_menu_event(window, click_event.menu_event, event_loop_window_target);
         self.process_click_asset_event(click_event.click_aseet, event_loop_window_target);
@@ -2244,9 +2246,10 @@ impl EditorContext {
                 self.data_source.highlight_asset_file = Some(asset_file.clone());
                 if asset_file.get_file_type() == EFileType::Mp4 {
                     self.open_media_window(asset_file.path, event_loop_window_target);
-                } else {
-                    let result = self.open_model_file(asset_file.path.clone());
-                    log::trace!("{:?}", result);
+                } else if asset_file.get_file_type().is_model() {
+                    let _ = self.model_loader.load(&asset_file.path);
+                    self.data_source.model_scene_view_data = Default::default();
+                    self.data_source.model_scene_view_data.model_scene = Some(asset_file.path);
                 }
             }
             asset_view::EClickItemType::Back => todo!(),
@@ -2331,6 +2334,10 @@ impl EditorContext {
                     vec![content.clone()],
                 );
                 current_folder.files.push(content);
+            }
+            asset_view::EClickItemType::ImportAsActor(asset_file) => {
+                let result = self.open_model_file(asset_file.path.clone());
+                log::trace!("{:?}", result);
             }
         }
     }

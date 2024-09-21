@@ -1,5 +1,6 @@
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
+use crate::model_loader::ModelLoader;
 use crate::thumbnail_cache::ThumbnailCache;
 use crate::ui::content_item_property_view::ContentItemPropertyView;
 use crate::ui::debug_textures_view::{self, DebugTexturesView};
@@ -89,11 +90,15 @@ impl EditorUI {
         self.project_folder_path = project_folder_path;
     }
 
-    pub fn build(&mut self, context: &Context, data_source: &mut DataSource) -> ClickEvent {
+    pub fn build(
+        &mut self,
+        context: &Context,
+        data_source: &mut DataSource,
+        model_loader: &mut ModelLoader,
+    ) -> ClickEvent {
         let mut click = ClickEvent::default();
         click.menu_event = self.top_menu.draw(context, data_source);
 
-        Self::model_hierarchy_window(context, data_source, &mut click);
         if let Some(level) = &data_source.level {
             let window = Self::new_window("Level", data_source.input_mode);
             click.click_actor = crate::ui::level_view::draw(
@@ -215,50 +220,31 @@ impl EditorUI {
                 click.debug_textures_view_event = self.debug_textures_view.draw(ui);
             });
 
-        click
-    }
-
-    fn model_hierarchy_window(
-        context: &Context,
-        data_source: &mut DataSource,
-        click: &mut ClickEvent,
-    ) {
-        Window::new("Model Hierarchy")
-            .enabled(data_source.input_mode.is_interact_ui())
-            .open(&mut data_source.is_model_hierarchy_open)
+        let mut is_open = data_source.model_scene_view_data.model_scene.is_some();
+        let mut scene = None;
+        if let Some(path) = data_source.model_scene_view_data.model_scene.clone() {
+            scene = model_loader.get(&path).ok();
+        }
+        Self::new_window("Model Scene", data_source.input_mode)
+            .open(&mut is_open)
+            .vscroll(true)
+            .hscroll(true)
+            .resizable(true)
+            .default_size([500.0, 500.0])
             .show(context, |ui| {
-                if let Some(model_view_data) = data_source.model_view_data.as_ref() {
-                    Self::render_collapsing_header(
+                if let Some(scene) = scene {
+                    crate::ui::model_scene_view::render(
                         ui,
-                        &model_view_data.mesh_items,
-                        &model_view_data.file_path,
-                        click,
+                        scene.as_ref(),
+                        &mut data_source.model_scene_view_data,
                     );
                 }
             });
-    }
-
-    fn render_collapsing_header(
-        ui: &mut Ui,
-        mesh_items: &[Rc<MeshItem>],
-        file_path: &std::path::Path,
-        click: &mut ClickEvent,
-    ) {
-        for mesh_item in mesh_items {
-            let id = ui.make_persistent_id(mesh_item.name.clone());
-            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false)
-                .show_header(ui, |ui| {
-                    if ui.button(mesh_item.name.clone()).clicked() {
-                        click.mesh_item = Some(ClickMeshItem {
-                            item: mesh_item.clone(),
-                            file_path: file_path.to_path_buf(),
-                        });
-                    }
-                })
-                .body(|ui| {
-                    Self::render_collapsing_header(ui, &mesh_item.childs, file_path, click);
-                });
+        if !is_open {
+            data_source.model_scene_view_data.model_scene = None;
         }
+
+        click
     }
 
     pub fn new_window(name: &str, input_mode: EInputMode) -> egui::Window<'static> {
