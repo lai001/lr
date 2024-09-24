@@ -99,6 +99,34 @@ impl PlayerViewport {
             None
         };
 
+        let resource_manager = ResourceManager::default();
+        let shadow_depth_texture_handle = resource_manager
+            .next_texture(build_built_in_resouce_url("PlayerViewport.ShadowDepthTexture").unwrap());
+        engine
+            .get_render_thread_mode_mut()
+            .send_command(RenderCommand::CreateTexture(
+                rs_render::command::CreateTexture {
+                    handle: *shadow_depth_texture_handle,
+                    texture_descriptor_create_info: TextureDescriptorCreateInfo {
+                        label: Some(format!("PlayerViewport.ShadowDepthTexture")),
+                        size: wgpu::Extent3d {
+                            width: 1024,
+                            height: 1024,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Depth32Float,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::COPY_SRC
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                        view_formats: None,
+                    },
+                    init_data: None,
+                },
+            ));
+
         PlayerViewport {
             scene_viewport,
             window_id,
@@ -106,7 +134,7 @@ impl PlayerViewport {
             height,
             global_sampler_handle,
             virtual_pass_handle: None,
-            shadow_depth_texture_handle: None,
+            shadow_depth_texture_handle: Some(shadow_depth_texture_handle),
             grid_draw_object,
             global_constants,
             global_constants_handle,
@@ -457,6 +485,12 @@ impl PlayerViewport {
                     EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
                 object.irradiance_texture_resource =
                     EBindingResource::Texture(*ibl_textures.irradiance);
+                object.shadow_map_texture_resource = EBindingResource::Texture(
+                    *self
+                        .shadow_depth_texture_handle
+                        .clone()
+                        .unwrap_or(engine.get_default_textures().get_depth_texture_handle()),
+                );
             }
             EDrawObjectType::StaticMeshMaterial(object) => {
                 let settings = engine.get_settings();
@@ -533,6 +567,12 @@ impl PlayerViewport {
                     EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
                 object.irradiance_texture_resource =
                     EBindingResource::Texture(*ibl_textures.irradiance);
+                object.shadow_map_texture_resource = EBindingResource::Texture(
+                    *self
+                        .shadow_depth_texture_handle
+                        .clone()
+                        .unwrap_or(engine.get_default_textures().get_depth_texture_handle()),
+                );
             }
             EDrawObjectType::Custom(_) => {}
         }

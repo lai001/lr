@@ -21,12 +21,12 @@ pub struct DirectionalLight {
     light_projection: glam::Mat4,
     light_view: glam::Mat4,
     transformation: glam::Mat4,
-    left: f32,
-    right: f32,
-    bottom: f32,
-    top: f32,
+    pub left: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub top: f32,
     near: f32,
-    far: f32,
+    pub far: f32,
     #[serde(skip)]
     runtime: Option<Runtime>,
 }
@@ -50,7 +50,7 @@ impl DirectionalLight {
     ) -> DirectionalLight {
         let light_projection = glam::Mat4::orthographic_rh(left, right, bottom, top, near, far);
         let up = glam::Vec3::Y;
-        let dir = glam::Vec3::NEG_Z;
+        let dir = glam::Vec3::Z;
         let eye = glam::Vec3::ZERO;
         let light_view = glam::Mat4::look_to_rh(eye, dir, up);
         let transformation = glam::Mat4::IDENTITY;
@@ -84,12 +84,16 @@ impl DirectionalLight {
         let runtime = Runtime {
             draw_object: EDrawObjectType::Custom(CustomDrawObject {
                 draw_object,
-                window_id: engine.get_main_window_id(),
+                window_id: player_viewport.window_id,
             }),
             constants_handle,
             constants: constants::Constants::default(),
         };
         self.runtime = Some(runtime);
+    }
+
+    pub fn remake_preview(&mut self, engine: &mut Engine, player_viewport: &mut PlayerViewport) {
+        self.initialize(engine, player_viewport);
     }
 
     fn make_draw_object(
@@ -233,8 +237,10 @@ impl DirectionalLight {
 
     pub fn get_light_space_matrix(&mut self) -> glam::Mat4 {
         let up = glam::Vec3::Y;
-        let dir = glam::Vec3::NEG_Z;
-        self.light_view = self.transformation.inverse() * glam::Mat4::look_to_rh(self.eye, dir, up);
+        let dir = glam::Vec3::Z;
+        let eye = self.transformation.to_scale_rotation_translation().2;
+        self.light_view =
+            glam::Mat4::look_to_rh(eye, self.transformation.transform_vector3(dir), up);
         self.light_projection * self.light_view
     }
 }

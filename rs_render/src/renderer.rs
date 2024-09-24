@@ -2428,4 +2428,12 @@ impl Renderer {
     pub fn get_base_compute_pipeline_pool(&self) -> &BaseComputePipelinePool {
         &self.base_compute_pipeline_pool
     }
+
+    pub fn get_texture_descriptor(
+        &self,
+        handle: TextureHandle,
+    ) -> Option<&TextureDescriptorCreateInfo> {
+        let descriptor = self.texture_descriptors.get(&handle);
+        descriptor
+    }
 }

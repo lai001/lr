@@ -1,6 +1,14 @@
 #ifndef COMMON_WGSL
 #define COMMON_WGSL
 
+fn check_uv(uv: vec2<f32>) -> f32 {
+    if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
+        return 1.0;
+    } else {
+        return 0.0;
+    }
+}
+
 fn inverse(m: mat4x4<f32>) -> mat4x4<f32> {
     let n11 = m[0][0]; let n12 = m[1][0]; let n13 = m[2][0]; let n14 = m[3][0];
     let n21 = m[0][1]; let n22 = m[1][1]; let n23 = m[2][1]; let n24 = m[3][1];

@@ -12,6 +12,14 @@ pub struct UpdateMaterial {
 
 pub enum EEventType {
     UpdateMaterial(UpdateMaterial),
+    UpdateDirectionalLight(
+        SingleThreadMutType<DirectionalLight>,
+        f32,
+        f32,
+        f32,
+        f32,
+        f32,
+    ),
 }
 
 #[derive(Clone)]
@@ -160,9 +168,59 @@ impl ObjectPropertyView {
             }
             ESelectedObjectType::DirectionalLight(directional_light) => {
                 ui.label(format!("Type: DirectionalLight"));
-
+                let directional_light_clone = directional_light.clone();
                 let mut component = directional_light.borrow_mut();
                 Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+
+                let mut is_changed = false;
+
+                let mut left = component.left;
+                is_changed = is_changed
+                    || ui
+                        .add(egui::DragValue::new(&mut left).speed(0.1).prefix("Left: "))
+                        .changed();
+
+                let mut right = component.right;
+                is_changed = is_changed
+                    || ui
+                        .add(
+                            egui::DragValue::new(&mut right)
+                                .speed(0.1)
+                                .prefix("Right: "),
+                        )
+                        .changed();
+
+                let mut top = component.top;
+                is_changed = is_changed
+                    || ui
+                        .add(egui::DragValue::new(&mut top).speed(0.1).prefix("Top: "))
+                        .changed();
+
+                let mut bottom = component.bottom;
+                is_changed = is_changed
+                    || ui
+                        .add(
+                            egui::DragValue::new(&mut bottom)
+                                .speed(0.1)
+                                .prefix("Bottom: "),
+                        )
+                        .changed();
+
+                let mut far = component.far;
+                is_changed = is_changed
+                    || ui
+                        .add(egui::DragValue::new(&mut far).speed(0.1).prefix("Far: "))
+                        .changed();
+                if is_changed {
+                    event = Some(EEventType::UpdateDirectionalLight(
+                        directional_light_clone,
+                        left,
+                        right,
+                        top,
+                        bottom,
+                        far,
+                    ));
+                }
             }
         }
 

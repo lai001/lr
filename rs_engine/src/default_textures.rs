@@ -11,6 +11,7 @@ pub struct DefaultTextures {
     texture_handle: TextureHandle,
     texture_cube_handle: TextureHandle,
     ibl_textures: IBLTextures,
+    depth_texture_handle: TextureHandle,
 }
 
 impl DefaultTextures {
@@ -20,6 +21,8 @@ impl DefaultTextures {
             texture_cube_handle: rm
                 .next_texture(build_built_in_resouce_url("DefaultCubeTexture0").unwrap()),
             ibl_textures: rm.next_ibl_textures(build_built_in_resouce_url("IBLTextures0").unwrap()),
+            depth_texture_handle: rm
+                .next_texture(build_built_in_resouce_url("ShadowDepthTexture").unwrap()),
         }
     }
 
@@ -64,6 +67,27 @@ impl DefaultTextures {
 
         render_thread_mode
             .send_command(RenderCommand::CreateDefaultIBL(self.ibl_textures.to_key()));
+
+        render_thread_mode.send_command(RenderCommand::CreateTexture(CreateTexture {
+            handle: *self.depth_texture_handle,
+            texture_descriptor_create_info: TextureDescriptorCreateInfo {
+                label: Some(format!("ShadowDepthTexture")),
+                size: wgpu::Extent3d {
+                    width: 4,
+                    height: 4,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: None,
+            },
+            init_data: None,
+        }));
     }
 
     pub fn get_texture_handle(&self) -> TextureHandle {
@@ -76,5 +100,9 @@ impl DefaultTextures {
 
     pub fn get_ibl_textures(&self) -> &IBLTextures {
         &self.ibl_textures
+    }
+
+    pub fn get_depth_texture_handle(&self) -> TextureHandle {
+        self.depth_texture_handle.clone()
     }
 }

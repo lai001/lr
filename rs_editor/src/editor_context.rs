@@ -1461,7 +1461,7 @@ impl EditorContext {
                 let visualization_url =
                     build_built_in_resouce_url("ShadowDepthTextureVisualization").unwrap();
                 let shadow_depth_texture_url =
-                    build_built_in_resouce_url("ShadowDepthTexture").unwrap();
+                    build_built_in_resouce_url("PlayerViewport.ShadowDepthTexture").unwrap();
                 let Some(texture_handle) = rm.get_texture_by_url(&visualization_url) else {
                     return;
                 };
@@ -1964,7 +1964,8 @@ impl EditorContext {
                     build_built_in_resouce_url("ShadowDepthTextureVisualization").unwrap();
 
                 if texture_url.scheme() == rs_engine::BUILT_IN_RESOURCE
-                    && texture_url.host() == Some(url::Host::Domain("ShadowDepthTexture"))
+                    && texture_url.host()
+                        == Some(url::Host::Domain("PlayerViewport.ShadowDepthTexture"))
                     && rm.get_texture_by_url(&visualization_url).is_none()
                 {
                     let texture_handle = self.engine.create_texture(
@@ -2046,8 +2047,9 @@ impl EditorContext {
                 }
             }
             crate::ui::level_view::EClickEventType::CreateDirectionalLight => {
-                let size = 10.0;
-                let mut light = DirectionalLight::new(-size, size, -size, size, 0.01, 25.0);
+                let size = 5.0;
+                let far = 50.0;
+                let mut light = DirectionalLight::new(-size, size, -size, size, 0.01, far);
                 light.initialize(&mut self.engine, &mut self.player_viewport);
                 opened_level
                     .borrow_mut()
@@ -2474,6 +2476,22 @@ impl EditorContext {
                     }
                     _ => unimplemented!(),
                 }
+            }
+            object_property_view::EEventType::UpdateDirectionalLight(
+                directional_light,
+                left,
+                right,
+                top,
+                bottom,
+                far,
+            ) => {
+                let mut directional_light = directional_light.borrow_mut();
+                directional_light.left = left;
+                directional_light.right = right;
+                directional_light.top = top;
+                directional_light.bottom = bottom;
+                directional_light.far = far;
+                directional_light.remake_preview(&mut self.engine, &mut self.player_viewport);
             }
         }
     }

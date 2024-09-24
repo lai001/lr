@@ -18,6 +18,14 @@ impl Rotator {
         glam::Mat4::from_euler(glam::EulerRot::XYZ, self.pitch, self.yaw, self.roll)
     }
 
+    pub fn from_matrix(matrix: &glam::Mat4) -> Self {
+        let (scale, rotation, _) = matrix.to_scale_rotation_translation();
+        let matrix = glam::Mat4::from_scale_rotation_translation(scale, rotation, glam::Vec3::ZERO);
+        let (_, quat_rotation, _) = matrix.to_scale_rotation_translation();
+        let (pitch, yaw, roll) = quat_rotation.to_euler(glam::EulerRot::XYZ);
+        Rotator { yaw, roll, pitch }
+    }
+
     pub fn to_radians(&self) -> Self {
         Rotator {
             yaw: self.yaw.to_radians(),
@@ -51,5 +59,44 @@ impl Rotator {
             roll: 0.0,
             pitch,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Rotator;
+    use core::f32;
+    use glam::{BVec4A, EulerRot};
+    use std::iter::zip;
+
+    #[test]
+    fn test_rotator() {
+        let transformation =
+            glam::Mat4::from_euler(EulerRot::XYZ, 1.0, -1.0, 1.0) * glam::Mat4::IDENTITY;
+        let rotator = Rotator::from_matrix(&transformation);
+        assert_eq!(
+            (rotator.to_matrix().x_axis - transformation.x_axis)
+                .abs()
+                .cmple(glam::Vec4::splat(0.001)),
+            BVec4A::splat(true)
+        );
+        assert_eq!(
+            (rotator.to_matrix().y_axis - transformation.y_axis)
+                .abs()
+                .cmple(glam::Vec4::splat(0.001)),
+            BVec4A::splat(true)
+        );
+        assert_eq!(
+            (rotator.to_matrix().z_axis - transformation.z_axis)
+                .abs()
+                .cmple(glam::Vec4::splat(0.001)),
+            BVec4A::splat(true)
+        );
+        assert_eq!(
+            (rotator.to_matrix().w_axis - transformation.w_axis)
+                .abs()
+                .cmple(glam::Vec4::splat(0.001)),
+            BVec4A::splat(true)
+        );
     }
 }

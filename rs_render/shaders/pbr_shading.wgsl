@@ -313,7 +313,8 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
 
     var shadow = shadow_calculation(shadow_map, vertex_output.frag_position_at_light_space);
 
-    fragment_output.color = vec4<f32>(ibl_color, 1.0);
+    fragment_output.color = vec4<f32>(mix(ibl_color, ibl_color * vec3<f32>(0.5), shadow), 1.0);
+    // fragment_output.color = vec4<f32>(ibl_color, 1.0);
     if (global_constants.debug_shading == DEBUG_SHADING_TYPE_BASE_COLOR) {
         fragment_output.color = vec4<f32>(shading_info.base_color, 1.0);
     } else if (global_constants.debug_shading == DEBUG_SHADING_TYPE_METALLIC) {

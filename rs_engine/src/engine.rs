@@ -82,7 +82,6 @@ pub struct Engine {
     main_window_id: isize,
     default_textures: DefaultTextures,
     virtual_pass_handle: Option<VirtualPassHandle>,
-    pub shadow_depth_texture_handle: Option<TextureHandle>,
     _audio_device: Option<AudioDevice>,
 }
 
@@ -188,28 +187,6 @@ impl Engine {
         let default_textures = DefaultTextures::new(ResourceManager::default());
         default_textures.create(&mut render_thread_mode);
 
-        let shadow_depth_texture_handle = resource_manager
-            .next_texture(build_built_in_resouce_url("ShadowDepthTexture").unwrap());
-        render_thread_mode.send_command(RenderCommand::CreateTexture(CreateTexture {
-            handle: *shadow_depth_texture_handle,
-            texture_descriptor_create_info: TextureDescriptorCreateInfo {
-                label: Some(format!("ShadowDepthTexture")),
-                size: wgpu::Extent3d {
-                    width: 1024,
-                    height: 1024,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: None,
-            },
-            init_data: None,
-        }));
         let mut audio_device =
             AudioDevice::new().map_err(|err| crate::error::Error::AudioError(err))?;
         audio_device
@@ -232,7 +209,7 @@ impl Engine {
             main_window_id: window_id,
             default_textures,
             virtual_pass_handle,
-            shadow_depth_texture_handle: Some(shadow_depth_texture_handle),
+            // shadow_depth_texture_handle: None,
             _audio_device: Some(audio_device),
         };
 
@@ -1090,10 +1067,7 @@ impl Engine {
             ),
             user_textures_resources: vec![],
             shadow_map_texture_resource: EBindingResource::Texture(
-                *self
-                    .shadow_depth_texture_handle
-                    .clone()
-                    .unwrap_or(self.default_textures.get_texture_handle()),
+                *self.default_textures.get_depth_texture_handle(),
             ),
         };
         EDrawObjectType::SkinMaterial(object)
@@ -1270,10 +1244,7 @@ impl Engine {
             ),
             user_textures_resources: vec![],
             shadow_map_texture_resource: EBindingResource::Texture(
-                *self
-                    .shadow_depth_texture_handle
-                    .clone()
-                    .unwrap_or(self.default_textures.get_texture_handle()),
+                *self.default_textures.get_depth_texture_handle(),
             ),
         };
         EDrawObjectType::StaticMeshMaterial(object)
