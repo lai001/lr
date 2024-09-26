@@ -595,7 +595,7 @@ impl Engine {
         let virtual_texture_pass = player_viewport.virtual_pass_handle.clone().map(|x| x.key());
         self.render_thread_mode
             .send_command(RenderCommand::Present(PresentInfo {
-                window_id: player_viewport.window_id,
+                render_target_type: *player_viewport.get_render_target_type(),
                 draw_objects,
                 virtual_texture_pass,
                 scene_viewport: player_viewport.scene_viewport.clone(),

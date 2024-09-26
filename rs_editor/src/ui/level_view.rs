@@ -8,10 +8,14 @@ pub enum EClickEventType {
     SceneNode(SingleThreadMutType<SceneNode>),
     CreateDirectionalLight,
     DirectionalLight(SingleThreadMutType<DirectionalLight>),
+    DeleteDirectionalLight(SingleThreadMutType<DirectionalLight>),
+    CreateCameraComponent(SingleThreadMutType<SceneNode>),
+    DeleteNode(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
 }
 
 fn draw_scene_node(
     ui: &mut Ui,
+    actor: SingleThreadMutType<rs_engine::actor::Actor>,
     scene_node: SingleThreadMutType<SceneNode>,
     event: &mut Option<EClickEventType>,
 ) {
@@ -26,18 +30,41 @@ fn draw_scene_node(
             rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
                 component.borrow().name.clone()
             }
+            rs_engine::scene_node::EComponentType::CameraComponent(component) => {
+                component.borrow().name.clone()
+            }
         }
     };
     let id = ui.make_persistent_id(name.clone());
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
         .show_header(ui, |ui| {
-            if ui.button(name).clicked() {
+            let response = ui.button(name);
+            if response.clicked() {
                 *event = Some(EClickEventType::SceneNode(scene_node.clone()));
+            } else {
+                response.context_menu(|ui| {
+                    ui.menu_button("Add", |ui| {
+                        let response = ui.button("Camera");
+                        if response.clicked() {
+                            *event =
+                                Some(EClickEventType::CreateCameraComponent(scene_node.clone()));
+                            ui.close_menu();
+                        }
+                    });
+                    let response = ui.button("Delete");
+                    if response.clicked() {
+                        *event = Some(EClickEventType::DeleteNode(
+                            actor.clone(),
+                            scene_node.clone(),
+                        ));
+                        ui.close_menu();
+                    }
+                });
             }
         })
         .body(|ui| {
             for child in &scene_node.borrow().childs {
-                draw_scene_node(ui, child.clone(), event);
+                draw_scene_node(ui, actor.clone(), child.clone(), event);
             }
         });
 }
@@ -52,12 +79,13 @@ fn level_node(
     let id = ui.make_persistent_id(name);
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
         .show_header(ui, |ui| {
-            if ui.button(name).clicked() {
+            let response = ui.button(name);
+            if response.clicked() {
                 *event = Some(EClickEventType::Actor(actor.clone()));
             }
         })
         .body(|ui| {
-            draw_scene_node(ui, actor.borrow().scene_node.clone(), event);
+            draw_scene_node(ui, actor.clone(), actor.borrow().scene_node.clone(), event);
         });
 }
 
@@ -73,9 +101,17 @@ pub fn draw(
             ui.label(format!("name: {}", level.get_name()));
             ScrollArea::vertical().show(ui, |ui| {
                 for (index, light) in level.directional_lights.iter().enumerate() {
-                    if ui.button(format!("DirectionalLight_{}", index)).clicked() {
+                    let response = ui.button(format!("DirectionalLight_{}", index));
+                    if response.clicked() {
                         event = Some(EClickEventType::DirectionalLight(light.clone()));
                     }
+                    response.context_menu(|ui| {
+                        let response = ui.button("Delete");
+                        if response.clicked() {
+                            event = Some(EClickEventType::DeleteDirectionalLight(light.clone()));
+                            ui.close_menu();
+                        }
+                    });
                 }
                 for actor in &level.actors {
                     level_node(ui, actor.clone(), &mut event);

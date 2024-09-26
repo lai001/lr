@@ -34,11 +34,13 @@ use rs_core_minimal::{
 use rs_engine::plugin::plugin_crate::Plugin;
 use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
+    camera_component::CameraComponent,
     content::{content_file_type::EContentFileType, texture::TextureFile},
     directional_light::DirectionalLight,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
     player_viewport::PlayerViewport,
+    scene_node::SceneNode,
 };
 use rs_engine::{
     file_type::EFileType,
@@ -250,17 +252,11 @@ impl EditorContext {
             v8_runtime
         };
 
-        let virtual_texture_source_infos = engine.get_virtual_texture_source_infos();
-        let player_viewport = PlayerViewport::new(
+        let player_viewport = PlayerViewport::from_window_surface(
             window_id,
             window_width,
             window_height,
-            ResourceManager::default()
-                .get_builtin_resources()
-                .global_sampler_handle
-                .clone(),
             &mut engine,
-            virtual_texture_source_infos,
             EInputMode::UI,
             true,
         );
@@ -401,6 +397,7 @@ impl EditorContext {
                                         ESelectedObjectType::SkeletonMeshComponent(componenet),
                                     );
                                 }
+                                EComponentType::CameraComponent(_) => {}
                             }
                         } else {
                             self.editor_ui.object_property_view.selected_object = None;
@@ -1406,6 +1403,22 @@ impl EditorContext {
             );
 
             let mut draw_objects = active_level.collect_draw_objects();
+
+            for camera_componenet in active_level.collect_camera_componenets() {
+                let camera_componenet = camera_componenet.borrow();
+                let player_viewport = camera_componenet
+                    .get_player_viewport()
+                    .expect("Should not be null.");
+                let mut player_viewport = player_viewport.borrow_mut();
+                player_viewport.update_global_constants(&mut self.engine);
+                for draw_object in draw_objects.iter_mut() {
+                    player_viewport.update_draw_object(&mut self.engine, draw_object);
+                    draw_object.switch_player_viewport(&player_viewport);
+                }
+                player_viewport.append_to_draw_list(&draw_objects);
+                self.engine.present_player_viewport(&mut player_viewport);
+            }
+
             for draw_object in draw_objects.iter_mut() {
                 self.player_viewport
                     .update_draw_object(&mut self.engine, draw_object);
@@ -2044,6 +2057,10 @@ impl EditorContext {
                             ESelectedObjectType::SkeletonMeshComponent(component.clone()),
                         );
                     }
+                    rs_engine::scene_node::EComponentType::CameraComponent(component) => {
+                        self.editor_ui.object_property_view.selected_object =
+                            Some(ESelectedObjectType::CameraComponent(component.clone()));
+                    }
                 }
             }
             crate::ui::level_view::EClickEventType::CreateDirectionalLight => {
@@ -2059,6 +2076,25 @@ impl EditorContext {
             crate::ui::level_view::EClickEventType::DirectionalLight(light) => {
                 self.editor_ui.object_property_view.selected_object =
                     Some(ESelectedObjectType::DirectionalLight(light));
+            }
+            crate::ui::level_view::EClickEventType::CreateCameraComponent(parent_node) => {
+                let mut camera_component =
+                    CameraComponent::new("Camera".to_string(), glam::Mat4::IDENTITY);
+                camera_component.initialize(&mut self.engine, &mut self.player_viewport);
+                let camera_component = SingleThreadMut::new(camera_component);
+                let mut parent_node = parent_node.borrow_mut();
+                parent_node.childs.push(SingleThreadMut::new(SceneNode {
+                    component: rs_engine::scene_node::EComponentType::CameraComponent(
+                        camera_component,
+                    ),
+                    childs: vec![],
+                }));
+            }
+            crate::ui::level_view::EClickEventType::DeleteNode(actor, node) => {
+                actor.borrow_mut().remove_node(node);
+            }
+            crate::ui::level_view::EClickEventType::DeleteDirectionalLight(light) => {
+                opened_level.borrow_mut().delete_light(light);
             }
         }
     }
@@ -2553,6 +2589,15 @@ impl EditorContext {
                 if let Some(gizmo_final_transformation) = gizmo_final_transformation {
                     let mut component = component.borrow_mut();
                     *component.get_transformation_mut() = gizmo_final_transformation;
+                }
+            }
+            ESelectedObjectType::CameraComponent(component) => {
+                let mut component = component.borrow_mut();
+                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                    let parent_final_transformation = component.get_parent_final_transformation();
+                    let model_matrix = component.get_transformation_mut();
+                    *model_matrix =
+                        parent_final_transformation.inverse() * gizmo_final_transformation;
                 }
             }
         }

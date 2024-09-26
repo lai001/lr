@@ -3,6 +3,7 @@ pub struct Line {
     pub p_1: glam::Vec3,
 }
 
+#[derive(Debug)]
 pub struct Frustum {
     pub near_0: glam::Vec3,
     pub near_1: glam::Vec3,

@@ -40,6 +40,10 @@ impl DirectionalLight {
         &self.transformation
     }
 
+    fn default_dir() -> glam::Vec3 {
+        glam::Vec3::Z
+    }
+
     pub fn new(
         left: f32,
         right: f32,
@@ -50,7 +54,7 @@ impl DirectionalLight {
     ) -> DirectionalLight {
         let light_projection = glam::Mat4::orthographic_rh(left, right, bottom, top, near, far);
         let up = glam::Vec3::Y;
-        let dir = glam::Vec3::Z;
+        let dir = Self::default_dir();
         let eye = glam::Vec3::ZERO;
         let light_view = glam::Mat4::look_to_rh(eye, dir, up);
         let transformation = glam::Mat4::IDENTITY;
@@ -84,7 +88,7 @@ impl DirectionalLight {
         let runtime = Runtime {
             draw_object: EDrawObjectType::Custom(CustomDrawObject {
                 draw_object,
-                window_id: player_viewport.window_id,
+                render_target_type: *player_viewport.get_render_target_type(),
             }),
             constants_handle,
             constants: constants::Constants::default(),
@@ -237,7 +241,7 @@ impl DirectionalLight {
 
     pub fn get_light_space_matrix(&mut self) -> glam::Mat4 {
         let up = glam::Vec3::Y;
-        let dir = glam::Vec3::Z;
+        let dir = Self::default_dir();
         let eye = self.transformation.to_scale_rotation_translation().2;
         self.light_view =
             glam::Mat4::look_to_rh(eye, self.transformation.transform_vector3(dir), up);

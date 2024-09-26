@@ -5,10 +5,8 @@ use crate::{
     engine::Engine,
     input_mode::EInputMode,
     player_viewport::PlayerViewport,
-    resource_manager::ResourceManager,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
-use rs_render::command::{CreateSampler, RenderCommand};
 
 pub struct Application {
     _window_id: isize,
@@ -30,25 +28,20 @@ impl Application {
         input_mode: EInputMode,
         #[cfg(feature = "plugin_shared_crate")] mut plugins: Vec<Box<dyn Plugin>>,
     ) -> Application {
-        let resource_manager = ResourceManager::default();
+        // let resource_manager = ResourceManager::default();
 
-        let global_sampler_handle = resource_manager.next_sampler();
-        let command = RenderCommand::CreateSampler(CreateSampler {
-            handle: *global_sampler_handle,
-            sampler_descriptor: wgpu::SamplerDescriptor::default(),
-        });
-        engine.send_render_command(command);
+        // let global_sampler_handle = resource_manager.next_sampler();
+        // let command = RenderCommand::CreateSampler(CreateSampler {
+        //     handle: *global_sampler_handle,
+        //     sampler_descriptor: wgpu::SamplerDescriptor::default(),
+        // });
+        // engine.send_render_command(command);
 
-        let infos = engine.get_virtual_texture_source_infos();
-        let mut player_view_port = PlayerViewport::new(
-            window_id,
-            width,
-            height,
-            global_sampler_handle,
-            engine,
-            infos,
-            input_mode,
-            false,
+        // let infos = engine.get_virtual_texture_source_infos();
+        let mut player_view_port = PlayerViewport::from_window_surface(
+            window_id, width, height, // global_sampler_handle,
+            engine, // infos,
+            input_mode, false,
         );
         let mut current_active_level =
             current_active_level.make_copy_for_standalone(engine, &contents, &mut player_view_port);

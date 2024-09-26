@@ -11,8 +11,8 @@ use rapier3d::prelude::*;
 use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
 use rs_render::antialias_type::{FXAAInfo, MSAAInfo};
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, RenderCommand, ShadowMapping,
-    TextureDescriptorCreateInfo, UpdateBuffer, VirtualPassSet,
+    BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, ERenderTargetType, RenderCommand,
+    ShadowMapping, TextureDescriptorCreateInfo, UpdateBuffer, VirtualPassSet,
 };
 use rs_render::constants::Constants;
 use rs_render::global_uniform;
@@ -32,7 +32,8 @@ bitflags::bitflags! {
 }
 
 pub struct PlayerViewport {
-    pub window_id: isize,
+    // pub window_id: isize,
+    render_target_type: ERenderTargetType,
     pub scene_viewport: SceneViewport,
     pub width: u32,
     pub height: u32,
@@ -58,15 +59,11 @@ pub struct PlayerViewport {
 }
 
 impl PlayerViewport {
-    pub fn new(
-        window_id: isize,
+    fn new(
+        render_target_type: ERenderTargetType,
         width: u32,
         height: u32,
-        global_sampler_handle: crate::handle::SamplerHandle,
         engine: &mut Engine,
-        virtual_texture_source_infos: SingleThreadMutType<
-            HashMap<url::Url, MultipleThreadMutType<Box<dyn TVirtualTextureSource>>>,
-        >,
         input_mode: EInputMode,
         is_create_grid: bool,
     ) -> PlayerViewport {
@@ -84,7 +81,7 @@ impl PlayerViewport {
         });
         engine.get_render_thread_mode_mut().send_command(command);
         let mut camera = Camera::default(width, height);
-        camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
+        camera.set_world_location(glam::vec3(0.0, 1.0, 0.0));
         let physics_debug_render = Some(PhysicsDebugRender::new());
         let grid_draw_object = if is_create_grid {
             #[cfg(feature = "editor")]
@@ -100,8 +97,10 @@ impl PlayerViewport {
         };
 
         let resource_manager = ResourceManager::default();
-        let shadow_depth_texture_handle = resource_manager
-            .next_texture(build_built_in_resouce_url("PlayerViewport.ShadowDepthTexture").unwrap());
+        let shadow_depth_texture_handle =
+            resource_manager.next_texture(resource_manager.get_unique_texture_url(
+                &build_built_in_resouce_url("PlayerViewport.ShadowDepthTexture").unwrap(),
+            ));
         engine
             .get_render_thread_mode_mut()
             .send_command(RenderCommand::CreateTexture(
@@ -127,18 +126,24 @@ impl PlayerViewport {
                 },
             ));
 
+        let global_sampler_handle = resource_manager
+            .get_builtin_resources()
+            .global_sampler_handle
+            .clone();
+        let virtual_texture_source_infos = engine.get_virtual_texture_source_infos();
         PlayerViewport {
+            render_target_type,
             scene_viewport,
-            window_id,
             width,
             height,
             global_sampler_handle,
+            global_constants,
+            global_constants_handle,
             virtual_pass_handle: None,
             shadow_depth_texture_handle: Some(shadow_depth_texture_handle),
             grid_draw_object,
-            global_constants,
-            global_constants_handle,
             draw_objects: vec![],
+            particle_draw_objects: vec![],
             camera,
             virtual_texture_source_infos,
             debug_draw_objects: vec![],
@@ -148,8 +153,47 @@ impl PlayerViewport {
             _camera_movement_speed: 0.1,
             _camera_motion_speed: 0.1,
             is_use_default_input_process: true,
-            particle_draw_objects: vec![],
         }
+    }
+
+    pub fn from_window_surface(
+        window_id: isize,
+        width: u32,
+        height: u32,
+        engine: &mut Engine,
+        input_mode: EInputMode,
+        is_create_grid: bool,
+    ) -> PlayerViewport {
+        Self::new(
+            ERenderTargetType::SurfaceTexture(window_id),
+            width,
+            height,
+            engine,
+            input_mode,
+            is_create_grid,
+        )
+    }
+
+    pub fn from_frame_buffer(
+        color_texture_handle: crate::handle::TextureHandle,
+        depth_texture_handle: crate::handle::TextureHandle,
+        width: u32,
+        height: u32,
+        engine: &mut Engine,
+        input_mode: EInputMode,
+        is_create_grid: bool,
+    ) -> PlayerViewport {
+        Self::new(
+            ERenderTargetType::FrameBuffer(rs_render::command::FrameBufferOptions {
+                color: *color_texture_handle,
+                depth: *depth_texture_handle,
+            }),
+            width,
+            height,
+            engine,
+            input_mode,
+            is_create_grid,
+        )
     }
 
     pub fn enable_fxaa(&mut self, engine: &mut Engine) {
@@ -981,5 +1025,9 @@ impl PlayerViewport {
 
     pub fn set_input_mode(&mut self, input_mode: EInputMode) {
         self._input_mode = input_mode;
+    }
+
+    pub fn get_render_target_type(&self) -> &ERenderTargetType {
+        &self.render_target_type
     }
 }

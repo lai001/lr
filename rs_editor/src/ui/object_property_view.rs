@@ -1,6 +1,7 @@
 use rs_engine::{
-    actor::Actor, directional_light::DirectionalLight, scene_node::*,
-    skeleton_mesh_component::SkeletonMeshComponent, static_mesh_component::StaticMeshComponent,
+    actor::Actor, camera_component::CameraComponent, directional_light::DirectionalLight,
+    scene_node::*, skeleton_mesh_component::SkeletonMeshComponent,
+    static_mesh_component::StaticMeshComponent,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
@@ -29,6 +30,7 @@ pub enum ESelectedObjectType {
     StaticMeshComponent(SingleThreadMutType<StaticMeshComponent>),
     SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
     DirectionalLight(SingleThreadMutType<DirectionalLight>),
+    CameraComponent(SingleThreadMutType<CameraComponent>),
 }
 
 pub struct ObjectPropertyView {
@@ -221,6 +223,14 @@ impl ObjectPropertyView {
                         far,
                     ));
                 }
+            }
+            ESelectedObjectType::CameraComponent(component) => {
+                ui.label(format!("Type: CameraComponent"));
+                let mut component = component.borrow_mut();
+                ui.label(component.name.clone());
+
+                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                Self::transformation_detail(&component.get_final_transformation(), ui);
             }
         }
 

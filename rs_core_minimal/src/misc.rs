@@ -105,3 +105,41 @@ pub fn get_orthographic_frustum(
         far_3,
     }
 }
+
+pub fn frustum_from_perspective(
+    fov_y_radians: f32,
+    aspect_ratio: f32,
+    z_near: f32,
+    z_far: f32,
+) -> Frustum {
+    let near_top = z_near * (fov_y_radians / 2.0).tan();
+    let near_bottom = -near_top;
+    let near_right = near_top * aspect_ratio;
+    let near_left = -near_right;
+
+    let far_top = z_far * (fov_y_radians / 2.0).tan();
+    let far_bottom = -far_top;
+    let far_right = far_top * aspect_ratio;
+    let far_left = -far_right;
+
+    let near_0 = glam::vec3(near_right, near_top, z_near);
+    let near_1 = glam::vec3(near_right, near_bottom, z_near);
+    let near_2 = glam::vec3(near_left, near_bottom, z_near);
+    let near_3 = glam::vec3(near_left, near_top, z_near);
+
+    let far_0 = glam::vec3(far_right, far_top, z_far);
+    let far_1 = glam::vec3(far_right, far_bottom, z_far);
+    let far_2 = glam::vec3(far_left, far_bottom, z_far);
+    let far_3 = glam::vec3(far_left, far_top, z_far);
+
+    Frustum {
+        near_0,
+        near_1,
+        near_2,
+        near_3,
+        far_0,
+        far_1,
+        far_2,
+        far_3,
+    }
+}

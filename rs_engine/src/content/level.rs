@@ -1,5 +1,6 @@
 use super::content_file_type::EContentFileType;
 use crate::actor::Actor;
+use crate::camera_component::CameraComponent;
 use crate::directional_light::DirectionalLight;
 use crate::drawable::EDrawObjectType;
 use crate::engine::Engine;
@@ -355,8 +356,8 @@ impl Level {
         }
         let scene_node = scene_node.borrow();
         match &scene_node.component {
-            crate::scene_node::EComponentType::SceneComponent(_) => {}
-            crate::scene_node::EComponentType::StaticMeshComponent(static_mesh_component) => {
+            EComponentType::SceneComponent(_) => {}
+            EComponentType::StaticMeshComponent(static_mesh_component) => {
                 let is_find = (|| {
                     let mut component = static_mesh_component.borrow_mut();
                     if let Some(physics) = component.get_physics_mut() {
@@ -373,7 +374,7 @@ impl Level {
                     return;
                 }
             }
-            crate::scene_node::EComponentType::SkeletonMeshComponent(static_mesh_component) => {
+            EComponentType::SkeletonMeshComponent(static_mesh_component) => {
                 let is_find = (|| {
                     let mut component = static_mesh_component.borrow_mut();
                     if let Some(physics) = component.get_physics_mut() {
@@ -390,6 +391,7 @@ impl Level {
                     return;
                 }
             }
+            EComponentType::CameraComponent(_) => {}
         }
         for child in scene_node.childs.clone() {
             self.find_component(child, handle, componenet);
@@ -413,5 +415,24 @@ impl Level {
             draw_objects.append(&mut sub_draw_objects);
         }
         draw_objects
+    }
+
+    pub fn collect_camera_componenets(&self) -> Vec<SingleThreadMutType<CameraComponent>> {
+        let mut camera_componenets = vec![];
+        for actor in self.actors.clone() {
+            let actor = actor.borrow_mut();
+            Actor::walk_node(actor.scene_node.clone(), &mut |node| {
+                let node = node.borrow();
+                if let EComponentType::CameraComponent(rc) = &node.component {
+                    camera_componenets.push(rc.clone());
+                }
+            });
+        }
+        camera_componenets
+    }
+
+    pub fn delete_light(&mut self, light: SingleThreadMutType<DirectionalLight>) {
+        self.directional_lights
+            .retain(|element| !Rc::ptr_eq(&element, &light));
     }
 }

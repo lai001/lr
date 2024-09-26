@@ -18,6 +18,18 @@ pub type TextureHandle = u64;
 pub type SamplerHandle = u64;
 pub type MaterialRenderPipelineHandle = u64;
 
+#[derive(Debug, Clone, Copy)]
+pub struct FrameBufferOptions {
+    pub color: TextureHandle,
+    pub depth: TextureHandle,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ERenderTargetType {
+    SurfaceTexture(isize),
+    FrameBuffer(FrameBufferOptions),
+}
+
 #[derive(Clone)]
 pub struct TextureDescriptorCreateInfo {
     pub label: Option<String>,
@@ -316,7 +328,7 @@ pub type TaskType = Arc<Mutex<Box<dyn FnMut(&mut crate::renderer::Renderer) + Se
 
 #[derive(Clone)]
 pub struct PresentInfo {
-    pub window_id: isize,
+    pub render_target_type: ERenderTargetType,
     pub draw_objects: Vec<DrawObject>,
     pub virtual_texture_pass: Option<VirtualTexturePassKey>,
     pub scene_viewport: SceneViewport,

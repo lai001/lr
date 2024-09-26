@@ -530,8 +530,6 @@ impl Renderer {
             }
         }
 
-        let window_id = present_info.window_id;
-
         let msaa_texture_view: Option<TextureView> = match &present_info.scene_viewport.anti_type {
             EAntialiasType::None => None,
             EAntialiasType::FXAA(_) => None,
@@ -566,41 +564,51 @@ impl Renderer {
         self.vt_pass(&present_info);
         self.shadow_for_draw_objects(present_info.draw_objects.as_slice());
 
-        let color_texture = match self.surface_textures.get(&window_id) {
-            Some(surface_texture) => {
-                let color_texture = &surface_texture.texture;
-                color_texture
+        let color_texture = match present_info.render_target_type {
+            ERenderTargetType::SurfaceTexture(window_id) => {
+                match self.surface_textures.get(&window_id) {
+                    Some(surface_texture) => {
+                        let color_texture = &surface_texture.texture;
+                        color_texture
+                    }
+                    None => return,
+                }
             }
-            None => return,
+            ERenderTargetType::FrameBuffer(options) => {
+                let FrameBufferOptions { color, .. } = options;
+                match self.textures.get(&color) {
+                    Some(texture) => texture,
+                    None => return,
+                }
+            }
         };
 
-        let output_view = match self.surface_textures.get(&window_id) {
-            Some(surface_texture) => {
-                let output_view = surface_texture
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                output_view
+        let depth_texture = match present_info.render_target_type {
+            ERenderTargetType::SurfaceTexture(window_id) => {
+                match self.depth_textures.get(&window_id) {
+                    Some(surface_texture) => &surface_texture.depth_texture,
+                    None => return,
+                }
             }
-            None => return,
+            ERenderTargetType::FrameBuffer(options) => {
+                let FrameBufferOptions { depth, .. } = options;
+                match self.textures.get(&depth) {
+                    Some(texture) => texture,
+                    None => return,
+                }
+            }
         };
+
+        let output_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         if self.is_enable_multiple_thread {
-            let depth_texture = &self
-                .depth_textures
-                .get(&window_id)
-                .expect("Not null")
-                .depth_texture;
             self.draw_objects_multiple_thread(
                 color_texture,
                 depth_texture,
                 &present_info.draw_objects,
             );
         } else {
-            let depth_texture_view = &self
-                .depth_textures
-                .get(&window_id)
-                .expect("Not null")
-                .get_view();
             let mut mesh_buffers: Vec<GpuVertexBufferImp> =
                 Vec::with_capacity(present_info.draw_objects.len());
             let mut g_vertex_buffers: Vec<Vec<&Buffer>> =

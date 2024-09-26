@@ -1,5 +1,6 @@
 pub mod actor;
 pub mod camera;
+pub mod camera_component;
 #[cfg(not(target_os = "android"))]
 pub mod camera_input_event_handle;
 pub mod console_cmd;

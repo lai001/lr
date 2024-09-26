@@ -308,7 +308,9 @@ impl ParticleSystemUIWindow {
                 draw_objects.push(self.base_ui_window.grid_draw_object.clone());
 
                 engine.send_render_command(RenderCommand::Present(PresentInfo {
-                    window_id,
+                    render_target_type: rs_render::command::ERenderTargetType::SurfaceTexture(
+                        window_id,
+                    ),
                     draw_objects,
                     virtual_texture_pass: None,
                     scene_viewport: SceneViewport::new(),

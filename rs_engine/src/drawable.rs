@@ -37,7 +37,7 @@ impl EDrawObjectType {
 #[derive(Clone)]
 pub struct CustomDrawObject {
     pub draw_object: DrawObject,
-    pub window_id: isize,
+    pub render_target_type: rs_render::command::ERenderTargetType,
 }
 
 #[derive(Clone, Debug)]

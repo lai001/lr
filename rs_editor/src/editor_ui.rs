@@ -137,6 +137,10 @@ impl EditorUI {
                     let component = component.borrow();
                     Some(*component.get_transformation())
                 }
+                ESelectedObjectType::CameraComponent(component) => {
+                    let component = component.borrow();
+                    Some(component.get_final_transformation())
+                }
             };
             if let Some(model_matrix) = model_matrix {
                 let gizmo_result = self.gizmo_view.draw(

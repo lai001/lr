@@ -45,6 +45,10 @@ pub struct Camera {
 }
 
 impl Camera {
+    pub fn default_forward_vector() -> glam::Vec3 {
+        glam::Vec3::Z
+    }
+
     fn new(
         world_location: glam::Vec3,
         forward_vector: glam::Vec3,
@@ -87,9 +91,9 @@ impl Camera {
     pub fn default(window_width: u32, window_height: u32) -> Camera {
         Self::new(
             glam::Vec3::new(0.0, 0.0, 0.0),
-            glam::Vec3::new(0.0, 0.0, -1.0),
+            Self::default_forward_vector(),
             glam::Vec3::new(0.0, 1.0, 0.0),
-            0.01,
+            0.1,
             1000.0,
             ECameraType::Perspective(PerspectiveProperties {
                 fov_y_radians: 39.6_f32.to_radians(),
@@ -211,5 +215,22 @@ impl Camera {
 
     pub fn get_view_projection_matrix(&self) -> glam::Mat4 {
         return self.projection_matrix * self.view_matrix;
+    }
+
+    pub fn get_z_far(&self) -> f32 {
+        self.z_far
+    }
+
+    pub fn get_z_near(&self) -> f32 {
+        self.z_near
+    }
+
+    pub fn get_camera_type(&self) -> ECameraType {
+        self.camera_type
+    }
+
+    pub fn set_forward_vector(&mut self, forward_vector: glam::Vec3) {
+        self.forward_vector = forward_vector;
+        self.update_view_matrix();
     }
 }

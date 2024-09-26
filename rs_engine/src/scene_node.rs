@@ -1,5 +1,6 @@
 use crate::{
-    skeleton_mesh_component::SkeletonMeshComponent, static_mesh_component::StaticMeshComponent,
+    camera_component::CameraComponent, skeleton_mesh_component::SkeletonMeshComponent,
+    static_mesh_component::StaticMeshComponent,
 };
 use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
@@ -81,6 +82,7 @@ pub enum EComponentType {
     SceneComponent(SingleThreadMutType<SceneComponent>),
     StaticMeshComponent(SingleThreadMutType<StaticMeshComponent>),
     SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
+    CameraComponent(SingleThreadMutType<CameraComponent>),
 }
 
 #[derive(Serialize, Deserialize, Clone)]

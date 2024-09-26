@@ -11,6 +11,7 @@ use rs_artifact::static_mesh::StaticMesh;
 use rs_artifact::{
     artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
 };
+use rs_core_minimal::name_generator;
 use rs_render::command::IBLTexturesKey;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -430,6 +431,13 @@ impl STResourceManager {
             }
         });
         handles
+    }
+
+    fn get_unique_texture_url(&self, url: &url::Url) -> url::Url {
+        let names = self.textures.keys().map(|x| x.to_string()).collect();
+        let new_name = url.to_string();
+        let new_name = name_generator::make_unique_name(names, new_name);
+        url::Url::parse(&new_name).expect(&format!("The new name ({}) should be unique", new_name))
     }
 }
 
