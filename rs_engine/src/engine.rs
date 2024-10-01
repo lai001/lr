@@ -574,7 +574,7 @@ impl Engine {
         draw_objects.append(&mut player_viewport.draw_objects.drain(..).collect());
         draw_objects.append(&mut player_viewport.particle_draw_objects.drain(..).collect());
         // let mut draw_objects: Vec<_> = player_viewport.draw_objects.drain(..).collect();
-        if let Some(grid_draw_object) = &player_viewport.grid_draw_object {
+        if let Some(grid_draw_object) = player_viewport.get_grid_draw_object() {
             draw_objects.push(grid_draw_object.clone());
         }
         let virtual_texture_pass = player_viewport.virtual_pass_handle.clone().map(|x| x.key());

@@ -5,6 +5,7 @@ use std::{cell::RefCell, rc::Rc};
 
 pub enum EClickEventType {
     Actor(SingleThreadMutType<Actor>),
+    DeleteActor(SingleThreadMutType<Actor>),
     SceneNode(SingleThreadMutType<SceneNode>),
     CreateDirectionalLight,
     DirectionalLight(SingleThreadMutType<DirectionalLight>),
@@ -82,6 +83,14 @@ fn level_node(
             let response = ui.button(name);
             if response.clicked() {
                 *event = Some(EClickEventType::Actor(actor.clone()));
+            } else {
+                response.context_menu(|ui| {
+                    let response = ui.button("Delete");
+                    if response.clicked() {
+                        *event = Some(EClickEventType::DeleteActor(actor.clone()));
+                        ui.close_menu();
+                    }
+                });
             }
         })
         .body(|ui| {

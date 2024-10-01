@@ -891,6 +891,14 @@ impl EditorContext {
         ) {
             event_loop_window_target.exit();
         }
+
+        if Self::is_keys_pressed(
+            &mut self.virtual_key_code_states,
+            &[KeyCode::ControlLeft, KeyCode::KeyG],
+            false,
+        ) {
+            self.player_viewport.toggle_grid_visible();
+        }
     }
 
     fn is_keys_pressed(
@@ -1217,6 +1225,20 @@ impl EditorContext {
                 }
             }
         }
+        {
+            let mut animations = self.editor_ui.object_property_view.animations.borrow_mut();
+            animations.clear();
+            let files = &project_context.project.content.borrow().files;
+            for file in files {
+                match file {
+                    EContentFileType::SkeletonAnimation(animation) => {
+                        let url = animation.borrow().url.clone();
+                        animations.push(url);
+                    }
+                    _ => {}
+                }
+            }
+        }
 
         let rm = ResourceManager::default();
         self.editor_ui.debug_textures_view.all_texture_urls = rm.get_texture_urls();
@@ -1318,7 +1340,7 @@ impl EditorContext {
         let asset_reference = file_path
             .strip_prefix(project_context.get_asset_folder_path())?
             .to_str()
-            .unwrap();
+            .ok_or(anyhow!("Incorrect path: {:?}", file_path))?;
 
         let actor_names: Vec<String> = {
             active_level
@@ -1335,8 +1357,6 @@ impl EditorContext {
             actor_names,
         )?;
 
-        let content = project_context.project.content.clone();
-        let mut content = content.borrow_mut();
         let mut add_files: Vec<EContentFileType> = vec![];
         for static_mesh in &load_result.static_meshes {
             add_files.push(EContentFileType::StaticMesh(static_mesh.clone()));
@@ -1345,11 +1365,18 @@ impl EditorContext {
             add_files.push(EContentFileType::SkeletonMesh(skeleton_meshe.clone()));
         }
         for node_animation in &load_result.node_animations {
+            self.editor_ui
+                .object_property_view
+                .animations
+                .borrow_mut()
+                .push(node_animation.borrow().url.clone());
             add_files.push(EContentFileType::SkeletonAnimation(node_animation.clone()));
         }
         if let Some(skeleton) = &load_result.skeleton {
             add_files.push(EContentFileType::Skeleton(skeleton.clone()));
         }
+        let content = project_context.project.content.clone();
+        let mut content = content.borrow_mut();
         Self::content_load_resources(
             &mut self.engine,
             &mut self.model_loader,
@@ -2096,6 +2123,9 @@ impl EditorContext {
             crate::ui::level_view::EClickEventType::DeleteDirectionalLight(light) => {
                 opened_level.borrow_mut().delete_light(light);
             }
+            crate::ui::level_view::EClickEventType::DeleteActor(actor) => {
+                opened_level.borrow_mut().delete_actor(actor);
+            }
         }
     }
 
@@ -2492,7 +2522,7 @@ impl EditorContext {
                             &mut self.player_viewport,
                         );
                     }
-                    ESelectedObjectType::SkeletonMeshComponent(static_mesh_component) => {
+                    ESelectedObjectType::SkeletonMeshComponent(skeleton_mesh_component) => {
                         let files = if let Some(folder) =
                             &self.data_source.content_data_source.current_folder
                         {
@@ -2500,9 +2530,9 @@ impl EditorContext {
                         } else {
                             vec![]
                         };
-                        let mut static_mesh_component = static_mesh_component.borrow_mut();
+                        let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
                         if let Some(url) = update_material.new {
-                            static_mesh_component.set_material(
+                            skeleton_mesh_component.set_material(
                                 &mut self.engine,
                                 url,
                                 &files,
@@ -2528,6 +2558,28 @@ impl EditorContext {
                 directional_light.bottom = bottom;
                 directional_light.far = far;
                 directional_light.remake_preview(&mut self.engine, &mut self.player_viewport);
+            }
+            object_property_view::EEventType::UpdateAnimation(update_animation) => {
+                match update_animation.selected_object {
+                    ESelectedObjectType::SkeletonMeshComponent(skeleton_mesh_component) => {
+                        let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
+                        let files = if let Some(folder) =
+                            &self.data_source.content_data_source.current_folder
+                        {
+                            folder.borrow().files.clone()
+                        } else {
+                            vec![]
+                        };
+                        skeleton_mesh_component.set_animation(
+                            update_animation.new,
+                            self.engine.get_resource_manager().clone(),
+                            &files,
+                        );
+                    }
+                    _ => {
+                        unimplemented!()
+                    }
+                }
             }
         }
     }

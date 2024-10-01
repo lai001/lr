@@ -435,4 +435,8 @@ impl Level {
         self.directional_lights
             .retain(|element| !Rc::ptr_eq(&element, &light));
     }
+
+    pub fn delete_actor(&mut self, actor: SingleThreadMutType<Actor>) {
+        self.actors.retain(|element| !Rc::ptr_eq(&element, &actor));
+    }
 }

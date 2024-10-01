@@ -42,7 +42,7 @@ pub struct PlayerViewport {
     pub global_constants_handle: crate::handle::BufferHandle,
     pub virtual_pass_handle: Option<VirtualPassHandle>,
     pub shadow_depth_texture_handle: Option<TextureHandle>,
-    pub grid_draw_object: Option<DrawObject>,
+    grid_draw_object: Option<DrawObject>,
     pub draw_objects: Vec<DrawObject>,
     pub particle_draw_objects: Vec<DrawObject>,
     pub camera: Camera,
@@ -56,6 +56,7 @@ pub struct PlayerViewport {
     _camera_movement_speed: f32,
     _camera_motion_speed: f32,
     pub is_use_default_input_process: bool,
+    pub is_grid_visible: bool,
 }
 
 impl PlayerViewport {
@@ -153,6 +154,7 @@ impl PlayerViewport {
             _camera_movement_speed: 0.1,
             _camera_motion_speed: 0.1,
             is_use_default_input_process: true,
+            is_grid_visible: true,
         }
     }
 
@@ -1029,5 +1031,21 @@ impl PlayerViewport {
 
     pub fn get_render_target_type(&self) -> &ERenderTargetType {
         &self.render_target_type
+    }
+
+    pub fn set_grid_visible(&mut self, is_visible: bool) {
+        self.is_grid_visible = is_visible;
+    }
+
+    pub fn toggle_grid_visible(&mut self) {
+        self.is_grid_visible = !self.is_grid_visible;
+    }
+
+    pub fn get_grid_draw_object(&self) -> Option<&DrawObject> {
+        if self.is_grid_visible {
+            self.grid_draw_object.as_ref()
+        } else {
+            None
+        }
     }
 }

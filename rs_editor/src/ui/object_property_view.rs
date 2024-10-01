@@ -11,8 +11,15 @@ pub struct UpdateMaterial {
     pub new: Option<url::Url>,
 }
 
+pub struct UpdateAnimation {
+    pub selected_object: ESelectedObjectType,
+    pub old: Option<url::Url>,
+    pub new: Option<url::Url>,
+}
+
 pub enum EEventType {
     UpdateMaterial(UpdateMaterial),
+    UpdateAnimation(UpdateAnimation),
     UpdateDirectionalLight(
         SingleThreadMutType<DirectionalLight>,
         f32,
@@ -36,6 +43,7 @@ pub enum ESelectedObjectType {
 pub struct ObjectPropertyView {
     pub selected_object: Option<ESelectedObjectType>,
     pub materials: SingleThreadMutType<Vec<url::Url>>,
+    pub animations: SingleThreadMutType<Vec<url::Url>>,
 }
 
 impl ObjectPropertyView {
@@ -43,6 +51,7 @@ impl ObjectPropertyView {
         ObjectPropertyView {
             selected_object: None,
             materials: SingleThreadMut::new(vec![]),
+            animations: SingleThreadMut::new(vec![]),
         }
     }
 
@@ -125,6 +134,48 @@ impl ObjectPropertyView {
 
                 Self::transformation_detail_mut(component.get_transformation_mut(), ui);
                 Self::transformation_detail(&component.get_final_transformation(), ui);
+
+                egui::ComboBox::from_label("Animation")
+                    .selected_text(format!("{}", {
+                        match &component.animation_url {
+                            Some(animation_url) => animation_url.to_string(),
+                            None => "None".to_string(),
+                        }
+                    }))
+                    .show_ui(ui, |ui| {
+                        let mut collection: Vec<Option<url::Url>> = vec![];
+                        collection.push(None);
+                        collection.append(
+                            &mut self
+                                .animations
+                                .borrow()
+                                .iter()
+                                .map(|x| Some(x.clone()))
+                                .collect(),
+                        );
+
+                        for animation in collection {
+                            let old = component.animation_url.clone();
+                            let text = animation
+                                .as_ref()
+                                .map(|x| x.to_string())
+                                .unwrap_or("None".to_string());
+                            let is_changed = ui
+                                .selectable_value(
+                                    &mut component.animation_url,
+                                    animation.clone(),
+                                    text,
+                                )
+                                .changed();
+                            if is_changed {
+                                event = Some(EEventType::UpdateAnimation(UpdateAnimation {
+                                    selected_object: selected_object_clone.clone(),
+                                    old,
+                                    new: animation.clone(),
+                                }));
+                            }
+                        }
+                    });
 
                 egui::ComboBox::from_label("Material")
                     .selected_text(format!("{}", {

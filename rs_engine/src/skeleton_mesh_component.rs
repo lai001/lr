@@ -223,8 +223,7 @@ impl SkeletonMeshComponent {
         skeleton_animation: Arc<SkeletonAnimation>,
         animation_time: f32,
         skeleton_mesh_hierarchy: &HashMap<String, rs_artifact::skeleton::SkeletonMeshHierarchyNode>,
-        gather_parent_node_transformation: glam::Mat4,
-        global_inverse_transform: glam::Mat4,
+        parent_global_transformation: glam::Mat4,
     ) {
         let mut position = glam::Vec3::ZERO;
         let mut scale = glam::Vec3::ONE;
@@ -288,22 +287,26 @@ impl SkeletonMeshComponent {
             has_anim = true;
         }
 
-        let mut attached_node_transformation = skeleton_mesh_hierarchy
+        let anim_transform = glam::Mat4::from_scale_rotation_translation(scale, rotation, position);
+
+        let self_transformation = skeleton_mesh_hierarchy
             .get(&skeleton_bone.path)
             .unwrap()
             .transformation;
 
-        let self_anim_transform =
-            glam::Mat4::from_scale_rotation_translation(scale, rotation, position).transpose();
-        if has_anim {
-            attached_node_transformation = self_anim_transform;
-        }
+        let global_transform = parent_global_transformation
+            * self_transformation
+            * if has_anim {
+                self_transformation.inverse()
+            } else {
+                glam::Mat4::IDENTITY
+            }
+            * anim_transform;
 
-        let global_transform = attached_node_transformation * gather_parent_node_transformation;
-        let bone_space_transformation =
-            (skeleton_bone.offset_matrix * global_transform * global_inverse_transform).transpose();
-
-        node_anim_transforms.insert(skeleton_bone.path.clone(), bone_space_transformation);
+        node_anim_transforms.insert(
+            skeleton_bone.path.clone(),
+            global_transform * skeleton_bone.offset_matrix,
+        );
 
         for child in &skeleton_bone.childs {
             Self::walk_skeleton_bone(
@@ -314,7 +317,6 @@ impl SkeletonMeshComponent {
                 animation_time,
                 skeleton_mesh_hierarchy,
                 global_transform,
-                global_inverse_transform,
             );
         }
     }
@@ -333,13 +335,7 @@ impl SkeletonMeshComponent {
             let duration = skeleton_animation.duration / skeleton_animation.ticks_per_second;
             let animation_time = time % duration as f32;
             let root_bone = skeleton.bones.get(&skeleton.root_bone).unwrap();
-            let global_inverse_transform = skeleton
-                .skeleton_mesh_hierarchy
-                .get(&skeleton.root_node)
-                .unwrap()
-                .transformation
-                .inverse();
-
+            let parent_global_transformation = glam::Mat4::IDENTITY;
             Self::walk_skeleton_bone(
                 &mut node_anim_transforms,
                 root_bone,
@@ -347,20 +343,19 @@ impl SkeletonMeshComponent {
                 skeleton_animation.clone(),
                 animation_time,
                 &skeleton.skeleton_mesh_hierarchy,
-                skeleton
-                    .skeleton_mesh_hierarchy
-                    .get(&root_bone.path)
-                    .unwrap()
-                    .transformation,
-                global_inverse_transform,
+                parent_global_transformation,
             );
         }
 
+        let mut bones: [glam::Mat4; NUM_MAX_BONE] = [glam::Mat4::IDENTITY; NUM_MAX_BONE];
+        let is_animated = run_time.skeleton_animation.is_some();
         for skin_mesh in run_time.skin_meshes.clone() {
-            let mut bones: [glam::Mat4; NUM_MAX_BONE] = [glam::Mat4::IDENTITY; NUM_MAX_BONE];
-            for (index, bone_path) in skin_mesh.bone_paths.iter().enumerate() {
-                if let Some(node_anim_transform) = node_anim_transforms.get(bone_path) {
-                    bones[index] = *node_anim_transform;
+            if is_animated {
+                bones.fill(glam::Mat4::IDENTITY);
+                for (index, bone_path) in skin_mesh.bone_paths.iter().enumerate() {
+                    if let Some(node_anim_transform) = node_anim_transforms.get(bone_path) {
+                        bones[index] = *node_anim_transform;
+                    }
                 }
             }
             let draw_object = run_time.draw_objects.get_mut(&skin_mesh.name).unwrap();
@@ -436,13 +431,13 @@ impl SkeletonMeshComponent {
         let Some(material) = material else {
             return;
         };
-        for (_, draw_object) in &mut run_time.draw_objects {
+        for (name, draw_object) in &mut run_time.draw_objects {
             match draw_object {
                 EDrawObjectType::SkinMaterial(material_draw_object) => {
                     material_draw_object.material = material.clone();
                 }
                 EDrawObjectType::Skin(_) => {
-                    for skin_mesh in run_time.skin_meshes.clone() {
+                    if let Some(skin_mesh) = run_time.skin_meshes.iter().find(|x| &x.name == name) {
                         *draw_object = engine.create_material_draw_object_from_skin_mesh(
                             &skin_mesh.vertexes,
                             &skin_mesh.indexes,
@@ -547,5 +542,31 @@ impl SkeletonMeshComponent {
 
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
         self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten()
+    }
+
+    pub fn set_animation(
+        &mut self,
+        animation: Option<url::Url>,
+        resource_manager: ResourceManager,
+        files: &[EContentFileType],
+    ) {
+        self.animation_url = animation;
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        let mut skeleton_animation: Option<Arc<SkeletonAnimation>> = None;
+
+        if let Some(animation_url) = &self.animation_url {
+            for file in files.iter() {
+                if let EContentFileType::SkeletonAnimation(content_skeleton_animation) = file {
+                    if &content_skeleton_animation.borrow().url == animation_url {
+                        skeleton_animation = resource_manager
+                            .get_skeleton_animation(&content_skeleton_animation.borrow().asset_url);
+                        break;
+                    }
+                }
+            }
+        }
+        run_time.skeleton_animation = skeleton_animation;
     }
 }
