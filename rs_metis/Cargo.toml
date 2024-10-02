@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-glam = { version = "0.28.0", features = ["mint"] }
+glam = { version = "0.29.0", features = ["mint"] }
 log = "0.4.22"
 rs_foundation = { path = "../rs_foundation" }
 
 [build-dependencies]
-bindgen = "0.69.4"
+bindgen = "0.70.1"

@@ -43,7 +43,7 @@ impl V8Runtime {
         let global_context = {
             let isolate = &mut isolate;
             let mut handle_scope = v8::HandleScope::new(isolate);
-            let local_context = v8::Context::new(&mut handle_scope);
+            let local_context = v8::Context::new(&mut handle_scope, v8::ContextOptions::default());
             let mut context_scope = v8::ContextScope::new(&mut handle_scope, local_context);
             Global::new(&mut context_scope, local_context)
         };

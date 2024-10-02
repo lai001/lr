@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-v8 = "0.98.0"
+v8 = "129.0.0"
 notify = "6.1.1"
 notify-debouncer-mini = { version = "0.4.1" }
 walkdir = "2.5.0"
