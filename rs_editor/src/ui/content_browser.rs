@@ -32,6 +32,7 @@ pub enum EClickEventType {
     CreateMaterial,
     CreateIBL,
     CreateParticleSystem,
+    CreateCurve,
     OpenFolder(Rc<RefCell<ContentFolder>>),
     OpenFile(EContentFileType),
     DeleteFile(EContentFileType),
@@ -101,6 +102,13 @@ pub fn draw(
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateParticleSystem);
+                                ui.close_menu();
+                            }
+                        });
+                        ui.menu_button("Curve", |ui| {
+                            ui.text_edit_singleline(&mut data_source.new_content_name);
+                            if ui.button("Ok").clicked() {
+                                click = Some(EClickEventType::CreateCurve);
                                 ui.close_menu();
                             }
                         });
@@ -252,6 +260,11 @@ fn draw_content(
                                         EContentFileType::Sound(_) => {
                                             ui.image(egui::include_image!(
                                                 "../../../Resource/Editor/sound.svg"
+                                            ));
+                                        }
+                                        EContentFileType::Curve(_) => {
+                                            ui.image(egui::include_image!(
+                                                "../../../Resource/Editor/curve.svg"
                                             ));
                                         }
                                     }

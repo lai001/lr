@@ -8,8 +8,8 @@ use crate::ui::gizmo_view::GizmoView;
 use crate::ui::object_property_view::{self, ESelectedObjectType, ObjectPropertyView};
 use crate::ui::top_menu::TopMenu;
 use crate::ui::{
-    asset_view, console_cmds_view, content_browser, gizmo_settings, level_view, project_settings,
-    top_menu,
+    asset_view, console_cmds_view, content_browser, curve_view, gizmo_settings, level_view,
+    project_settings, top_menu,
 };
 use egui::*;
 use rs_engine::input_mode::EInputMode;
@@ -246,6 +246,24 @@ impl EditorUI {
             });
         if !is_open {
             data_source.model_scene_view_data.model_scene = None;
+        }
+
+        let mut is_curve_open = true;
+        if let Some(opend_curve) = data_source.opened_curve.clone() {
+            let mut opend_curve = opend_curve.borrow_mut();
+            let name = opend_curve.get_name();
+            Self::new_window(&format!("Curve({})", name), data_source.input_mode)
+                .open(&mut is_curve_open)
+                .vscroll(false)
+                .hscroll(false)
+                .resizable(true)
+                .default_size([500.0, 500.0])
+                .show(context, |ui| {
+                    curve_view::draw(&mut opend_curve, ui, &mut data_source.curve_data_source);
+                });
+        }
+        if !is_curve_open {
+            data_source.opened_curve = None;
         }
 
         click

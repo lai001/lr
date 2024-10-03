@@ -3,6 +3,7 @@ pub mod asset_view;
 pub mod console_cmds_view;
 pub mod content_browser;
 pub mod content_item_property_view;
+pub mod curve_view;
 pub mod debug_textures_view;
 pub mod gizmo_settings;
 pub mod gizmo_view;

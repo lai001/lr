@@ -13,4 +13,5 @@ pub enum EContentType {
     MediaSource,
     ParticleSystem,
     Sound,
+    Curve,
 }

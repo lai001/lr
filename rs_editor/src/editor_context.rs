@@ -1136,6 +1136,7 @@ impl EditorContext {
                     let rm = ResourceManager::default();
                     rm.add_sound(url, Arc::new(sound_resouce));
                 }
+                EContentFileType::Curve(_) => {}
             }
         }
     }
@@ -2191,6 +2192,10 @@ impl EditorContext {
                         self.open_particle_window(event_loop_window_target, particle_system);
                     }
                     EContentFileType::Sound(_) => todo!(),
+                    EContentFileType::Curve(curve) => {
+                        self.data_source.opened_curve = Some(curve);
+                        self.data_source.is_content_item_property_view_open = false;
+                    }
                 }
             }
             content_browser::EClickEventType::SingleClickFile(file) => {
@@ -2294,6 +2299,25 @@ impl EditorContext {
                 content
                     .files
                     .retain(|x| x.get_url() != content_file.get_url());
+            }
+            content_browser::EClickEventType::CreateCurve => {
+                let names = self.get_all_content_names();
+                let name = make_unique_name(
+                    names,
+                    &self.data_source.content_data_source.new_content_name,
+                );
+                let Some(project_context) = &mut self.project_context else {
+                    return;
+                };
+                let curve =
+                    rs_engine::content::curve::Curve::new(build_content_file_url(&name).unwrap());
+                let curve = SingleThreadMut::new(curve);
+                project_context
+                    .project
+                    .content
+                    .borrow_mut()
+                    .files
+                    .push(EContentFileType::Curve(curve));
             }
         }
     }

@@ -366,6 +366,7 @@ impl Engine {
                             log::warn!("{err}");
                         }
                     },
+                    EContentType::Curve => todo!(),
                 },
                 _ => {}
             }

@@ -1,9 +1,11 @@
 use crate::{
     project_context::RecentProjects,
-    ui::{content_browser, model_scene_view},
+    ui::{content_browser, curve_view::CurveViewDataSource, model_scene_view},
 };
 use rs_core_minimal::settings::Settings;
-use rs_engine::{console_cmd::ConsoleCmd, file_type::EFileType, input_mode::EInputMode};
+use rs_engine::{
+    console_cmd::ConsoleCmd, content::curve::Curve, file_type::EFileType, input_mode::EInputMode,
+};
 use rs_foundation::new::SingleThreadMutType;
 use rs_render::bake_info::BakeInfo;
 use rs_render::view_mode::EViewModeType;
@@ -73,6 +75,8 @@ pub struct DataSource {
     pub is_debug_texture_view_open: bool,
     pub is_simulate_real_time: bool,
     pub model_scene_view_data: model_scene_view::DataSource,
+    pub opened_curve: Option<SingleThreadMutType<Curve>>,
+    pub curve_data_source: CurveViewDataSource,
 }
 
 impl DataSource {
@@ -109,6 +113,8 @@ impl DataSource {
             is_simulate_real_time: false,
             debug_flags: rs_engine::player_viewport::DebugFlags::empty(),
             model_scene_view_data: model_scene_view::DataSource::default(),
+            opened_curve: None,
+            curve_data_source: CurveViewDataSource::default(),
         }
     }
 
