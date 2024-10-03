@@ -28,6 +28,12 @@ pub fn draw(
 
 fn draw_content(ui: &mut Ui, project_settings: Rc<RefCell<Settings>>) -> Option<EEventType> {
     let mut event: Option<EEventType> = None;
+    ui.collapsing("Editor", |ui| {
+        let mut project_settings = project_settings.borrow_mut();
+        let auto_open_last_project =
+            &mut project_settings.editor_settings.is_auto_open_last_project;
+        ui.checkbox(auto_open_last_project, "Is auto open last project");
+    });
     ui.collapsing("Render", |ui| {
         let mut project_settings = project_settings.borrow_mut();
         let render_setting = &mut project_settings.render_setting;

@@ -261,7 +261,17 @@ impl EditorContext {
             true,
         );
 
-        let editor_context = EditorContext {
+        let last_project_path = if engine
+            .get_settings()
+            .editor_settings
+            .is_auto_open_last_project
+        {
+            data_source.recent_projects.paths.first().cloned()
+        } else {
+            None
+        };
+
+        let mut editor_context = EditorContext {
             event_loop_proxy,
             engine,
             egui_winit_state,
@@ -291,6 +301,10 @@ impl EditorContext {
             },
             player_viewport,
         };
+
+        if let Some(file_path) = last_project_path {
+            let _ = editor_context.open_project(&file_path, window);
+        }
 
         Ok(editor_context)
     }
@@ -1154,7 +1168,7 @@ impl EditorContext {
     fn open_project(
         &mut self,
         file_path: &Path,
-        window: &mut winit::window::Window,
+        window: &winit::window::Window,
     ) -> anyhow::Result<()> {
         let _span = tracy_client::span!();
         let project_context = ProjectContext::open(&file_path)?;
@@ -1251,7 +1265,7 @@ impl EditorContext {
         self.data_source
             .recent_projects
             .paths
-            .insert(file_path.to_path_buf());
+            .insert(0, file_path.to_path_buf());
         self.data_source.recent_projects.save()?;
         self.post_build_asset_folder();
 

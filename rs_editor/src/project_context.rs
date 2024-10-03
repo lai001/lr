@@ -18,7 +18,7 @@ use rs_hotreload_plugin::hot_reload::HotReload;
 use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io::Write,
     ops::Deref,
     path::{Path, PathBuf},
@@ -30,7 +30,7 @@ pub enum EFolderUpdateType {
 
 #[derive(Serialize, Deserialize)]
 pub struct RecentProjects {
-    pub paths: HashSet<std::path::PathBuf>,
+    pub paths: Vec<std::path::PathBuf>,
 }
 
 impl RecentProjects {
@@ -41,16 +41,19 @@ impl RecentProjects {
             let reader = std::io::BufReader::new(file);
             serde_json::from_reader(reader).unwrap()
         } else {
-            RecentProjects {
-                paths: HashSet::new(),
-            }
+            RecentProjects { paths: Vec::new() }
         }
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
+    pub fn save(&mut self) -> anyhow::Result<()> {
+        self.remove_duplicated();
         let path = Path::new("./recent_projects.json");
         std::fs::write(path, serde_json::to_string(self)?)?;
         Ok(())
+    }
+
+    pub fn remove_duplicated(&mut self) {
+        self.paths.dedup();
     }
 }
 

@@ -57,8 +57,14 @@ impl RenderSettings {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct EditorSettings {
+    pub is_auto_open_last_project: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Settings {
+    pub editor_settings: EditorSettings,
     pub render_setting: RenderSettings,
 }
 
@@ -84,6 +90,9 @@ impl Default for Settings {
                 android_backends: Backends::Primary,
                 antialias_type: EAntialiasType::None,
                 is_enable_multithread_rendering: false,
+            },
+            editor_settings: EditorSettings {
+                is_auto_open_last_project: true,
             },
         }
     }
