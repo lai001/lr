@@ -21,6 +21,7 @@ pub enum EPropertyTypeValue {
     FloatArray(Vec<f32>),
     DoubleArray(Vec<f64>),
     String(String),
+    NotSupport,
 }
 
 impl EPropertyTypeInfo {
@@ -68,11 +69,35 @@ impl<'a> MaterialProperty<'a> {
             )
             .to_vec()
         };
+        let value: EPropertyTypeValue = Self::get_property_type_value(
+            ai_material,
+            ai_material_property,
+            property_type_info,
+            index,
+        );
+        MaterialProperty {
+            _ai_material_property: ai_material_property,
+            key,
+            _semantic: semantic,
+            _index: index,
+            _property_type_info: property_type_info,
+            _data: data,
+            value,
+            marker: PhantomData,
+        }
+    }
+
+    fn get_property_type_value(
+        ai_material: &russimp_sys::aiMaterial,
+        ai_material_property: &mut aiMaterialProperty,
+        property_type_info: EPropertyTypeInfo,
+        index: u32,
+    ) -> EPropertyTypeValue {
         let value: EPropertyTypeValue;
         match property_type_info {
             EPropertyTypeInfo::FloatArray => {
-                let mut out_vec: std::mem::MaybeUninit<f32> = std::mem::MaybeUninit::uninit();
-                let mut p_max: std::mem::MaybeUninit<u32> = std::mem::MaybeUninit::uninit();
+                let mut p_max: u32 = 16;
+                let mut out_vec = vec![0.0; p_max as usize];
                 unsafe {
                     let status = aiGetMaterialFloatArray(
                         ai_material,
@@ -80,17 +105,12 @@ impl<'a> MaterialProperty<'a> {
                         ai_material_property.mSemantic as _,
                         index,
                         out_vec.as_mut_ptr(),
-                        p_max.as_mut_ptr(),
+                        &mut p_max,
                     );
                     assert_eq!(aiReturn_aiReturn_SUCCESS, status);
                 };
-                let array = unsafe {
-                    std::slice::from_raw_parts(out_vec.as_ptr(), p_max.assume_init() as _)
-                };
-                value = EPropertyTypeValue::FloatArray(array.to_vec());
-            }
-            EPropertyTypeInfo::DoubleArray => {
-                todo!()
+                out_vec.drain(p_max as usize..out_vec.len());
+                value = EPropertyTypeValue::FloatArray(out_vec);
             }
             EPropertyTypeInfo::String => {
                 let mut out_string: std::mem::MaybeUninit<aiString> =
@@ -109,8 +129,8 @@ impl<'a> MaterialProperty<'a> {
                 value = EPropertyTypeValue::String(out_string.to_string());
             }
             EPropertyTypeInfo::IntegerArray => {
-                let mut out_vec: std::mem::MaybeUninit<i32> = std::mem::MaybeUninit::uninit();
-                let mut p_max: std::mem::MaybeUninit<u32> = std::mem::MaybeUninit::uninit();
+                let mut p_max: u32 = 16;
+                let mut out_vec = vec![0; p_max as usize];
                 unsafe {
                     let status = aiGetMaterialIntegerArray(
                         ai_material,
@@ -118,32 +138,16 @@ impl<'a> MaterialProperty<'a> {
                         ai_material_property.mSemantic as _,
                         index,
                         out_vec.as_mut_ptr(),
-                        p_max.as_mut_ptr(),
+                        &mut p_max,
                     );
                     assert_eq!(aiReturn_aiReturn_SUCCESS, status);
                 };
-                let array = unsafe {
-                    std::slice::from_raw_parts(out_vec.as_ptr(), p_max.assume_init() as _)
-                };
-                value = EPropertyTypeValue::IntegerArray(array.to_vec());
+                out_vec.drain(p_max as usize..out_vec.len());
+                value = EPropertyTypeValue::IntegerArray(out_vec);
             }
-            EPropertyTypeInfo::Buffer => {
-                value = EPropertyTypeValue::Buffer(vec![]);
-            }
-            EPropertyTypeInfo::Force32Bit => {
-                todo!()
-            }
+            _ => value = EPropertyTypeValue::NotSupport,
         }
-        MaterialProperty {
-            _ai_material_property: ai_material_property,
-            key,
-            _semantic: semantic,
-            _index: index,
-            _property_type_info: property_type_info,
-            _data: data,
-            value,
-            marker: PhantomData,
-        }
+        value
     }
 }
 

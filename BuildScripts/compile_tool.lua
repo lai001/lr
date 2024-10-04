@@ -11,7 +11,7 @@ do
         os.exec("cargo build --package rs_shader_compiler_lsp --bin rs_shader_compiler_lsp --release")
         os.cd(path.join(engine_root_dir, "rs_media_cmd"))
         os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd")
-        os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd --release")                
+        os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd --release")
     end)
     set_menu {
         usage = "xmake compile_tool",
