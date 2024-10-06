@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rotator {
     pub yaw: f32,
     pub roll: f32,
@@ -44,16 +44,18 @@ impl Rotator {
 
     pub fn to_forward_vector(&self) -> glam::Vec3 {
         let mut forward_vector = glam::Vec3::ZERO;
-        let pitch = self.pitch;
-        forward_vector.x = pitch.cos() * self.yaw.cos();
+        let pitch = -self.pitch;
+        forward_vector.x = pitch.cos() * self.yaw.sin();
         forward_vector.y = pitch.sin();
-        forward_vector.z = pitch.cos() * self.yaw.sin();
+        forward_vector.z = pitch.cos() * self.yaw.cos();
         forward_vector
+        // glam::Mat4::from_euler(glam::EulerRot::XYZ, self.pitch, self.yaw, self.roll)
+        //     .transform_vector3(FORWARD_VECTOR)
     }
 
     pub fn from_forward_vector(forward_vector: glam::Vec3) -> Rotator {
         let pitch = (-forward_vector.y).asin();
-        let yaw = forward_vector.z.atan2(forward_vector.x);
+        let yaw = forward_vector.x.atan2(forward_vector.z);
         Rotator {
             yaw,
             roll: 0.0,
@@ -65,9 +67,8 @@ impl Rotator {
 #[cfg(test)]
 mod test {
     use super::Rotator;
-    use core::f32;
-    use glam::{BVec4A, EulerRot};
-    use std::iter::zip;
+    use crate::misc::FORWARD_VECTOR;
+    use glam::{BVec3, BVec4A, EulerRot};
 
     #[test]
     fn test_rotator() {
@@ -98,5 +99,45 @@ mod test {
                 .cmple(glam::Vec4::splat(0.001)),
             BVec4A::splat(true)
         );
+    }
+
+    #[test]
+    fn test_rotator_1() {
+        let transformation = glam::Mat4::IDENTITY;
+        let rotator = Rotator::from_matrix(&transformation);
+        let forward_vector = rotator.to_forward_vector();
+        assert_eq!(forward_vector, FORWARD_VECTOR);
+    }
+
+    #[test]
+    fn test_rotator_2() {
+        let transformation =
+            glam::Mat4::from_rotation_x(45.0_f32.to_radians()) * glam::Mat4::IDENTITY;
+        let rotator = Rotator::from_matrix(&transformation);
+        let forward_vector = rotator.to_forward_vector();
+        assert_eq!(
+            (forward_vector - glam::vec3(0.0, -0.7071068, 0.7071067))
+                .abs()
+                .cmple(glam::Vec3::splat(0.001)),
+            BVec3::splat(true)
+        );
+    }
+
+    #[test]
+    fn test_rotator_3() {
+        let transformation =
+            glam::Mat4::from_rotation_x(45.0_f32.to_radians()) * glam::Mat4::IDENTITY;
+        let rotator = Rotator::from_matrix(&transformation);
+        let forward_vector = rotator.to_forward_vector();
+        assert_eq!(rotator, Rotator::from_forward_vector(forward_vector));
+    }
+
+    #[test]
+    fn test_rotator_4() {
+        let transformation =
+            glam::Mat4::from_rotation_y(45.0_f32.to_radians()) * glam::Mat4::IDENTITY;
+        let rotator = Rotator::from_matrix(&transformation);
+        let forward_vector = rotator.to_forward_vector();
+        assert_eq!(rotator, Rotator::from_forward_vector(forward_vector));
     }
 }

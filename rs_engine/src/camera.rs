@@ -1,4 +1,4 @@
-use crate::rotator::Rotator;
+use crate::{misc::FORWARD_VECTOR, rotator::Rotator};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PerspectiveProperties {
@@ -46,7 +46,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn default_forward_vector() -> glam::Vec3 {
-        glam::Vec3::Z
+        FORWARD_VECTOR
     }
 
     fn new(
@@ -150,21 +150,21 @@ impl Camera {
     }
 
     pub fn set_world_rotation_absolute(&mut self, rotator: &Rotator) {
-        let mut forward_vector = glam::Vec3::ZERO;
-        let pitch = rotator
-            .pitch
-            .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
-        forward_vector.x = pitch.cos() * rotator.yaw.cos();
-        forward_vector.y = pitch.sin();
-        forward_vector.z = pitch.cos() * rotator.yaw.sin();
-        self.forward_vector = forward_vector;
+        // let mut forward_vector = glam::Vec3::ZERO;
+        // let pitch = rotator
+        //     .pitch
+        //     .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+        // forward_vector.x = pitch.cos() * rotator.yaw.cos();
+        // forward_vector.y = pitch.sin();
+        // forward_vector.z = pitch.cos() * rotator.yaw.sin();
+        self.forward_vector = rotator.to_forward_vector();
         self.update_view_matrix();
     }
 
     pub fn add_world_rotation_relative(&mut self, rotator: &Rotator) {
-        self.rotator.pitch = (self.rotator.pitch + rotator.pitch)
+        self.rotator.pitch = (self.rotator.pitch - rotator.pitch)
             .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
-        self.rotator.yaw += rotator.yaw;
+        self.rotator.yaw -= rotator.yaw;
         self.rotator.roll += rotator.roll;
         self.set_world_rotation_absolute(&self.rotator.clone());
     }
