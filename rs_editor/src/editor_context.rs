@@ -413,9 +413,10 @@ impl EditorContext {
                                 }
                                 EComponentType::CameraComponent(_) => {}
                             }
-                        } else {
-                            self.editor_ui.object_property_view.selected_object = None;
                         }
+                        // } else {
+                        //     self.editor_ui.object_property_view.selected_object = None;
+                        // }
                     }
                 }
             }
@@ -912,6 +913,10 @@ impl EditorContext {
             false,
         ) {
             self.player_viewport.toggle_grid_visible();
+        }
+
+        if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::Escape], true) {
+            self.editor_ui.object_property_view.selected_object = None;
         }
     }
 
@@ -2140,6 +2145,49 @@ impl EditorContext {
             }
             crate::ui::level_view::EClickEventType::DeleteActor(actor) => {
                 opened_level.borrow_mut().delete_actor(actor);
+            }
+            crate::ui::level_view::EClickEventType::CreateSceneComponent(parent_node) => {
+                let mut parent_node = parent_node.borrow_mut();
+                let names = parent_node
+                    .childs
+                    .iter()
+                    .map(|x| x.borrow().get_name())
+                    .collect();
+                let new_name = make_unique_name(names, "Scene");
+                parent_node.childs.push(SceneNode::new_sp(new_name));
+            }
+            crate::ui::level_view::EClickEventType::CopyPath(actor, node) => {
+                if let Some(node_path) = actor.borrow_mut().find_path_by_node(node) {
+                    self.editor_ui.egui_context.copy_text(node_path);
+                }
+            }
+            crate::ui::level_view::EClickEventType::CreateActor => {
+                let Some(active_level) = self.data_source.level.as_mut() else {
+                    return;
+                };
+                let mut active_level = active_level.borrow_mut();
+                let _ = active_level.create_and_insert_actor();
+            }
+            crate::ui::level_view::EClickEventType::CreateCameraHere => {
+                let Some(active_level) = self.data_source.level.as_mut() else {
+                    return;
+                };
+                let mut active_level = active_level.borrow_mut();
+                let new_actor = active_level.create_and_insert_actor();
+                let new_actor = new_actor.borrow_mut();
+                let mut scene_node = new_actor.scene_node.borrow_mut();
+                scene_node
+                    .set_transformation(self.player_viewport.camera.get_world_transformation());
+                let mut camera_component =
+                    CameraComponent::new("Camera".to_string(), glam::Mat4::IDENTITY);
+                camera_component.initialize(&mut self.engine, &mut self.player_viewport);
+                let camera_component = SingleThreadMut::new(camera_component);
+                scene_node.childs.push(SingleThreadMut::new(SceneNode {
+                    component: rs_engine::scene_node::EComponentType::CameraComponent(
+                        camera_component,
+                    ),
+                    childs: vec![],
+                }));
             }
         }
     }

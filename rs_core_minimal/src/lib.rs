@@ -1,9 +1,11 @@
 pub mod error;
 pub mod file_manager;
 pub mod frustum;
+pub mod line_3d;
 pub mod misc;
 pub mod name_generator;
 pub mod path_ext;
+pub mod plane_3d;
 pub mod primitive_data;
 pub mod settings;
 pub mod thread_pool;

@@ -837,6 +837,9 @@ impl PlayerViewport {
         end: glam::Vec3,
         color: glam::Vec4,
     ) {
+        if !self.debug_flags.contains(DebugFlags::Line) {
+            return;
+        }
         let draw_object = Self::create_draw_debug_line(
             engine,
             self.global_constants_handle.clone(),
@@ -996,6 +999,7 @@ impl PlayerViewport {
                     );
                 }
             }
+            _ => {}
         }
     }
 

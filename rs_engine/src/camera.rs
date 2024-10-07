@@ -233,4 +233,12 @@ impl Camera {
         self.forward_vector = forward_vector;
         self.update_view_matrix();
     }
+
+    pub fn get_right_vector(&self) -> glam::Vec3 {
+        self.forward_vector.cross(self.up_vector)
+    }
+
+    pub fn get_world_transformation(&self) -> glam::Mat4 {
+        glam::Mat4::from_translation(self.world_location) * self.rotator.to_matrix()
+    }
 }

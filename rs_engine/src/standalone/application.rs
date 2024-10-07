@@ -65,25 +65,30 @@ impl Application {
     }
 
     #[cfg(not(target_os = "android"))]
-    pub fn on_input(&mut self, ty: crate::input_type::EInputType) {
+    pub fn on_input(&mut self, ty: crate::input_type::EInputType) -> Vec<winit::keyboard::KeyCode> {
         self.player_view_port.on_input(ty.clone());
-
+        let mut consume = vec![];
         #[cfg(feature = "plugin_shared_crate")]
         for plugin in self.plugins.iter_mut() {
-            plugin.on_input(ty.clone());
+            let mut plugin_consume = plugin.on_input(ty.clone());
+            consume.append(&mut plugin_consume);
         }
+        consume
     }
 
     pub fn on_redraw_requested(
         &mut self,
         engine: &mut Engine,
         ctx: egui::Context,
+        #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
         #[cfg(not(target_os = "android"))] virtual_key_code_states: &std::collections::HashMap<
             winit::keyboard::KeyCode,
             winit::event::ElementState,
         >,
     ) {
         let _ = ctx;
+        #[cfg(not(target_os = "android"))]
+        let _ = window;
 
         let mut active_level = self.current_active_level.borrow_mut();
 

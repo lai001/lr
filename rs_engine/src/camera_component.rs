@@ -283,4 +283,11 @@ impl CameraComponent {
             .map(|x| vec![&x.draw_object])
             .unwrap_or(vec![])
     }
+
+    pub fn on_post_update_transformation(
+        &mut self,
+        level_physics: Option<&mut crate::content::level::Physics>,
+    ) {
+        let _ = level_physics;
+    }
 }

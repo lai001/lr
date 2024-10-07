@@ -569,4 +569,11 @@ impl SkeletonMeshComponent {
         }
         run_time.skeleton_animation = skeleton_animation;
     }
+
+    pub fn on_post_update_transformation(
+        &mut self,
+        level_physics: Option<&mut crate::content::level::Physics>,
+    ) {
+        let _ = level_physics;
+    }
 }

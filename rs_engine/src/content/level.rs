@@ -286,6 +286,13 @@ impl Level {
         name
     }
 
+    pub fn create_and_insert_actor(&mut self) -> SingleThreadMutType<crate::actor::Actor> {
+        let name = self.make_actor_name("Actor");
+        let new_actor = Actor::new_sp(name);
+        self.actors.push(new_actor.clone());
+        new_actor
+    }
+
     pub fn add_new_actors(
         &mut self,
         engine: &mut crate::engine::Engine,
@@ -438,5 +445,12 @@ impl Level {
 
     pub fn delete_actor(&mut self, actor: SingleThreadMutType<Actor>) {
         self.actors.retain(|element| !Rc::ptr_eq(&element, &actor));
+    }
+
+    pub fn find_actor(&self, name: &str) -> Option<SingleThreadMutType<Actor>> {
+        self.actors
+            .iter()
+            .find(|x| x.borrow().name == name)
+            .cloned()
     }
 }

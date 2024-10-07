@@ -15,5 +15,5 @@ pub trait Plugin {
         files: &[EContentFileType],
     );
     #[cfg(not(target_os = "android"))]
-    fn on_input(&mut self, ty: crate::input_type::EInputType);
+    fn on_input(&mut self, ty: crate::input_type::EInputType) -> Vec<winit::keyboard::KeyCode>;
 }

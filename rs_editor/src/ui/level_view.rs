@@ -5,12 +5,16 @@ use std::{cell::RefCell, rc::Rc};
 
 pub enum EClickEventType {
     Actor(SingleThreadMutType<Actor>),
+    CreateActor,
+    CreateCameraHere,
     DeleteActor(SingleThreadMutType<Actor>),
     SceneNode(SingleThreadMutType<SceneNode>),
     CreateDirectionalLight,
     DirectionalLight(SingleThreadMutType<DirectionalLight>),
     DeleteDirectionalLight(SingleThreadMutType<DirectionalLight>),
     CreateCameraComponent(SingleThreadMutType<SceneNode>),
+    CreateSceneComponent(SingleThreadMutType<SceneNode>),
+    CopyPath(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
     DeleteNode(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
 }
 
@@ -45,10 +49,24 @@ fn draw_scene_node(
             } else {
                 response.context_menu(|ui| {
                     ui.menu_button("Add", |ui| {
+                        let response = ui.button("Scene");
+                        if response.clicked() {
+                            *event =
+                                Some(EClickEventType::CreateSceneComponent(scene_node.clone()));
+                            ui.close_menu();
+                        }
                         let response = ui.button("Camera");
                         if response.clicked() {
                             *event =
                                 Some(EClickEventType::CreateCameraComponent(scene_node.clone()));
+                            ui.close_menu();
+                        }
+                    });
+                    ui.menu_button("Copy", |ui| {
+                        let response = ui.button("Path");
+                        if response.clicked() {
+                            *event =
+                                Some(EClickEventType::CopyPath(actor.clone(), scene_node.clone()));
                             ui.close_menu();
                         }
                     });
@@ -128,8 +146,18 @@ pub fn draw(
             });
         });
         response.response.context_menu(|ui| {
-            if ui.button("Directional Light").clicked() {
-                event = Some(EClickEventType::CreateDirectionalLight);
+            ui.menu_button("Add", |ui| {
+                if ui.button("Directional Light").clicked() {
+                    event = Some(EClickEventType::CreateDirectionalLight);
+                    ui.close_menu();
+                }
+                if ui.button("Actor").clicked() {
+                    event = Some(EClickEventType::CreateActor);
+                    ui.close_menu();
+                }
+            });
+            if ui.button("Create camera here").clicked() {
+                event = Some(EClickEventType::CreateCameraHere);
                 ui.close_menu();
             }
         });

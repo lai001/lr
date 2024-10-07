@@ -151,6 +151,7 @@ impl ApplicationContext {
                         self.app.on_redraw_requested(
                             &mut self.engine,
                             self.egui_winit_state.egui_ctx().clone(),
+                            window,
                             &self.virtual_key_code_states,
                         );
 

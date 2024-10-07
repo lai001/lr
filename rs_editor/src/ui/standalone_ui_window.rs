@@ -65,7 +65,7 @@ impl StandaloneUiWindow {
 
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
-        let input_mode = EInputMode::Game;
+        let input_mode = EInputMode::GameUI;
         update_window_with_input_mode(window, input_mode);
 
         // let level = active_level.make_copy_for_standalone(engine, &contents);
@@ -119,6 +119,15 @@ impl StandaloneUiWindow {
         );
 
         match event {
+            WindowEvent::CursorEntered { .. } => {
+                self.application.on_input(EInputType::CursorEntered);
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.application.on_input(EInputType::CursorLeft);
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.application.on_input(EInputType::CursorMoved(position));
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
                     return;
@@ -137,8 +146,12 @@ impl StandaloneUiWindow {
                     );
                     return;
                 }
-                self.application
+                let consume = self
+                    .application
                     .on_input(EInputType::KeyboardInput(&self.virtual_key_code_states));
+                for item in consume {
+                    let _ = self.virtual_key_code_states.remove(&item);
+                }
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.application.on_input(EInputType::MouseWheel(delta));
@@ -153,6 +166,7 @@ impl StandaloneUiWindow {
                 self.application.on_redraw_requested(
                     engine,
                     self.egui_winit_state.egui_ctx().clone(),
+                    window,
                     &self.virtual_key_code_states,
                 );
                 engine.send_render_command(RenderCommand::UiOutput(super::misc::ui_end(

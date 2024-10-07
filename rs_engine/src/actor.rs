@@ -7,9 +7,9 @@ use crate::{
     scene_node::{EComponentType, SceneNode},
 };
 use rapier3d::prelude::{ColliderSet, RigidBodySet};
-use rs_foundation::new::SingleThreadMutType;
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Actor {
@@ -18,6 +18,15 @@ pub struct Actor {
 }
 
 impl Actor {
+    pub fn new(name: String) -> Actor {
+        let scene_node = SceneNode::new_sp("Scene".to_string());
+        Actor { name, scene_node }
+    }
+
+    pub fn new_sp(name: String) -> SingleThreadMutType<Actor> {
+        SingleThreadMut::new(Self::new(name))
+    }
+
     pub fn walk_node(
         node: SingleThreadMutType<SceneNode>,
         walk: &mut impl FnMut(SingleThreadMutType<SceneNode>) -> (),
@@ -258,5 +267,45 @@ impl Actor {
             node.childs
                 .retain(|element| !Rc::ptr_eq(element, &node_will_remove));
         });
+    }
+
+    pub fn find_path_by_node(&self, node: SingleThreadMutType<SceneNode>) -> Option<String> {
+        let map = self.collect_node_map();
+        for (path, item) in map {
+            if Rc::ptr_eq(&item, &node) {
+                return Some(path);
+            }
+        }
+        return None;
+    }
+
+    pub fn find_node_by_path(
+        &self,
+        path: impl AsRef<str>,
+    ) -> Option<SingleThreadMutType<SceneNode>> {
+        let map = self.collect_node_map();
+        map.get(path.as_ref()).cloned()
+    }
+
+    pub fn collect_node_map(&self) -> HashMap<String, SingleThreadMutType<SceneNode>> {
+        let mut node_map = HashMap::new();
+        Self::collect_node_map_internal("", self.scene_node.clone(), &mut node_map);
+        node_map
+    }
+
+    fn collect_node_map_internal(
+        parent_path: impl AsRef<str>,
+        node: SingleThreadMutType<SceneNode>,
+        node_map: &mut HashMap<String, SingleThreadMutType<SceneNode>>,
+    ) {
+        let path = {
+            let node = node.borrow();
+            format!("{}/{}", parent_path.as_ref(), node.get_name())
+        };
+        node_map.insert(path.clone(), node.clone());
+        let node = node.borrow();
+        for child in node.childs.clone() {
+            Self::collect_node_map_internal(&path, child.clone(), node_map);
+        }
     }
 }

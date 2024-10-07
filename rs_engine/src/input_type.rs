@@ -9,4 +9,7 @@ pub enum EInputType<'a> {
     KeyboardInput(
         &'a std::collections::HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     ),
+    CursorEntered,
+    CursorLeft,
+    CursorMoved(&'a winit::dpi::PhysicalPosition<f64>),
 }
