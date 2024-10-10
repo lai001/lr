@@ -2,6 +2,7 @@ use crate::{
     content::content_file_type::EContentFileType,
     drawable::EDrawObjectType,
     engine::Engine,
+    misc,
     player_viewport::PlayerViewport,
     resource_manager::ResourceManager,
     scene_node::{EComponentType, SceneNode},
@@ -307,5 +308,63 @@ impl Actor {
         for child in node.childs.clone() {
             Self::collect_node_map_internal(&path, child.clone(), node_map);
         }
+    }
+
+    pub fn find_node_by_collider_handle(
+        &self,
+        collider: &rapier3d::prelude::ColliderHandle,
+    ) -> Option<SingleThreadMutType<SceneNode>> {
+        let mut find_node = None;
+        Self::walk_node(self.scene_node.clone(), &mut |scene_node| {
+            if find_node.is_some() {
+                return;
+            }
+            let is_contain: bool = (|| {
+                let scene_node = scene_node.borrow();
+                match &scene_node.component {
+                    EComponentType::SceneComponent(_) => {
+                        return false;
+                    }
+                    EComponentType::StaticMeshComponent(component) => {
+                        let component = component.borrow();
+                        let collider_handles = component
+                            .get_physics()
+                            .map(|x| x.collider_handles.clone())
+                            .unwrap_or_default();
+                        if collider_handles.contains(collider) {
+                            return true;
+                        }
+                    }
+                    EComponentType::SkeletonMeshComponent(component) => {
+                        let component = component.borrow();
+                        let collider_handles = component
+                            .get_physics()
+                            .map(|x| x.collider_handles.clone())
+                            .unwrap_or_default();
+                        if collider_handles.contains(collider) {
+                            return true;
+                        }
+                    }
+                    EComponentType::CameraComponent(_) => {
+                        return false;
+                    }
+                }
+                false
+            })();
+            if is_contain && find_node.is_none() {
+                find_node = Some(scene_node.clone());
+            }
+        });
+        find_node
+    }
+
+    pub fn compute_components_aabb(&self) -> Option<rapier3d::prelude::Aabb> {
+        let mut aabbs: Vec<rapier3d::prelude::Aabb> = vec![];
+        Self::walk_node(self.scene_node.clone(), &mut |node| {
+            if let Some(aabb) = node.borrow().get_aabb() {
+                aabbs.push(aabb);
+            }
+        });
+        misc::merge_aabb(&aabbs)
     }
 }

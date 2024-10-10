@@ -348,11 +348,15 @@ impl ObjectPropertyView {
     }
 
     fn detail_view_mut(value: &mut glam::Vec3, ui: &mut egui::Ui, label: &str) {
+        let old = value.clone();
         ui.horizontal(|ui| {
             ui.label(label);
             ui.add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "));
             ui.add(egui::DragValue::new(&mut value.y).speed(0.1).prefix("y: "));
             ui.add(egui::DragValue::new(&mut value.z).speed(0.1).prefix("z: "));
+            if value.cmpeq(glam::Vec3::ZERO).any() {
+                *value = old;
+            }
         });
     }
 }

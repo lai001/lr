@@ -4,6 +4,7 @@ use crate::camera_component::CameraComponent;
 use crate::directional_light::DirectionalLight;
 use crate::drawable::EDrawObjectType;
 use crate::engine::Engine;
+use crate::misc::{compute_appropriate_offset_look_and_projection_matrix, merge_aabb};
 use crate::player_viewport::PlayerViewport;
 use crate::resource_manager::ResourceManager;
 use crate::scene_node::{EComponentType, SceneNode};
@@ -76,7 +77,7 @@ impl Physics {
     }
 
     pub fn find_the_contact_pair(
-        &mut self,
+        &self,
         collider_handle1: ColliderHandle,
         collider_handle2: ColliderHandle,
     ) -> Option<&ContactPair> {
@@ -219,6 +220,22 @@ impl Level {
     }
 
     pub fn tick(&mut self, time: f32, engine: &mut Engine, player_viewport: &mut PlayerViewport) {
+        for light in self.directional_lights.clone() {
+            let mut light = light.borrow_mut();
+            light.update(engine);
+            // player_viewport.update_light(&mut light);
+        }
+        {
+            if let Some(offset_look_and_projection_matrix) =
+                compute_appropriate_offset_look_and_projection_matrix(self)
+            {
+                player_viewport.update_light2(
+                    offset_look_and_projection_matrix,
+                    self.directional_lights.clone(),
+                );
+            }
+        }
+
         let Some(runtime) = self.runtime.as_mut() else {
             return;
         };
@@ -226,11 +243,6 @@ impl Level {
             runtime.physics.step();
         } else {
             runtime.physics.query_update();
-        }
-        for light in self.directional_lights.clone() {
-            let mut light = light.borrow_mut();
-            light.update(engine);
-            player_viewport.update_light(&mut light);
         }
         let rigid_body_set = &mut runtime.physics.rigid_body_set;
         let collider_set = &mut runtime.physics.collider_set;
@@ -452,5 +464,35 @@ impl Level {
             .iter()
             .find(|x| x.borrow().name == name)
             .cloned()
+    }
+
+    pub fn find_actor_by_collider_handle(
+        &self,
+        collider: &rapier3d::prelude::ColliderHandle,
+    ) -> (
+        Option<SingleThreadMutType<Actor>>,
+        Option<SingleThreadMutType<SceneNode>>,
+    ) {
+        for actor in self.actors.clone() {
+            let node = {
+                let actor = actor.borrow();
+                actor.find_node_by_collider_handle(collider)
+            };
+            if node.is_some() {
+                return (Some(actor.clone()), node.clone());
+            }
+        }
+        return (None, None);
+    }
+
+    pub fn compute_scene_aabb(&self) -> Option<rapier3d::prelude::Aabb> {
+        let mut aabbs: Vec<rapier3d::prelude::Aabb> = vec![];
+        for actor in self.actors.clone() {
+            let actor = actor.borrow();
+            if let Some(aabb) = actor.compute_components_aabb() {
+                aabbs.push(aabb);
+            }
+        }
+        merge_aabb(&aabbs)
     }
 }

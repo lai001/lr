@@ -544,6 +544,10 @@ impl SkeletonMeshComponent {
         self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten()
     }
 
+    pub fn get_physics(&self) -> Option<&Physics> {
+        self.run_time.as_ref().map(|x| x.physics.as_ref()).flatten()
+    }
+
     pub fn set_animation(
         &mut self,
         animation: Option<url::Url>,

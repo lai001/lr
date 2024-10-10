@@ -173,6 +173,15 @@ impl SceneNode {
         SingleThreadMut::new(Self::new(name))
     }
 
+    pub fn get_aabb(&self) -> Option<rapier3d::prelude::Aabb> {
+        match &self.component {
+            EComponentType::SceneComponent(_) => None,
+            EComponentType::StaticMeshComponent(component) => component.borrow().get_aabb(),
+            EComponentType::SkeletonMeshComponent(_) => None,
+            EComponentType::CameraComponent(_) => None,
+        }
+    }
+
     common_fn!(
         SceneComponent,
         StaticMeshComponent,

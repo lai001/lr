@@ -1,6 +1,10 @@
 use crate::{
-    content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
-    player_viewport::PlayerViewport, resource_manager::ResourceManager,
+    content::content_file_type::EContentFileType,
+    drawable::EDrawObjectType,
+    engine::Engine,
+    misc::{static_mesh_get_aabb, transform_aabb},
+    player_viewport::PlayerViewport,
+    resource_manager::ResourceManager,
 };
 use rapier3d::prelude::*;
 use rs_artifact::static_mesh::StaticMesh;
@@ -29,6 +33,7 @@ pub struct StaticMeshComponentRuntime {
     pub physics: Option<Physics>,
     pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
+    aabb: Option<Aabb>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -157,13 +162,14 @@ impl StaticMeshComponent {
                 }
                 _ => unimplemented!(),
             }
-
+            let aabb = static_mesh_get_aabb(&find_static_mesh);
             self.run_time = Some(StaticMeshComponentRuntime {
                 draw_objects: draw_object,
                 _mesh: find_static_mesh,
                 physics: None,
                 final_transformation: glam::Mat4::IDENTITY,
                 parent_final_transformation: glam::Mat4::IDENTITY,
+                aabb: Some(aabb),
             })
         }
     }
@@ -431,5 +437,22 @@ impl StaticMeshComponent {
 
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
         self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten()
+    }
+
+    pub fn get_physics(&self) -> Option<&Physics> {
+        self.run_time.as_ref().map(|x| x.physics.as_ref()).flatten()
+    }
+
+    pub fn get_aabb(&self) -> Option<Aabb> {
+        self.run_time
+            .as_ref()
+            .map(|x| {
+                if let Some(aabb) = &x.aabb {
+                    Some(transform_aabb(aabb, &self.get_final_transformation()))
+                } else {
+                    None
+                }
+            })
+            .flatten()
     }
 }

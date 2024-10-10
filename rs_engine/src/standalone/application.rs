@@ -111,6 +111,9 @@ impl Application {
 
         self.player_view_port.update_global_constants(engine);
 
+        if let Some(physics) = active_level.get_physics_mut() {
+            physics.collision_events.clear();
+        }
         active_level.tick(engine.get_game_time(), engine, &mut self.player_view_port);
         let mut draw_objects = active_level.collect_draw_objects();
         for draw_object in draw_objects.iter_mut() {

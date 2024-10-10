@@ -1,8 +1,10 @@
 use crate::camera::Camera;
+use crate::directional_light::DirectionalLight;
 use crate::drawable::EDrawObjectType;
 use crate::engine::{Engine, VirtualPassHandle};
 use crate::handle::TextureHandle;
 use crate::input_mode::EInputMode;
+use crate::misc::{FORWARD_VECTOR, UP_VECTOR};
 use crate::physics_debug_render::{PhysicsDebugRender, RenderRigidBodiesBundle};
 use crate::resource_manager::ResourceManager;
 use crate::{build_built_in_resouce_url, BUILT_IN_RESOURCE};
@@ -1023,6 +1025,33 @@ impl PlayerViewport {
 
     pub fn update_light(&mut self, light: &mut crate::directional_light::DirectionalLight) {
         self.global_constants.light_space_matrix = light.get_light_space_matrix();
+    }
+
+    fn update_light3(&mut self, view_matrix: glam::Mat4, projection_matrix: glam::Mat4) {
+        self.global_constants.light_space_matrix = projection_matrix * view_matrix;
+    }
+
+    pub fn update_light2(
+        &mut self,
+        offset_look_and_projection_matrix: (f32, glam::Vec3, glam::Mat4),
+        directional_lights: Vec<SingleThreadMutType<DirectionalLight>>,
+    ) {
+        let (offset, center, projection_matrix) = offset_look_and_projection_matrix;
+        for directional_light in directional_lights {
+            let directional_light = directional_light.borrow();
+            let look_to = directional_light
+                .get_transformation()
+                .transform_vector3(FORWARD_VECTOR);
+            let eye = center - look_to * offset;
+            let view_matrix = glam::Mat4::look_to_rh(
+                eye,
+                directional_light
+                    .get_transformation()
+                    .transform_vector3(FORWARD_VECTOR),
+                UP_VECTOR,
+            );
+            self.update_light3(view_matrix, projection_matrix);
+        }
     }
 
     pub fn set_debug_shading(&mut self, ty: global_uniform::EDebugShadingType) {

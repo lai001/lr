@@ -1,5 +1,6 @@
 use crate::drawable::{CustomDrawObject, EDrawObjectType};
 use crate::engine::Engine;
+use crate::misc::FORWARD_VECTOR;
 use crate::player_viewport::PlayerViewport;
 use rs_core_minimal::frustum::Frustum;
 use rs_core_minimal::misc::get_orthographic_frustum;
@@ -25,7 +26,7 @@ pub struct DirectionalLight {
     pub right: f32,
     pub bottom: f32,
     pub top: f32,
-    near: f32,
+    pub near: f32,
     pub far: f32,
     #[serde(skip)]
     runtime: Option<Runtime>,
@@ -41,7 +42,8 @@ impl DirectionalLight {
     }
 
     fn default_dir() -> glam::Vec3 {
-        glam::Vec3::Z
+        // glam::Vec3::Z
+        FORWARD_VECTOR
     }
 
     pub fn new(

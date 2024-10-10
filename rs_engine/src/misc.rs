@@ -1,3 +1,5 @@
+use rapier3d::na::Point3;
+use rs_core_minimal::sphere_3d::Sphere3D;
 pub const FORWARD_VECTOR: glam::Vec3 = glam::Vec3::Z;
 pub const UP_VECTOR: glam::Vec3 = glam::Vec3::Y;
 pub const RIGHT_VECTOR: glam::Vec3 = glam::Vec3::X;
@@ -21,6 +23,76 @@ pub fn project_to_world(
     let start = ndc_to_world.project_point3(glam::vec3(ndc_cursor.x, ndc_cursor.y, 0.0));
     let end = ndc_to_world.project_point3(glam::vec3(ndc_cursor.x, ndc_cursor.y, 1.0));
     (start, end)
+}
+
+pub fn points_to_aabb(points: &[glam::Vec3]) -> rapier3d::prelude::Aabb {
+    let points: Vec<rapier3d::math::Point<f32>> = points
+        .iter()
+        .map(|x| rapier3d::math::Point::<f32>::from_slice(&x.to_array()))
+        .collect();
+
+    let aabb = rapier3d::prelude::Aabb::from_points(&points);
+    aabb
+}
+
+pub fn static_mesh_get_aabb(
+    static_mesh: &rs_artifact::static_mesh::StaticMesh,
+) -> rapier3d::prelude::Aabb {
+    let points: Vec<glam::Vec3> = static_mesh
+        .vertexes
+        .iter()
+        .map(|x| x.position.clone())
+        .collect();
+    points_to_aabb(&points)
+}
+
+pub fn transform_aabb(
+    aabb: &rapier3d::prelude::Aabb,
+    transformation: &glam::Mat4,
+) -> rapier3d::prelude::Aabb {
+    let mins = glam::vec3(aabb.mins.x, aabb.mins.y, aabb.mins.z);
+    let maxs = glam::vec3(aabb.maxs.x, aabb.maxs.y, aabb.maxs.z);
+    let mins = transformation.transform_point3(mins);
+    let maxs = transformation.transform_point3(maxs);
+    rapier3d::prelude::Aabb::new(
+        Point3::from_slice(&mins.to_array()),
+        Point3::from_slice(&maxs.to_array()),
+    )
+}
+
+pub fn merge_aabb(aabbs: &[rapier3d::prelude::Aabb]) -> Option<rapier3d::prelude::Aabb> {
+    if aabbs.is_empty() {
+        return None;
+    }
+    let mut points: Vec<glam::Vec3> = Vec::with_capacity(2 * aabbs.len());
+    for aabb in aabbs.iter() {
+        let mins = glam::vec3(aabb.mins.x, aabb.mins.y, aabb.mins.z);
+        let maxs = glam::vec3(aabb.maxs.x, aabb.maxs.y, aabb.maxs.z);
+        points.push(mins);
+        points.push(maxs);
+    }
+    Some(points_to_aabb(&points))
+}
+
+pub fn aabb_as_sphere(aabb: &rapier3d::prelude::Aabb) -> Sphere3D {
+    let center = aabb.center();
+    let center = glam::vec3(center.x, center.y, center.z);
+    let half_extents = glam::Vec3::from_slice(aabb.half_extents().as_slice());
+    Sphere3D::new(center, half_extents.length())
+}
+
+pub fn compute_appropriate_offset_look_and_projection_matrix(
+    level: &crate::content::level::Level,
+) -> Option<(f32, glam::Vec3, glam::Mat4)> {
+    if let Some(aabb) = level.compute_scene_aabb() {
+        let sphere = aabb_as_sphere(&aabb);
+        let size = sphere.radius;
+        let directional_light_projection =
+            glam::Mat4::orthographic_rh(-size, size, -size, size, 0.01, 0.01 + size * 2.0);
+        Some((size, sphere.center, directional_light_projection))
+    } else {
+        None
+    }
 }
 
 pub trait Mat4Extension {
