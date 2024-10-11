@@ -4,11 +4,11 @@ use rs_foundation::new::SingleThreadMutType;
 use std::{cell::RefCell, rc::Rc};
 
 pub enum EClickEventType {
-    Actor(SingleThreadMutType<Actor>),
+    SingleClickActor(SingleThreadMutType<Actor>),
     CreateActor,
     CreateCameraHere,
     DeleteActor(SingleThreadMutType<Actor>),
-    SceneNode(SingleThreadMutType<SceneNode>),
+    SingleClickSceneNode(SingleThreadMutType<SceneNode>),
     CreateDirectionalLight,
     DirectionalLight(SingleThreadMutType<DirectionalLight>),
     DeleteDirectionalLight(SingleThreadMutType<DirectionalLight>),
@@ -31,7 +31,7 @@ fn draw_scene_node(
         .show_header(ui, |ui| {
             let response = ui.button(name);
             if response.clicked() {
-                *event = Some(EClickEventType::SceneNode(scene_node.clone()));
+                *event = Some(EClickEventType::SingleClickSceneNode(scene_node.clone()));
             } else {
                 response.context_menu(|ui| {
                     ui.menu_button("Add", |ui| {
@@ -94,7 +94,7 @@ fn level_node(
         .show_header(ui, |ui| {
             let response = ui.button(name);
             if response.clicked() {
-                *event = Some(EClickEventType::Actor(actor.clone()));
+                *event = Some(EClickEventType::SingleClickActor(actor.clone()));
             } else {
                 response.context_menu(|ui| {
                     let response = ui.button("Delete");

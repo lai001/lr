@@ -121,29 +121,34 @@ impl EditorUI {
         if let Some(selected_object) = self.object_property_view.selected_object.as_ref() {
             let model_matrix = match selected_object {
                 ESelectedObjectType::Actor(_) => None,
-                ESelectedObjectType::SceneComponent(component) => {
-                    let component = component.borrow();
-                    Some(component.get_final_transformation())
-                }
-                ESelectedObjectType::StaticMeshComponent(component) => {
-                    let component = component.borrow();
-                    Some(component.get_final_transformation())
-                }
-                ESelectedObjectType::SkeletonMeshComponent(component) => {
-                    let component = component.borrow();
-                    Some(*component.get_transformation())
+                ESelectedObjectType::SceneNode(scene_node) => {
+                    let scene_node = scene_node.borrow();
+                    match &scene_node.component {
+                        rs_engine::scene_node::EComponentType::SceneComponent(component) => {
+                            let component = component.borrow();
+                            Some(component.get_final_transformation())
+                        }
+                        rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
+                            let component = component.borrow();
+                            Some(component.get_final_transformation())
+                        }
+                        rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                            let component = component.borrow();
+                            Some(*component.get_transformation())
+                        }
+                        rs_engine::scene_node::EComponentType::CameraComponent(component) => {
+                            let component = component.borrow();
+                            Some(component.get_final_transformation())
+                        }
+                        rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
+                            let component = component.borrow();
+                            Some(component.get_final_transformation())
+                        }
+                    }
                 }
                 ESelectedObjectType::DirectionalLight(component) => {
                     let component = component.borrow();
                     Some(*component.get_transformation())
-                }
-                ESelectedObjectType::CameraComponent(component) => {
-                    let component = component.borrow();
-                    Some(component.get_final_transformation())
-                }
-                ESelectedObjectType::CollisionComponent(component) => {
-                    let component = component.borrow();
-                    Some(component.get_final_transformation())
                 }
             };
             if let Some(model_matrix) = model_matrix {

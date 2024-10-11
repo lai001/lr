@@ -390,7 +390,7 @@ impl EditorContext {
                 {
                     if let Some(level) = self.data_source.level.as_ref() {
                         let level = level.borrow();
-                        let componenet_type = level.ray_cast_find_component(
+                        let componenet_type = level.ray_cast_find_node(
                             &self.mosue_state.position,
                             &glam::vec2(
                                 window.inner_size().width as f32,
@@ -400,21 +400,8 @@ impl EditorContext {
                             self.player_viewport.camera.get_projection_matrix(),
                         );
                         if let Some(componenet_type) = componenet_type {
-                            use rs_engine::scene_node::EComponentType;
-                            match componenet_type {
-                                EComponentType::SceneComponent(_) => {}
-                                EComponentType::StaticMeshComponent(componenet) => {
-                                    self.editor_ui.object_property_view.selected_object =
-                                        Some(ESelectedObjectType::StaticMeshComponent(componenet));
-                                }
-                                EComponentType::SkeletonMeshComponent(componenet) => {
-                                    self.editor_ui.object_property_view.selected_object = Some(
-                                        ESelectedObjectType::SkeletonMeshComponent(componenet),
-                                    );
-                                }
-                                EComponentType::CameraComponent(_) => {}
-                                EComponentType::CollisionComponent(_) => {}
-                            }
+                            self.editor_ui.object_property_view.selected_object =
+                                Some(ESelectedObjectType::SceneNode(componenet_type));
                         }
                         // } else {
                         //     self.editor_ui.object_property_view.selected_object = None;
@@ -2087,42 +2074,34 @@ impl EditorContext {
             return;
         };
         match event {
-            crate::ui::level_view::EClickEventType::Actor(actor) => {
+            crate::ui::level_view::EClickEventType::SingleClickActor(actor) => {
                 self.editor_ui.object_property_view.selected_object =
                     Some(ESelectedObjectType::Actor(actor));
             }
-            crate::ui::level_view::EClickEventType::SceneNode(scene_node) => {
-                match &scene_node.borrow().component {
-                    rs_engine::scene_node::EComponentType::SceneComponent(component) => {
-                        self.editor_ui.object_property_view.selected_object =
-                            Some(ESelectedObjectType::SceneComponent(component.clone()));
-                    }
-                    rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
-                        self.editor_ui.object_property_view.selected_object =
-                            Some(ESelectedObjectType::StaticMeshComponent(component.clone()));
-                    }
-                    rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                        self.editor_ui.object_property_view.selected_object = Some(
-                            ESelectedObjectType::SkeletonMeshComponent(component.clone()),
-                        );
-                    }
-                    rs_engine::scene_node::EComponentType::CameraComponent(component) => {
-                        self.editor_ui.object_property_view.selected_object =
-                            Some(ESelectedObjectType::CameraComponent(component.clone()));
-                    }
-                    rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
-                        self.editor_ui.object_property_view.selected_object =
-                            Some(ESelectedObjectType::CollisionComponent(component.clone()));
-                    }
-                }
+            crate::ui::level_view::EClickEventType::SingleClickSceneNode(scene_node) => {
+                self.editor_ui.object_property_view.selected_object =
+                    Some(ESelectedObjectType::SceneNode(scene_node));
             }
             crate::ui::level_view::EClickEventType::CreateDirectionalLight => {
                 let size = 5.0;
                 let far = 50.0;
-                let mut light = DirectionalLight::new(-size, size, -size, size, 0.01, far);
+                let mut opened_level = opened_level.borrow_mut();
+                let names = opened_level
+                    .directional_lights
+                    .iter()
+                    .map(|x| x.borrow().name.clone())
+                    .collect();
+                let mut light = DirectionalLight::new(
+                    make_unique_name(names, "DirectionalLight"),
+                    -size,
+                    size,
+                    -size,
+                    size,
+                    0.01,
+                    far,
+                );
                 light.initialize(&mut self.engine, &mut self.player_viewport);
                 opened_level
-                    .borrow_mut()
                     .directional_lights
                     .push(SingleThreadMut::new(light));
             }
@@ -2617,44 +2596,67 @@ impl EditorContext {
         let Some(event) = event else {
             return;
         };
+        let Some(_) = self.data_source.level.as_mut() else {
+            return;
+        };
         match event {
             object_property_view::EEventType::UpdateMaterial(update_material) => {
                 match update_material.selected_object {
-                    ESelectedObjectType::StaticMeshComponent(static_mesh_component) => {
-                        let files = if let Some(folder) =
-                            &self.data_source.content_data_source.current_folder
-                        {
-                            folder.borrow().files.clone()
-                        } else {
-                            vec![]
-                        };
-                        let mut static_mesh_component = static_mesh_component.borrow_mut();
-                        static_mesh_component.set_material(
-                            &mut self.engine,
-                            update_material.new,
-                            &files,
-                            &mut self.player_viewport,
-                        );
-                    }
-                    ESelectedObjectType::SkeletonMeshComponent(skeleton_mesh_component) => {
-                        let files = if let Some(folder) =
-                            &self.data_source.content_data_source.current_folder
-                        {
-                            folder.borrow().files.clone()
-                        } else {
-                            vec![]
-                        };
-                        let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
-                        if let Some(url) = update_material.new {
-                            skeleton_mesh_component.set_material(
-                                &mut self.engine,
-                                url,
-                                &files,
-                                &mut self.player_viewport,
-                            );
+                    ESelectedObjectType::Actor(_) => unimplemented!(),
+                    ESelectedObjectType::DirectionalLight(_) => unimplemented!(),
+                    ESelectedObjectType::SceneNode(scene_node) => {
+                        let scene_node = scene_node.borrow_mut();
+                        match &scene_node.component {
+                            rs_engine::scene_node::EComponentType::SceneComponent(_) => {
+                                unimplemented!()
+                            }
+                            rs_engine::scene_node::EComponentType::StaticMeshComponent(
+                                static_mesh_component,
+                            ) => {
+                                let files = if let Some(folder) =
+                                    &self.data_source.content_data_source.current_folder
+                                {
+                                    folder.borrow().files.clone()
+                                } else {
+                                    vec![]
+                                };
+                                let mut static_mesh_component = static_mesh_component.borrow_mut();
+                                static_mesh_component.set_material(
+                                    &mut self.engine,
+                                    update_material.new,
+                                    &files,
+                                    &mut self.player_viewport,
+                                );
+                            }
+                            rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
+                                skeleton_mesh_component,
+                            ) => {
+                                let files = if let Some(folder) =
+                                    &self.data_source.content_data_source.current_folder
+                                {
+                                    folder.borrow().files.clone()
+                                } else {
+                                    vec![]
+                                };
+                                let mut skeleton_mesh_component =
+                                    skeleton_mesh_component.borrow_mut();
+                                if let Some(url) = update_material.new {
+                                    skeleton_mesh_component.set_material(
+                                        &mut self.engine,
+                                        url,
+                                        &files,
+                                        &mut self.player_viewport,
+                                    );
+                                }
+                            }
+                            rs_engine::scene_node::EComponentType::CameraComponent(_) => {
+                                unimplemented!()
+                            }
+                            rs_engine::scene_node::EComponentType::CollisionComponent(_) => {
+                                unimplemented!()
+                            }
                         }
                     }
-                    _ => unimplemented!(),
                 }
             }
             object_property_view::EEventType::UpdateDirectionalLight(
@@ -2675,23 +2677,50 @@ impl EditorContext {
             }
             object_property_view::EEventType::UpdateAnimation(update_animation) => {
                 match update_animation.selected_object {
-                    ESelectedObjectType::SkeletonMeshComponent(skeleton_mesh_component) => {
-                        let mut skeleton_mesh_component = skeleton_mesh_component.borrow_mut();
-                        let files = if let Some(folder) =
-                            &self.data_source.content_data_source.current_folder
-                        {
-                            folder.borrow().files.clone()
-                        } else {
-                            vec![]
-                        };
-                        skeleton_mesh_component.set_animation(
-                            update_animation.new,
-                            self.engine.get_resource_manager().clone(),
-                            &files,
-                        );
+                    ESelectedObjectType::Actor(_) => unimplemented!(),
+                    ESelectedObjectType::DirectionalLight(_) => unimplemented!(),
+                    ESelectedObjectType::SceneNode(scene_node) => {
+                        let scene_node = scene_node.borrow_mut();
+                        match &scene_node.component {
+                            rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
+                                skeleton_mesh_component,
+                            ) => {
+                                let mut skeleton_mesh_component =
+                                    skeleton_mesh_component.borrow_mut();
+                                let files = if let Some(folder) =
+                                    &self.data_source.content_data_source.current_folder
+                                {
+                                    folder.borrow().files.clone()
+                                } else {
+                                    vec![]
+                                };
+                                skeleton_mesh_component.set_animation(
+                                    update_animation.new,
+                                    self.engine.get_resource_manager().clone(),
+                                    &files,
+                                );
+                            }
+                            _ => {
+                                unimplemented!()
+                            }
+                        }
                     }
-                    _ => {
-                        unimplemented!()
+                }
+            }
+            object_property_view::EEventType::ChangeName(selected_object_type, new_name) => {
+                // let opened_level = opened_level.borrow();
+                if !rs_core_minimal::misc::is_valid_name(&new_name) {
+                    return;
+                }
+                match selected_object_type {
+                    ESelectedObjectType::Actor(actor) => {
+                        actor.borrow_mut().name = new_name;
+                    }
+                    ESelectedObjectType::SceneNode(scene_node) => {
+                        scene_node.borrow_mut().set_name(new_name);
+                    }
+                    ESelectedObjectType::DirectionalLight(componenet) => {
+                        componenet.borrow_mut().name = new_name;
                     }
                 }
             }
@@ -2723,57 +2752,68 @@ impl EditorContext {
 
         match event.selected_object {
             ESelectedObjectType::Actor(_) => {}
-            ESelectedObjectType::SceneComponent(component) => {
-                let mut component = component.borrow_mut();
-                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                    let parent_final_transformation = component.get_parent_final_transformation();
-                    let model_matrix = component.get_transformation_mut();
-                    *model_matrix =
-                        parent_final_transformation.inverse() * gizmo_final_transformation;
+            ESelectedObjectType::SceneNode(secne_node) => {
+                let mut secne_node = secne_node.borrow_mut();
+                let component = &mut secne_node.component;
+                match component {
+                    rs_engine::scene_node::EComponentType::SceneComponent(component) => {
+                        let mut component = component.borrow_mut();
+                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                            let parent_final_transformation =
+                                component.get_parent_final_transformation();
+                            let model_matrix = component.get_transformation_mut();
+                            *model_matrix =
+                                parent_final_transformation.inverse() * gizmo_final_transformation;
+                        }
+                    }
+                    rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
+                        let mut component = component.borrow_mut();
+                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                            let parent_final_transformation =
+                                component.get_parent_final_transformation();
+                            let model_matrix = component.get_transformation_mut();
+                            *model_matrix =
+                                parent_final_transformation.inverse() * gizmo_final_transformation;
+                            component.set_apply_simulate(false);
+                            component.on_post_update_transformation(level_physics);
+                        } else {
+                            component.set_apply_simulate(true);
+                        }
+                    }
+                    rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
+                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                            let mut component = component.borrow_mut();
+                            *component.get_transformation_mut() = gizmo_final_transformation;
+                        }
+                    }
+                    rs_engine::scene_node::EComponentType::CameraComponent(component) => {
+                        let mut component = component.borrow_mut();
+                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                            let parent_final_transformation =
+                                component.get_parent_final_transformation();
+                            let model_matrix = component.get_transformation_mut();
+                            *model_matrix =
+                                parent_final_transformation.inverse() * gizmo_final_transformation;
+                        }
+                    }
+                    rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
+                        let mut component = component.borrow_mut();
+                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                            let parent_final_transformation =
+                                component.get_parent_final_transformation();
+                            let model_matrix = component.get_transformation_mut();
+                            *model_matrix =
+                                parent_final_transformation.inverse() * gizmo_final_transformation;
+                            component.on_post_update_transformation(level_physics);
+                        }
+                    }
                 }
             }
-            ESelectedObjectType::StaticMeshComponent(component) => {
-                let mut component = component.borrow_mut();
-                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                    let parent_final_transformation = component.get_parent_final_transformation();
-                    let model_matrix = component.get_transformation_mut();
-                    *model_matrix =
-                        parent_final_transformation.inverse() * gizmo_final_transformation;
-                    component.set_apply_simulate(false);
-                    component.on_post_update_transformation(level_physics);
-                } else {
-                    component.set_apply_simulate(true);
-                }
-            }
-            ESelectedObjectType::SkeletonMeshComponent(component) => {
-                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                    let mut component = component.borrow_mut();
-                    *component.get_transformation_mut() = gizmo_final_transformation;
-                }
-            }
+
             ESelectedObjectType::DirectionalLight(component) => {
                 if let Some(gizmo_final_transformation) = gizmo_final_transformation {
                     let mut component = component.borrow_mut();
                     *component.get_transformation_mut() = gizmo_final_transformation;
-                }
-            }
-            ESelectedObjectType::CameraComponent(component) => {
-                let mut component = component.borrow_mut();
-                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                    let parent_final_transformation = component.get_parent_final_transformation();
-                    let model_matrix = component.get_transformation_mut();
-                    *model_matrix =
-                        parent_final_transformation.inverse() * gizmo_final_transformation;
-                }
-            }
-            ESelectedObjectType::CollisionComponent(component) => {
-                let mut component = component.borrow_mut();
-                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                    let parent_final_transformation = component.get_parent_final_transformation();
-                    let model_matrix = component.get_transformation_mut();
-                    *model_matrix =
-                        parent_final_transformation.inverse() * gizmo_final_transformation;
-                    component.on_post_update_transformation(level_physics);
                 }
             }
         }

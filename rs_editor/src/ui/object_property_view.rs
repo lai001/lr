@@ -1,8 +1,4 @@
-use rs_engine::{
-    actor::Actor, camera_component::CameraComponent, collision_componenet::CollisionComponent,
-    directional_light::DirectionalLight, scene_node::*,
-    skeleton_mesh_component::SkeletonMeshComponent, static_mesh_component::StaticMeshComponent,
-};
+use rs_engine::{actor::Actor, directional_light::DirectionalLight, scene_node::*};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
 pub struct UpdateMaterial {
@@ -28,17 +24,14 @@ pub enum EEventType {
         f32,
         f32,
     ),
+    ChangeName(ESelectedObjectType, String),
 }
 
 #[derive(Clone)]
 pub enum ESelectedObjectType {
     Actor(SingleThreadMutType<Actor>),
-    SceneComponent(SingleThreadMutType<SceneComponent>),
-    StaticMeshComponent(SingleThreadMutType<StaticMeshComponent>),
-    SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
     DirectionalLight(SingleThreadMutType<DirectionalLight>),
-    CameraComponent(SingleThreadMutType<CameraComponent>),
-    CollisionComponent(SingleThreadMutType<CollisionComponent>),
+    SceneNode(SingleThreadMutType<SceneNode>),
 }
 
 pub struct ObjectPropertyView {
@@ -56,6 +49,20 @@ impl ObjectPropertyView {
         }
     }
 
+    fn edit_name(name: &str, ui: &mut egui::Ui) -> Option<String> {
+        let mut edit_name = name.to_string();
+        let mut is_changed = false;
+        ui.horizontal(|ui| {
+            ui.label("Name: ");
+            is_changed = ui.text_edit_singleline(&mut edit_name).changed();
+        });
+        if is_changed {
+            return Some(edit_name);
+        } else {
+            None
+        }
+    }
+
     pub fn draw(&mut self, ui: &mut egui::Ui) -> Option<EEventType> {
         let Some(selected_object) = self.selected_object.as_mut() else {
             return None;
@@ -64,166 +71,216 @@ impl ObjectPropertyView {
         let selected_object_clone = selected_object.clone();
         match selected_object {
             ESelectedObjectType::Actor(actor) => {
+                let actor = actor.borrow();
                 ui.label(format!("Type: Actor"));
-                ui.label(actor.borrow().name.clone());
+                if let Some(new_name) = Self::edit_name(&actor.name, ui) {
+                    event = Some(EEventType::ChangeName(selected_object_clone, new_name));
+                }
             }
-            ESelectedObjectType::SceneComponent(scene_component) => {
-                ui.label(format!("Type: SceneComponent"));
+            ESelectedObjectType::SceneNode(scene_node) => {
+                let mut scene_node = scene_node.borrow_mut();
+                match &mut scene_node.component {
+                    EComponentType::SceneComponent(scene_component) => {
+                        ui.label(format!("Type: SceneComponent"));
 
-                let mut component = scene_component.borrow_mut();
-                ui.label(component.name.clone());
-
-                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                Self::transformation_detail(&component.get_final_transformation(), ui);
-            }
-            ESelectedObjectType::StaticMeshComponent(static_mesh_component) => {
-                ui.label(format!("Type: StaticMeshComponent"));
-
-                let mut component = static_mesh_component.borrow_mut();
-                ui.label(component.name.clone());
-
-                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                Self::transformation_detail(&component.get_final_transformation(), ui);
-
-                egui::ComboBox::from_label("Material")
-                    .selected_text(format!("{}", {
-                        match &component.material_url {
-                            Some(material_url) => material_url.to_string(),
-                            None => "None".to_string(),
+                        let mut component = scene_component.borrow_mut();
+                        if let Some(new_name) = Self::edit_name(&component.name, ui) {
+                            event = Some(EEventType::ChangeName(selected_object_clone, new_name));
                         }
-                    }))
-                    .show_ui(ui, |ui| {
-                        let mut collection: Vec<Option<url::Url>> = vec![];
-                        collection.push(None);
-                        collection.append(
-                            &mut self
-                                .materials
-                                .borrow()
-                                .iter()
-                                .map(|x| Some(x.clone()))
-                                .collect(),
-                        );
 
-                        for material in collection {
-                            let old = component.material_url.clone();
-                            let text = material
-                                .as_ref()
-                                .map(|x| x.to_string())
-                                .unwrap_or("None".to_string());
-                            let is_changed = ui
-                                .selectable_value(
-                                    &mut component.material_url,
-                                    material.clone(),
-                                    text,
-                                )
-                                .changed();
-                            if is_changed {
-                                event = Some(EEventType::UpdateMaterial(UpdateMaterial {
-                                    selected_object: selected_object_clone.clone(),
-                                    old,
-                                    new: material.clone(),
-                                }));
-                            }
+                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                    }
+                    EComponentType::StaticMeshComponent(static_mesh_component) => {
+                        ui.label(format!("Type: StaticMeshComponent"));
+
+                        let mut component = static_mesh_component.borrow_mut();
+                        if let Some(new_name) = Self::edit_name(&component.name, ui) {
+                            event = Some(EEventType::ChangeName(
+                                selected_object_clone.clone(),
+                                new_name,
+                            ));
                         }
-                    });
-            }
-            ESelectedObjectType::SkeletonMeshComponent(skeleton_mesh_component) => {
-                ui.label(format!("Type: SkeletonMeshComponent"));
 
-                let mut component = skeleton_mesh_component.borrow_mut();
-                ui.label(component.name.clone());
+                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_detail(&component.get_final_transformation(), ui);
 
-                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                Self::transformation_detail(&component.get_final_transformation(), ui);
+                        egui::ComboBox::from_label("Material")
+                            .selected_text(format!("{}", {
+                                match &component.material_url {
+                                    Some(material_url) => material_url.to_string(),
+                                    None => "None".to_string(),
+                                }
+                            }))
+                            .show_ui(ui, |ui| {
+                                let mut collection: Vec<Option<url::Url>> = vec![];
+                                collection.push(None);
+                                collection.append(
+                                    &mut self
+                                        .materials
+                                        .borrow()
+                                        .iter()
+                                        .map(|x| Some(x.clone()))
+                                        .collect(),
+                                );
 
-                egui::ComboBox::from_label("Animation")
-                    .selected_text(format!("{}", {
-                        match &component.animation_url {
-                            Some(animation_url) => animation_url.to_string(),
-                            None => "None".to_string(),
+                                for material in collection {
+                                    let old = component.material_url.clone();
+                                    let text = material
+                                        .as_ref()
+                                        .map(|x| x.to_string())
+                                        .unwrap_or("None".to_string());
+                                    let is_changed = ui
+                                        .selectable_value(
+                                            &mut component.material_url,
+                                            material.clone(),
+                                            text,
+                                        )
+                                        .changed();
+                                    if is_changed {
+                                        event = Some(EEventType::UpdateMaterial(UpdateMaterial {
+                                            selected_object: selected_object_clone.clone(),
+                                            old,
+                                            new: material.clone(),
+                                        }));
+                                    }
+                                }
+                            });
+                    }
+                    EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
+                        ui.label(format!("Type: SkeletonMeshComponent"));
+
+                        let mut component = skeleton_mesh_component.borrow_mut();
+                        if let Some(new_name) = Self::edit_name(&component.name, ui) {
+                            event = Some(EEventType::ChangeName(
+                                selected_object_clone.clone(),
+                                new_name,
+                            ));
                         }
-                    }))
-                    .show_ui(ui, |ui| {
-                        let mut collection: Vec<Option<url::Url>> = vec![];
-                        collection.push(None);
-                        collection.append(
-                            &mut self
-                                .animations
-                                .borrow()
-                                .iter()
-                                .map(|x| Some(x.clone()))
-                                .collect(),
-                        );
 
-                        for animation in collection {
-                            let old = component.animation_url.clone();
-                            let text = animation
-                                .as_ref()
-                                .map(|x| x.to_string())
-                                .unwrap_or("None".to_string());
-                            let is_changed = ui
-                                .selectable_value(
-                                    &mut component.animation_url,
-                                    animation.clone(),
-                                    text,
-                                )
-                                .changed();
-                            if is_changed {
-                                event = Some(EEventType::UpdateAnimation(UpdateAnimation {
-                                    selected_object: selected_object_clone.clone(),
-                                    old,
-                                    new: animation.clone(),
-                                }));
-                            }
-                        }
-                    });
+                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_detail(&component.get_final_transformation(), ui);
 
-                egui::ComboBox::from_label("Material")
-                    .selected_text(format!("{}", {
-                        match &component.material_url {
-                            Some(material_url) => material_url.to_string(),
-                            None => "None".to_string(),
-                        }
-                    }))
-                    .show_ui(ui, |ui| {
-                        let mut collection: Vec<Option<url::Url>> = vec![];
-                        collection.push(None);
-                        collection.append(
-                            &mut self
-                                .materials
-                                .borrow()
-                                .iter()
-                                .map(|x| Some(x.clone()))
-                                .collect(),
-                        );
+                        egui::ComboBox::from_label("Animation")
+                            .selected_text(format!("{}", {
+                                match &component.animation_url {
+                                    Some(animation_url) => animation_url.to_string(),
+                                    None => "None".to_string(),
+                                }
+                            }))
+                            .show_ui(ui, |ui| {
+                                let mut collection: Vec<Option<url::Url>> = vec![];
+                                collection.push(None);
+                                collection.append(
+                                    &mut self
+                                        .animations
+                                        .borrow()
+                                        .iter()
+                                        .map(|x| Some(x.clone()))
+                                        .collect(),
+                                );
 
-                        for material in collection {
-                            let old = component.material_url.clone();
-                            let text = material
-                                .as_ref()
-                                .map(|x| x.to_string())
-                                .unwrap_or("None".to_string());
-                            let is_changed = ui
-                                .selectable_value(
-                                    &mut component.material_url,
-                                    material.clone(),
-                                    text,
-                                )
-                                .changed();
-                            if is_changed {
-                                event = Some(EEventType::UpdateMaterial(UpdateMaterial {
-                                    selected_object: selected_object_clone.clone(),
-                                    old,
-                                    new: material.clone(),
-                                }));
-                            }
+                                for animation in collection {
+                                    let old = component.animation_url.clone();
+                                    let text = animation
+                                        .as_ref()
+                                        .map(|x| x.to_string())
+                                        .unwrap_or("None".to_string());
+                                    let is_changed = ui
+                                        .selectable_value(
+                                            &mut component.animation_url,
+                                            animation.clone(),
+                                            text,
+                                        )
+                                        .changed();
+                                    if is_changed {
+                                        event =
+                                            Some(EEventType::UpdateAnimation(UpdateAnimation {
+                                                selected_object: selected_object_clone.clone(),
+                                                old,
+                                                new: animation.clone(),
+                                            }));
+                                    }
+                                }
+                            });
+
+                        egui::ComboBox::from_label("Material")
+                            .selected_text(format!("{}", {
+                                match &component.material_url {
+                                    Some(material_url) => material_url.to_string(),
+                                    None => "None".to_string(),
+                                }
+                            }))
+                            .show_ui(ui, |ui| {
+                                let mut collection: Vec<Option<url::Url>> = vec![];
+                                collection.push(None);
+                                collection.append(
+                                    &mut self
+                                        .materials
+                                        .borrow()
+                                        .iter()
+                                        .map(|x| Some(x.clone()))
+                                        .collect(),
+                                );
+
+                                for material in collection {
+                                    let old = component.material_url.clone();
+                                    let text = material
+                                        .as_ref()
+                                        .map(|x| x.to_string())
+                                        .unwrap_or("None".to_string());
+                                    let is_changed = ui
+                                        .selectable_value(
+                                            &mut component.material_url,
+                                            material.clone(),
+                                            text,
+                                        )
+                                        .changed();
+                                    if is_changed {
+                                        event = Some(EEventType::UpdateMaterial(UpdateMaterial {
+                                            selected_object: selected_object_clone.clone(),
+                                            old,
+                                            new: material.clone(),
+                                        }));
+                                    }
+                                }
+                            });
+                    }
+                    EComponentType::CameraComponent(component) => {
+                        ui.label(format!("Type: CameraComponent"));
+                        let mut component = component.borrow_mut();
+                        if let Some(new_name) = Self::edit_name(&component.name, ui) {
+                            event = Some(EEventType::ChangeName(
+                                selected_object_clone.clone(),
+                                new_name,
+                            ));
                         }
-                    });
+
+                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                    }
+                    EComponentType::CollisionComponent(component) => {
+                        ui.label(format!("Type: CollisionComponent"));
+                        let mut component = component.borrow_mut();
+                        if let Some(new_name) = Self::edit_name(&component.name, ui) {
+                            event = Some(EEventType::ChangeName(
+                                selected_object_clone.clone(),
+                                new_name,
+                            ));
+                        }
+
+                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                    }
+                }
             }
             ESelectedObjectType::DirectionalLight(directional_light) => {
                 ui.label(format!("Type: DirectionalLight"));
                 let directional_light_clone = directional_light.clone();
                 let mut component = directional_light.borrow_mut();
+                if let Some(new_name) = Self::edit_name(&component.name, ui) {
+                    event = Some(EEventType::ChangeName(selected_object_clone, new_name));
+                }
                 Self::transformation_detail_mut(component.get_transformation_mut(), ui);
 
                 let mut is_changed = false;
@@ -275,22 +332,6 @@ impl ObjectPropertyView {
                         far,
                     ));
                 }
-            }
-            ESelectedObjectType::CameraComponent(component) => {
-                ui.label(format!("Type: CameraComponent"));
-                let mut component = component.borrow_mut();
-                ui.label(component.name.clone());
-
-                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                Self::transformation_detail(&component.get_final_transformation(), ui);
-            }
-            ESelectedObjectType::CollisionComponent(component) => {
-                ui.label(format!("Type: CollisionComponent"));
-                let mut component = component.borrow_mut();
-                ui.label(component.name.clone());
-
-                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                Self::transformation_detail(&component.get_final_transformation(), ui);
             }
         }
 

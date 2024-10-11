@@ -143,3 +143,8 @@ pub fn frustum_from_perspective(
         far_3,
     }
 }
+
+pub fn is_valid_name(name: &str) -> bool {
+    let re = regex::Regex::new(r"^\w+$").unwrap();
+    re.is_match(name)
+}

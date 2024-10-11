@@ -18,6 +18,7 @@ pub struct Runtime {
 
 #[derive(Serialize, Deserialize)]
 pub struct DirectionalLight {
+    pub name: String,
     eye: glam::Vec3,
     light_projection: glam::Mat4,
     light_view: glam::Mat4,
@@ -47,6 +48,7 @@ impl DirectionalLight {
     }
 
     pub fn new(
+        name: String,
         left: f32,
         right: f32,
         bottom: f32,
@@ -72,6 +74,7 @@ impl DirectionalLight {
             eye,
             transformation,
             runtime: None,
+            name,
         }
     }
 

@@ -340,14 +340,14 @@ impl Level {
         self.actors.append(&mut actors);
     }
 
-    pub fn ray_cast_find_component(
+    pub fn ray_cast_find_node(
         &self,
         cursor_position: &glam::Vec2,
         window_size: &glam::Vec2,
         // camera: &mut Camera,
         camera_view_matrix: glam::Mat4,
         camera_projection_matrix: glam::Mat4,
-    ) -> Option<EComponentType> {
+    ) -> Option<SingleThreadMutType<SceneNode>> {
         let Some(physics) = self.runtime.as_ref().map(|x| &x.physics) else {
             return None;
         };
@@ -372,26 +372,28 @@ impl Level {
             QueryFilter::only_dynamic(),
         );
         if let Some((handle, _)) = hit {
-            let mut componenet: Option<EComponentType> = None;
+            let mut search_node: Option<SingleThreadMutType<SceneNode>> = None;
             for actor in self.actors.clone() {
                 let actor = actor.borrow_mut();
-                self.find_component(actor.scene_node.clone(), handle, &mut componenet);
+                self.find_node(actor.scene_node.clone(), handle, &mut search_node);
             }
-            return componenet;
+            return search_node;
         }
 
         return None;
     }
 
-    pub fn find_component(
+    pub fn find_node(
         &self,
         scene_node: SingleThreadMutType<SceneNode>,
         handle: ColliderHandle,
-        componenet: &mut Option<EComponentType>,
+        search_node: &mut Option<SingleThreadMutType<SceneNode>>,
     ) {
-        if componenet.is_some() {
+        if search_node.is_some() {
             return;
         }
+        let scene_node_clone = scene_node.clone();
+
         let scene_node = scene_node.borrow();
         match &scene_node.component {
             EComponentType::SceneComponent(_) => {}
@@ -406,9 +408,7 @@ impl Level {
                     false
                 })();
                 if is_find {
-                    *componenet = Some(EComponentType::StaticMeshComponent(
-                        static_mesh_component.clone(),
-                    ));
+                    *search_node = Some(scene_node_clone);
                     return;
                 }
             }
@@ -423,9 +423,7 @@ impl Level {
                     false
                 })();
                 if is_find {
-                    *componenet = Some(EComponentType::SkeletonMeshComponent(
-                        static_mesh_component.clone(),
-                    ));
+                    *search_node = Some(scene_node_clone);
                     return;
                 }
             }
@@ -441,15 +439,13 @@ impl Level {
                     false
                 })();
                 if is_find {
-                    *componenet = Some(EComponentType::CollisionComponent(
-                        collision_component.clone(),
-                    ));
+                    *search_node = Some(scene_node_clone);
                     return;
                 }
             }
         }
         for child in scene_node.childs.clone() {
-            self.find_component(child, handle, componenet);
+            self.find_node(child, handle, search_node);
         }
     }
 

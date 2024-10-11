@@ -116,6 +116,17 @@ macro_rules! common_fn {
             }
         }
 
+        pub fn set_name(&self, new_name: String) {
+            match &self.component {
+                $(
+                    EComponentType::$x(component) => {
+                        let mut component = component.borrow_mut();
+                        component.name = new_name;
+                    }
+                )*
+            }
+        }
+
         pub fn get_final_transformation(&self) -> glam::Mat4 {
             match &self.component {
                 $(
