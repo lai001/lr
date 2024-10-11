@@ -35,6 +35,7 @@ use rs_engine::plugin::plugin_crate::Plugin;
 use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
     camera_component::CameraComponent,
+    collision_componenet::CollisionComponent,
     content::{content_file_type::EContentFileType, texture::TextureFile},
     directional_light::DirectionalLight,
     frame_sync::{EOptions, FrameSync},
@@ -412,6 +413,7 @@ impl EditorContext {
                                     );
                                 }
                                 EComponentType::CameraComponent(_) => {}
+                                EComponentType::CollisionComponent(_) => {}
                             }
                         }
                         // } else {
@@ -2108,6 +2110,10 @@ impl EditorContext {
                         self.editor_ui.object_property_view.selected_object =
                             Some(ESelectedObjectType::CameraComponent(component.clone()));
                     }
+                    rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
+                        self.editor_ui.object_property_view.selected_object =
+                            Some(ESelectedObjectType::CollisionComponent(component.clone()));
+                    }
                 }
             }
             crate::ui::level_view::EClickEventType::CreateDirectionalLight => {
@@ -2188,6 +2194,28 @@ impl EditorContext {
                     ),
                     childs: vec![],
                 }));
+            }
+            crate::ui::level_view::EClickEventType::CreateCollisionComponent(_, parent_node) => {
+                let mut parent_node = parent_node.borrow_mut();
+                let names = parent_node
+                    .childs
+                    .iter()
+                    .map(|x| x.borrow().get_name())
+                    .collect();
+                let new_name = make_unique_name(names, "Collision");
+                let collision_component =
+                    CollisionComponent::new_scene_node(new_name, glam::Mat4::IDENTITY);
+                {
+                    let mut collision_component = collision_component.borrow_mut();
+                    match &mut collision_component.component {
+                        rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
+                            let mut component = component.borrow_mut();
+                            component.initialize(&mut self.engine, &mut self.player_viewport);
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                parent_node.childs.push(collision_component);
             }
         }
     }
@@ -2736,6 +2764,16 @@ impl EditorContext {
                     let model_matrix = component.get_transformation_mut();
                     *model_matrix =
                         parent_final_transformation.inverse() * gizmo_final_transformation;
+                }
+            }
+            ESelectedObjectType::CollisionComponent(component) => {
+                let mut component = component.borrow_mut();
+                if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                    let parent_final_transformation = component.get_parent_final_transformation();
+                    let model_matrix = component.get_transformation_mut();
+                    *model_matrix =
+                        parent_final_transformation.inverse() * gizmo_final_transformation;
+                    component.on_post_update_transformation(level_physics);
                 }
             }
         }

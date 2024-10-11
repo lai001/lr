@@ -84,6 +84,25 @@ impl Physics {
         self.narrow_phase
             .contact_pair(collider_handle1, collider_handle2)
     }
+
+    pub fn intersections_with_shape(
+        &self,
+        collider_handle: ColliderHandle,
+        callback: impl FnMut(ColliderHandle) -> bool,
+    ) {
+        let collider = &self.collider_set[collider_handle];
+        let shape = collider.shape();
+        let shape_pos = collider.position();
+        let filter = QueryFilter::default();
+        self.query_pipeline.intersections_with_shape(
+            &self.rigid_body_set,
+            &self.collider_set,
+            &shape_pos,
+            shape,
+            filter,
+            callback,
+        );
+    }
 }
 
 pub struct Runtime {
@@ -411,6 +430,23 @@ impl Level {
                 }
             }
             EComponentType::CameraComponent(_) => {}
+            EComponentType::CollisionComponent(collision_component) => {
+                let is_find = (|| {
+                    let mut component = collision_component.borrow_mut();
+                    if let Some(physics) = component.get_physics_mut() {
+                        if physics.get_collider_handles().contains(&handle) {
+                            return true;
+                        }
+                    }
+                    false
+                })();
+                if is_find {
+                    *componenet = Some(EComponentType::CollisionComponent(
+                        collision_component.clone(),
+                    ));
+                    return;
+                }
+            }
         }
         for child in scene_node.childs.clone() {
             self.find_component(child, handle, componenet);

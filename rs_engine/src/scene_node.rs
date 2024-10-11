@@ -1,6 +1,6 @@
 use crate::{
-    camera_component::CameraComponent, skeleton_mesh_component::SkeletonMeshComponent,
-    static_mesh_component::StaticMeshComponent,
+    camera_component::CameraComponent, collision_componenet::CollisionComponent,
+    skeleton_mesh_component::SkeletonMeshComponent, static_mesh_component::StaticMeshComponent,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
@@ -82,6 +82,10 @@ impl SceneComponent {
     ) {
         let _ = level_physics;
     }
+
+    pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
+        vec![]
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -90,6 +94,7 @@ pub enum EComponentType {
     StaticMeshComponent(SingleThreadMutType<StaticMeshComponent>),
     SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
     CameraComponent(SingleThreadMutType<CameraComponent>),
+    CollisionComponent(SingleThreadMutType<CollisionComponent>),
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -155,6 +160,28 @@ macro_rules! common_fn {
                 )*
             }
         }
+
+        pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
+            match &mut self.component {
+                $(
+                    EComponentType::$x(component) => {
+                        let mut component = component.borrow_mut();
+                        component.set_final_transformation(final_transformation);
+                    }
+                )*
+            }
+        }
+
+        pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
+            match &mut self.component {
+                $(
+                    EComponentType::$x(component) => {
+                        let mut component = component.borrow_mut();
+                        component.set_parent_final_transformation(parent_final_transformation);
+                    }
+                )*
+            }
+        }
     };
 }
 
@@ -179,6 +206,7 @@ impl SceneNode {
             EComponentType::StaticMeshComponent(component) => component.borrow().get_aabb(),
             EComponentType::SkeletonMeshComponent(_) => None,
             EComponentType::CameraComponent(_) => None,
+            EComponentType::CollisionComponent(_) => None,
         }
     }
 
@@ -186,6 +214,7 @@ impl SceneNode {
         SceneComponent,
         StaticMeshComponent,
         SkeletonMeshComponent,
-        CameraComponent
+        CameraComponent,
+        CollisionComponent
     );
 }

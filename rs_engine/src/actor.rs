@@ -65,6 +65,10 @@ impl Actor {
                     let mut component = component.borrow_mut();
                     component.initialize(engine, player_viewport);
                 }
+                EComponentType::CollisionComponent(component) => {
+                    let mut component = component.borrow_mut();
+                    component.initialize(engine, player_viewport);
+                }
             },
         );
         self.update_components_world_transformation();
@@ -88,6 +92,10 @@ impl Actor {
                     component.init_physics(rigid_body_set, collider_set)
                 }
                 EComponentType::CameraComponent(_) => {}
+                EComponentType::CollisionComponent(component) => {
+                    let mut component = component.borrow_mut();
+                    component.init_physics(rigid_body_set, collider_set)
+                }
             },
         );
     }
@@ -117,6 +125,15 @@ impl Actor {
                     draw_objects.append(&mut sub_draw_objects);
                 }
                 EComponentType::CameraComponent(component) => {
+                    let component = component.borrow();
+                    let mut sub_draw_objects: Vec<_> = component
+                        .get_draw_objects()
+                        .iter()
+                        .map(|x| (*x).clone())
+                        .collect();
+                    draw_objects.append(&mut sub_draw_objects);
+                }
+                EComponentType::CollisionComponent(component) => {
                     let component = component.borrow();
                     let mut sub_draw_objects: Vec<_> = component
                         .get_draw_objects()
@@ -157,6 +174,10 @@ impl Actor {
                                 let mut component = component.borrow_mut();
                                 component.update(time, engine);
                             }
+                            EComponentType::CollisionComponent(component) => {
+                                let mut component = component.borrow_mut();
+                                component.update(time, engine);
+                            }
                         }
                     }
                 });
@@ -176,6 +197,10 @@ impl Actor {
                                 component.update(time, engine);
                             }
                             EComponentType::CameraComponent(component) => {
+                                let mut component = component.borrow_mut();
+                                component.update(time, engine);
+                            }
+                            EComponentType::CollisionComponent(component) => {
                                 let mut component = component.borrow_mut();
                                 component.update(time, engine);
                             }
@@ -202,6 +227,7 @@ impl Actor {
                         component.update_physics(rigid_body_set, collider_set);
                     }
                     EComponentType::CameraComponent(_) => {}
+                    EComponentType::CollisionComponent(_) => {}
                 }
             }
         });
@@ -211,42 +237,11 @@ impl Actor {
         scene_node: SingleThreadMutType<SceneNode>,
         parent_transformation: glam::Mat4,
     ) {
-        let scene_node = scene_node.borrow();
-        let component_type = &scene_node.component;
-        let final_transformation = match component_type {
-            EComponentType::SceneComponent(component) => {
-                let mut component = component.borrow_mut();
-                let current_transformation = *component.get_transformation();
-                let final_transformation = parent_transformation * current_transformation;
-                component.set_parent_final_transformation(parent_transformation);
-                component.set_final_transformation(final_transformation);
-                final_transformation
-            }
-            EComponentType::StaticMeshComponent(component) => {
-                let mut component = component.borrow_mut();
-                let current_transformation = *component.get_transformation();
-                let final_transformation = parent_transformation * current_transformation;
-                component.set_parent_final_transformation(parent_transformation);
-                component.set_final_transformation(final_transformation);
-                final_transformation
-            }
-            EComponentType::SkeletonMeshComponent(component) => {
-                let mut component = component.borrow_mut();
-                let current_transformation = *component.get_transformation();
-                let final_transformation = parent_transformation * current_transformation;
-                component.set_parent_final_transformation(parent_transformation);
-                component.set_final_transformation(final_transformation);
-                final_transformation
-            }
-            EComponentType::CameraComponent(component) => {
-                let mut component = component.borrow_mut();
-                let current_transformation = *component.get_transformation();
-                let final_transformation = parent_transformation * current_transformation;
-                component.set_parent_final_transformation(parent_transformation);
-                component.set_final_transformation(final_transformation);
-                final_transformation
-            }
-        };
+        let mut scene_node = scene_node.borrow_mut();
+        let current_transformation = scene_node.get_transformation();
+        let final_transformation = parent_transformation * current_transformation;
+        scene_node.set_parent_final_transformation(parent_transformation);
+        scene_node.set_final_transformation(final_transformation);
 
         for child in scene_node.childs.clone() {
             let parent_transformation = final_transformation;
@@ -347,6 +342,16 @@ impl Actor {
                     }
                     EComponentType::CameraComponent(_) => {
                         return false;
+                    }
+                    EComponentType::CollisionComponent(component) => {
+                        let component = component.borrow();
+                        let collider_handles = component
+                            .get_physics()
+                            .map(|x| x.collider_handles.clone())
+                            .unwrap_or_default();
+                        if collider_handles.contains(collider) {
+                            return true;
+                        }
                     }
                 }
                 false

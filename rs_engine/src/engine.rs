@@ -1117,6 +1117,14 @@ impl Engine {
         self.create_gpu_buffer(contents, wgpu::BufferUsages::VERTEX, label)
     }
 
+    pub fn create_index_buffer<T: Sized>(
+        &mut self,
+        contents: &[T],
+        label: Option<String>,
+    ) -> crate::handle::BufferHandle {
+        self.create_gpu_buffer(contents, wgpu::BufferUsages::INDEX, label)
+    }
+
     pub fn create_material_draw_object_from_static_mesh(
         &mut self,
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],

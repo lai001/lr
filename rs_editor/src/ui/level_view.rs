@@ -16,6 +16,7 @@ pub enum EClickEventType {
     CreateSceneComponent(SingleThreadMutType<SceneNode>),
     CopyPath(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
     DeleteNode(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
+    CreateCollisionComponent(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
 }
 
 fn draw_scene_node(
@@ -24,22 +25,7 @@ fn draw_scene_node(
     scene_node: SingleThreadMutType<SceneNode>,
     event: &mut Option<EClickEventType>,
 ) {
-    let name = {
-        match &scene_node.borrow().component {
-            rs_engine::scene_node::EComponentType::SceneComponent(component) => {
-                component.borrow().name.clone()
-            }
-            rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
-                component.borrow().name.clone()
-            }
-            rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                component.borrow().name.clone()
-            }
-            rs_engine::scene_node::EComponentType::CameraComponent(component) => {
-                component.borrow().name.clone()
-            }
-        }
-    };
+    let name = { scene_node.borrow().get_name() };
     let id = ui.make_persistent_id(name.clone());
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
         .show_header(ui, |ui| {
@@ -59,6 +45,14 @@ fn draw_scene_node(
                         if response.clicked() {
                             *event =
                                 Some(EClickEventType::CreateCameraComponent(scene_node.clone()));
+                            ui.close_menu();
+                        }
+                        let response = ui.button("Collision");
+                        if response.clicked() {
+                            *event = Some(EClickEventType::CreateCollisionComponent(
+                                actor.clone(),
+                                scene_node.clone(),
+                            ));
                             ui.close_menu();
                         }
                     });
