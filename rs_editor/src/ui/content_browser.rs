@@ -38,6 +38,7 @@ pub enum EClickEventType {
     DeleteFile(EContentFileType),
     SingleClickFile(EContentFileType),
     Back,
+    Rename(EContentFileType, String),
 }
 
 enum EItemType {
@@ -66,8 +67,8 @@ pub fn draw(
         .default_size([500.0, 250.0])
         .show(context, |ui| {
             ui.vertical(|ui| {
-                ui.set_max_height(250.0);
-                ui.set_max_width(500.0);
+                // ui.set_max_height(250.0);
+                // ui.set_max_width(500.0);
                 ui.horizontal(|ui| {
                     if ui
                         .button(RichText::new("Back").color(Color32::WHITE))
@@ -148,7 +149,8 @@ fn draw_content(
     }
     let mut click: Option<EClickEventType> = None;
 
-    let mut iter = total_items.chunks(10);
+    let chunk_size = ((ui.available_width() / 50.0).floor() as usize - 1).max(1);
+    let mut iter = total_items.chunks(chunk_size);
     while let Some(row) = iter.next() {
         ui.horizontal_wrapped(|ui| {
             for item in row {
@@ -174,11 +176,11 @@ fn draw_content(
                     EItemType::File(file) => {
                         let name = file.get_name().clone();
                         let url = file.get_url();
-                        let response = ui
-                            .push_id(name.clone(), |ui| {
-                                ui.vertical(|ui| {
-                                    ui.set_max_height(50.0);
-                                    ui.set_max_width(50.0);
+                        ui.vertical(|ui| {
+                            ui.set_max_height(50.0);
+                            ui.set_max_width(50.0);
+                            let mut response = ui
+                                .push_id(name.clone(), |ui| {
                                     if let Some(highlight_file) = highlight_file.as_ref() {
                                         if highlight_file.get_url() == file.get_url() {
                                             ui.painter().rect_filled(
@@ -188,105 +190,34 @@ fn draw_content(
                                             );
                                         }
                                     }
-                                    match file {
-                                        EContentFileType::StaticMesh(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/static_mesh.svg"
-                                            ));
-                                        }
-                                        EContentFileType::SkeletonMesh(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/skeleton_mesh.svg"
-                                            ));
-                                        }
-                                        EContentFileType::SkeletonAnimation(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/animation.svg"
-                                            ));
-                                        }
-                                        EContentFileType::Skeleton(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/skeleton.svg"
-                                            ));
-                                        }
-                                        EContentFileType::Texture(texture) => {
-                                            if let Some(image_reference) =
-                                                texture.borrow().get_image_reference_path().as_ref()
-                                            {
-                                                let path =
-                                                    project_folder_path.join(image_reference);
-                                                match thumbnail_cache.get_image_file_uri(&path) {
-                                                    Some(uri) => {
-                                                        ui.image(uri);
-                                                    }
-                                                    None => {
-                                                        thumbnail_cache.load_image(&path);
-                                                        ui.spinner();
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        EContentFileType::Level(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/level.svg"
-                                            ));
-                                        }
-                                        EContentFileType::Material(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/material.svg"
-                                            ));
-                                        }
-                                        EContentFileType::IBL(ibl) => {
-                                            let ibl = ibl.borrow();
-                                            if let Some(image_reference) = &ibl.image_reference {
-                                                let path =
-                                                    project_folder_path.join(image_reference);
-                                                match thumbnail_cache.get_image_file_uri(&path) {
-                                                    Some(uri) => {
-                                                        ui.image(uri);
-                                                    }
-                                                    None => {
-                                                        thumbnail_cache.load_image(&path);
-                                                        ui.spinner();
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        EContentFileType::ParticleSystem(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/particle.svg"
-                                            ));
-                                        }
-                                        EContentFileType::Sound(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/sound.svg"
-                                            ));
-                                        }
-                                        EContentFileType::Curve(_) => {
-                                            ui.image(egui::include_image!(
-                                                "../../../Resource/Editor/curve.svg"
-                                            ));
-                                        }
-                                    }
-                                    let _ = ui.button(name.clone());
+                                    render_thumbnail(
+                                        file,
+                                        project_folder_path,
+                                        thumbnail_cache,
+                                        ui,
+                                    );
                                 })
-                            })
-                            .response;
-                        let response = response.interact(Sense::click_and_drag());
-                        if response.clicked() {
-                            click = Some(EClickEventType::SingleClickFile(file.clone()));
-                        }
-                        if response.double_clicked() {
-                            click = Some(EClickEventType::OpenFile(file.clone()));
-                        }
-                        response.context_menu(|ui| {
-                            if ui.button("Copy Reference").clicked() {
-                                ui.output_mut(|p| p.copied_text = url.to_string());
-                                ui.close_menu();
+                                .response;
+                            response = response.interact(Sense::click_and_drag());
+                            if response.clicked() {
+                                click = Some(EClickEventType::SingleClickFile(file.clone()));
                             }
-                            if ui.button("Delete").clicked() {
-                                click = Some(EClickEventType::DeleteFile(file.clone()));
-                                ui.close_menu();
+                            if response.double_clicked() {
+                                click = Some(EClickEventType::OpenFile(file.clone()));
+                            }
+                            response.context_menu(|ui| {
+                                if ui.button("Copy Reference").clicked() {
+                                    ui.output_mut(|p| p.copied_text = url.to_string());
+                                    ui.close_menu();
+                                }
+                                if ui.button("Delete").clicked() {
+                                    click = Some(EClickEventType::DeleteFile(file.clone()));
+                                    ui.close_menu();
+                                }
+                            });
+                            let mut edit_name = name.clone();
+                            if ui.text_edit_multiline(&mut edit_name).changed() {
+                                click = Some(EClickEventType::Rename(file.clone(), edit_name));
                             }
                         });
                     }
@@ -295,4 +226,89 @@ fn draw_content(
         });
     }
     click
+}
+
+fn render_thumbnail(
+    file: &EContentFileType,
+    project_folder_path: &Path,
+    thumbnail_cache: &mut ThumbnailCache,
+    ui: &mut Ui,
+) {
+    let thumbnail_render_szie = egui::vec2(50.0, 50.0);
+    match file {
+        EContentFileType::StaticMesh(_) => {
+            ui.image(egui::include_image!(
+                "../../../Resource/Editor/static_mesh.svg"
+            ));
+        }
+        EContentFileType::SkeletonMesh(_) => {
+            ui.image(egui::include_image!(
+                "../../../Resource/Editor/skeleton_mesh.svg"
+            ));
+        }
+        EContentFileType::SkeletonAnimation(_) => {
+            ui.image(egui::include_image!(
+                "../../../Resource/Editor/animation.svg"
+            ));
+        }
+        EContentFileType::Skeleton(_) => {
+            ui.image(egui::include_image!(
+                "../../../Resource/Editor/skeleton.svg"
+            ));
+        }
+        EContentFileType::Texture(texture) => {
+            if let Some(image_reference) = texture.borrow().get_image_reference_path().as_ref() {
+                let path = project_folder_path.join(image_reference);
+                match thumbnail_cache.get_image_file_uri(&path) {
+                    Some(uri) => {
+                        ui.add_sized(thumbnail_render_szie, egui::Image::new(uri));
+                    }
+                    None => {
+                        thumbnail_cache.load_image(&path);
+                        ui.add_sized(
+                            thumbnail_render_szie,
+                            egui::Spinner::new().size(thumbnail_render_szie.x),
+                        );
+                    }
+                }
+            }
+        }
+        EContentFileType::Level(_) => {
+            ui.image(egui::include_image!("../../../Resource/Editor/level.svg"));
+        }
+        EContentFileType::Material(_) => {
+            ui.image(egui::include_image!(
+                "../../../Resource/Editor/material.svg"
+            ));
+        }
+        EContentFileType::IBL(ibl) => {
+            let ibl = ibl.borrow();
+            if let Some(image_reference) = &ibl.image_reference {
+                let path = project_folder_path.join(image_reference);
+                match thumbnail_cache.get_image_file_uri(&path) {
+                    Some(uri) => {
+                        ui.add_sized(thumbnail_render_szie, egui::Image::new(uri));
+                    }
+                    None => {
+                        thumbnail_cache.load_image(&path);
+                        ui.add_sized(
+                            thumbnail_render_szie,
+                            egui::Spinner::new().size(thumbnail_render_szie.x),
+                        );
+                    }
+                }
+            }
+        }
+        EContentFileType::ParticleSystem(_) => {
+            ui.image(egui::include_image!(
+                "../../../Resource/Editor/particle.svg"
+            ));
+        }
+        EContentFileType::Sound(_) => {
+            ui.image(egui::include_image!("../../../Resource/Editor/sound.svg"));
+        }
+        EContentFileType::Curve(_) => {
+            ui.image(egui::include_image!("../../../Resource/Editor/curve.svg"));
+        }
+    }
 }

@@ -148,3 +148,22 @@ pub fn is_valid_name(name: &str) -> bool {
     let re = regex::Regex::new(r"^\w+$").unwrap();
     re.is_match(name)
 }
+
+#[cfg(test)]
+mod test {
+    use crate::misc::is_valid_name;
+
+    #[test]
+    fn is_valid_name_test() {
+        assert_eq!(is_valid_name("name"), true);
+        assert_eq!(is_valid_name("_name"), true);
+        assert_eq!(is_valid_name("name111"), true);
+        assert_eq!(is_valid_name("name_111"), true);
+        assert_eq!(is_valid_name("name_=111"), false);
+        assert_eq!(is_valid_name("%name"), false);
+        assert_eq!(is_valid_name(""), false);
+        assert_eq!(is_valid_name("🔥"), false);
+        assert_eq!(is_valid_name("."), false);
+        assert_eq!(is_valid_name("**"), false);
+    }
+}

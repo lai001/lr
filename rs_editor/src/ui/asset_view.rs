@@ -35,8 +35,8 @@ pub fn draw(
         .resizable(true)
         .default_size([350.0, 150.0])
         .show(context, |ui| {
-            ui.set_max_height(250.0);
-            ui.set_max_width(500.0);
+            // ui.set_max_height(250.0);
+            // ui.set_max_width(500.0);
             if let Some(asset_folder) = &asset_folder {
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
@@ -78,7 +78,8 @@ fn draw_content(
     for file in &asset_folder.files {
         total_items.push(EAssetItem::AssetFile(&file));
     }
-    let mut iter = total_items.chunks(10);
+    let chunk_size = ((ui.available_width() / 50.0).floor() as usize - 1).max(1);
+    let mut iter = total_items.chunks(chunk_size);
     let mut click_item: Option<EClickItemType> = None;
     let mut highlight_item: Option<EClickItemType> = None;
 
@@ -120,44 +121,7 @@ fn draw_content(
                                         );
                                     }
                                 }
-                                match file.get_file_type() {
-                                    EFileType::Fbx
-                                    | EFileType::Glb
-                                    | EFileType::Blend
-                                    | EFileType::Dae => {
-                                        ui.image(egui::include_image!(
-                                            "../../../Resource/Editor/model.svg"
-                                        ));
-                                    }
-                                    EFileType::Jpeg
-                                    | EFileType::Jpg
-                                    | EFileType::Png
-                                    | EFileType::Exr
-                                    | EFileType::Hdr => {
-                                        match thumbnail_cache.get_image_file_uri(&file.path) {
-                                            Some(uri) => {
-                                                ui.image(uri);
-                                            }
-                                            None => {
-                                                thumbnail_cache.load_image(&file.path);
-                                                ui.spinner();
-                                            }
-                                        }
-                                    }
-                                    EFileType::Mp4 => {
-                                        ui.painter_at(ui.available_rect_before_wrap()).rect_filled(
-                                            ui.available_rect_before_wrap(),
-                                            0.0,
-                                            Color32::WHITE,
-                                        );
-                                        ui.allocate_space(ui.available_rect_before_wrap().size());
-                                    }
-                                    EFileType::WAV | EFileType::MP3 => {
-                                        ui.image(egui::include_image!(
-                                            "../../../Resource/Editor/sound.svg"
-                                        ));
-                                    }
-                                }
+                                render_thumbnail(file, thumbnail_cache, ui);
                                 let response = ui.button(file.name.clone());
                                 if response.clicked() {
                                     highlight_item =
@@ -232,4 +196,39 @@ fn draw_content(
 
     let item = click_item.or(highlight_item);
     item
+}
+
+fn render_thumbnail(file: &AssetFile, thumbnail_cache: &mut ThumbnailCache, ui: &mut Ui) {
+    let thumbnail_render_szie = egui::vec2(50.0, 50.0);
+    match file.get_file_type() {
+        EFileType::Fbx | EFileType::Glb | EFileType::Blend | EFileType::Dae => {
+            ui.image(egui::include_image!("../../../Resource/Editor/model.svg"));
+        }
+        EFileType::Jpeg | EFileType::Jpg | EFileType::Png | EFileType::Exr | EFileType::Hdr => {
+            match thumbnail_cache.get_image_file_uri(&file.path) {
+                Some(uri) => {
+                    // ui.image(uri);
+                    ui.add_sized(thumbnail_render_szie, egui::Image::new(uri));
+                }
+                None => {
+                    thumbnail_cache.load_image(&file.path);
+                    ui.add_sized(
+                        thumbnail_render_szie,
+                        egui::Spinner::new().size(thumbnail_render_szie.x),
+                    );
+                }
+            }
+        }
+        EFileType::Mp4 => {
+            ui.painter_at(ui.available_rect_before_wrap()).rect_filled(
+                ui.available_rect_before_wrap(),
+                0.0,
+                Color32::WHITE,
+            );
+            ui.allocate_space(ui.available_rect_before_wrap().size());
+        }
+        EFileType::WAV | EFileType::MP3 => {
+            ui.image(egui::include_image!("../../../Resource/Editor/sound.svg"));
+        }
+    }
 }

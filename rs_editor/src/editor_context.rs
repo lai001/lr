@@ -2388,6 +2388,13 @@ impl EditorContext {
                     .files
                     .push(EContentFileType::Curve(curve));
             }
+            content_browser::EClickEventType::Rename(mut content_file_type, new_name) => {
+                let names = self.get_all_content_names();
+                if names.contains(&new_name) {
+                    return;
+                }
+                content_file_type.set_name(new_name);
+            }
         }
     }
 

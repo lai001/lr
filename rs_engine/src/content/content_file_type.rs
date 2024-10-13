@@ -1,3 +1,5 @@
+use crate::url_extension::UrlExtension;
+
 use super::{
     curve::Curve, ibl::IBL, level::Level, material::Material, particle_system::ParticleSystem,
     skeleton::Skeleton, skeleton_animation::SkeletonAnimation, skeleton_mesh::SkeletonMesh,
@@ -39,6 +41,17 @@ macro_rules! common_fn {
         pub fn get_url(&self) -> url::Url {
             match self {
                 $(EContentFileType::$x(content) => content.borrow().get_url(),)*
+            }
+        }
+
+        pub fn set_name(&mut self, new_name: String) {
+            match self {
+                $(
+                    EContentFileType::$x(content) => {
+                        let mut content = content.borrow_mut();
+                        content.url.set_name_in_editor(new_name);
+                    }
+                )*
             }
         }
     };

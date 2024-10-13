@@ -67,7 +67,10 @@ impl Application {
     #[cfg(not(target_os = "android"))]
     pub fn on_input(&mut self, ty: crate::input_type::EInputType) -> Vec<winit::keyboard::KeyCode> {
         self.player_view_port.on_input(ty.clone());
+        #[cfg(feature = "plugin_shared_crate")]
         let mut consume = vec![];
+        #[cfg(not(feature = "plugin_shared_crate"))]
+        let consume = vec![];
         #[cfg(feature = "plugin_shared_crate")]
         for plugin in self.plugins.iter_mut() {
             let mut plugin_consume = plugin.on_input(ty.clone());
