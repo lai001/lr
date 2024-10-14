@@ -13,9 +13,16 @@ pub struct UpdateAnimation {
     pub new: Option<url::Url>,
 }
 
+pub struct UpdateStaticMesh {
+    pub selected_object: ESelectedObjectType,
+    pub old: Option<url::Url>,
+    pub new: Option<url::Url>,
+}
+
 pub enum EEventType {
     UpdateMaterial(UpdateMaterial),
     UpdateAnimation(UpdateAnimation),
+    UpdateStaticMesh(UpdateStaticMesh),
     UpdateDirectionalLight(
         SingleThreadMutType<DirectionalLight>,
         f32,
@@ -38,6 +45,7 @@ pub struct ObjectPropertyView {
     pub selected_object: Option<ESelectedObjectType>,
     pub materials: SingleThreadMutType<Vec<url::Url>>,
     pub animations: SingleThreadMutType<Vec<url::Url>>,
+    pub static_meshes: SingleThreadMutType<Vec<url::Url>>,
 }
 
 impl ObjectPropertyView {
@@ -46,6 +54,7 @@ impl ObjectPropertyView {
             selected_object: None,
             materials: SingleThreadMut::new(vec![]),
             animations: SingleThreadMut::new(vec![]),
+            static_meshes: SingleThreadMut::new(vec![]),
         }
     }
 
@@ -105,47 +114,43 @@ impl ObjectPropertyView {
                         Self::transformation_detail_mut(component.get_transformation_mut(), ui);
                         Self::transformation_detail(&component.get_final_transformation(), ui);
 
-                        egui::ComboBox::from_label("Material")
-                            .selected_text(format!("{}", {
-                                match &component.material_url {
-                                    Some(material_url) => material_url.to_string(),
-                                    None => "None".to_string(),
-                                }
-                            }))
-                            .show_ui(ui, |ui| {
-                                let mut collection: Vec<Option<url::Url>> = vec![];
-                                collection.push(None);
-                                collection.append(
-                                    &mut self
-                                        .materials
-                                        .borrow()
-                                        .iter()
-                                        .map(|x| Some(x.clone()))
-                                        .collect(),
-                                );
+                        {
+                            let mut current_url = component.material_url.as_ref();
+                            let candidate_items = self.materials.borrow();
+                            let old_url = current_url.cloned();
+                            let is_changed = render_combo_box(
+                                ui,
+                                "Material",
+                                &mut current_url,
+                                &candidate_items,
+                            );
+                            if is_changed {
+                                event = Some(EEventType::UpdateMaterial(UpdateMaterial {
+                                    selected_object: selected_object_clone.clone(),
+                                    old: old_url,
+                                    new: current_url.cloned(),
+                                }));
+                            }
+                        }
 
-                                for material in collection {
-                                    let old = component.material_url.clone();
-                                    let text = material
-                                        .as_ref()
-                                        .map(|x| x.to_string())
-                                        .unwrap_or("None".to_string());
-                                    let is_changed = ui
-                                        .selectable_value(
-                                            &mut component.material_url,
-                                            material.clone(),
-                                            text,
-                                        )
-                                        .changed();
-                                    if is_changed {
-                                        event = Some(EEventType::UpdateMaterial(UpdateMaterial {
-                                            selected_object: selected_object_clone.clone(),
-                                            old,
-                                            new: material.clone(),
-                                        }));
-                                    }
-                                }
-                            });
+                        {
+                            let mut current_url = component.static_mesh.as_ref();
+                            let candidate_items = self.static_meshes.borrow();
+                            let old_url = current_url.cloned();
+                            let is_changed = render_combo_box(
+                                ui,
+                                "Static mesh",
+                                &mut current_url,
+                                &candidate_items,
+                            );
+                            if is_changed {
+                                event = Some(EEventType::UpdateStaticMesh(UpdateStaticMesh {
+                                    selected_object: selected_object_clone.clone(),
+                                    old: old_url,
+                                    new: current_url.cloned(),
+                                }));
+                            }
+                        }
                     }
                     EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
                         ui.label(format!("Type: SkeletonMeshComponent"));
@@ -409,4 +414,45 @@ impl ObjectPropertyView {
             }
         });
     }
+}
+
+fn render_combo_box2<'a>(
+    ui: &mut egui::Ui,
+    label: &str,
+    current_url: &mut Option<&'a url::Url>,
+    selected_collection: Vec<Option<&'a url::Url>>,
+) -> bool {
+    let mut is_changed = false;
+    let combo_box = egui::ComboBox::from_label(label).selected_text(format!("{}", {
+        match current_url {
+            Some(current_url) => current_url.to_string(),
+            None => "None".to_string(),
+        }
+    }));
+    combo_box.show_ui(ui, |ui| {
+        for url in selected_collection {
+            let text = url
+                .as_ref()
+                .map(|x| x.to_string())
+                .unwrap_or("None".to_string());
+            is_changed = ui.selectable_value(current_url, url, text).changed();
+            if is_changed {
+                break;
+            }
+        }
+    });
+    is_changed
+}
+
+fn render_combo_box<'a>(
+    ui: &mut egui::Ui,
+    label: &str,
+    current_url: &mut Option<&'a url::Url>,
+    candidate_items: &'a Vec<url::Url>,
+) -> bool {
+    let mut selected_collection: Vec<Option<&url::Url>> =
+        Vec::with_capacity(1 + candidate_items.len());
+    selected_collection.push(None);
+    selected_collection.append(&mut candidate_items.iter().map(|x| Some(x)).collect());
+    render_combo_box2(ui, label, current_url, selected_collection)
 }

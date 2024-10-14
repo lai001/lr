@@ -501,20 +501,17 @@ impl Level {
     pub fn find_actor_by_collider_handle(
         &self,
         collider: &rapier3d::prelude::ColliderHandle,
-    ) -> (
-        Option<SingleThreadMutType<Actor>>,
-        Option<SingleThreadMutType<SceneNode>>,
-    ) {
+    ) -> Option<(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>)> {
         for actor in self.actors.clone() {
             let node = {
                 let actor = actor.borrow();
                 actor.find_node_by_collider_handle(collider)
             };
-            if node.is_some() {
-                return (Some(actor.clone()), node.clone());
+            if let Some(node) = node {
+                return Some((actor, node));
             }
         }
-        return (None, None);
+        return None;
     }
 
     pub fn compute_scene_aabb(&self) -> Option<rapier3d::prelude::Aabb> {

@@ -1,5 +1,5 @@
 use crate::{
-    content::content_file_type::EContentFileType,
+    content::{content_file_type::EContentFileType, material::Material},
     drawable::EDrawObjectType,
     engine::Engine,
     misc::{static_mesh_get_aabb, transform_aabb},
@@ -8,6 +8,7 @@ use crate::{
 };
 use rapier3d::prelude::*;
 use rs_artifact::static_mesh::StaticMesh;
+use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -28,8 +29,8 @@ impl Physics {
 
 #[derive(Clone)]
 pub struct StaticMeshComponentRuntime {
-    draw_objects: EDrawObjectType,
-    _mesh: Arc<StaticMesh>,
+    draw_objects: Option<EDrawObjectType>,
+    _mesh: Option<Arc<StaticMesh>>,
     pub physics: Option<Physics>,
     pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
@@ -164,8 +165,8 @@ impl StaticMeshComponent {
             }
             let aabb = static_mesh_get_aabb(&find_static_mesh);
             self.run_time = Some(StaticMeshComponentRuntime {
-                draw_objects: draw_object,
-                _mesh: find_static_mesh,
+                draw_objects: Some(draw_object),
+                _mesh: Some(find_static_mesh),
                 physics: None,
                 final_transformation: glam::Mat4::IDENTITY,
                 parent_final_transformation: glam::Mat4::IDENTITY,
@@ -183,6 +184,9 @@ impl StaticMeshComponent {
         let _ = time;
         let _ = engine;
         let Some(run_time) = &mut self.run_time else {
+            return;
+        };
+        let Some(draw_objects) = run_time.draw_objects.as_mut() else {
             return;
         };
 
@@ -209,7 +213,7 @@ impl StaticMeshComponent {
                     .0;
                 let transformation =
                     glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
-                match &mut run_time.draw_objects {
+                match draw_objects {
                     EDrawObjectType::Static(draw_object) => {
                         draw_object.constants.model = transformation;
                     }
@@ -221,7 +225,7 @@ impl StaticMeshComponent {
             }
             _ => {
                 let transformation = run_time.final_transformation;
-                match &mut run_time.draw_objects {
+                match draw_objects {
                     EDrawObjectType::Static(draw_object) => {
                         draw_object.constants.model = transformation;
                     }
@@ -239,7 +243,10 @@ impl StaticMeshComponent {
             return vec![];
         }
         match &self.run_time {
-            Some(x) => vec![&x.draw_objects],
+            Some(x) => match &x.draw_objects {
+                Some(draw_objects) => vec![draw_objects],
+                None => vec![],
+            },
             None => vec![],
         }
     }
@@ -249,7 +256,10 @@ impl StaticMeshComponent {
             return vec![];
         }
         match &mut self.run_time {
-            Some(x) => vec![&mut x.draw_objects],
+            Some(x) => match &mut x.draw_objects {
+                Some(draw_objects) => vec![draw_objects],
+                None => vec![],
+            },
             None => vec![],
         }
     }
@@ -275,28 +285,31 @@ impl StaticMeshComponent {
         } else {
             None
         };
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        let Some(static_mesh) = run_time._mesh.as_ref() else {
+            return;
+        };
 
-        if let Some(run_time) = self.run_time.as_mut() {
-            let static_mesh = run_time._mesh.clone();
-            let draw_object: EDrawObjectType;
-            if let Some(material) = material.clone() {
-                draw_object = engine.create_material_draw_object_from_static_mesh(
-                    &static_mesh.vertexes,
-                    &static_mesh.indexes,
-                    Some(static_mesh.name.clone()),
-                    material,
-                    player_viewport.global_constants_handle.clone(),
-                );
-            } else {
-                draw_object = engine.create_draw_object_from_static_mesh(
-                    &static_mesh.vertexes,
-                    &static_mesh.indexes,
-                    Some(static_mesh.name.clone()),
-                    player_viewport.global_constants_handle.clone(),
-                );
-            }
-            run_time.draw_objects = draw_object;
+        let draw_object: EDrawObjectType;
+        if let Some(material) = material.clone() {
+            draw_object = engine.create_material_draw_object_from_static_mesh(
+                &static_mesh.vertexes,
+                &static_mesh.indexes,
+                Some(static_mesh.name.clone()),
+                material,
+                player_viewport.global_constants_handle.clone(),
+            );
+        } else {
+            draw_object = engine.create_draw_object_from_static_mesh(
+                &static_mesh.vertexes,
+                &static_mesh.indexes,
+                Some(static_mesh.name.clone()),
+                player_viewport.global_constants_handle.clone(),
+            );
         }
+        run_time.draw_objects = Some(draw_object);
     }
 
     fn build_physics(
@@ -361,11 +374,12 @@ impl StaticMeshComponent {
         let Some(run_time) = &mut self.run_time else {
             return;
         };
-        let Ok(mut physics) = Self::build_physics(
-            run_time._mesh.as_ref(),
-            false,
-            run_time.final_transformation,
-        ) else {
+        let Some(static_mesh) = run_time._mesh.as_ref() else {
+            return;
+        };
+        let Ok(mut physics) =
+            Self::build_physics(static_mesh, false, run_time.final_transformation)
+        else {
             return;
         };
         let handle = rigid_body_set.insert(physics.rigid_body.clone());
@@ -454,5 +468,103 @@ impl StaticMeshComponent {
                 }
             })
             .flatten()
+    }
+
+    pub fn set_static_mesh_url(
+        &mut self,
+        static_mesh_url: Option<url::Url>,
+        resource_manager: ResourceManager,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        player_viewport: &PlayerViewport,
+    ) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        self.static_mesh = static_mesh_url;
+
+        if self.static_mesh.is_none() {
+            run_time._mesh = None;
+            run_time.aabb = None;
+            run_time.draw_objects = None;
+            run_time.physics = None;
+            return;
+        }
+
+        let mut find_static_mesh: Option<Arc<StaticMesh>> = None;
+        for file in files {
+            if let EContentFileType::StaticMesh(mesh) = file {
+                let mesh = mesh.borrow();
+                if Some(mesh.url.clone()) == self.static_mesh {
+                    find_static_mesh = resource_manager
+                        .get_static_mesh(&mesh.asset_info.get_url())
+                        .ok();
+                    break;
+                }
+            }
+        }
+
+        let Some(find_static_mesh) = find_static_mesh else {
+            return;
+        };
+
+        let mut existing_material: Option<SingleThreadMutType<Material>> = None;
+        if let Some(draw_objects) = &run_time.draw_objects {
+            match draw_objects {
+                EDrawObjectType::SkinMaterial(material_draw_object) => {
+                    existing_material = Some(material_draw_object.material.clone());
+                }
+                EDrawObjectType::StaticMeshMaterial(static_mesh_material_draw_object) => {
+                    existing_material = Some(static_mesh_material_draw_object.material.clone());
+                }
+                _ => {}
+            }
+        }
+        if existing_material.is_none() {
+            let material = if let Some(material_url) = &self.material_url {
+                files.iter().find_map(|x| {
+                    if let EContentFileType::Material(content_material) = x {
+                        if &content_material.borrow().url == material_url {
+                            return Some(content_material.clone());
+                        }
+                    }
+                    None
+                })
+            } else {
+                None
+            };
+            existing_material = material;
+        }
+
+        let mut draw_object: EDrawObjectType;
+        if let Some(material) = existing_material.clone() {
+            draw_object = engine.create_material_draw_object_from_static_mesh(
+                &find_static_mesh.vertexes,
+                &find_static_mesh.indexes,
+                Some(find_static_mesh.name.clone()),
+                material,
+                player_viewport.global_constants_handle.clone(),
+            );
+        } else {
+            draw_object = engine.create_draw_object_from_static_mesh(
+                &find_static_mesh.vertexes,
+                &find_static_mesh.indexes,
+                Some(find_static_mesh.name.clone()),
+                player_viewport.global_constants_handle.clone(),
+            );
+        }
+        match &mut draw_object {
+            EDrawObjectType::Static(draw_object) => {
+                draw_object.constants.model = self.transformation;
+            }
+            EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                draw_object.constants.model = self.transformation;
+            }
+            _ => unimplemented!(),
+        }
+        let aabb = static_mesh_get_aabb(&find_static_mesh);
+        run_time.aabb = Some(aabb);
+        run_time.draw_objects = Some(draw_object);
+        run_time._mesh = Some(find_static_mesh);
     }
 }

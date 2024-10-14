@@ -1220,9 +1220,19 @@ impl EditorContext {
                 }
             }
         }
+
         {
             let mut materials = self.editor_ui.object_property_view.materials.borrow_mut();
             materials.clear();
+            let mut animations = self.editor_ui.object_property_view.animations.borrow_mut();
+            animations.clear();
+            let mut static_meshes = self
+                .editor_ui
+                .object_property_view
+                .static_meshes
+                .borrow_mut();
+            static_meshes.clear();
+
             let files = &project_context.project.content.borrow().files;
             for file in files {
                 match file {
@@ -1230,19 +1240,13 @@ impl EditorContext {
                         let url = material.borrow().url.clone();
                         materials.push(url);
                     }
-                    _ => {}
-                }
-            }
-        }
-        {
-            let mut animations = self.editor_ui.object_property_view.animations.borrow_mut();
-            animations.clear();
-            let files = &project_context.project.content.borrow().files;
-            for file in files {
-                match file {
                     EContentFileType::SkeletonAnimation(animation) => {
                         let url = animation.borrow().url.clone();
                         animations.push(url);
+                    }
+                    EContentFileType::StaticMesh(static_mesh) => {
+                        let url = static_mesh.borrow().url.clone();
+                        static_meshes.push(url);
                     }
                     _ => {}
                 }
@@ -2603,7 +2607,7 @@ impl EditorContext {
         let Some(event) = event else {
             return;
         };
-        let Some(_) = self.data_source.level.as_mut() else {
+        let Some(active_level) = self.data_source.level.as_mut() else {
             return;
         };
         match event {
@@ -2728,6 +2732,47 @@ impl EditorContext {
                     }
                     ESelectedObjectType::DirectionalLight(componenet) => {
                         componenet.borrow_mut().name = new_name;
+                    }
+                }
+            }
+            object_property_view::EEventType::UpdateStaticMesh(update_static_mesh) => {
+                match update_static_mesh.selected_object {
+                    ESelectedObjectType::SceneNode(scene_node) => {
+                        let mut scene_node = scene_node.borrow_mut();
+                        match &mut scene_node.component {
+                            rs_engine::scene_node::EComponentType::StaticMeshComponent(
+                                static_mesh_component,
+                            ) => {
+                                let mut static_mesh_component = static_mesh_component.borrow_mut();
+                                let static_mesh_url = update_static_mesh.new;
+                                let files = if let Some(folder) =
+                                    &self.data_source.content_data_source.current_folder
+                                {
+                                    folder.borrow().files.clone()
+                                } else {
+                                    vec![]
+                                };
+                                static_mesh_component.set_static_mesh_url(
+                                    static_mesh_url,
+                                    self.engine.get_resource_manager().clone(),
+                                    &mut self.engine,
+                                    &files,
+                                    &mut self.player_viewport,
+                                );
+                                let mut active_level = active_level.borrow_mut();
+                                let physics = active_level.get_physics_mut();
+                                if let Some(physics) = physics {
+                                    static_mesh_component.init_physics(
+                                        &mut physics.rigid_body_set,
+                                        &mut physics.collider_set,
+                                    );
+                                }
+                            }
+                            _ => unimplemented!(),
+                        }
+                    }
+                    _ => {
+                        unimplemented!()
                     }
                 }
             }
