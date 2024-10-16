@@ -1,7 +1,5 @@
 use super::misc::{random_color4, update_window_with_input_mode};
-use crate::{
-    custom_event::ECustomEventType, editor_context::EWindowType, windows_manager::WindowsManager,
-};
+use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
 use rs_artifact::skin_mesh::SkinMeshVertex;
@@ -52,7 +50,7 @@ impl MeshUIWindow {
     pub fn new(
         context: egui::Context,
         window_manager: &mut WindowsManager,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
     ) -> anyhow::Result<MeshUIWindow> {
         let window_context =
@@ -75,6 +73,7 @@ impl MeshUIWindow {
             viewport_id,
             window,
             Some(window.scale_factor() as f32),
+            None,
             None,
         );
 
@@ -146,7 +145,7 @@ impl MeshUIWindow {
         window_id: isize,
         window: &mut winit::window::Window,
         event: &WindowEvent,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
     ) {

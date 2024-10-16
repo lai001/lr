@@ -10,8 +10,8 @@ editor = []
 standalone = []
 
 [dependencies]
-wgpu = "0.20.1"
-naga = "0.20.0"
+wgpu = "22.1.0"
+naga = "22.1.0"
 pollster = "0.3.0"
 dunce = "1.0.5"
 path-slash = "0.2.1"

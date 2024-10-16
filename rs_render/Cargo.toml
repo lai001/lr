@@ -13,15 +13,15 @@ profiler = ["tracy-client/default"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 serde = { version = "1.0.210", features = ["derive", "rc"] }
-wgpu = { version = "0.20.1", features = ["spirv", "naga-ir"] }
-naga = { version = "0.20.0" }
+wgpu = { version = "22.1.0", features = ["spirv", "naga-ir"] }
+naga = { version = "22.1.0" }
 log = "0.4.22"
 pollster = "0.3.0"
 raw-window-handle = "0.6.2"
 type-layout = "0.2.0"
 glam = { version = "0.29.0", features = ["mint", "serde"] }
-egui = { version = "0.28.1" }
-egui-wgpu = { version = "0.28.1" }
+egui = { version = "0.29.1" }
+egui-wgpu = { version = "0.29.1" }
 image = "0.25.2"
 dunce = "1.0.5"
 path-slash = "0.2.1"

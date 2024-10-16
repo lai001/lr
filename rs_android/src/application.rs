@@ -75,7 +75,7 @@ impl Application {
     pub fn redraw(&mut self) {
         self.engine.window_redraw_requested_begin(WINDOW_ID);
         let context = &self.gui_context;
-        context.begin_frame(self.raw_input.clone());
+        context.begin_pass(self.raw_input.clone());
 
         egui::Window::new("Pannel")
             .default_pos((200.0, 200.0))
@@ -86,7 +86,7 @@ impl Application {
                 ui.label(format!("Time: {:.2}", 0.0f32));
             });
 
-        let full_output = context.end_frame();
+        let full_output = context.end_pass();
         let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
             textures_delta: full_output.textures_delta,
             clipped_primitives: context

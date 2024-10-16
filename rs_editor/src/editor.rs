@@ -6,9 +6,9 @@ use crate::{
 use anyhow::anyhow;
 use clap::*;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
-use rs_foundation::new::SingleThreadMut;
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use winit::{
-    event_loop::{EventLoopBuilder, EventLoopProxy},
+    application::ApplicationHandler, dpi::PhysicalSize, event_loop::EventLoop,
     platform::windows::EventLoopBuilderExtWindows,
 };
 
@@ -106,47 +106,16 @@ impl Editor {
 
     fn run_app(self) -> anyhow::Result<()> {
         let window_manager = SingleThreadMut::new(WindowsManager::new());
-
-        let event_loop = EventLoopBuilder::with_user_event()
+        let event_loop = EventLoop::<ECustomEventType>::with_user_event()
             .with_any_thread(true)
             .build()?;
-        let event_loop_proxy: EventLoopProxy<ECustomEventType> = event_loop.create_proxy();
-        let scale_factor = event_loop
-            .primary_monitor()
-            .map(|x| x.scale_factor())
-            .unwrap_or(1.0);
-
-        let window_width = (1280 as f64 * scale_factor) as u32;
-        let window_height = (720 as f64 * scale_factor) as u32;
-
-        let window = winit::window::WindowBuilder::new()
-            .with_window_icon(Some(Self::default_icon()?))
-            .with_decorations(true)
-            .with_resizable(true)
-            .with_transparent(false)
-            .with_title("Editor")
-            .with_inner_size(winit::dpi::PhysicalSize {
-                width: window_width,
-                height: window_height,
-            })
-            .build(&event_loop)?;
-        window.set_ime_allowed(true);
-
-        let mut editor_context = EditorContext::new(
-            u64::from(window.id()) as isize,
-            &window,
-            event_loop_proxy.clone(),
-            window_manager.clone(),
-        )?;
-        window_manager
-            .borrow_mut()
-            .add_new_window(EWindowType::Main, window);
-
-        let event_loop_result = event_loop.run({
-            move |event, event_loop_window_target| {
-                editor_context.handle_event(&event, event_loop_window_target);
-            }
-        });
+        let event_loop_proxy = event_loop.create_proxy();
+        let mut app = EditorApplicationHandler {
+            editor_context: None,
+            window_manager,
+            event_loop_proxy,
+        };
+        let event_loop_result = event_loop.run_app(&mut app);
         Ok(event_loop_result?)
     }
 
@@ -159,5 +128,131 @@ impl Editor {
             icon_image.height(),
         )?;
         Ok(icon)
+    }
+}
+
+struct EditorApplicationHandler {
+    editor_context: Option<EditorContext>,
+    window_manager: SingleThreadMutType<WindowsManager>,
+    event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
+}
+
+impl ApplicationHandler<ECustomEventType> for EditorApplicationHandler {
+    fn new_events(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        cause: winit::event::StartCause,
+    ) {
+        match &cause {
+            winit::event::StartCause::Init => {
+                let scale_factor = event_loop
+                    .primary_monitor()
+                    .map(|x| x.scale_factor())
+                    .unwrap_or(1.0);
+                let window_width = (1280 as f64 * scale_factor) as u32;
+                let window_height = (720 as f64 * scale_factor) as u32;
+                let window_attributes = winit::window::Window::default_attributes()
+                    .with_window_icon(Editor::default_icon().ok())
+                    .with_decorations(true)
+                    .with_resizable(true)
+                    .with_transparent(false)
+                    .with_inner_size(PhysicalSize::new(window_width, window_height))
+                    .with_title("Editor");
+                let window = event_loop
+                    .create_window(window_attributes)
+                    .expect("Should not be null");
+                window.set_ime_allowed(true);
+                let editor_context = EditorContext::new(
+                    u64::from(window.id()) as isize,
+                    &window,
+                    self.event_loop_proxy.clone(),
+                    self.window_manager.clone(),
+                )
+                .expect("Should not be null");
+                self.editor_context = Some(editor_context);
+                self.window_manager
+                    .borrow_mut()
+                    .add_new_window(EWindowType::Main, window);
+            }
+            _ => {}
+        }
+    }
+
+    fn user_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        event: ECustomEventType,
+    ) {
+        let event = winit::event::Event::UserEvent(event);
+        self.editor_context
+            .as_mut()
+            .expect("Should not be null")
+            .handle_event(&event, event_loop);
+    }
+
+    fn device_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        let event = winit::event::Event::DeviceEvent { device_id, event };
+        self.editor_context
+            .as_mut()
+            .expect("Should not be null")
+            .handle_event(&event, event_loop);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let event = winit::event::Event::AboutToWait;
+        self.editor_context
+            .as_mut()
+            .expect("Should not be null")
+            .handle_event(&event, event_loop);
+    }
+
+    fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let event = winit::event::Event::Suspended;
+        self.editor_context
+            .as_mut()
+            .expect("Should not be null")
+            .handle_event(&event, event_loop);
+    }
+
+    fn exiting(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let event = winit::event::Event::LoopExiting;
+        self.editor_context
+            .as_mut()
+            .expect("Should not be null")
+            .handle_event(&event, event_loop);
+    }
+
+    fn memory_warning(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let event = winit::event::Event::MemoryWarning;
+        self.editor_context
+            .as_mut()
+            .expect("Should not be null")
+            .handle_event(&event, event_loop);
+    }
+
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let event = winit::event::Event::Resumed;
+        self.editor_context
+            .as_mut()
+            .expect("Should not be null")
+            .handle_event(&event, event_loop);
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        let event = winit::event::Event::WindowEvent { window_id, event };
+        self.editor_context
+            .as_mut()
+            .expect("Should not be null")
+            .handle_event(&event, event_loop);
     }
 }

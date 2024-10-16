@@ -113,6 +113,7 @@ impl WGPUContext {
                 required_features: adapter.features(),
                 required_limits: adapter.limits(),
                 label: Some("Engine"),
+                memory_hints: wgpu::MemoryHints::MemoryUsage,
             },
             None,
         ))

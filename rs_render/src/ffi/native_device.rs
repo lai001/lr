@@ -114,6 +114,7 @@ pub extern "C" fn nativeDeviceCreateRenderPipeline(
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
+            cache: None,
         });
         let handle = Box::into_raw(Box::new(render_pipeline));
         log::trace!(

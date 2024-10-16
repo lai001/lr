@@ -220,6 +220,7 @@ impl EditorContext {
             window,
             Some(window.scale_factor() as f32),
             None,
+            None,
         );
         let artifact_reader = None;
         let mut engine = rs_engine::engine::Engine::new(
@@ -325,7 +326,7 @@ impl EditorContext {
         window_id: isize,
         window: &mut winit::window::Window,
         event: &WindowEvent,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         egui_event_response: egui_winit::EventResponse,
     ) {
         match event {
@@ -509,7 +510,7 @@ impl EditorContext {
     pub fn handle_event(
         &mut self,
         event: &Event<ECustomEventType>,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         match event {
             Event::DeviceEvent { event, .. } => {
@@ -805,7 +806,7 @@ impl EditorContext {
         _: &winit::event::DeviceId,
         event: &winit::event::KeyEvent,
         _: bool,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
             return;
@@ -1431,7 +1432,7 @@ impl EditorContext {
         &mut self,
         window_id: isize,
         window: &mut winit::window::Window,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         if let Some(active_level) = self.data_source.level.clone() {
             let mut active_level = active_level.borrow_mut();
@@ -1589,7 +1590,7 @@ impl EditorContext {
 
     fn open_standalone_window(
         &mut self,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let Some(level) = self.data_source.level.clone() else {
             return;
@@ -1612,7 +1613,7 @@ impl EditorContext {
 
     fn open_particle_window(
         &mut self,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         particle_system: Rc<RefCell<rs_engine::content::particle_system::ParticleSystem>>,
     ) {
         let ui_window = ParticleSystemUIWindow::new(
@@ -1628,7 +1629,7 @@ impl EditorContext {
 
     fn open_material_window(
         &mut self,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         open_material: Option<Rc<RefCell<rs_engine::content::material::Material>>>,
     ) {
         let mut ui_window = MaterialUIWindow::new(
@@ -1663,7 +1664,7 @@ impl EditorContext {
     fn open_mesh_window(
         &mut self,
         skeleton_mesh: &mut rs_engine::content::skeleton_mesh::SkeletonMesh,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let Some(project_context) = &self.project_context else {
             return;
@@ -1690,7 +1691,7 @@ impl EditorContext {
     fn open_media_window(
         &mut self,
         media_path: impl AsRef<Path>,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let mut ui_window = MediaUIWindow::new(
             self.editor_ui.egui_context.clone(),
@@ -1706,7 +1707,7 @@ impl EditorContext {
 
     fn open_multiple_draw_ui_window(
         &mut self,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let mut ui_window = MultipleDrawUiWindow::new(
             self.editor_ui.egui_context.clone(),
@@ -1762,7 +1763,7 @@ impl EditorContext {
     fn process_ui_event(
         &mut self,
         window: &mut winit::window::Window,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let _span = tracy_client::span!();
 
@@ -1833,7 +1834,7 @@ impl EditorContext {
         &mut self,
         window: &mut winit::window::Window,
         top_menu_event: Option<top_menu::EClickEventType>,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let Some(menu_event) = top_menu_event else {
             return;
@@ -2206,7 +2207,7 @@ impl EditorContext {
     fn process_content_browser_event(
         &mut self,
         content_browser_event: Option<content_browser::EClickEventType>,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let Some(event) = content_browser_event else {
             return;
@@ -2405,7 +2406,7 @@ impl EditorContext {
     fn process_click_asset_event(
         &mut self,
         click_aseet: Option<asset_view::EClickItemType>,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let Some(click_aseet) = click_aseet else {
             return;

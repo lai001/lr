@@ -1,6 +1,5 @@
 use super::misc::update_window_with_input_mode;
 use crate::{
-    custom_event::ECustomEventType,
     editor_context::EWindowType,
     editor_ui,
     windows_manager::{WindowContext, WindowsManager},
@@ -76,6 +75,7 @@ impl BaseUIWindow {
             viewport_id,
             window,
             Some(window.scale_factor() as f32),
+            None,
             None,
         );
 
@@ -222,7 +222,7 @@ impl ParticleSystemUIWindow {
     pub fn new(
         context: egui::Context,
         window_manager: &mut WindowsManager,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         particle_system: SingleThreadMutType<rs_engine::content::particle_system::ParticleSystem>,
     ) -> anyhow::Result<ParticleSystemUIWindow> {
@@ -262,7 +262,7 @@ impl ParticleSystemUIWindow {
         window_id: isize,
         window: &mut winit::window::Window,
         event: &WindowEvent,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
     ) {

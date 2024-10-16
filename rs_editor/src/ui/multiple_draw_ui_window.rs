@@ -1,7 +1,6 @@
 use super::misc::update_window_with_input_mode;
 use crate::{
-    custom_event::ECustomEventType, editor_context::EWindowType, ui::misc::random_color3,
-    windows_manager::WindowsManager,
+    editor_context::EWindowType, ui::misc::random_color3, windows_manager::WindowsManager,
 };
 use anyhow::anyhow;
 use egui_winit::State;
@@ -53,7 +52,7 @@ impl MultipleDrawUiWindow {
     pub fn new(
         context: egui::Context,
         window_manager: &mut WindowsManager,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
     ) -> anyhow::Result<MultipleDrawUiWindow> {
         let window_context =
@@ -76,6 +75,7 @@ impl MultipleDrawUiWindow {
             viewport_id,
             window,
             Some(window.scale_factor() as f32),
+            None,
             None,
         );
 
@@ -147,7 +147,7 @@ impl MultipleDrawUiWindow {
         window_id: isize,
         window: &mut winit::window::Window,
         event: &WindowEvent,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
     ) {

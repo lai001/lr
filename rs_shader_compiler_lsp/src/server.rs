@@ -119,7 +119,7 @@ impl Server {
                                         if Path::new(&shader_preview_params.shader_file_path)
                                             == Path::new(&command.file)
                                         {
-                                            if let Some(code) = code {
+                                            if let Ok(code) = code {
                                                 result.code = Some(code);
                                                 break;
                                             }

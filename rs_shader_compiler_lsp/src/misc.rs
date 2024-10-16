@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use lsp_server::Connection;
 use lsp_types::{notification::Notification, request::Request, MessageType};
 use std::path::Path;
@@ -89,24 +90,27 @@ pub fn send_response(
     connection.sender.send(msg)
 }
 
-pub fn pre_process(clang_path: &Path, shader_path: &Path, arguments: &str) -> Option<String> {
+pub fn pre_process(
+    clang_path: &Path,
+    shader_path: &Path,
+    arguments: &str,
+) -> anyhow::Result<String> {
     let mut clang = std::process::Command::new(clang_path);
     clang.arg("-E");
     clang.arg("-P");
     clang.arg("-x");
     clang.arg("c");
     clang.arg(arguments);
-    clang.arg(shader_path.to_str().unwrap());
-    let output = clang.output();
-    let output = output.unwrap();
+    clang.arg(shader_path.to_str().ok_or(anyhow!("Incorrect path"))?);
+    let output = clang.output()?;
     let stderr = String::from_utf8(output.stderr);
     let stdout = String::from_utf8(output.stdout);
-    let stdout = stdout.unwrap();
-    let stderr = stderr.unwrap();
+    let stdout = stdout?;
+    let stderr = stderr?;
     if output.status.success() {
-        Some(stdout)
+        Ok(stdout)
     } else {
-        None
+        Err(anyhow!("{}", stderr))
     }
 }
 

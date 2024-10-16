@@ -23,9 +23,10 @@ profiler = ["tracy-client/default", "rs_render/profiler", "rs_engine/profiler"]
 plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 plugin_dotnet = ["dep:rs_dotnet", "dep:rs_dotnet_host"]
 plugin_v8 = ["dep:rs_v8_host"]
+exit_check = []
 
 [dependencies]
-egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "36a090a", version = "0.4.3", features = [
+egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "036b076", version = "0.5.0", features = [
     "serde",
 ] }
 syn = { version = "2.0.79", features = ["full", "extra-traits"] }
@@ -36,7 +37,7 @@ serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
 bincode = { version = "1.3.3" }
 glam = { version = "0.29.0", features = ["mint"] }
-uuid = { version = "1.10.0", features = [
+uuid = { version = "1.11.0", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
@@ -44,11 +45,11 @@ uuid = { version = "1.10.0", features = [
 ] }
 url = { version = "2.5.2", features = ["serde"] }
 percent-encoding = "2.3.1"
-winit = { version = "0.29.15" }
-egui = { version = "0.28.1" }
-egui_extras = { version = "0.28.1", features = ["all_loaders"] }
-egui-winit = { version = "0.28.1" }
-egui_plot = "0.28.1"
+winit = { version = "0.30.5" }
+egui = { version = "0.29.1" }
+egui_extras = { version = "0.29.1", features = ["all_loaders"] }
+egui-winit = { version = "0.29.1" }
+egui_plot = "0.29.0"
 uniform-cubic-splines = { version = "0.1", default-features = false, features = [
     "std",
 ] }
@@ -64,9 +65,9 @@ md-5 = { version = "0.10.6" }
 anyhow = { version = "1.0.89" }
 lazy_static = "1.5.0"
 image_dds = { version = "0.6.0" }
-clap = { version = "4.5.19", features = ["derive"] }
-naga = { version = "0.20.0" }
-wgpu = "0.20.1"
+clap = { version = "4.5.20", features = ["derive"] }
+naga = { version = "22.1.0" }
+wgpu = "22.1.0"
 rand = { version = "0.8.5" }
 mp4 = { version = "0.14.0" }
 tracy-client = { version = "0.17.4", default-features = false }

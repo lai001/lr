@@ -28,7 +28,7 @@ impl GraphViewer {
         ui: &mut egui::Ui,
     ) {
         let mut responses: Vec<egui::Response> = vec![];
-        egui::ComboBox::from_id_source(id_source)
+        egui::ComboBox::from_id_salt(id_source)
             .width(1.0)
             .selected_text(value_type.get_type_name())
             .show_ui(ui, |ui| {
@@ -659,6 +659,7 @@ impl MaterialView {
                                         let theme =
                                             egui_extras::syntax_highlighting::CodeTheme::from_memory(
                                                 ui.ctx(),
+                                                ui.style()
                                             );
                                         egui_extras::syntax_highlighting::code_view_ui(
                                             ui,
@@ -676,7 +677,7 @@ impl MaterialView {
                         }
                     }
                     ui.separator();
-                    let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx());
+                    let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx(), ui.style());
                     let clicked = egui_extras::syntax_highlighting::code_view_ui(
                         ui,
                         &theme,

@@ -165,6 +165,7 @@ impl BaseRenderPipeline {
             depth_stencil,
             multisample: multisample.unwrap_or_default(),
             multiview,
+            cache: None,
         });
 
         BaseRenderPipeline {

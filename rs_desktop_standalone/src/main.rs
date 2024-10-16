@@ -1,4 +1,4 @@
 fn main() -> anyhow::Result<()> {
-    rs_desktop_standalone::application::Application::new()?.run();
+    rs_desktop_standalone::application::Application::new().run()?;
     Ok(())
 }

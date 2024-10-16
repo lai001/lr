@@ -45,13 +45,13 @@ pub fn gui_render_output(
 
     let new_input = egui_winit_state.take_egui_input(window);
 
-    egui_winit_state.egui_ctx().begin_frame(new_input);
+    egui_winit_state.egui_ctx().begin_pass(new_input);
 
     add_contents(egui_winit_state);
 
     egui_winit_state.egui_ctx().clear_animations();
 
-    let full_output = egui_winit_state.egui_ctx().end_frame();
+    let full_output = egui_winit_state.egui_ctx().end_pass();
 
     egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
 
@@ -91,7 +91,7 @@ pub fn ui_begin(egui_winit_state: &mut State, window: &mut winit::window::Window
     egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
 
     let new_input = egui_winit_state.take_egui_input(window);
-    egui_winit_state.egui_ctx().begin_frame(new_input);
+    egui_winit_state.egui_ctx().begin_pass(new_input);
     egui_winit_state.egui_ctx().clear_animations();
 }
 
@@ -100,7 +100,7 @@ pub fn ui_end(
     window: &mut winit::window::Window,
     window_id: isize,
 ) -> EGUIRenderOutput {
-    let full_output = egui_winit_state.egui_ctx().end_frame();
+    let full_output = egui_winit_state.egui_ctx().end_pass();
 
     egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
 

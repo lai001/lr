@@ -20,7 +20,7 @@ impl EGUIRenderer {
         screen_descriptors: HashMap<isize, egui_wgpu::ScreenDescriptor>,
     ) -> EGUIRenderer {
         let egui_wgpu_renderer =
-            egui_wgpu::Renderer::new(device, output_format, None, msaa_samples);
+            egui_wgpu::Renderer::new(device, output_format, None, msaa_samples, false);
 
         EGUIRenderer {
             egui_wgpu_renderer,
@@ -94,7 +94,7 @@ impl EGUIRenderer {
         );
 
         {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("egui_render"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: output_view,
@@ -108,6 +108,8 @@ impl EGUIRenderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+            // TODO!
+            let mut render_pass = render_pass.forget_lifetime();
             self.egui_wgpu_renderer.render(
                 &mut render_pass,
                 &clipped_primitives,

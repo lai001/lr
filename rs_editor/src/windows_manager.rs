@@ -1,7 +1,6 @@
-use crate::{custom_event::ECustomEventType, editor::Editor, editor_context::EWindowType};
+use crate::{editor::Editor, editor_context::EWindowType};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use std::collections::HashMap;
-use winit::event_loop::EventLoopWindowTarget;
 
 pub struct WindowContext {
     pub window_type: EWindowType,
@@ -90,16 +89,16 @@ impl WindowsManager {
     pub fn spwan_new_window(
         &mut self,
         window_type: EWindowType,
-        event_loop_window_target: &EventLoopWindowTarget<ECustomEventType>,
+        active_event_loop: &winit::event_loop::ActiveEventLoop,
     ) -> anyhow::Result<&mut WindowContext> {
-        let scale_factor = event_loop_window_target
+        let scale_factor = active_event_loop
             .primary_monitor()
             .map(|x| x.scale_factor())
             .unwrap_or(1.0);
-
         let window_width = (1280 as f64 * scale_factor) as u32;
         let window_height = (720 as f64 * scale_factor) as u32;
-        let child_window_builder = winit::window::WindowBuilder::new()
+
+        let window_attributes = winit::window::Window::default_attributes()
             .with_window_icon(Some(Editor::default_icon()?))
             .with_decorations(true)
             .with_resizable(true)
@@ -109,8 +108,10 @@ impl WindowsManager {
                 width: window_width,
                 height: window_height,
             });
-        let child_window =
-            SingleThreadMut::new(child_window_builder.build(event_loop_window_target)?);
+        let child_window = active_event_loop.create_window(window_attributes)?;
+        child_window.set_ime_allowed(true);
+
+        let child_window = SingleThreadMut::new(child_window);
         self.window_contexts.insert(
             window_type,
             WindowContext {

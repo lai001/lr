@@ -46,6 +46,7 @@ impl ApplicationContext {
             window,
             Some(window.scale_factor() as f32),
             None,
+            None,
         );
         let artifact_filepath = match input_file {
             Some(input_file) => input_file.as_ref().to_path_buf(),
@@ -109,10 +110,10 @@ impl ApplicationContext {
         &mut self,
         window: &mut winit::window::Window,
         event: &Event<ECustomEventType>,
-        event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
-        _: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        // event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
+        // _: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
-        let _ = event_loop_proxy;
+        // let _ = event_loop_proxy;
         match event {
             Event::DeviceEvent { event, .. } => {
                 self.app.on_input(EInputType::Device(event));
@@ -190,14 +191,14 @@ impl ApplicationContext {
         egui_winit::update_viewport_info(viewport_info, &ctx, window, true);
 
         let new_input = egui_winit_state.take_egui_input(window);
-        egui_winit_state.egui_ctx().begin_frame(new_input);
+        egui_winit_state.egui_ctx().begin_pass(new_input);
         egui_winit_state.egui_ctx().clear_animations();
     }
 
     fn ui_end(&mut self, window: &mut winit::window::Window, window_id: isize) -> EGUIRenderOutput {
         let egui_winit_state = &mut self.egui_winit_state;
 
-        let full_output = egui_winit_state.egui_ctx().end_frame();
+        let full_output = egui_winit_state.egui_ctx().end_pass();
 
         egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
 

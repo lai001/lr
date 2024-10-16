@@ -46,6 +46,7 @@ impl BaseComputePipeline {
             module: &shader,
             entry_point: &cs.name,
             compilation_options: PipelineCompilationOptions::default(),
+            cache: None,
         });
         BaseComputePipeline {
             compute_pipeline,

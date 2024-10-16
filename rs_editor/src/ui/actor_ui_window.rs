@@ -2,9 +2,7 @@ use super::{
     misc::{self, update_window_with_input_mode},
     ui_window::UIWindow,
 };
-use crate::{
-    custom_event::ECustomEventType, editor_context::EWindowType, windows_manager::WindowsManager,
-};
+use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
 use rs_engine::{
@@ -25,7 +23,7 @@ impl ActorUIWindow {
     pub fn new(
         context: egui::Context,
         window_manager: &mut WindowsManager,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
     ) -> anyhow::Result<ActorUIWindow> {
         let window_context =
@@ -48,6 +46,7 @@ impl ActorUIWindow {
             viewport_id,
             window,
             Some(window.scale_factor() as f32),
+            None,
             None,
         );
 
@@ -78,7 +77,7 @@ impl UIWindow for ActorUIWindow {
         window_id: isize,
         window: &mut winit::window::Window,
         event: &WindowEvent,
-        event_loop_window_target: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
         is_close: &mut bool,
