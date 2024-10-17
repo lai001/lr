@@ -386,8 +386,9 @@ impl EditorContext {
                 if *button == winit::event::MouseButton::Left
                     && !self.egui_winit_state.egui_ctx().is_pointer_over_area()
                     && self.mosue_state.is_focus
-                    && *state == winit::event::ElementState::Released
+                    && *state == winit::event::ElementState::Pressed
                     && egui_event_response.consumed == false
+                    && self.data_source.is_gizmo_focused == false
                 {
                     if let Some(level) = self.data_source.level.as_ref() {
                         let level = level.borrow();
@@ -403,6 +404,7 @@ impl EditorContext {
                         if let Some(componenet_type) = componenet_type {
                             self.editor_ui.object_property_view.selected_object =
                                 Some(ESelectedObjectType::SceneNode(componenet_type));
+                            self.data_source.is_object_property_view_open = true;
                         }
                         // } else {
                         //     self.editor_ui.object_property_view.selected_object = None;
@@ -2801,7 +2803,6 @@ impl EditorContext {
                 .as_mat4();
                 gizmo_final_transformation
             });
-        self.data_source.is_object_property_view_open = true;
 
         match event.selected_object {
             ESelectedObjectType::Actor(_) => {}

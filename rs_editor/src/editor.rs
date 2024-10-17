@@ -34,7 +34,14 @@ impl Editor {
         Self {}
     }
 
-    pub fn run(mut self) -> anyhow::Result<()> {
+    pub fn run(self) -> anyhow::Result<()> {
+        let result = self.run_internal();
+        #[cfg(feature = "exit_check")]
+        let _ = std::io::stdin().read_line(&mut String::new());
+        result
+    }
+
+    fn run_internal(mut self) -> anyhow::Result<()> {
         let is_run_app = self.parse_args();
         if is_run_app {
             self.run_app()?;

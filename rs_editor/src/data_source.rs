@@ -77,6 +77,7 @@ pub struct DataSource {
     pub model_scene_view_data: model_scene_view::DataSource,
     pub opened_curve: Option<SingleThreadMutType<Curve>>,
     pub curve_data_source: CurveViewDataSource,
+    pub is_gizmo_focused: bool,
 }
 
 impl DataSource {
@@ -115,6 +116,7 @@ impl DataSource {
             model_scene_view_data: model_scene_view::DataSource::default(),
             opened_curve: None,
             curve_data_source: CurveViewDataSource::default(),
+            is_gizmo_focused: false,
         }
     }
 

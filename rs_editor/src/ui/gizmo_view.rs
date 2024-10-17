@@ -109,6 +109,10 @@ impl GizmoView {
         }
     }
 
+    pub fn is_focused(&self) -> bool {
+        self.gizmo.is_focused()
+    }
+
     fn show_gizmo_status(ui: &egui::Ui, result: &GizmoResult) {
         let text = match result {
             GizmoResult::Rotation {

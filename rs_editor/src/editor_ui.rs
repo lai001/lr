@@ -162,6 +162,9 @@ impl EditorUI {
                     selected_object: selected_object.clone(),
                     gizmo_result,
                 });
+                data_source.is_gizmo_focused = self.gizmo_view.is_focused();
+            } else {
+                data_source.is_gizmo_focused = false;
             }
         }
         let window = Self::new_window("Gizmo Settings", data_source.input_mode);
