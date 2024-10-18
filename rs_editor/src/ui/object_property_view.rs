@@ -365,9 +365,9 @@ impl ObjectPropertyView {
         ui: &mut egui::Ui,
     ) {
         ui.vertical(|ui| {
-            Self::detail_view_mut(translation, ui, "Location");
-            Self::detail_view_mut(scale, ui, "Scale");
-            Self::detail_view_mut(rotation, ui, "Rotation");
+            Self::detail_view_mut(translation, ui, "Location", true);
+            Self::detail_view_mut(scale, ui, "Scale", false);
+            Self::detail_view_mut(rotation, ui, "Rotation", true);
         });
         if translation.is_nan() {
             *translation = glam::Vec3::ZERO;
@@ -402,14 +402,19 @@ impl ObjectPropertyView {
         });
     }
 
-    fn detail_view_mut(value: &mut glam::Vec3, ui: &mut egui::Ui, label: &str) {
+    fn detail_view_mut(
+        value: &mut glam::Vec3,
+        ui: &mut egui::Ui,
+        label: &str,
+        is_allow_zero_value: bool,
+    ) {
         let old = value.clone();
         ui.horizontal(|ui| {
             ui.label(label);
             ui.add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "));
             ui.add(egui::DragValue::new(&mut value.y).speed(0.1).prefix("y: "));
             ui.add(egui::DragValue::new(&mut value.z).speed(0.1).prefix("z: "));
-            if value.cmpeq(glam::Vec3::ZERO).any() {
+            if value.cmpeq(glam::Vec3::ZERO).any() && !is_allow_zero_value {
                 *value = old;
             }
         });

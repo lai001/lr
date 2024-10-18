@@ -8,6 +8,7 @@ pub enum EClickEventType {
     CreateActor,
     CreateCameraHere,
     DeleteActor(SingleThreadMutType<Actor>),
+    DuplicateActor(SingleThreadMutType<Actor>),
     SingleClickSceneNode(SingleThreadMutType<SceneNode>),
     CreateDirectionalLight,
     DirectionalLight(SingleThreadMutType<DirectionalLight>),
@@ -97,6 +98,12 @@ fn level_node(
                 *event = Some(EClickEventType::SingleClickActor(actor.clone()));
             } else {
                 response.context_menu(|ui| {
+                    let response = ui.button("Duplicate");
+                    if response.clicked() {
+                        *event = Some(EClickEventType::DuplicateActor(actor.clone()));
+                        ui.close_menu();
+                    }
+
                     let response = ui.button("Delete");
                     if response.clicked() {
                         *event = Some(EClickEventType::DeleteActor(actor.clone()));

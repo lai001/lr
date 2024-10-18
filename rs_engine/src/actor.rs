@@ -233,11 +233,10 @@ impl Actor {
         });
     }
 
-    fn set_world_transformation_recursion(
-        scene_node: SingleThreadMutType<SceneNode>,
+    pub fn set_world_transformation_recursion(
+        scene_node: &mut SceneNode,
         parent_transformation: glam::Mat4,
     ) {
-        let mut scene_node = scene_node.borrow_mut();
         let current_transformation = scene_node.get_transformation();
         let final_transformation = parent_transformation * current_transformation;
         scene_node.set_parent_final_transformation(parent_transformation);
@@ -245,13 +244,39 @@ impl Actor {
 
         for child in scene_node.childs.clone() {
             let parent_transformation = final_transformation;
-            Self::set_world_transformation_recursion(child, parent_transformation);
+            Self::set_world_transformation_recursion(
+                &mut child.borrow_mut(),
+                parent_transformation,
+            );
         }
     }
 
     pub fn update_components_world_transformation(&mut self) {
         let parent_transformation = glam::Mat4::IDENTITY;
-        Self::set_world_transformation_recursion(self.scene_node.clone(), parent_transformation);
+        Self::set_world_transformation_recursion(
+            &mut self.scene_node.borrow_mut(),
+            parent_transformation,
+        );
+    }
+
+    pub fn on_post_update_transformation_recursion(
+        scene_node: &mut SceneNode,
+        level_physics: Option<&mut crate::content::level::Physics>,
+    ) {
+        if let Some(level_physics) = level_physics {
+            scene_node.on_post_update_transformation(Some(level_physics));
+            for child in scene_node.childs.clone() {
+                Self::on_post_update_transformation_recursion(
+                    &mut child.borrow_mut(),
+                    Some(level_physics),
+                );
+            }
+        } else {
+            scene_node.on_post_update_transformation(None);
+            for child in scene_node.childs.clone() {
+                Self::on_post_update_transformation_recursion(&mut child.borrow_mut(), None);
+            }
+        }
     }
 
     pub fn remove_node(&mut self, node_will_remove: SingleThreadMutType<SceneNode>) {
@@ -371,5 +396,25 @@ impl Actor {
             }
         });
         misc::merge_aabb(&aabbs)
+    }
+
+    pub fn copy_without_initialization(&self, name: String) -> Actor {
+        let copy_root_scene_node = Self::copy_recursion(&self.scene_node.borrow());
+        let copy_actor = Actor {
+            name,
+            scene_node: SingleThreadMut::new(copy_root_scene_node),
+        };
+        copy_actor
+    }
+
+    fn copy_recursion(scene_node: &SceneNode) -> SceneNode {
+        let mut copy_scene_node = scene_node.clone();
+        copy_scene_node.component = copy_scene_node.component.copy();
+        copy_scene_node.childs.clear();
+        for child in &scene_node.childs {
+            let copy_node = Self::copy_recursion(&child.borrow());
+            copy_scene_node.childs.push(SingleThreadMut::new(copy_node));
+        }
+        copy_scene_node
     }
 }

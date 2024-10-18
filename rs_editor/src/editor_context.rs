@@ -2203,6 +2203,24 @@ impl EditorContext {
                 }
                 parent_node.childs.push(collision_component);
             }
+            crate::ui::level_view::EClickEventType::DuplicateActor(actor) => {
+                let Some(active_level) = self.data_source.level.as_mut() else {
+                    return;
+                };
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+
+                let mut active_level = active_level.borrow_mut();
+                let content = project_context.project.content.clone();
+                let content = content.borrow_mut();
+                active_level.duplicate_actor(
+                    actor,
+                    &mut self.engine,
+                    &content.files,
+                    &mut self.player_viewport,
+                );
+            }
         }
     }
 
@@ -2790,7 +2808,6 @@ impl EditorContext {
             return;
         };
         let mut active_level = active_level.borrow_mut();
-        let level_physics = active_level.get_physics_mut();
 
         let gizmo_final_transformation: Option<glam::Mat4> =
             event.gizmo_result.map(|(_, transforms)| {
@@ -2818,6 +2835,8 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
+                            let final_transformation = parent_final_transformation * *model_matrix;
+                            component.set_final_transformation(final_transformation);
                         }
                     }
                     rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
@@ -2828,8 +2847,9 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
+                            let final_transformation = parent_final_transformation * *model_matrix;
+                            component.set_final_transformation(final_transformation);
                             component.set_apply_simulate(false);
-                            component.on_post_update_transformation(level_physics);
                         } else {
                             component.set_apply_simulate(true);
                         }
@@ -2848,6 +2868,8 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
+                            let final_transformation = parent_final_transformation * *model_matrix;
+                            component.set_final_transformation(final_transformation);
                         }
                     }
                     rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
@@ -2858,10 +2880,13 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
-                            component.on_post_update_transformation(level_physics);
+                            let final_transformation = parent_final_transformation * *model_matrix;
+                            component.set_final_transformation(final_transformation);
                         }
                     }
                 }
+                let level_physics = active_level.get_physics_mut();
+                secne_node.notify_transformation_updated(level_physics);
             }
 
             ESelectedObjectType::DirectionalLight(component) => {

@@ -216,7 +216,7 @@ impl EditorUI {
                 self.content_item_property_view.draw(ui);
             });
 
-        Self::new_window("Object Property", data_source.input_mode)
+        Self::new_window("Detail", data_source.input_mode)
             .open(&mut data_source.is_object_property_view_open)
             .vscroll(true)
             .hscroll(true)

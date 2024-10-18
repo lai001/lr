@@ -97,6 +97,32 @@ pub enum EComponentType {
     CollisionComponent(SingleThreadMutType<CollisionComponent>),
 }
 
+macro_rules! copy_fn {
+    ($($x:tt),*) => {
+        pub fn copy(&self) -> EComponentType {
+            match self {
+                $(
+                    EComponentType::$x(component) => {
+                        let component = component.borrow();
+                        let copy_component = component.clone();
+                        EComponentType::$x(SingleThreadMut::new(copy_component))
+                    }
+                )*
+            }
+        }
+    }
+}
+
+impl EComponentType {
+    copy_fn!(
+        SceneComponent,
+        StaticMeshComponent,
+        SkeletonMeshComponent,
+        CameraComponent,
+        CollisionComponent
+    );
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SceneNode {
     pub component: EComponentType,
@@ -218,6 +244,39 @@ impl SceneNode {
             EComponentType::SkeletonMeshComponent(_) => None,
             EComponentType::CameraComponent(_) => None,
             EComponentType::CollisionComponent(_) => None,
+        }
+    }
+
+    pub fn notify_transformation_updated(
+        &mut self,
+        mut level_physics: Option<&mut crate::content::level::Physics>,
+    ) {
+        if let Some(level_physics) = level_physics.as_mut() {
+            self.on_post_update_transformation(Some(level_physics));
+        } else {
+            self.on_post_update_transformation(None);
+        }
+        for child in self.childs.clone() {
+            let parent_transformation = self.get_final_transformation();
+            crate::actor::Actor::set_world_transformation_recursion(
+                &mut child.borrow_mut(),
+                parent_transformation,
+            );
+        }
+        if let Some(level_physics) = level_physics.as_mut() {
+            for child in self.childs.clone() {
+                crate::actor::Actor::on_post_update_transformation_recursion(
+                    &mut child.borrow_mut(),
+                    Some(level_physics),
+                );
+            }
+        } else {
+            for child in self.childs.clone() {
+                crate::actor::Actor::on_post_update_transformation_recursion(
+                    &mut child.borrow_mut(),
+                    None,
+                );
+            }
         }
     }
 

@@ -149,7 +149,20 @@ impl PhysicsDebugRender {
         let mut bundle = vec![];
         match shape.as_typed_shape() {
             TypedShape::Ball(_) => todo!(),
-            TypedShape::Cuboid(_) => todo!(),
+            TypedShape::Cuboid(cuboid) => {
+                let cuboid_outline = Cuboid::new(cuboid.half_extents).to_outline();
+                let (vertexes, indexes) = cuboid_outline;
+                let mut lines: Vec<RenderRigidBodiesBundle> = Vec::with_capacity(indexes.len());
+                for index in indexes {
+                    let line = RenderRigidBodiesBundle {
+                        start: Self::point_to_vec3(&(pos * vertexes[index[0] as usize])),
+                        end: Self::point_to_vec3(&(pos * vertexes[index[1] as usize])),
+                        color,
+                    };
+                    lines.push(line);
+                }
+                bundle.append(&mut lines);
+            }
             TypedShape::Capsule(_) => todo!(),
             TypedShape::Segment(_) => todo!(),
             TypedShape::Triangle(triangle) => {

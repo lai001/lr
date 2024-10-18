@@ -12,7 +12,7 @@ use crate::{build_content_file_url, url_extension::UrlExtension};
 use rapier3d::prelude::*;
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use rs_core_minimal::name_generator::make_unique_name;
-use rs_foundation::new::SingleThreadMutType;
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -101,6 +101,32 @@ impl Physics {
             shape,
             filter,
             callback,
+        );
+    }
+
+    pub fn remove_colliders(&mut self, collider_handle: ColliderHandle) {
+        if collider_handle == ColliderHandle::invalid() {
+            return;
+        }
+        self.collider_set.remove(
+            collider_handle,
+            &mut self.island_manager,
+            &mut self.rigid_body_set,
+            true,
+        );
+    }
+
+    pub fn remove_rigid_body(&mut self, rigid_body_handle: RigidBodyHandle) {
+        if rigid_body_handle == RigidBodyHandle::invalid() {
+            return;
+        }
+        self.rigid_body_set.remove(
+            rigid_body_handle,
+            &mut self.island_manager,
+            &mut self.collider_set,
+            &mut self.impulse_joint_set,
+            &mut self.multibody_joint_set,
+            true,
         );
     }
 }
@@ -488,7 +514,53 @@ impl Level {
     }
 
     pub fn delete_actor(&mut self, actor: SingleThreadMutType<Actor>) {
+        let delete_actors = self
+            .actors
+            .iter()
+            .filter_map(|x| {
+                if Rc::ptr_eq(&x, &actor) {
+                    Some(actor.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<SingleThreadMutType<Actor>>>();
+        if let Some(level_physics) = self.get_physics_mut() {
+            for delete_actor in delete_actors {
+                let delete_actor = delete_actor.borrow();
+                Self::remove_actor_physics(level_physics, &delete_actor);
+            }
+        }
         self.actors.retain(|element| !Rc::ptr_eq(&element, &actor));
+    }
+
+    fn remove_actor_physics(level_physics: &mut Physics, actor: &Actor) {
+        let node = actor.scene_node.clone();
+        Actor::walk_node(node, &mut |node| {
+            let node = node.borrow();
+            match &node.component {
+                EComponentType::SceneComponent(_) => {}
+                EComponentType::StaticMeshComponent(component) => {
+                    let component = component.borrow();
+                    if let Some(component_physics) = component.get_physics() {
+                        level_physics.remove_rigid_body(component_physics.rigid_body_handle);
+                    }
+                }
+                EComponentType::SkeletonMeshComponent(component) => {
+                    let component = component.borrow();
+                    if let Some(component_physics) = component.get_physics() {
+                        level_physics.remove_rigid_body(component_physics.rigid_body_handle);
+                    }
+                }
+                EComponentType::CameraComponent(_) => {}
+                EComponentType::CollisionComponent(component) => {
+                    let component = component.borrow();
+                    if let Some(component_physics) = component.get_physics() {
+                        level_physics.remove_rigid_body(component_physics.rigid_body_handle);
+                    }
+                }
+            }
+        });
     }
 
     pub fn find_actor(&self, name: &str) -> Option<SingleThreadMutType<Actor>> {
@@ -523,5 +595,18 @@ impl Level {
             }
         }
         merge_aabb(&aabbs)
+    }
+
+    pub fn duplicate_actor(
+        &mut self,
+        actor: SingleThreadMutType<Actor>,
+        engine: &mut crate::engine::Engine,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
+        let actor = actor.borrow();
+        let name = self.make_actor_name(&actor.name);
+        let duplicated_actor = SingleThreadMut::new(actor.copy_without_initialization(name));
+        self.add_new_actors(engine, vec![duplicated_actor], files, player_viewport);
     }
 }
