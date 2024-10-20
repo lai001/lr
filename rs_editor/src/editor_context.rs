@@ -910,6 +910,18 @@ impl EditorContext {
         if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::Escape], true) {
             self.editor_ui.object_property_view.selected_object = None;
         }
+
+        if Self::is_keys_pressed(
+            &mut self.virtual_key_code_states,
+            &[KeyCode::ControlLeft, KeyCode::KeyS],
+            true,
+        ) {
+            self.save_current_project();
+        }
+
+        if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::F5], true) {
+            self.open_standalone_window(event_loop_window_target);
+        }
     }
 
     fn is_keys_pressed(
@@ -1449,17 +1461,16 @@ impl EditorContext {
 
             for camera_componenet in active_level.collect_camera_componenets() {
                 let camera_componenet = camera_componenet.borrow();
-                let player_viewport = camera_componenet
-                    .get_player_viewport()
-                    .expect("Should not be null.");
-                let mut player_viewport = player_viewport.borrow_mut();
-                player_viewport.update_global_constants(&mut self.engine);
-                for draw_object in draw_objects.iter_mut() {
-                    player_viewport.update_draw_object(&mut self.engine, draw_object);
-                    draw_object.switch_player_viewport(&player_viewport);
+                if let Some(player_viewport) = camera_componenet.get_player_viewport() {
+                    let mut player_viewport = player_viewport.borrow_mut();
+                    player_viewport.update_global_constants(&mut self.engine);
+                    for draw_object in draw_objects.iter_mut() {
+                        player_viewport.update_draw_object(&mut self.engine, draw_object);
+                        draw_object.switch_player_viewport(&player_viewport);
+                    }
+                    player_viewport.append_to_draw_list(&draw_objects);
+                    self.engine.present_player_viewport(&mut player_viewport);
                 }
-                player_viewport.append_to_draw_list(&draw_objects);
-                self.engine.present_player_viewport(&mut player_viewport);
             }
 
             for draw_object in draw_objects.iter_mut() {
@@ -1785,7 +1796,7 @@ impl EditorContext {
             event_loop_window_target,
         );
         self.process_debug_texture_view_event(click_event.debug_textures_view_event);
-        self.process_click_actor_event(click_event.click_actor);
+        self.process_level_view_click_event(click_event.click_actor);
         self.process_project_settings_event(click_event.project_settings_event);
         self.process_object_property_view_event(click_event.object_property_view_event);
         self.process_gizmo_event(click_event.gizmo_event);
@@ -1832,6 +1843,13 @@ impl EditorContext {
         result
     }
 
+    fn save_current_project(&self) {
+        if let Some(project_context) = self.project_context.as_ref() {
+            let save_status = project_context.save();
+            log::trace!("Save project: {:?}", save_status);
+        }
+    }
+
     fn process_top_menu_event(
         &mut self,
         window: &mut winit::window::Window,
@@ -1862,10 +1880,7 @@ impl EditorContext {
                 log::trace!("Open project {result:?}");
             }
             top_menu::EClickEventType::SaveProject => {
-                if let Some(project_context) = self.project_context.as_ref() {
-                    let save_status = project_context.save();
-                    log::trace!("Save project: {:?}", save_status);
-                }
+                self.save_current_project();
             }
             top_menu::EClickEventType::Export => {
                 if let Some(project_context) = self.project_context.as_mut() {
@@ -2070,7 +2085,7 @@ impl EditorContext {
         }
     }
 
-    fn process_click_actor_event(
+    fn process_level_view_click_event(
         &mut self,
         level_view_event: Option<crate::ui::level_view::EClickEventType>,
     ) {
@@ -2084,10 +2099,12 @@ impl EditorContext {
             crate::ui::level_view::EClickEventType::SingleClickActor(actor) => {
                 self.editor_ui.object_property_view.selected_object =
                     Some(ESelectedObjectType::Actor(actor));
+                self.data_source.is_object_property_view_open = true;
             }
             crate::ui::level_view::EClickEventType::SingleClickSceneNode(scene_node) => {
                 self.editor_ui.object_property_view.selected_object =
                     Some(ESelectedObjectType::SceneNode(scene_node));
+                self.data_source.is_object_property_view_open = true;
             }
             crate::ui::level_view::EClickEventType::CreateDirectionalLight => {
                 let size = 5.0;
@@ -2115,6 +2132,7 @@ impl EditorContext {
             crate::ui::level_view::EClickEventType::DirectionalLight(light) => {
                 self.editor_ui.object_property_view.selected_object =
                     Some(ESelectedObjectType::DirectionalLight(light));
+                self.data_source.is_object_property_view_open = true;
             }
             crate::ui::level_view::EClickEventType::CreateCameraComponent(parent_node) => {
                 let mut camera_component =
@@ -2835,8 +2853,6 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
-                            let final_transformation = parent_final_transformation * *model_matrix;
-                            component.set_final_transformation(final_transformation);
                         }
                     }
                     rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
@@ -2847,8 +2863,6 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
-                            let final_transformation = parent_final_transformation * *model_matrix;
-                            component.set_final_transformation(final_transformation);
                             component.set_apply_simulate(false);
                         } else {
                             component.set_apply_simulate(true);
@@ -2868,8 +2882,6 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
-                            let final_transformation = parent_final_transformation * *model_matrix;
-                            component.set_final_transformation(final_transformation);
                         }
                     }
                     rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
@@ -2880,8 +2892,6 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
-                            let final_transformation = parent_final_transformation * *model_matrix;
-                            component.set_final_transformation(final_transformation);
                         }
                     }
                 }

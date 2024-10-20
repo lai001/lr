@@ -175,6 +175,7 @@ impl EditorUI {
             &mut self.gizmo_view.gizmo_mode,
             &mut self.gizmo_view.gizmo_orientation,
             &mut self.gizmo_view.custom_highlight_color,
+            &mut data_source.is_gizmo_setting_open,
         );
         if let Some(project_settings) = data_source.project_settings.clone() {
             let window = Self::new_window("Project Settings", data_source.input_mode);

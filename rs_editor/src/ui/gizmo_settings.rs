@@ -22,6 +22,7 @@ pub fn draw(
     gizmo_mode: &mut EnumSet<GizmoMode>,
     gizmo_orientation: &mut GizmoOrientation,
     custom_highlight_color: &mut bool,
+    is_open: &mut bool,
 ) {
     let stroke_width = &mut visuals.stroke_width;
     let gizmo_size = &mut visuals.gizmo_size;
@@ -35,6 +36,7 @@ pub fn draw(
 
     window
         .resizable(false)
+        .open(is_open)
         .default_open(false)
         .show(context, |ui| {
             egui::ComboBox::from_label("Mode")

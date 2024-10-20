@@ -219,6 +219,17 @@ macro_rules! common_fn {
                 )*
             }
         }
+
+        pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
+            match &self.component {
+                $(
+                    EComponentType::$x(component) => {
+                        let component = component.borrow();
+                        component.get_parent_final_transformation()
+                    }
+                )*
+            }
+        }
     };
 }
 
@@ -251,6 +262,10 @@ impl SceneNode {
         &mut self,
         mut level_physics: Option<&mut crate::content::level::Physics>,
     ) {
+        let parent_final_transformation = self.get_parent_final_transformation();
+        let final_transformation = parent_final_transformation * self.get_transformation();
+        self.set_final_transformation(final_transformation);
+
         if let Some(level_physics) = level_physics.as_mut() {
             self.on_post_update_transformation(Some(level_physics));
         } else {

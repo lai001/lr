@@ -5,7 +5,7 @@ use crate::{
 };
 
 pub trait Plugin {
-    fn on_init(&mut self, engine: &mut Engine, level: &mut Level);
+    fn on_init(&mut self, engine: &mut Engine, level: &mut Level, files: &[EContentFileType]);
     fn tick(
         &mut self,
         engine: &mut Engine,

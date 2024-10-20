@@ -395,7 +395,7 @@ impl Level {
             &ray,
             f32::MAX,
             true,
-            QueryFilter::only_dynamic(),
+            QueryFilter::new(),
         );
         if let Some((handle, _)) = hit {
             let mut search_node: Option<SingleThreadMutType<SceneNode>> = None;

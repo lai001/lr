@@ -44,6 +44,7 @@ pub struct StaticMeshComponent {
     pub transformation: glam::Mat4,
     pub material_url: Option<url::Url>,
     pub is_visible: bool,
+    pub rigid_body_type: RigidBodyType,
 
     #[serde(skip)]
     pub run_time: Option<StaticMeshComponentRuntime>,
@@ -99,6 +100,7 @@ impl StaticMeshComponent {
             run_time: None,
             static_mesh: static_mesh_url,
             is_visible: true,
+            rigid_body_type: RigidBodyType::Dynamic,
         }
     }
 
@@ -316,6 +318,7 @@ impl StaticMeshComponent {
         mesh: &StaticMesh,
         is_use_convex_decomposition: bool,
         transformation: glam::Mat4,
+        rigid_body_type: RigidBodyType,
     ) -> crate::error::Result<Physics> {
         let vertices: Vec<_> = mesh
             .vertexes
@@ -348,7 +351,13 @@ impl StaticMeshComponent {
             .contact_skin(0.1)
             .active_events(ActiveEvents::COLLISION_EVENTS)
             .build();
-        let mut builder = RigidBodyBuilder::dynamic();
+
+        let mut builder = match rigid_body_type {
+            RigidBodyType::Dynamic => RigidBodyBuilder::dynamic(),
+            RigidBodyType::Fixed => RigidBodyBuilder::fixed(),
+            RigidBodyType::KinematicPositionBased => RigidBodyBuilder::kinematic_position_based(),
+            RigidBodyType::KinematicVelocityBased => RigidBodyBuilder::kinematic_velocity_based(),
+        };
         builder = builder.translation(translation);
         builder.position.rotation = Rotation::from_axis_angle(
             &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
@@ -377,9 +386,12 @@ impl StaticMeshComponent {
         let Some(static_mesh) = run_time._mesh.as_ref() else {
             return;
         };
-        let Ok(mut physics) =
-            Self::build_physics(static_mesh, false, run_time.final_transformation)
-        else {
+        let Ok(mut physics) = Self::build_physics(
+            static_mesh,
+            false,
+            run_time.final_transformation,
+            self.rigid_body_type.clone(),
+        ) else {
             return;
         };
         let handle = rigid_body_set.insert(physics.rigid_body.clone());

@@ -63,6 +63,27 @@ impl Curve {
         let y = spline::<CatmullRom, _, _>(v, &knots);
         Some(y)
     }
+
+    pub fn get_x_range(&self) -> Option<std::ops::RangeInclusive<f64>> {
+        let control_points = &self.control_points;
+        if control_points.len() < 2 {
+            return None;
+        }
+        let min_value = control_points
+            .iter()
+            .min_by(|lhs, rhs| lhs.position.x.total_cmp(&rhs.position.x))
+            .map(|x| x.position.x);
+        let max_value = control_points
+            .iter()
+            .max_by(|lhs, rhs| lhs.position.x.total_cmp(&rhs.position.x))
+            .map(|x| x.position.x);
+
+        if let (Some(min_value), Some(max_value)) = (min_value, max_value) {
+            Some(min_value..=max_value)
+        } else {
+            None
+        }
+    }
 }
 
 impl Asset for Curve {

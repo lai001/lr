@@ -32,6 +32,7 @@ pub struct CameraComponent {
     pub transformation: glam::Mat4,
     pub width: u32,
     pub height: u32,
+    pub is_enable: bool,
     #[serde(skip)]
     pub run_time: Option<CameraComponentRuntime>,
 }
@@ -80,6 +81,7 @@ impl CameraComponent {
             run_time: None,
             width: 1024,
             height: 1024,
+            is_enable: true,
         }
     }
 
@@ -271,6 +273,9 @@ impl CameraComponent {
     }
 
     pub fn get_player_viewport(&self) -> Option<SingleThreadMutType<PlayerViewport>> {
+        if !self.is_enable {
+            return None;
+        }
         match &self.run_time {
             Some(run_time) => Some(run_time.player_viewport.clone()),
             None => None,

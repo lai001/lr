@@ -78,6 +78,7 @@ pub struct DataSource {
     pub opened_curve: Option<SingleThreadMutType<Curve>>,
     pub curve_data_source: CurveViewDataSource,
     pub is_gizmo_focused: bool,
+    pub is_gizmo_setting_open: bool,
 }
 
 impl DataSource {
@@ -117,6 +118,7 @@ impl DataSource {
             opened_curve: None,
             curve_data_source: CurveViewDataSource::default(),
             is_gizmo_focused: false,
+            is_gizmo_setting_open: false,
         }
     }
 

@@ -53,6 +53,13 @@ impl SkeletonMeshComponent {
         run_time.parent_final_transformation = parent_final_transformation;
     }
 
+    pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
+        let Some(run_time) = self.run_time.as_ref() else {
+            return glam::Mat4::IDENTITY;
+        };
+        run_time.parent_final_transformation
+    }
+
     pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
         let Some(run_time) = self.run_time.as_mut() else {
             return;
