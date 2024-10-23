@@ -80,10 +80,10 @@ impl UIWindow for ActorUIWindow {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
-        is_close: &mut bool,
+        is_request_close: &mut bool,
     ) {
         let _ = event_loop_window_target;
-        let _ = is_close;
+        let _ = is_request_close;
         misc::on_window_event(
             window_id,
             EWindowType::Actor,

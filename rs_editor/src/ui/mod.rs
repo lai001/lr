@@ -1,5 +1,6 @@
 pub mod actor_ui_window;
 pub mod asset_view;
+pub mod blend_animations_ui_window;
 pub mod console_cmds_view;
 pub mod content_browser;
 pub mod content_item_property_view;

@@ -13,6 +13,6 @@ pub trait UIWindow {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
-        is_close: &mut bool,
+        is_request_close: &mut bool,
     );
 }

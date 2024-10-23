@@ -1,4 +1,4 @@
-use super::material_view::MaterialView;
+use super::{material_view::MaterialView, ui_window::UIWindow};
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
@@ -64,27 +64,28 @@ impl MaterialUIWindow {
             context,
         })
     }
+}
 
-    pub fn window_event_process(
+impl UIWindow for MaterialUIWindow {
+    fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent) {
+        let _ = device_event;
+    }
+
+    fn on_window_event(
         &mut self,
-        // context: &egui::Context,
         window_id: isize,
         window: &mut winit::window::Window,
         event: &WindowEvent,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
+        is_request_close: &mut bool,
     ) {
+        let _ = window_manager;
+        let _ = is_request_close;
         let _ = self.egui_winit_state.on_window_event(window, event);
         let _ = event_loop_window_target;
         match event {
-            WindowEvent::Resized(size) => {
-                engine.resize(window_id, size.width, size.height);
-            }
-            WindowEvent::CloseRequested => {
-                window_manager.remove_window(EWindowType::Material);
-                engine.remove_window(window_id);
-            }
             WindowEvent::RedrawRequested => {
                 engine.window_redraw_requested_begin(window_id);
                 crate::ui::misc::ui_begin(&mut self.egui_winit_state, window);

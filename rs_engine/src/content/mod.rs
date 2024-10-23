@@ -1,3 +1,4 @@
+pub mod blend_animations;
 pub mod content_file_type;
 pub mod curve;
 pub mod ibl;

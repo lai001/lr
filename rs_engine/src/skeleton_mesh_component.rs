@@ -1,14 +1,16 @@
 use crate::{
-    content::content_file_type::EContentFileType, drawable::EDrawObjectType, engine::Engine,
-    player_viewport::PlayerViewport, resource_manager::ResourceManager,
+    content::content_file_type::EContentFileType,
+    drawable::EDrawObjectType,
+    engine::Engine,
+    player_viewport::PlayerViewport,
+    resource_manager::ResourceManager,
+    skeleton_animation_provider::{
+        BlendSkeletonAnimationsProvider, SingleSkeletonAnimationProvider, SkeletonAnimationProvider,
+    },
     static_mesh_component::Physics,
 };
 use rapier3d::{na::point, prelude::*};
-use rs_artifact::{
-    skeleton::{Skeleton, SkeletonBone},
-    skeleton_animation::SkeletonAnimation,
-    skin_mesh::SkinMesh,
-};
+use rs_artifact::{skeleton::Skeleton, skin_mesh::SkinMesh};
 use rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, iter::zip, sync::Arc};
@@ -17,11 +19,11 @@ use std::{collections::HashMap, iter::zip, sync::Arc};
 struct SkeletonMeshComponentRuntime {
     draw_objects: HashMap<String, EDrawObjectType>,
     skeleton: Option<Arc<Skeleton>>,
-    skeleton_animation: Option<Arc<SkeletonAnimation>>,
     skin_meshes: Vec<Arc<SkinMesh>>,
     pub physics: Option<Physics>,
     pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
+    skeleton_animation_provider: Option<Box<dyn SkeletonAnimationProvider>>,
     // material: Option<SingleThreadMutType<crate::content::material::Material>>,
 }
 
@@ -93,6 +95,29 @@ impl SkeletonMeshComponent {
         }
     }
 
+    fn find_animation_provider(
+        &self,
+        files: &[EContentFileType],
+    ) -> Option<Box<dyn SkeletonAnimationProvider>> {
+        let Some(skeleton_url) = &self.skeleton_url else {
+            return None;
+        };
+        let Some(animation_url) = &self.animation_url else {
+            return None;
+        };
+        let blend_skeleton_animation_provider =
+            BlendSkeletonAnimationsProvider::from(skeleton_url, animation_url, files);
+        if let Some(blend_skeleton_animation_provider) = blend_skeleton_animation_provider {
+            return Some(Box::new(blend_skeleton_animation_provider));
+        }
+        let single_skeleton_animation_provider =
+            SingleSkeletonAnimationProvider::from(skeleton_url, animation_url, files);
+        if let Some(single_skeleton_animation_provider) = single_skeleton_animation_provider {
+            return Some(Box::new(single_skeleton_animation_provider));
+        }
+        None
+    }
+
     pub fn initialize(
         &mut self,
         resource_manager: ResourceManager,
@@ -101,7 +126,6 @@ impl SkeletonMeshComponent {
         player_viewport: &mut PlayerViewport,
     ) {
         let mut skeleton: Option<Arc<Skeleton>> = None;
-        let mut skeleton_animation: Option<Arc<SkeletonAnimation>> = None;
 
         if let Some(skeleton_url) = &self.skeleton_url {
             for file in files.iter() {
@@ -115,17 +139,7 @@ impl SkeletonMeshComponent {
             }
         }
 
-        if let Some(animation_url) = &self.animation_url {
-            for file in files.iter() {
-                if let EContentFileType::SkeletonAnimation(content_skeleton_animation) = file {
-                    if &content_skeleton_animation.borrow().url == animation_url {
-                        skeleton_animation = resource_manager
-                            .get_skeleton_animation(&content_skeleton_animation.borrow().asset_url);
-                        break;
-                    }
-                }
-            }
-        }
+        let skeleton_animation_provider = self.find_animation_provider(files);
 
         let material = if let Some(material_url) = &self.material_url {
             files.iter().find_map(|x| {
@@ -143,11 +157,11 @@ impl SkeletonMeshComponent {
         self.run_time = Some(SkeletonMeshComponentRuntime {
             draw_objects: HashMap::new(),
             skeleton: skeleton.clone(),
-            skeleton_animation,
             skin_meshes: vec![],
             physics: None,
             final_transformation: glam::Mat4::IDENTITY,
             parent_final_transformation: glam::Mat4::IDENTITY,
+            skeleton_animation_provider,
             // material: material.clone(),
         });
 
@@ -223,111 +237,6 @@ impl SkeletonMeshComponent {
         self.run_time.as_mut().unwrap().physics = physics;
     }
 
-    fn walk_skeleton_bone(
-        node_anim_transforms: &mut HashMap<String, glam::Mat4>,
-        skeleton_bone: &SkeletonBone,
-        bone_map: &HashMap<String, SkeletonBone>,
-        skeleton_animation: Arc<SkeletonAnimation>,
-        animation_time: f32,
-        skeleton_mesh_hierarchy: &HashMap<String, rs_artifact::skeleton::SkeletonMeshHierarchyNode>,
-        parent_global_transformation: glam::Mat4,
-    ) {
-        let mut position = glam::Vec3::ZERO;
-        let mut scale = glam::Vec3::ONE;
-        let mut rotation = glam::Quat::IDENTITY;
-        let mut has_anim = false;
-        let ticks_per_second = skeleton_animation.ticks_per_second;
-
-        if let Some(animation) = skeleton_animation
-            .channels
-            .iter()
-            .find(|x| x.node == skeleton_bone.path)
-        {
-            if animation.position_keys.len() == 1 {
-                position = animation.position_keys[0].value;
-            } else {
-                if let Some(position_keys) =
-                    animation.position_keys.windows(2).find(|position_keys| {
-                        animation_time <= (position_keys[1].time / ticks_per_second) as f32
-                    })
-                {
-                    let alpha = (animation_time
-                        - (position_keys[0].time / ticks_per_second) as f32)
-                        / ((position_keys[1].time / ticks_per_second)
-                            - (position_keys[0].time / ticks_per_second))
-                            as f32;
-                    position = position_keys[0].value.lerp(position_keys[1].value, alpha);
-                }
-            }
-
-            if animation.scaling_keys.len() == 1 {
-                scale = animation.scaling_keys[0].value;
-            } else {
-                if let Some(scaling_keys) = animation.scaling_keys.windows(2).find(|scaling_keys| {
-                    animation_time <= (scaling_keys[1].time / ticks_per_second) as f32
-                }) {
-                    let alpha = (animation_time - (scaling_keys[0].time / ticks_per_second) as f32)
-                        / ((scaling_keys[1].time / ticks_per_second)
-                            - (scaling_keys[0].time / ticks_per_second))
-                            as f32;
-                    scale = scaling_keys[0].value.lerp(scaling_keys[1].value, alpha);
-                }
-            }
-
-            if animation.rotation_keys.len() == 1 {
-                rotation = animation.rotation_keys[0].value;
-            } else {
-                if let Some(rotation_keys) =
-                    animation.rotation_keys.windows(2).find(|rotation_keys| {
-                        animation_time <= (rotation_keys[1].time / ticks_per_second) as f32
-                    })
-                {
-                    let alpha = (animation_time
-                        - (rotation_keys[0].time / ticks_per_second) as f32)
-                        / ((rotation_keys[1].time / ticks_per_second)
-                            - (rotation_keys[0].time / ticks_per_second))
-                            as f32;
-                    rotation = rotation_keys[0].value.slerp(rotation_keys[1].value, alpha);
-                }
-            }
-
-            has_anim = true;
-        }
-
-        let anim_transform = glam::Mat4::from_scale_rotation_translation(scale, rotation, position);
-
-        let self_transformation = skeleton_mesh_hierarchy
-            .get(&skeleton_bone.path)
-            .unwrap()
-            .transformation;
-
-        let global_transform = parent_global_transformation
-            * self_transformation
-            * if has_anim {
-                self_transformation.inverse()
-            } else {
-                glam::Mat4::IDENTITY
-            }
-            * anim_transform;
-
-        node_anim_transforms.insert(
-            skeleton_bone.path.clone(),
-            global_transform * skeleton_bone.offset_matrix,
-        );
-
-        for child in &skeleton_bone.childs {
-            Self::walk_skeleton_bone(
-                node_anim_transforms,
-                bone_map.get(child).unwrap(),
-                bone_map,
-                skeleton_animation.clone(),
-                animation_time,
-                skeleton_mesh_hierarchy,
-                global_transform,
-            );
-        }
-    }
-
     pub fn update(&mut self, time: f32, engine: &mut Engine) {
         let _ = engine;
         let Some(run_time) = self.run_time.as_mut() else {
@@ -338,24 +247,13 @@ impl SkeletonMeshComponent {
         };
         let mut node_anim_transforms: HashMap<String, glam::Mat4> = HashMap::new();
 
-        if let Some(skeleton_animation) = run_time.skeleton_animation.as_ref() {
-            let duration = skeleton_animation.duration / skeleton_animation.ticks_per_second;
-            let animation_time = time % duration as f32;
-            let root_bone = skeleton.bones.get(&skeleton.root_bone).unwrap();
-            let parent_global_transformation = glam::Mat4::IDENTITY;
-            Self::walk_skeleton_bone(
-                &mut node_anim_transforms,
-                root_bone,
-                &skeleton.bones,
-                skeleton_animation.clone(),
-                animation_time,
-                &skeleton.skeleton_mesh_hierarchy,
-                parent_global_transformation,
-            );
+        if let Some(skeleton_animation_provider) = run_time.skeleton_animation_provider.as_mut() {
+            skeleton_animation_provider.seek(time);
+            node_anim_transforms = skeleton_animation_provider.transforms().clone();
         }
 
         let mut bones: [glam::Mat4; NUM_MAX_BONE] = [glam::Mat4::IDENTITY; NUM_MAX_BONE];
-        let is_animated = run_time.skeleton_animation.is_some();
+        let is_animated = run_time.skeleton_animation_provider.is_some();
         for skin_mesh in run_time.skin_meshes.clone() {
             if is_animated {
                 bones.fill(glam::Mat4::IDENTITY);
@@ -561,24 +459,13 @@ impl SkeletonMeshComponent {
         resource_manager: ResourceManager,
         files: &[EContentFileType],
     ) {
+        let _ = resource_manager;
         self.animation_url = animation;
+        let animation_provider = self.find_animation_provider(files);
         let Some(run_time) = self.run_time.as_mut() else {
             return;
         };
-        let mut skeleton_animation: Option<Arc<SkeletonAnimation>> = None;
-
-        if let Some(animation_url) = &self.animation_url {
-            for file in files.iter() {
-                if let EContentFileType::SkeletonAnimation(content_skeleton_animation) = file {
-                    if &content_skeleton_animation.borrow().url == animation_url {
-                        skeleton_animation = resource_manager
-                            .get_skeleton_animation(&content_skeleton_animation.borrow().asset_url);
-                        break;
-                    }
-                }
-            }
-        }
-        run_time.skeleton_animation = skeleton_animation;
+        run_time.skeleton_animation_provider = animation_provider;
     }
 
     pub fn on_post_update_transformation(

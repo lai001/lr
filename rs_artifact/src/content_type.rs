@@ -14,4 +14,5 @@ pub enum EContentType {
     ParticleSystem,
     Sound,
     Curve,
+    BlendAnimations,
 }

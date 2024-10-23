@@ -2,6 +2,8 @@ use rapier3d::prelude::RigidBodyType;
 use rs_engine::{actor::Actor, directional_light::DirectionalLight, scene_node::*};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
+use super::misc::{render_combo_box, render_combo_box_not_null};
+
 pub struct UpdateMaterial {
     pub selected_object: ESelectedObjectType,
     pub old: Option<url::Url>,
@@ -433,101 +435,5 @@ impl ObjectPropertyView {
                 *value = old;
             }
         });
-    }
-}
-
-fn render_combo_box2<'a, Value>(
-    ui: &mut egui::Ui,
-    label: &str,
-    current_value: &mut Option<&'a Value>,
-    selected_collection: Vec<Option<&'a Value>>,
-) -> bool
-where
-    Value: ToUIString + std::cmp::PartialEq,
-{
-    let mut is_changed = false;
-    let combo_box = egui::ComboBox::from_label(label).selected_text(format!("{}", {
-        match current_value {
-            Some(current_url) => current_url.to_ui_string(),
-            None => "None".to_string(),
-        }
-    }));
-    combo_box.show_ui(ui, |ui| {
-        for selected_value in selected_collection {
-            let text = selected_value
-                .as_ref()
-                .map(|x| x.to_ui_string())
-                .unwrap_or("None".to_string());
-            is_changed = ui
-                .selectable_value(current_value, selected_value, text)
-                .changed();
-            if is_changed {
-                break;
-            }
-        }
-    });
-    is_changed
-}
-
-fn render_combo_box<'a, Value>(
-    ui: &mut egui::Ui,
-    label: &str,
-    current_value: &mut Option<&'a Value>,
-    candidate_items: &'a Vec<Value>,
-) -> bool
-where
-    Value: ToUIString + std::cmp::PartialEq,
-{
-    let mut selected_collection: Vec<Option<&Value>> =
-        Vec::with_capacity(1 + candidate_items.len());
-    selected_collection.push(None);
-    selected_collection.append(&mut candidate_items.iter().map(|x| Some(x)).collect());
-    render_combo_box2(ui, label, current_value, selected_collection)
-}
-
-fn render_combo_box_not_null<Value>(
-    ui: &mut egui::Ui,
-    label: &str,
-    current_value: &mut Value,
-    selected_collection: Vec<Value>,
-) -> bool
-where
-    Value: ToUIString + std::cmp::PartialEq,
-{
-    let mut is_changed = false;
-    let combo_box = egui::ComboBox::from_label(label)
-        .selected_text(format!("{}", { current_value.to_ui_string() }));
-    combo_box.show_ui(ui, |ui| {
-        for selected_value in selected_collection {
-            let text = selected_value.to_ui_string();
-            is_changed = ui
-                .selectable_value(current_value, selected_value, text)
-                .changed();
-            if is_changed {
-                break;
-            }
-        }
-    });
-    is_changed
-}
-
-trait ToUIString {
-    fn to_ui_string(&self) -> String;
-}
-
-impl ToUIString for RigidBodyType {
-    fn to_ui_string(&self) -> String {
-        match self {
-            RigidBodyType::Dynamic => "Dynamic".to_string(),
-            RigidBodyType::Fixed => "Fixed".to_string(),
-            RigidBodyType::KinematicPositionBased => "Kinematic position based".to_string(),
-            RigidBodyType::KinematicVelocityBased => "Kinematic velocity based".to_string(),
-        }
-    }
-}
-
-impl ToUIString for url::Url {
-    fn to_ui_string(&self) -> String {
-        self.to_string()
     }
 }

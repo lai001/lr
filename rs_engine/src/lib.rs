@@ -34,6 +34,7 @@ pub mod render_thread_mode;
 pub mod resource_manager;
 pub mod rotator;
 pub mod scene_node;
+pub mod skeleton_animation_provider;
 pub mod skeleton_mesh_component;
 pub mod standalone;
 pub mod static_mesh_component;

@@ -10,6 +10,12 @@ pub struct SkeletonAnimation {
     pub channels: Vec<NodeAnim>,
 }
 
+impl SkeletonAnimation {
+    pub fn duration_as_secs_f32(&self) -> f32 {
+        (self.duration / self.ticks_per_second) as f32
+    }
+}
+
 impl Asset for SkeletonAnimation {
     fn get_url(&self) -> url::Url {
         self.url.clone()

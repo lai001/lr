@@ -147,6 +147,7 @@ impl ContentItemPropertyView {
             EContentFileType::ParticleSystem(_) => {}
             EContentFileType::Sound(_) => {}
             EContentFileType::Curve(_) => {}
+            EContentFileType::BlendAnimations(_) => {}
         }
     }
 }

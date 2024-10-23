@@ -33,6 +33,7 @@ pub enum EClickEventType {
     CreateIBL,
     CreateParticleSystem,
     CreateCurve,
+    CreateBlendAnimations,
     OpenFolder(Rc<RefCell<ContentFolder>>),
     OpenFile(EContentFileType),
     DeleteFile(EContentFileType),
@@ -110,6 +111,13 @@ pub fn draw(
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateCurve);
+                                ui.close_menu();
+                            }
+                        });
+                        ui.menu_button("Blend Animation", |ui| {
+                            ui.text_edit_singleline(&mut data_source.new_content_name);
+                            if ui.button("Ok").clicked() {
+                                click = Some(EClickEventType::CreateBlendAnimations);
                                 ui.close_menu();
                             }
                         });
@@ -309,6 +317,11 @@ fn render_thumbnail(
         }
         EContentFileType::Curve(_) => {
             ui.image(egui::include_image!("../../../Resource/Editor/curve.svg"));
+        }
+        EContentFileType::BlendAnimations(_) => {
+            ui.image(egui::include_image!(
+                "../../../Resource/Editor/blend_animations.svg"
+            ));
         }
     }
 }

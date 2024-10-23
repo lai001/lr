@@ -1,10 +1,9 @@
-use crate::url_extension::UrlExtension;
-
 use super::{
-    curve::Curve, ibl::IBL, level::Level, material::Material, particle_system::ParticleSystem,
-    skeleton::Skeleton, skeleton_animation::SkeletonAnimation, skeleton_mesh::SkeletonMesh,
-    sound::Sound, static_mesh::StaticMesh, texture::TextureFile,
+    blend_animations::BlendAnimations, curve::Curve, ibl::IBL, level::Level, material::Material,
+    particle_system::ParticleSystem, skeleton::Skeleton, skeleton_animation::SkeletonAnimation,
+    skeleton_mesh::SkeletonMesh, sound::Sound, static_mesh::StaticMesh, texture::TextureFile,
 };
+use crate::url_extension::UrlExtension;
 use rs_artifact::asset::Asset;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
@@ -22,6 +21,7 @@ pub enum EContentFileType {
     ParticleSystem(Rc<RefCell<ParticleSystem>>),
     Sound(Rc<RefCell<Sound>>),
     Curve(Rc<RefCell<Curve>>),
+    BlendAnimations(Rc<RefCell<BlendAnimations>>),
 }
 
 macro_rules! common_fn {
@@ -69,6 +69,7 @@ impl EContentFileType {
         IBL,
         ParticleSystem,
         Sound,
-        Curve
+        Curve,
+        BlendAnimations
     );
 }

@@ -511,6 +511,7 @@ impl ProjectContext {
                     sound_resources.insert(sound.asset_info.get_url(), sound_resource);
                 }
                 EContentFileType::Curve(_) => todo!(),
+                EContentFileType::BlendAnimations(_) => todo!(),
             }
         }
 

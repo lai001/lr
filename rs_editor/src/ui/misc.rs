@@ -1,5 +1,6 @@
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use egui_winit::State;
+use rapier3d::prelude::RigidBodyType;
 use rs_engine::{engine::Engine, frame_sync::FrameSync, input_mode::EInputMode};
 use rs_render::egui_render::EGUIRenderOutput;
 use std::collections::HashMap;
@@ -125,19 +126,14 @@ pub fn on_window_event(
     virtual_key_code_states: &mut HashMap<KeyCode, ElementState>,
     taget_fps: f32,
 ) {
+    let _ = window_type;
+    let _ = window_manager;
+    let _ = window_id;
     match event {
-        WindowEvent::Resized(size) => {
-            engine.resize(window_id, size.width, size.height);
-        }
-        WindowEvent::CloseRequested => {
-            window_manager.remove_window(window_type);
-            engine.remove_window(window_id);
-        }
         WindowEvent::KeyboardInput { event, .. } => {
             let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
                 return;
             };
-
             virtual_key_code_states.insert(virtual_keycode, event.state);
         }
         WindowEvent::RedrawRequested => {
@@ -146,5 +142,101 @@ pub fn on_window_event(
             window.request_redraw();
         }
         _ => {}
+    }
+}
+
+pub fn render_combo_box2<'a, Value>(
+    ui: &mut egui::Ui,
+    label: &str,
+    current_value: &mut Option<&'a Value>,
+    selected_collection: Vec<Option<&'a Value>>,
+) -> bool
+where
+    Value: ToUIString + std::cmp::PartialEq,
+{
+    let mut is_changed = false;
+    let combo_box = egui::ComboBox::from_label(label).selected_text(format!("{}", {
+        match current_value {
+            Some(current_url) => current_url.to_ui_string(),
+            None => "None".to_string(),
+        }
+    }));
+    combo_box.show_ui(ui, |ui| {
+        for selected_value in selected_collection {
+            let text = selected_value
+                .as_ref()
+                .map(|x| x.to_ui_string())
+                .unwrap_or("None".to_string());
+            is_changed = ui
+                .selectable_value(current_value, selected_value, text)
+                .changed();
+            if is_changed {
+                break;
+            }
+        }
+    });
+    is_changed
+}
+
+pub fn render_combo_box<'a, Value>(
+    ui: &mut egui::Ui,
+    label: &str,
+    current_value: &mut Option<&'a Value>,
+    candidate_items: &'a Vec<Value>,
+) -> bool
+where
+    Value: ToUIString + std::cmp::PartialEq,
+{
+    let mut selected_collection: Vec<Option<&Value>> =
+        Vec::with_capacity(1 + candidate_items.len());
+    selected_collection.push(None);
+    selected_collection.append(&mut candidate_items.iter().map(|x| Some(x)).collect());
+    render_combo_box2(ui, label, current_value, selected_collection)
+}
+
+pub fn render_combo_box_not_null<Value>(
+    ui: &mut egui::Ui,
+    label: &str,
+    current_value: &mut Value,
+    selected_collection: Vec<Value>,
+) -> bool
+where
+    Value: ToUIString + std::cmp::PartialEq,
+{
+    let mut is_changed = false;
+    let combo_box = egui::ComboBox::from_label(label)
+        .selected_text(format!("{}", { current_value.to_ui_string() }));
+    combo_box.show_ui(ui, |ui| {
+        for selected_value in selected_collection {
+            let text = selected_value.to_ui_string();
+            is_changed = ui
+                .selectable_value(current_value, selected_value, text)
+                .changed();
+            if is_changed {
+                break;
+            }
+        }
+    });
+    is_changed
+}
+
+pub trait ToUIString {
+    fn to_ui_string(&self) -> String;
+}
+
+impl ToUIString for RigidBodyType {
+    fn to_ui_string(&self) -> String {
+        match self {
+            RigidBodyType::Dynamic => "Dynamic".to_string(),
+            RigidBodyType::Fixed => "Fixed".to_string(),
+            RigidBodyType::KinematicPositionBased => "Kinematic position based".to_string(),
+            RigidBodyType::KinematicVelocityBased => "Kinematic velocity based".to_string(),
+        }
+    }
+}
+
+impl ToUIString for url::Url {
+    fn to_ui_string(&self) -> String {
+        self.to_string()
     }
 }

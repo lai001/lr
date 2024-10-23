@@ -1,4 +1,7 @@
-use super::misc::{random_color4, update_window_with_input_mode};
+use super::{
+    misc::{random_color4, update_window_with_input_mode},
+    ui_window::UIWindow,
+};
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
@@ -46,87 +49,8 @@ pub struct MeshUIWindow {
     input_mode: EInputMode,
 }
 
-impl MeshUIWindow {
-    pub fn new(
-        context: egui::Context,
-        window_manager: &mut WindowsManager,
-        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
-        engine: &mut Engine,
-    ) -> anyhow::Result<MeshUIWindow> {
-        let window_context =
-            window_manager.spwan_new_window(EWindowType::Mesh, event_loop_window_target)?;
-        let window = &*window_context.window.borrow();
-
-        engine
-            .set_new_window(
-                window_context.get_id(),
-                window,
-                window_context.get_width(),
-                window_context.get_height(),
-                window.scale_factor() as f32,
-            )
-            .map_err(|err| anyhow!("{err}"))?;
-        let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());
-
-        let mut egui_winit_state = egui_winit::State::new(
-            context,
-            viewport_id,
-            window,
-            Some(window.scale_factor() as f32),
-            None,
-            None,
-        );
-
-        egui_winit_state.egui_input_mut().viewport_id = viewport_id;
-        egui_winit_state.egui_input_mut().viewports =
-            std::iter::once((viewport_id, Default::default())).collect();
-
-        let mut camera = Camera::default(window_context.get_width(), window_context.get_height());
-        camera.set_world_location(glam::Vec3 {
-            x: 0.0,
-            y: 3.0,
-            z: 3.0,
-        });
-        let frame_sync = FrameSync::new(EOptions::FPS(60.0));
-
-        let resource_manager = ResourceManager::default();
-        let global_constants_handle = resource_manager.next_buffer();
-        let mut global_constants = rs_render::global_uniform::Constants::default();
-
-        global_constants.view_projection = camera.get_view_projection_matrix();
-        global_constants.view = camera.get_view_matrix();
-        global_constants.projection = camera.get_projection_matrix();
-        global_constants.view_position = camera.get_world_location();
-
-        let command = RenderCommand::CreateBuffer(CreateBuffer {
-            handle: *global_constants_handle,
-            buffer_create_info: BufferCreateInfo {
-                label: Some("Global.Constants".to_string()),
-                contents: rs_foundation::cast_to_raw_buffer(&vec![global_constants]).to_vec(),
-                usage: wgpu::BufferUsages::all(),
-            },
-        });
-        engine.send_render_command(command);
-
-        let grid_draw_object = engine.create_grid_draw_object(global_constants_handle.clone());
-        let input_mode = EInputMode::UI;
-        update_window_with_input_mode(window, input_mode);
-        Ok(MeshUIWindow {
-            egui_winit_state,
-            draw_objects: vec![],
-            camera,
-            frame_sync,
-            virtual_key_code_states: HashMap::new(),
-            global_constants,
-            global_constants_handle,
-            grid_draw_object,
-            camera_movement_speed: 0.01,
-            camera_motion_speed: 0.1,
-            input_mode,
-        })
-    }
-
-    pub fn device_event_process(&mut self, device_event: &winit::event::DeviceEvent) {
+impl UIWindow for MeshUIWindow {
+    fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent) {
         match device_event {
             winit::event::DeviceEvent::MouseMotion { delta } => {
                 DefaultCameraInputEventHandle::mouse_motion_handle(
@@ -140,7 +64,7 @@ impl MeshUIWindow {
         }
     }
 
-    pub fn window_event_process(
+    fn on_window_event(
         &mut self,
         window_id: isize,
         window: &mut winit::window::Window,
@@ -148,17 +72,13 @@ impl MeshUIWindow {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
+        is_request_close: &mut bool,
     ) {
+        let _ = window_manager;
+        let _ = is_request_close;
         let _ = window;
         let _ = event_loop_window_target;
         match event {
-            WindowEvent::Resized(size) => {
-                engine.resize(window_id, size.width, size.height);
-            }
-            WindowEvent::CloseRequested => {
-                window_manager.remove_window(EWindowType::Mesh);
-                engine.remove_window(window_id);
-            }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(_, up) => {
                     self.camera_movement_speed += up * 0.005;
@@ -240,6 +160,87 @@ impl MeshUIWindow {
             }
             _ => {}
         }
+    }
+}
+
+impl MeshUIWindow {
+    pub fn new(
+        context: egui::Context,
+        window_manager: &mut WindowsManager,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
+        engine: &mut Engine,
+    ) -> anyhow::Result<MeshUIWindow> {
+        let window_context =
+            window_manager.spwan_new_window(EWindowType::Mesh, event_loop_window_target)?;
+        let window = &*window_context.window.borrow();
+
+        engine
+            .set_new_window(
+                window_context.get_id(),
+                window,
+                window_context.get_width(),
+                window_context.get_height(),
+                window.scale_factor() as f32,
+            )
+            .map_err(|err| anyhow!("{err}"))?;
+        let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());
+
+        let mut egui_winit_state = egui_winit::State::new(
+            context,
+            viewport_id,
+            window,
+            Some(window.scale_factor() as f32),
+            None,
+            None,
+        );
+
+        egui_winit_state.egui_input_mut().viewport_id = viewport_id;
+        egui_winit_state.egui_input_mut().viewports =
+            std::iter::once((viewport_id, Default::default())).collect();
+
+        let mut camera = Camera::default(window_context.get_width(), window_context.get_height());
+        camera.set_world_location(glam::Vec3 {
+            x: 0.0,
+            y: 3.0,
+            z: 3.0,
+        });
+        let frame_sync = FrameSync::new(EOptions::FPS(60.0));
+
+        let resource_manager = ResourceManager::default();
+        let global_constants_handle = resource_manager.next_buffer();
+        let mut global_constants = rs_render::global_uniform::Constants::default();
+
+        global_constants.view_projection = camera.get_view_projection_matrix();
+        global_constants.view = camera.get_view_matrix();
+        global_constants.projection = camera.get_projection_matrix();
+        global_constants.view_position = camera.get_world_location();
+
+        let command = RenderCommand::CreateBuffer(CreateBuffer {
+            handle: *global_constants_handle,
+            buffer_create_info: BufferCreateInfo {
+                label: Some("Global.Constants".to_string()),
+                contents: rs_foundation::cast_to_raw_buffer(&vec![global_constants]).to_vec(),
+                usage: wgpu::BufferUsages::all(),
+            },
+        });
+        engine.send_render_command(command);
+
+        let grid_draw_object = engine.create_grid_draw_object(global_constants_handle.clone());
+        let input_mode = EInputMode::UI;
+        update_window_with_input_mode(window, input_mode);
+        Ok(MeshUIWindow {
+            egui_winit_state,
+            draw_objects: vec![],
+            camera,
+            frame_sync,
+            virtual_key_code_states: HashMap::new(),
+            global_constants,
+            global_constants_handle,
+            grid_draw_object,
+            camera_movement_speed: 0.01,
+            camera_motion_speed: 0.1,
+            input_mode,
+        })
     }
 
     pub fn update(

@@ -1,4 +1,7 @@
-use super::misc::{gui_render_output, update_window_with_input_mode};
+use super::{
+    misc::{gui_render_output, update_window_with_input_mode},
+    ui_window::UIWindow,
+};
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui::{load::SizedTexture, TextureId};
@@ -45,62 +48,12 @@ pub struct MediaUIWindow {
     audio_player_node: Option<MultipleThreadMutType<AudioPlayerNode>>,
 }
 
-impl MediaUIWindow {
-    pub fn new(
-        context: egui::Context,
-        window_manager: &mut WindowsManager,
-        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
-        engine: &mut Engine,
-    ) -> anyhow::Result<MediaUIWindow> {
-        let window_context =
-            window_manager.spwan_new_window(EWindowType::Media, event_loop_window_target)?;
-        let window = &*window_context.window.borrow();
-
-        engine
-            .set_new_window(
-                window_context.get_id(),
-                window,
-                window_context.get_width(),
-                window_context.get_height(),
-                window.scale_factor() as f32,
-            )
-            .map_err(|err| anyhow!("{err}"))?;
-        let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());
-
-        let mut egui_winit_state = egui_winit::State::new(
-            context,
-            viewport_id,
-            window,
-            Some(window.scale_factor() as f32),
-            None,
-            None,
-        );
-
-        egui_winit_state.egui_input_mut().viewport_id = viewport_id;
-        egui_winit_state.egui_input_mut().viewports =
-            std::iter::once((viewport_id, Default::default())).collect();
-
-        let frame_sync = FrameSync::new(EOptions::FPS(60.0));
-
-        let input_mode = EInputMode::UI;
-        update_window_with_input_mode(window, input_mode);
-
-        let audio_engine = AudioEngine::new();
-        let audio_player_node = None;
-
-        Ok(MediaUIWindow {
-            egui_winit_state,
-            draw_objects: HashMap::new(),
-            frame_sync,
-            video_frame_player: None,
-            cache_sized_texture: None,
-            composition_info: None,
-            audio_engine,
-            audio_player_node,
-        })
+impl UIWindow for MediaUIWindow {
+    fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent) {
+        let _ = device_event;
     }
 
-    pub fn window_event_process(
+    fn on_window_event(
         &mut self,
         window_id: isize,
         window: &mut winit::window::Window,
@@ -108,19 +61,13 @@ impl MediaUIWindow {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
-    ) -> bool {
+        is_request_close: &mut bool,
+    ) {
+        let _ = window_manager;
+        let _ = is_request_close;
         let _ = event_loop_window_target;
         let _ = self.egui_winit_state.on_window_event(window, event);
-        let mut is_close = false;
         match event {
-            WindowEvent::Resized(size) => {
-                engine.resize(window_id, size.width, size.height);
-            }
-            WindowEvent::CloseRequested => {
-                window_manager.remove_window(EWindowType::Media);
-                engine.remove_window(window_id);
-                is_close = true;
-            }
             WindowEvent::RedrawRequested => {
                 self.frame_sync.sync(60.0);
 
@@ -183,7 +130,62 @@ impl MediaUIWindow {
             }
             _ => {}
         }
-        is_close
+    }
+}
+
+impl MediaUIWindow {
+    pub fn new(
+        context: egui::Context,
+        window_manager: &mut WindowsManager,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
+        engine: &mut Engine,
+    ) -> anyhow::Result<MediaUIWindow> {
+        let window_context =
+            window_manager.spwan_new_window(EWindowType::Media, event_loop_window_target)?;
+        let window = &*window_context.window.borrow();
+
+        engine
+            .set_new_window(
+                window_context.get_id(),
+                window,
+                window_context.get_width(),
+                window_context.get_height(),
+                window.scale_factor() as f32,
+            )
+            .map_err(|err| anyhow!("{err}"))?;
+        let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());
+
+        let mut egui_winit_state = egui_winit::State::new(
+            context,
+            viewport_id,
+            window,
+            Some(window.scale_factor() as f32),
+            None,
+            None,
+        );
+
+        egui_winit_state.egui_input_mut().viewport_id = viewport_id;
+        egui_winit_state.egui_input_mut().viewports =
+            std::iter::once((viewport_id, Default::default())).collect();
+
+        let frame_sync = FrameSync::new(EOptions::FPS(60.0));
+
+        let input_mode = EInputMode::UI;
+        update_window_with_input_mode(window, input_mode);
+
+        let audio_engine = AudioEngine::new();
+        let audio_player_node = None;
+
+        Ok(MediaUIWindow {
+            egui_winit_state,
+            draw_objects: HashMap::new(),
+            frame_sync,
+            video_frame_player: None,
+            cache_sized_texture: None,
+            composition_info: None,
+            audio_engine,
+            audio_player_node,
+        })
     }
 
     pub fn update(&mut self, file_path: impl AsRef<Path>) -> anyhow::Result<()> {

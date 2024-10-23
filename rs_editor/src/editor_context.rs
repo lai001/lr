@@ -9,7 +9,9 @@ use crate::{
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
     ui::{
-        asset_view, content_browser, content_item_property_view, debug_textures_view,
+        asset_view,
+        blend_animations_ui_window::BlendAnimationUIWindow,
+        content_browser, content_item_property_view, debug_textures_view,
         material_ui_window::MaterialUIWindow,
         material_view::{self, EMaterialNodeType, MaterialNode},
         media_ui_window::MediaUIWindow,
@@ -20,6 +22,7 @@ use crate::{
         particle_system_ui_window::ParticleSystemUIWindow,
         standalone_ui_window::StandaloneUiWindow,
         top_menu,
+        ui_window::UIWindow,
     },
     watch_shader::WatchShader,
     windows_manager::WindowsManager,
@@ -36,7 +39,10 @@ use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
     camera_component::CameraComponent,
     collision_componenet::CollisionComponent,
-    content::{content_file_type::EContentFileType, texture::TextureFile},
+    content::{
+        blend_animations::BlendAnimations, content_file_type::EContentFileType,
+        texture::TextureFile,
+    },
     directional_light::DirectionalLight,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
@@ -119,6 +125,7 @@ pub enum EWindowType {
     Particle,
     Standalone,
     Actor,
+    BlendAnimation,
 }
 
 struct MouseState {
@@ -147,6 +154,7 @@ pub struct EditorContext {
     media_ui_window: Option<MediaUIWindow>,
     multiple_draw_ui_window: Option<MultipleDrawUiWindow>,
     standalone_ui_window: Option<StandaloneUiWindow>,
+    blend_animation_ui_window: Option<BlendAnimationUIWindow>,
     watch_shader: WatchShader,
     #[cfg(feature = "plugin_dotnet")]
     donet_host: Option<rs_dotnet_host::dotnet_runtime::DotnetRuntime>,
@@ -283,8 +291,6 @@ impl EditorContext {
             editor_ui,
             // #[cfg(feature = "plugin_shared_crate")]
             // plugins: vec![],
-            #[cfg(feature = "plugin_v8")]
-            v8_runtime: Some(v8_runtime),
             frame_sync,
             model_loader: ModelLoader::new(),
             window_manager: window_manager.clone(),
@@ -293,15 +299,18 @@ impl EditorContext {
             mesh_ui_window: None,
             media_ui_window: None,
             multiple_draw_ui_window: None,
-            watch_shader,
-            #[cfg(feature = "plugin_dotnet")]
-            donet_host,
             standalone_ui_window: None,
+            blend_animation_ui_window: None,
+            watch_shader,
             mosue_state: MouseState {
                 is_focus: false,
                 position: glam::vec2(0.0, 0.0),
             },
             player_viewport,
+            #[cfg(feature = "plugin_v8")]
+            v8_runtime: Some(v8_runtime),
+            #[cfg(feature = "plugin_dotnet")]
+            donet_host,
         };
 
         if let Some(file_path) = last_project_path {
@@ -514,19 +523,31 @@ impl EditorContext {
         event: &Event<ECustomEventType>,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
+        macro_rules! insert_window {
+            ($type:tt, $name:tt) => {
+                (
+                    EWindowType::$type,
+                    self.$name.as_mut().map(|x| x as &mut dyn UIWindow),
+                )
+            };
+        }
+        let ui_windows = HashMap::from([
+            insert_window!(Material, material_ui_window),
+            insert_window!(Particle, particle_system_ui_window),
+            insert_window!(Mesh, mesh_ui_window),
+            insert_window!(Media, media_ui_window),
+            insert_window!(MultipleDraw, multiple_draw_ui_window),
+            insert_window!(Standalone, standalone_ui_window),
+            insert_window!(BlendAnimation, blend_animation_ui_window),
+        ]);
+
         match event {
             Event::DeviceEvent { event, .. } => {
-                if let Some(ui_window) = self.mesh_ui_window.as_mut() {
-                    ui_window.device_event_process(event);
-                }
-                if let Some(ui_window) = self.multiple_draw_ui_window.as_mut() {
-                    ui_window.device_event_process(event);
-                }
-                if let Some(ui_window) = self.particle_system_ui_window.as_mut() {
-                    ui_window.device_event_process(event);
-                }
-                if let Some(ui_window) = self.standalone_ui_window.as_mut() {
-                    ui_window.device_event_process(event);
+                for ui_window in ui_windows.into_values() {
+                    let Some(ui_window) = ui_window else {
+                        continue;
+                    };
+                    ui_window.on_device_event(event);
                 }
                 self.player_viewport
                     .on_input(rs_engine::input_type::EInputType::Device(event));
@@ -550,6 +571,96 @@ impl EditorContext {
                 };
                 let window = &mut *window.borrow_mut();
                 let egui_event_response = self.egui_winit_state.on_window_event(window, event);
+
+                let mut close_windows = vec![];
+
+                for (ty, ui_window) in ui_windows {
+                    if ty != window_type {
+                        continue;
+                    }
+                    if let Some(ui_window) = ui_window {
+                        if let WindowEvent::Resized(window_size) = &event {
+                            self.engine
+                                .resize(window_id, window_size.width, window_size.height);
+                        };
+                        let mut is_request_close = false;
+                        let mut is_close = false;
+                        ui_window.on_window_event(
+                            window_id,
+                            window,
+                            event,
+                            event_loop_window_target,
+                            &mut self.engine,
+                            &mut self.window_manager.borrow_mut(),
+                            &mut is_request_close,
+                        );
+                        if is_request_close {
+                            is_close = true;
+                        }
+                        if let WindowEvent::CloseRequested = &event {
+                            is_close = true;
+                        };
+                        if is_close {
+                            self.window_manager.borrow_mut().remove_window(ty);
+                            self.engine.remove_window(window_id);
+                            close_windows.push(ty);
+                        }
+                    }
+                }
+
+                for ty in close_windows {
+                    match ty {
+                        EWindowType::Material => {
+                            self.material_ui_window = None;
+                        }
+                        EWindowType::Mesh => {
+                            self.mesh_ui_window = None;
+                        }
+                        EWindowType::Media => {
+                            self.media_ui_window = None;
+                        }
+                        EWindowType::MultipleDraw => {
+                            self.multiple_draw_ui_window = None;
+                        }
+                        EWindowType::Particle => {
+                            self.particle_system_ui_window = None;
+                        }
+                        EWindowType::Standalone => {
+                            self.standalone_ui_window = None;
+                        }
+                        EWindowType::Main => {}
+                        EWindowType::Actor => {}
+                        EWindowType::BlendAnimation => {
+                            self.blend_animation_ui_window = None;
+                        }
+                    }
+                }
+
+                if let Some(Some(event)) = self
+                    .material_ui_window
+                    .as_mut()
+                    .map(|x| &mut x.material_view.event)
+                {
+                    match event {
+                        material_view::EEventType::Update(material, resolve_result) => {
+                            let mut shader_code = HashMap::new();
+                            let mut material_info = HashMap::new();
+                            for (k, v) in resolve_result.iter() {
+                                shader_code.insert(k.clone(), v.shader_code.clone());
+                                material_info.insert(k.clone(), v.material_info.clone());
+                            }
+                            let handle = self.engine.create_material(shader_code);
+                            let material_content = material.borrow().get_associated_material();
+                            let Some(material_content) = material_content else {
+                                return;
+                            };
+                            let mut material_content = material_content.borrow_mut();
+                            material_content.set_pipeline_handle(handle);
+                            material_content.set_material_info(material_info);
+                        }
+                    }
+                }
+
                 match window_type {
                     EWindowType::Main => self.main_window_event_process(
                         window_id,
@@ -558,114 +669,7 @@ impl EditorContext {
                         event_loop_window_target,
                         egui_event_response,
                     ),
-                    EWindowType::Material => {
-                        let ui_window = self
-                            .material_ui_window
-                            .as_mut()
-                            .expect("Should not be bull");
-                        ui_window.window_event_process(
-                            window_id,
-                            window,
-                            event,
-                            event_loop_window_target,
-                            &mut self.engine,
-                            &mut *self.window_manager.borrow_mut(),
-                        );
-                        let Some(event) = &ui_window.material_view.event else {
-                            return;
-                        };
-                        match event {
-                            material_view::EEventType::Update(material, resolve_result) => {
-                                let mut shader_code = HashMap::new();
-                                let mut material_info = HashMap::new();
-                                for (k, v) in resolve_result.iter() {
-                                    shader_code.insert(k.clone(), v.shader_code.clone());
-                                    material_info.insert(k.clone(), v.material_info.clone());
-                                }
-                                let handle = self.engine.create_material(shader_code);
-                                let material_content = material.borrow().get_associated_material();
-                                let Some(material_content) = material_content else {
-                                    return;
-                                };
-                                let mut material_content = material_content.borrow_mut();
-                                material_content.set_pipeline_handle(handle);
-                                material_content.set_material_info(material_info);
-                            }
-                        }
-                    }
-                    EWindowType::Mesh => {
-                        let ui_window = self.mesh_ui_window.as_mut().expect("Should not be bull");
-                        ui_window.window_event_process(
-                            window_id,
-                            window,
-                            event,
-                            event_loop_window_target,
-                            &mut self.engine,
-                            &mut *self.window_manager.borrow_mut(),
-                        );
-                    }
-                    EWindowType::Media => {
-                        let ui_window = self.media_ui_window.as_mut().expect("Should not be bull");
-                        let is_close = ui_window.window_event_process(
-                            window_id,
-                            window,
-                            event,
-                            event_loop_window_target,
-                            &mut self.engine,
-                            &mut *self.window_manager.borrow_mut(),
-                        );
-                        if is_close {
-                            self.media_ui_window = None;
-                        }
-                    }
-                    EWindowType::MultipleDraw => {
-                        let ui_window = self
-                            .multiple_draw_ui_window
-                            .as_mut()
-                            .expect("Should not be bull");
-                        ui_window.window_event_process(
-                            window_id,
-                            window,
-                            event,
-                            event_loop_window_target,
-                            &mut self.engine,
-                            &mut *self.window_manager.borrow_mut(),
-                        );
-                    }
-                    EWindowType::Particle => {
-                        let ui_window = self
-                            .particle_system_ui_window
-                            .as_mut()
-                            .expect("Should not be bull");
-                        ui_window.window_event_process(
-                            window_id,
-                            window,
-                            event,
-                            event_loop_window_target,
-                            &mut self.engine,
-                            &mut *self.window_manager.borrow_mut(),
-                        );
-                    }
-                    EWindowType::Standalone => {
-                        let ui_window = self
-                            .standalone_ui_window
-                            .as_mut()
-                            .expect("Should not be bull");
-                        let mut is_close = false;
-                        ui_window.window_event_process(
-                            window_id,
-                            window,
-                            event,
-                            event_loop_window_target,
-                            &mut self.engine,
-                            &mut *self.window_manager.borrow_mut(),
-                            &mut is_close,
-                        );
-                        if event == &WindowEvent::CloseRequested || is_close {
-                            self.standalone_ui_window = None;
-                        }
-                    }
-                    EWindowType::Actor => todo!(),
+                    _ => {}
                 }
             }
             Event::NewEvents(_) => {}
@@ -1160,6 +1164,7 @@ impl EditorContext {
                     rm.add_sound(url, Arc::new(sound_resouce));
                 }
                 EContentFileType::Curve(_) => {}
+                EContentFileType::BlendAnimations(_) => {}
             }
         }
     }
@@ -1256,6 +1261,10 @@ impl EditorContext {
                         materials.push(url);
                     }
                     EContentFileType::SkeletonAnimation(animation) => {
+                        let url = animation.borrow().url.clone();
+                        animations.push(url);
+                    }
+                    EContentFileType::BlendAnimations(animation) => {
                         let url = animation.borrow().url.clone();
                         animations.push(url);
                     }
@@ -1731,6 +1740,27 @@ impl EditorContext {
         .expect("Should be opened");
         ui_window.update(&mut self.engine);
         self.multiple_draw_ui_window = Some(ui_window);
+    }
+
+    fn open_blend_animation_ui_window(
+        &mut self,
+        blend_animation: SingleThreadMutType<BlendAnimations>,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
+    ) {
+        let Some(project_context) = self.project_context.as_ref() else {
+            return;
+        };
+        let content = project_context.project.content.clone();
+        let ui_window = BlendAnimationUIWindow::new(
+            self.editor_ui.egui_context.clone(),
+            &mut *self.window_manager.borrow_mut(),
+            event_loop_window_target,
+            &mut self.engine,
+            content,
+            blend_animation,
+        )
+        .expect("Should be opened");
+        self.blend_animation_ui_window = Some(ui_window);
     }
 
     fn collect_textures(&self) -> Vec<url::Url> {
@@ -2308,6 +2338,12 @@ impl EditorContext {
                         self.data_source.opened_curve = Some(curve);
                         self.data_source.is_content_item_property_view_open = false;
                     }
+                    EContentFileType::BlendAnimations(blend_animation) => {
+                        self.open_blend_animation_ui_window(
+                            blend_animation,
+                            event_loop_window_target,
+                        );
+                    }
                 }
             }
             content_browser::EClickEventType::SingleClickFile(file) => {
@@ -2437,6 +2473,28 @@ impl EditorContext {
                     return;
                 }
                 content_file_type.set_name(new_name);
+            }
+            content_browser::EClickEventType::CreateBlendAnimations => {
+                let names = self.get_all_content_names();
+                let name = make_unique_name(
+                    names,
+                    &self.data_source.content_data_source.new_content_name,
+                );
+                let Some(project_context) = &mut self.project_context else {
+                    return;
+                };
+                let Ok(content_url) = build_content_file_url(&name) else {
+                    return;
+                };
+                let blend_animation =
+                    rs_engine::content::blend_animations::BlendAnimations::new(content_url);
+                let blend_animation = SingleThreadMut::new(blend_animation);
+                project_context
+                    .project
+                    .content
+                    .borrow_mut()
+                    .files
+                    .push(EContentFileType::BlendAnimations(blend_animation));
             }
         }
     }

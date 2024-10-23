@@ -1,4 +1,4 @@
-use super::misc::update_window_with_input_mode;
+use super::{misc::update_window_with_input_mode, ui_window::UIWindow};
 use crate::{
     editor_context::EWindowType,
     editor_ui,
@@ -218,46 +218,12 @@ pub struct ParticleSystemUIWindow {
     emiter_render: EmiterRender,
 }
 
-impl ParticleSystemUIWindow {
-    pub fn new(
-        context: egui::Context,
-        window_manager: &mut WindowsManager,
-        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
-        engine: &mut Engine,
-        particle_system: SingleThreadMutType<rs_engine::content::particle_system::ParticleSystem>,
-    ) -> anyhow::Result<ParticleSystemUIWindow> {
-        let window_context =
-            window_manager.spwan_new_window(EWindowType::Particle, event_loop_window_target)?;
-
-        let particle_system_template = {
-            let particle_system = particle_system.borrow();
-            let system_name = particle_system.get_name();
-            particle_system.new_template_instance(system_name)
-        };
-        let data_source = DataSource {
-            particle_system,
-            particle_system_template,
-            current_monitor: None,
-        };
-        let base_ui_window = BaseUIWindow::new(window_context, context.clone(), engine)?;
-
-        let emiter_render =
-            EmiterRender::new(engine, base_ui_window.global_constants_handle.clone());
-
-        Ok(ParticleSystemUIWindow {
-            data_source,
-            context,
-            base_ui_window,
-
-            emiter_render,
-        })
-    }
-
-    pub fn device_event_process(&mut self, device_event: &winit::event::DeviceEvent) {
+impl UIWindow for ParticleSystemUIWindow {
+    fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent) {
         self.base_ui_window.device_event_process(device_event);
     }
 
-    pub fn window_event_process(
+    fn on_window_event(
         &mut self,
         window_id: isize,
         window: &mut winit::window::Window,
@@ -265,16 +231,16 @@ impl ParticleSystemUIWindow {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         window_manager: &mut WindowsManager,
+        is_request_close: &mut bool,
     ) {
+        let _ = window_manager;
+        let _ = is_request_close;
         self.base_ui_window
             .window_event_process(window_id, window, event, engine);
         let window_inner_size = window.inner_size();
 
         let _ = event_loop_window_target;
         match event {
-            WindowEvent::CloseRequested => {
-                window_manager.remove_window(EWindowType::Particle);
-            }
             WindowEvent::RedrawRequested => {
                 engine.window_redraw_requested_begin(window_id);
                 crate::ui::misc::ui_begin(&mut self.base_ui_window.egui_winit_state, window);
@@ -324,6 +290,42 @@ impl ParticleSystemUIWindow {
             }
             _ => {}
         }
+    }
+}
+
+impl ParticleSystemUIWindow {
+    pub fn new(
+        context: egui::Context,
+        window_manager: &mut WindowsManager,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
+        engine: &mut Engine,
+        particle_system: SingleThreadMutType<rs_engine::content::particle_system::ParticleSystem>,
+    ) -> anyhow::Result<ParticleSystemUIWindow> {
+        let window_context =
+            window_manager.spwan_new_window(EWindowType::Particle, event_loop_window_target)?;
+
+        let particle_system_template = {
+            let particle_system = particle_system.borrow();
+            let system_name = particle_system.get_name();
+            particle_system.new_template_instance(system_name)
+        };
+        let data_source = DataSource {
+            particle_system,
+            particle_system_template,
+            current_monitor: None,
+        };
+        let base_ui_window = BaseUIWindow::new(window_context, context.clone(), engine)?;
+
+        let emiter_render =
+            EmiterRender::new(engine, base_ui_window.global_constants_handle.clone());
+
+        Ok(ParticleSystemUIWindow {
+            data_source,
+            context,
+            base_ui_window,
+
+            emiter_render,
+        })
     }
 }
 

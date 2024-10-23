@@ -367,6 +367,7 @@ impl Engine {
                         }
                     },
                     EContentType::Curve => todo!(),
+                    EContentType::BlendAnimations => todo!(),
                 },
                 _ => {}
             }
