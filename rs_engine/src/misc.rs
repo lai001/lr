@@ -98,6 +98,8 @@ pub fn compute_appropriate_offset_look_and_projection_matrix(
 pub trait Mat4Extension {
     fn get_forward_vector(&self) -> glam::Vec3;
     fn remove_translation(&self) -> glam::Mat4;
+    fn slerp(&self, rhs: &Self, s: f32) -> glam::Mat4;
+    fn lerp(&self, rhs: &Self, s: f32) -> glam::Mat4;
 }
 
 impl Mat4Extension for glam::Mat4 {
@@ -108,5 +110,25 @@ impl Mat4Extension for glam::Mat4 {
     fn remove_translation(&self) -> glam::Mat4 {
         let (scale, rotation, _) = self.to_scale_rotation_translation();
         glam::Mat4::from_scale_rotation_translation(scale, rotation, glam::Vec3::ZERO)
+    }
+
+    fn slerp(&self, rhs: &Self, s: f32) -> glam::Mat4 {
+        let lhs = self.to_scale_rotation_translation();
+        let rhs = rhs.to_scale_rotation_translation();
+        glam::Mat4::from_scale_rotation_translation(
+            lhs.0.lerp(rhs.0, s),
+            lhs.1.slerp(rhs.1, s),
+            lhs.2.lerp(rhs.2, s),
+        )
+    }
+
+    fn lerp(&self, rhs: &Self, s: f32) -> glam::Mat4 {
+        let lhs = self.to_scale_rotation_translation();
+        let rhs = rhs.to_scale_rotation_translation();
+        glam::Mat4::from_scale_rotation_translation(
+            lhs.0.lerp(rhs.0, s),
+            lhs.1.lerp(rhs.1, s),
+            lhs.2.lerp(rhs.2, s),
+        )
     }
 }

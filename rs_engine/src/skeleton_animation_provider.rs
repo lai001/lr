@@ -1,4 +1,7 @@
-use crate::{content::content_file_type::EContentFileType, resource_manager::ResourceManager};
+use crate::{
+    content::content_file_type::EContentFileType, misc::Mat4Extension,
+    resource_manager::ResourceManager,
+};
 use downcast_rs::Downcast;
 use dyn_clone::DynClone;
 use rs_artifact::{
@@ -13,6 +16,36 @@ pub trait SkeletonAnimationProvider: DynClone + Downcast {
     fn transforms(&mut self) -> &HashMap<String, glam::Mat4>;
     fn seek(&mut self, time: f32);
 
+    fn calculate_lcoal_transformation(
+        skeleton_bone: &SkeletonBone,
+        skeleton_mesh_hierarchy: &HashMap<String, rs_artifact::skeleton::SkeletonMeshHierarchyNode>,
+        skeleton_animation: Arc<SkeletonAnimation>,
+        parent_global_transformation: glam::Mat4,
+        animation_time: f32,
+        influence: f32,
+    ) -> glam::Mat4
+    where
+        Self: Sized,
+    {
+        let Some(node) = skeleton_mesh_hierarchy.get(&skeleton_bone.path) else {
+            return glam::Mat4::IDENTITY;
+        };
+        let ticks_per_second = skeleton_animation.ticks_per_second;
+        if let Some(animation) = skeleton_animation
+            .channels
+            .iter()
+            .find(|x| x.node == skeleton_bone.path)
+        {
+            let (scale, rotation, translation) =
+                Self::calculate_animation(animation, animation_time, ticks_per_second);
+            let anim_transform =
+                glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+            parent_global_transformation * (node.transformation.slerp(&anim_transform, influence))
+        } else {
+            parent_global_transformation * node.transformation
+        }
+    }
+
     fn walk_skeleton_bone(
         node_anim_transforms: &mut HashMap<String, glam::Mat4>,
         skeleton_bone: &SkeletonBone,
@@ -21,37 +54,23 @@ pub trait SkeletonAnimationProvider: DynClone + Downcast {
         animation_time: f32,
         skeleton_mesh_hierarchy: &HashMap<String, rs_artifact::skeleton::SkeletonMeshHierarchyNode>,
         parent_global_transformation: glam::Mat4,
+        influence: f32,
     ) where
         Self: Sized,
     {
-        let mut translation = glam::Vec3::ZERO;
-        let mut scale = glam::Vec3::ONE;
-        let mut rotation = glam::Quat::IDENTITY;
-        let mut has_anim = false;
-        let ticks_per_second = skeleton_animation.ticks_per_second;
-
-        if let Some(animation) = skeleton_animation
-            .channels
-            .iter()
-            .find(|x| x.node == skeleton_bone.path)
-        {
-            let (src_scale, src_rotation, src_translation) =
-                Self::calculate_animation(animation, animation_time, ticks_per_second);
-            translation = src_translation;
-            scale = src_scale;
-            rotation = src_rotation;
-            has_anim = true;
-        }
-
-        let global_transform = Self::post_calculate_animation(
-            node_anim_transforms,
+        let lcoal_transformation = Self::calculate_lcoal_transformation(
             skeleton_bone,
             skeleton_mesh_hierarchy,
+            skeleton_animation.clone(),
             parent_global_transformation,
-            scale,
-            rotation,
-            translation,
-            has_anim,
+            animation_time,
+            influence,
+        );
+
+        Self::post_calculate_local_transform(
+            node_anim_transforms,
+            skeleton_bone,
+            lcoal_transformation,
         );
 
         for child in &skeleton_bone.childs {
@@ -62,7 +81,8 @@ pub trait SkeletonAnimationProvider: DynClone + Downcast {
                 skeleton_animation.clone(),
                 animation_time,
                 skeleton_mesh_hierarchy,
-                global_transform,
+                lcoal_transformation,
+                influence,
             );
         }
     }
@@ -120,40 +140,17 @@ pub trait SkeletonAnimationProvider: DynClone + Downcast {
         (scale, rotation, position)
     }
 
-    fn post_calculate_animation(
+    fn post_calculate_local_transform(
         node_anim_transforms: &mut HashMap<String, glam::Mat4>,
         skeleton_bone: &SkeletonBone,
-        skeleton_mesh_hierarchy: &HashMap<String, rs_artifact::skeleton::SkeletonMeshHierarchyNode>,
-        parent_global_transformation: glam::Mat4,
-        scale: glam::Vec3,
-        rotation: glam::Quat,
-        translation: glam::Vec3,
-        has_anim: bool,
-    ) -> glam::Mat4
-    where
+        local_transform: glam::Mat4,
+    ) where
         Self: Sized,
     {
-        let Some(node) = skeleton_mesh_hierarchy.get(&skeleton_bone.path) else {
-            return glam::Mat4::IDENTITY;
-        };
-        let self_transformation = node.transformation;
-        let anim_transform =
-            glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
-
-        let global_transform = parent_global_transformation
-            * self_transformation
-            * if has_anim {
-                self_transformation.inverse()
-            } else {
-                glam::Mat4::IDENTITY
-            }
-            * anim_transform;
-
         node_anim_transforms.insert(
             skeleton_bone.path.clone(),
-            global_transform * skeleton_bone.offset_matrix,
+            local_transform * skeleton_bone.offset_matrix,
         );
-        global_transform
     }
 
     fn walk_skeleton_bone_blend(
@@ -167,53 +164,42 @@ pub trait SkeletonAnimationProvider: DynClone + Downcast {
     ) where
         Self: Sized,
     {
-        let mut dest_translation = glam::Vec3::ZERO;
-        let mut dest_scale = glam::Vec3::ONE;
-        let mut dest_rotation = glam::Quat::IDENTITY;
-        let mut has_anim = false;
-
         fn to_local_time(time: f32, time_range: std::ops::RangeInclusive<f32>) -> f32 {
             (time - *time_range.start()).clamp(*time_range.start(), *time_range.end())
         }
+        let Some(node) = skeleton_mesh_hierarchy.get(&skeleton_bone.path) else {
+            return;
+        };
+        let mut lcoal_transformation = parent_global_transformation * node.transformation;
 
         for skeleton_animation_blend in skeleton_animation_blends.iter() {
-            let ticks_per_second = skeleton_animation_blend.skeleton_animation.ticks_per_second;
-
-            if let Some(animation) = skeleton_animation_blend
+            let local_time =
+                to_local_time(animation_time, skeleton_animation_blend.time_range.clone());
+            let local_total_duration = skeleton_animation_blend
                 .skeleton_animation
-                .channels
-                .iter()
-                .find(|x| x.node == skeleton_bone.path)
-            {
-                let local_time =
-                    to_local_time(animation_time, skeleton_animation_blend.time_range.clone());
-                let local_total_duration = skeleton_animation_blend
-                    .skeleton_animation
-                    .duration_as_secs_f32();
-                let local_time = local_time.clamp(0.0, local_total_duration);
-
-                let (src_scale, src_rotation, src_translation) =
-                    Self::calculate_animation(animation, local_time, ticks_per_second);
-                match skeleton_animation_blend.blend_type {
-                    SkeletonAnimationBlendType::Combine(factor) => {
-                        dest_scale = dest_scale.lerp(src_scale, factor);
-                        dest_rotation = dest_rotation.slerp(src_rotation, factor);
-                        dest_translation = dest_translation.lerp(src_translation, factor);
-                    }
+                .duration_as_secs_f32();
+            let local_time = local_time.clamp(0.0, local_total_duration);
+            match skeleton_animation_blend.blend_type {
+                SkeletonAnimationBlendType::Combine(factor) => {
+                    lcoal_transformation = lcoal_transformation.slerp(
+                        &Self::calculate_lcoal_transformation(
+                            skeleton_bone,
+                            skeleton_mesh_hierarchy,
+                            skeleton_animation_blend.skeleton_animation.clone(),
+                            parent_global_transformation,
+                            local_time,
+                            1.0,
+                        ),
+                        factor,
+                    );
                 }
-                has_anim = true;
             }
         }
 
-        let global_transform = Self::post_calculate_animation(
+        Self::post_calculate_local_transform(
             node_anim_transforms,
             skeleton_bone,
-            skeleton_mesh_hierarchy,
-            parent_global_transformation,
-            dest_scale,
-            dest_rotation,
-            dest_translation,
-            has_anim,
+            lcoal_transformation,
         );
 
         for child in &skeleton_bone.childs {
@@ -224,7 +210,7 @@ pub trait SkeletonAnimationProvider: DynClone + Downcast {
                 skeleton_animation_blends.clone(),
                 animation_time,
                 skeleton_mesh_hierarchy,
-                global_transform,
+                lcoal_transformation,
             );
         }
     }
@@ -262,6 +248,7 @@ impl SkeletonAnimationProvider for SingleSkeletonAnimationProvider {
             self.animation_time,
             &self.skeleton.skeleton_mesh_hierarchy,
             parent_global_transformation,
+            1.0,
         );
     }
 }
