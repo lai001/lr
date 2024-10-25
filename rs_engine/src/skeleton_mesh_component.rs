@@ -474,4 +474,12 @@ impl SkeletonMeshComponent {
     ) {
         let _ = level_physics;
     }
+
+    pub fn on_post_update_animation(&mut self, files: &[EContentFileType]) {
+        let skeleton_animation_provider = self.find_animation_provider(files);
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.skeleton_animation_provider = skeleton_animation_provider;
+    }
 }

@@ -4,6 +4,7 @@ use super::{
 };
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
+use egui::Ui;
 use egui_winit::State;
 use rs_engine::{
     content::{blend_animations::BlendAnimations, skeleton_mesh::SkeletonMesh},
@@ -17,6 +18,14 @@ use rs_engine::{
 };
 use rs_foundation::new::SingleThreadMutType;
 use std::collections::HashMap;
+
+enum EventType {
+    PreviewSkeletonUrl(Option<url::Url>),
+    Remove(Vec<usize>),
+    Add(url::Url),
+    UpdateFactor(usize, f32),
+    UpdateAnimation(usize, url::Url),
+}
 
 pub struct BlendAnimationUIWindow {
     pub egui_winit_state: State,
@@ -145,6 +154,134 @@ impl BlendAnimationUIWindow {
             .collect();
         skeleton_meshes
     }
+
+    fn render_ui(&mut self, ui: &mut Ui) -> Option<EventType> {
+        let mut event_type: Option<EventType> = None;
+        let candidate_items = self.collect_skeleton_urls();
+        let _ = ui;
+        let mut current_value = self.preview_skeleton_url.as_ref();
+        let is_changed =
+            misc::render_combo_box(ui, "Preview skeleton", &mut current_value, &candidate_items);
+        if is_changed {
+            let new = current_value.cloned();
+            event_type = Some(EventType::PreviewSkeletonUrl(new));
+        }
+
+        let is_add = ui.button("+").clicked();
+        if is_add {
+            if let Some(animation_url) = self.collect_animation_urls().first().cloned() {
+                event_type = Some(EventType::Add(animation_url));
+            }
+        }
+
+        let mut remove_index = vec![];
+        let mut blend_animation = self.blend_animation.borrow_mut();
+        let channels = &mut blend_animation.channels;
+        for (index, channel) in channels.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                let current_value = &mut channel.animation_url;
+
+                let is_changed = render_combo_box_not_null(
+                    ui,
+                    &format!("Animation {}", index),
+                    current_value,
+                    self.collect_animation_urls(),
+                );
+                if is_changed {
+                    event_type = Some(EventType::UpdateAnimation(index, current_value.clone()));
+                }
+                match &mut channel.blend_type {
+                    SkeletonAnimationBlendType::Combine(factor) => {
+                        let response =
+                            ui.add(egui::DragValue::new(factor).speed(0.01).prefix("factor: "));
+                        if response.changed() {
+                            event_type = Some(EventType::UpdateFactor(index, *factor));
+                        }
+                    }
+                }
+                let is_remove = ui.button("-").clicked();
+                if is_remove {
+                    remove_index.push(index);
+                }
+            });
+        }
+        if !remove_index.is_empty() {
+            event_type = Some(EventType::Remove(remove_index));
+        }
+        event_type
+    }
+
+    fn process_event(&mut self, event: EventType, engine: &mut Engine) {
+        match event {
+            EventType::PreviewSkeletonUrl(url) => {
+                self.preview_skeleton_url = url;
+                if let Some(skeleton_url) = &self.preview_skeleton_url {
+                    self.skeleton_meshes =
+                        self.collect_skeleton_meshes_with_skeleton_url(skeleton_url);
+
+                    let skeleton_mesh_urls = self
+                        .skeleton_meshes
+                        .iter()
+                        .map(|x| x.borrow().url.clone())
+                        .collect();
+                    let mut skeleton_mesh_component = SkeletonMeshComponent::new(
+                        format!("PreviewSkeletonMesh"),
+                        Some(skeleton_url.clone()),
+                        skeleton_mesh_urls,
+                        Some(self.blend_animation.borrow().url.clone()),
+                        None,
+                        glam::Mat4::IDENTITY,
+                    );
+                    let files = &self.content.borrow().files;
+                    let resource_manager = ResourceManager::default();
+                    skeleton_mesh_component.initialize(
+                        resource_manager,
+                        engine,
+                        files,
+                        &mut self.player_view_port,
+                    );
+                    self.preview_skeleton_mesh_component = Some(skeleton_mesh_component);
+                } else {
+                    self.preview_skeleton_mesh_component = None;
+                }
+            }
+            EventType::Remove(mut remove_index) => {
+                remove_index.reverse();
+                let mut blend_animation = self.blend_animation.borrow_mut();
+                let channels = &mut blend_animation.channels;
+                for index in remove_index {
+                    channels.remove(index);
+                }
+            }
+            EventType::Add(animation_url) => {
+                let added_channel = rs_engine::content::blend_animations::Channel {
+                    animation_url,
+                    blend_type: SkeletonAnimationBlendType::Combine(1.0),
+                    time_range: 0.0..=3.0,
+                };
+                let mut blend_animation = self.blend_animation.borrow_mut();
+                blend_animation.channels.push(added_channel);
+            }
+            EventType::UpdateFactor(index, factor) => {
+                let mut blend_animation = self.blend_animation.borrow_mut();
+                let channels = &mut blend_animation.channels;
+                match &mut channels[index].blend_type {
+                    SkeletonAnimationBlendType::Combine(factor_mut) => {
+                        *factor_mut = factor;
+                    }
+                }
+            }
+            EventType::UpdateAnimation(index, url) => {
+                let mut blend_animation = self.blend_animation.borrow_mut();
+                let channels = &mut blend_animation.channels;
+                channels[index].animation_url = url;
+            }
+        }
+        if let Some(component) = self.preview_skeleton_mesh_component.as_mut() {
+            let files = &self.content.borrow().files;
+            component.on_post_update_animation(files);
+        }
+    }
 }
 
 impl UIWindow for BlendAnimationUIWindow {
@@ -208,90 +345,15 @@ impl UIWindow for BlendAnimationUIWindow {
                 self.player_view_port.update_global_constants(engine);
 
                 engine.present_player_viewport(&mut self.player_view_port);
-                let candidate_items = self.collect_skeleton_urls();
                 let ctx = self.egui_winit_state.egui_ctx().clone();
                 misc::ui_begin(&mut self.egui_winit_state, window);
                 egui::Window::new("")
                     .default_open(true)
                     .open(&mut true)
                     .show(&ctx, |ui| {
-                        let _ = ui;
-                        let mut current_value = self.preview_skeleton_url.as_ref();
-                        let is_changed = misc::render_combo_box(
-                            ui,
-                            "Preview skeleton",
-                            &mut current_value,
-                            &candidate_items,
-                        );
-                        if is_changed {
-                            let new = current_value.cloned();
-                            self.preview_skeleton_url = new;
-                            if let Some(skeleton_url) = &self.preview_skeleton_url {
-                                self.skeleton_meshes =
-                                    self.collect_skeleton_meshes_with_skeleton_url(skeleton_url);
-
-                                let skeleton_mesh_urls = self
-                                    .skeleton_meshes
-                                    .iter()
-                                    .map(|x| x.borrow().url.clone())
-                                    .collect();
-                                let mut skeleton_mesh_component = SkeletonMeshComponent::new(
-                                    format!("PreviewSkeletonMesh"),
-                                    Some(skeleton_url.clone()),
-                                    skeleton_mesh_urls,
-                                    Some(self.blend_animation.borrow().url.clone()),
-                                    None,
-                                    glam::Mat4::IDENTITY,
-                                );
-                                let files = &self.content.borrow().files;
-                                let resource_manager = ResourceManager::default();
-                                skeleton_mesh_component.initialize(
-                                    resource_manager,
-                                    engine,
-                                    files,
-                                    &mut self.player_view_port,
-                                );
-                                self.preview_skeleton_mesh_component =
-                                    Some(skeleton_mesh_component);
-                            }
-                        }
-
-                        let is_add = ui.button("+").clicked();
-                        if is_add {
-                            if let Some(animation_url) =
-                                self.collect_animation_urls().first().cloned()
-                            {
-                                let added_channel = rs_engine::content::blend_animations::Channel {
-                                    animation_url,
-                                    blend_type: SkeletonAnimationBlendType::Combine(1.0),
-                                    time_range: 0.0..=3.0,
-                                };
-                                let mut blend_animation = self.blend_animation.borrow_mut();
-                                blend_animation.channels.push(added_channel);
-                            }
-                        }
-
-                        let mut blend_animation = self.blend_animation.borrow_mut();
-                        let channels = &mut blend_animation.channels;
-                        for (index, channel) in channels.iter_mut().enumerate() {
-                            ui.horizontal(|ui| {
-                                let current_value = &mut channel.animation_url;
-                                render_combo_box_not_null(
-                                    ui,
-                                    &format!("Animation {}", index),
-                                    current_value,
-                                    self.collect_animation_urls(),
-                                );
-                                match &mut channel.blend_type {
-                                    SkeletonAnimationBlendType::Combine(factor) => {
-                                        ui.add(
-                                            egui::DragValue::new(factor)
-                                                .speed(0.01)
-                                                .prefix("factor: "),
-                                        );
-                                    }
-                                }
-                            });
+                        let event = self.render_ui(ui);
+                        if let Some(event) = event {
+                            self.process_event(event, engine);
                         }
                     });
                 let gui_render_output = misc::ui_end(&mut self.egui_winit_state, window, window_id);
