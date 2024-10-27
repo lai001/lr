@@ -1,6 +1,6 @@
 #[derive(Clone)]
 pub enum EInputType<'a> {
-    Device(&'a winit::event::DeviceEvent),
+    // Device(&'a winit::event::DeviceEvent),
     MouseWheel(&'a winit::event::MouseScrollDelta),
     MouseInput(
         &'a winit::event::ElementState,

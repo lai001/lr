@@ -351,23 +351,57 @@ impl Engine {
                             }
                         }
                     }
-                    EContentType::Sound => match resource_manager
-                        .get_resource::<crate::content::sound::Sound>(
+                    EContentType::Sound => {
+                        match resource_manager.get_resource::<crate::content::sound::Sound>(
                             url,
                             Some(EResourceType::Content(EContentType::Sound)),
                         ) {
-                        Ok(sound) => {
-                            files.insert(
-                                url.clone(),
-                                EContentFileType::Sound(SingleThreadMut::new(sound)),
-                            );
+                            Ok(sound) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::Sound(SingleThreadMut::new(sound)),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
                         }
-                        Err(err) => {
-                            log::warn!("{err}");
+                    }
+                    EContentType::Curve => {
+                        match resource_manager.get_resource::<crate::content::curve::Curve>(
+                            url,
+                            Some(EResourceType::Content(EContentType::Curve)),
+                        ) {
+                            Ok(curve) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::Curve(SingleThreadMut::new(curve)),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
                         }
-                    },
-                    EContentType::Curve => todo!(),
-                    EContentType::BlendAnimations => todo!(),
+                    }
+                    EContentType::BlendAnimations => {
+                        match resource_manager
+                            .get_resource::<crate::content::blend_animations::BlendAnimations>(
+                                url,
+                                Some(EResourceType::Content(EContentType::BlendAnimations)),
+                            ) {
+                            Ok(blend_animations) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::BlendAnimations(SingleThreadMut::new(
+                                        blend_animations,
+                                    )),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
+                        }
+                    }
                 },
                 _ => {}
             }

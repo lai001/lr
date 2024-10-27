@@ -65,15 +65,28 @@ impl Application {
     }
 
     #[cfg(not(target_os = "android"))]
-    pub fn on_input(&mut self, ty: crate::input_type::EInputType) -> Vec<winit::keyboard::KeyCode> {
-        self.player_view_port.on_input(ty.clone());
+    pub fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent) {
+        self.player_view_port.on_device_event(device_event);
+        #[cfg(feature = "plugin_shared_crate")]
+        for plugin in self.plugins.iter_mut() {
+            plugin.on_device_event(device_event);
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub fn on_window_input(
+        &mut self,
+        window: &mut winit::window::Window,
+        ty: crate::input_type::EInputType,
+    ) -> Vec<winit::keyboard::KeyCode> {
+        self.player_view_port.on_window_input(ty.clone());
         #[cfg(feature = "plugin_shared_crate")]
         let mut consume = vec![];
         #[cfg(not(feature = "plugin_shared_crate"))]
         let consume = vec![];
         #[cfg(feature = "plugin_shared_crate")]
         for plugin in self.plugins.iter_mut() {
-            let mut plugin_consume = plugin.on_input(ty.clone());
+            let mut plugin_consume = plugin.on_window_input(window, ty.clone());
             consume.append(&mut plugin_consume);
         }
         consume
@@ -97,7 +110,7 @@ impl Application {
 
         #[cfg(not(target_os = "android"))]
         self.player_view_port
-            .on_input(crate::input_type::EInputType::KeyboardInput(
+            .on_window_input(crate::input_type::EInputType::KeyboardInput(
                 virtual_key_code_states,
             ));
 

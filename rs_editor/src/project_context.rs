@@ -324,6 +324,12 @@ impl ProjectContext {
         let mut sound_resources: HashMap<url::Url, rs_artifact::sound::Sound> = HashMap::new();
         let mut sounds: HashMap<url::Url, rs_engine::content::sound::Sound> = HashMap::new();
 
+        let mut curves: HashMap<url::Url, rs_engine::content::curve::Curve> = HashMap::new();
+        let mut blend_animations: HashMap<
+            url::Url,
+            rs_engine::content::blend_animations::BlendAnimations,
+        > = HashMap::new();
+
         for file in &self.project.content.borrow().files {
             match file {
                 EContentFileType::StaticMesh(asset) => {
@@ -510,8 +516,14 @@ impl ProjectContext {
                     };
                     sound_resources.insert(sound.asset_info.get_url(), sound_resource);
                 }
-                EContentFileType::Curve(_) => todo!(),
-                EContentFileType::BlendAnimations(_) => todo!(),
+                EContentFileType::Curve(curve) => {
+                    let curve = curve.borrow();
+                    curves.insert(curve.url.clone(), curve.clone());
+                }
+                EContentFileType::BlendAnimations(blend_animation) => {
+                    let blend_animation = blend_animation.borrow();
+                    blend_animations.insert(blend_animation.url.clone(), blend_animation.clone());
+                }
             }
         }
 
@@ -561,6 +573,12 @@ impl ProjectContext {
             artifact_asset_encoder.encode(asset);
         }
         for asset in sounds.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in curves.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in blend_animations.values() {
             artifact_asset_encoder.encode(asset);
         }
         let _ = artifact_asset_encoder.finish()?;

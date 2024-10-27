@@ -954,7 +954,25 @@ impl PlayerViewport {
     }
 
     #[cfg(not(target_os = "android"))]
-    pub fn on_input(&mut self, ty: crate::input_type::EInputType) {
+    pub fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent) {
+        use crate::camera_input_event_handle::{
+            CameraInputEventHandle, DefaultCameraInputEventHandle,
+        };
+        match device_event {
+            winit::event::DeviceEvent::MouseMotion { delta } => {
+                DefaultCameraInputEventHandle::mouse_motion_handle(
+                    &mut self.camera,
+                    *delta,
+                    self._input_mode,
+                    self._camera_motion_speed,
+                );
+            }
+            _ => {}
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub fn on_window_input(&mut self, ty: crate::input_type::EInputType) {
         use crate::{
             camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
             input_type::EInputType,
@@ -964,20 +982,6 @@ impl PlayerViewport {
             return;
         }
         match ty {
-            EInputType::Device(device_event) => {
-                //
-                match device_event {
-                    winit::event::DeviceEvent::MouseMotion { delta } => {
-                        DefaultCameraInputEventHandle::mouse_motion_handle(
-                            &mut self.camera,
-                            *delta,
-                            self._input_mode,
-                            self._camera_motion_speed,
-                        );
-                    }
-                    _ => {}
-                }
-            }
             EInputType::MouseWheel(delta) => {
                 //
                 match delta {

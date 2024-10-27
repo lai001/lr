@@ -286,9 +286,7 @@ impl BlendAnimationUIWindow {
 
 impl UIWindow for BlendAnimationUIWindow {
     fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent) {
-        let _ = device_event;
-        self.player_view_port
-            .on_input(rs_engine::input_type::EInputType::Device(device_event));
+        self.player_view_port.on_device_event(device_event);
     }
 
     fn on_window_event(
@@ -311,14 +309,13 @@ impl UIWindow for BlendAnimationUIWindow {
                     return;
                 };
                 self.virtual_key_code_states.insert(key_code, event.state);
-                self.player_view_port
-                    .on_input(rs_engine::input_type::EInputType::KeyboardInput(
-                        &self.virtual_key_code_states,
-                    ));
+                self.player_view_port.on_window_input(
+                    rs_engine::input_type::EInputType::KeyboardInput(&self.virtual_key_code_states),
+                );
             }
             winit::event::WindowEvent::MouseWheel { delta, .. } => {
                 self.player_view_port
-                    .on_input(rs_engine::input_type::EInputType::MouseWheel(delta));
+                    .on_window_input(rs_engine::input_type::EInputType::MouseWheel(delta));
             }
             winit::event::WindowEvent::MouseInput { state, button, .. } => {
                 if *button == winit::event::MouseButton::Right {
@@ -338,10 +335,9 @@ impl UIWindow for BlendAnimationUIWindow {
                 let time = std::time::Instant::now() - self.start;
                 self.frame_sync.sync(60.0);
                 engine.window_redraw_requested_begin(window_id);
-                self.player_view_port
-                    .on_input(rs_engine::input_type::EInputType::KeyboardInput(
-                        &self.virtual_key_code_states,
-                    ));
+                self.player_view_port.on_window_input(
+                    rs_engine::input_type::EInputType::KeyboardInput(&self.virtual_key_code_states),
+                );
                 self.player_view_port.update_global_constants(engine);
 
                 engine.present_player_viewport(&mut self.player_view_port);

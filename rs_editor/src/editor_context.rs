@@ -377,7 +377,7 @@ impl EditorContext {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.player_viewport
-                    .on_input(rs_engine::input_type::EInputType::MouseWheel(delta));
+                    .on_window_input(rs_engine::input_type::EInputType::MouseWheel(delta));
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if *button == winit::event::MouseButton::Right
@@ -493,10 +493,9 @@ impl EditorContext {
                 }
                 self.player_viewport
                     .set_debug_flags(self.data_source.debug_flags);
-                self.player_viewport
-                    .on_input(rs_engine::input_type::EInputType::KeyboardInput(
-                        &self.virtual_key_code_states,
-                    ));
+                self.player_viewport.on_window_input(
+                    rs_engine::input_type::EInputType::KeyboardInput(&self.virtual_key_code_states),
+                );
 
                 self.player_viewport
                     .set_input_mode(self.data_source.input_mode);
@@ -549,8 +548,7 @@ impl EditorContext {
                     };
                     ui_window.on_device_event(event);
                 }
-                self.player_viewport
-                    .on_input(rs_engine::input_type::EInputType::Device(event));
+                self.player_viewport.on_device_event(event);
             }
             Event::UserEvent(event) => {
                 let window = self.window_manager.borrow_mut().get_main_window();

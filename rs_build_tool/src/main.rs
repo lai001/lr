@@ -373,11 +373,11 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli {
         Cli::ProjectFiles(project_files_args) => generate_project_files(project_files_args)?,
-        Cli::Hotreload(hotreload_args) => {
-            if hotreload_args.is_enable {
-                make_build_script(&hotreload_args)?;
+        Cli::Project(project_args) => {
+            if project_args.is_enable {
+                make_build_script(&project_args)?;
             } else {
-                clean(&hotreload_args)?;
+                clean(&project_args)?;
             }
         }
     }

@@ -11,7 +11,7 @@ use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
 use std::{collections::HashMap, path::Path};
 use winit::event::{Event, WindowEvent};
 
-include!("../target/generated/load_plugins.generated");
+include!("../target/generated/load_plugins.generated.rs");
 
 pub struct ApplicationContext {
     engine: Engine,
@@ -116,14 +116,24 @@ impl ApplicationContext {
         // let _ = event_loop_proxy;
         match event {
             Event::DeviceEvent { event, .. } => {
-                self.app.on_input(EInputType::Device(event));
+                self.app.on_device_event(event);
             }
             Event::WindowEvent { event, .. } => {
                 let _ = self.egui_winit_state.on_window_event(window, event);
-                Engine::update_window_with_input_mode(window, EInputMode::Game);
+                // Engine::update_window_with_input_mode(window, EInputMode::Game);
                 match event {
                     WindowEvent::CloseRequested => {
                         self.quit_app();
+                    }
+                    WindowEvent::CursorEntered { .. } => {
+                        self.app.on_window_input(window, EInputType::CursorEntered);
+                    }
+                    WindowEvent::CursorLeft { .. } => {
+                        self.app.on_window_input(window, EInputType::CursorLeft);
+                    }
+                    WindowEvent::CursorMoved { position, .. } => {
+                        self.app
+                            .on_window_input(window, EInputType::CursorMoved(position));
                     }
                     WindowEvent::KeyboardInput { event, .. } => {
                         let winit::keyboard::PhysicalKey::Code(virtual_keycode) =
@@ -133,14 +143,21 @@ impl ApplicationContext {
                         };
                         self.virtual_key_code_states
                             .insert(virtual_keycode, event.state);
-                        self.app
-                            .on_input(EInputType::KeyboardInput(&self.virtual_key_code_states));
+                        let consume = self.app.on_window_input(
+                            window,
+                            EInputType::KeyboardInput(&self.virtual_key_code_states),
+                        );
+                        for item in consume {
+                            let _ = self.virtual_key_code_states.remove(&item);
+                        }
                     }
                     WindowEvent::MouseWheel { delta, .. } => {
-                        self.app.on_input(EInputType::MouseWheel(delta));
+                        self.app
+                            .on_window_input(window, EInputType::MouseWheel(delta));
                     }
                     WindowEvent::MouseInput { state, button, .. } => {
-                        self.app.on_input(EInputType::MouseInput(state, button));
+                        self.app
+                            .on_window_input(window, EInputType::MouseInput(state, button));
                     }
                     WindowEvent::RedrawRequested => {
                         let window_id = u64::from(window.id()) as isize;

@@ -1,20 +1,27 @@
-use crate::cli::HotreloadArgs;
+use crate::{
+    cli::ProjectArgs,
+    load_plugins::create_load_plugins_file,
+    toml_edit::{
+        add_plugin_dependencies_document_mut, add_plugin_dependencies_file, disable_dylib_file,
+        enable_dylib_file, fix_dylib_document_mut, remove_plugin_dependencies_file,
+    },
+};
 use anyhow::anyhow;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
-use toml_edit::{value, Array, DocumentMut, Item, Table};
+use toml_edit::DocumentMut;
 
-fn support_crate_names() -> Vec<String> {
-    let crate_names = vec!["rs_engine", "rs_render"];
-    crate_names.iter().map(|x| x.to_string()).collect()
-}
+// fn support_crate_names() -> Vec<String> {
+//     let crate_names = vec!["rs_engine", "rs_render"];
+//     crate_names.iter().map(|x| x.to_string()).collect()
+// }
 
-pub fn make_build_script(hotreload_args: &HotreloadArgs) -> anyhow::Result<()> {
-    let projcet_folder = hotreload_args
+pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
+    let projcet_folder = project_args
         .project_file
         .parent()
         .ok_or(anyhow!("No parent folder."))?
         .canonicalize_slash()?;
-    let project_name = hotreload_args
+    let project_name = project_args
         .project_file
         .file_stem()
         .ok_or(anyhow!("No project name"))?
@@ -23,138 +30,103 @@ pub fn make_build_script(hotreload_args: &HotreloadArgs) -> anyhow::Result<()> {
 
     let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();
 
-    let crate_names = support_crate_names();
-    let manifest_files = crate_names
-        .iter()
-        .map(|x| engine_root_dir.join(x).join("Cargo.toml"));
+    match &project_args.mode_type {
+        crate::cli::ModeType::Editor => {
+            let crate_names = vec!["rs_engine", "rs_render"];
+            let manifest_files = crate_names
+                .iter()
+                .map(|x| engine_root_dir.join(x).join("Cargo.toml"));
 
-    for path in manifest_files.clone() {
-        let content = std::fs::read_to_string(&path)?;
-        let mut doc = content.parse::<DocumentMut>()?;
+            for path in manifest_files.clone() {
+                enable_dylib_file(&path)?;
+            }
 
-        doc["lib"] = toml_edit::Item::Table({
-            let mut array = Array::default();
-            array.push("dylib");
-            let mut table = Table::new();
-            table["crate-type"] = value(array);
-            table
-        });
+            enable_dylib_file(&projcet_folder.join("Cargo.toml"))?;
 
-        doc["profile"] = toml_edit::Item::Table({
-            let mut level = Table::new();
-            level["opt-level"] = value(2);
+            {
+                let editor_manifest_file = engine_root_dir.join("rs_editor/Cargo.toml");
+                let content = std::fs::read_to_string(&editor_manifest_file)?;
+                let mut doc = content.parse::<DocumentMut>()?;
+                add_plugin_dependencies_document_mut(&mut doc, project_name, &projcet_folder)?;
+                fix_dylib_document_mut(&mut doc);
+                std::fs::write(&editor_manifest_file, doc.to_string())?;
+            }
 
-            let mut any = Table::default();
-            any["*"] = toml_edit::Item::Table(level);
-            any.set_dotted(true);
+            let old_dir = std::env::current_dir()?;
+            std::env::set_current_dir(engine_root_dir.join("rs_editor"))?;
+            let mut command = std::process::Command::new("cargo");
+            command
+                .arg("build")
+                .arg("-vv")
+                .arg("--message-format")
+                .arg("json")
+                .arg("--color")
+                .arg("never")
+                .arg("--package")
+                .arg("rs_editor")
+                .arg("--bin")
+                .arg("editor")
+                .arg("--features")
+                .arg("editor")
+                .arg("--features")
+                .arg("plugin_shared_crate");
 
-            let mut package = Table::default();
-            package["package"] = toml_edit::Item::Table(any);
-            package.set_dotted(true);
+            let output = command.output()?;
+            if !output.status.success() {
+                return Err(anyhow!(
+                    "cargo build, {:?}\n{}",
+                    output.status.code(),
+                    String::from_utf8(output.stderr)?
+                ));
+            }
 
-            let mut dev = Table::default();
-            dev["dev"] = toml_edit::Item::Table(package);
-            dev.set_dotted(true);
-            dev
-        });
-
-        std::fs::write(&path, doc.to_string())?;
-    }
-
-    {
-        let editor_manifest_file = engine_root_dir.join("rs_editor/Cargo.toml");
-        let content = std::fs::read_to_string(&editor_manifest_file)?;
-        let mut doc = content.parse::<DocumentMut>()?;
-
-        let table = doc["dependencies"]
-            .as_table_mut()
-            .ok_or(anyhow!("No dependencies"))?;
-        let mut attributes = Table::default();
-        attributes["path"] = value(projcet_folder.canonicalize_slash()?.to_str().unwrap());
-        table[project_name] = toml_edit::Item::Table(attributes);
-        table[project_name].make_value();
-
-        doc["profile"] = toml_edit::Item::Table({
-            let mut level = Table::new();
-            level["opt-level"] = value(2);
-
-            let mut any = Table::default();
-            any["*"] = toml_edit::Item::Table(level);
-            any.set_dotted(true);
-
-            let mut package = Table::default();
-            package["package"] = toml_edit::Item::Table(any);
-            package.set_dotted(true);
-
-            let mut dev = Table::default();
-            dev["dev"] = toml_edit::Item::Table(package);
-            dev.set_dotted(true);
-            dev
-        });
-
-        std::fs::write(&editor_manifest_file, doc.to_string())?;
-    }
-
-    let old_dir = std::env::current_dir()?;
-    std::env::set_current_dir(engine_root_dir.join("rs_editor"))?;
-    let mut command = std::process::Command::new("cargo");
-    command
-        .arg("build")
-        .arg("-vv")
-        .arg("--message-format")
-        .arg("json")
-        .arg("--color")
-        .arg("never")
-        .arg("--package")
-        .arg("rs_editor")
-        .arg("--bin")
-        .arg("editor")
-        .arg("--features")
-        .arg("editor")
-        .arg("--features")
-        .arg("plugin_shared_crate");
-
-    let output = command.output()?;
-    if !output.status.success() {
-        return Err(anyhow!(
-            "cargo build, {:?}\n{}",
-            output.status.code(),
-            String::from_utf8(output.stderr)?
-        ));
-    }
-
-    let stderr = String::from_utf8(output.stderr)?;
-    let lines = stderr.split("\n");
-    for line in lines {
-        if line.contains("Running")
-            && line.contains("--crate-name")
-            && line.contains(&format!("CARGO_CRATE_NAME={}", project_name))
-        {
-            let line = line.trim_start().trim_end().to_string();
-            let line = line
-                .strip_prefix("Running `")
-                .ok_or(anyhow!("strip_prefix error"))?;
-            let line = line
-                .strip_suffix("`")
-                .ok_or(anyhow!("strip_suffix error"))?;
-            let contents: String = line.replace("&& ", "\n");
-            let mut contents = contents.replace(
-                "--error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat",
-                "",
-            );
-            contents.insert_str(0, "echo off\n");
-            std::fs::write(projcet_folder.join("build.bat"), contents)?;
-            break;
+            let stderr = String::from_utf8(output.stderr)?;
+            let lines = stderr.split("\n");
+            for line in lines {
+                if line.contains("Running")
+                    && line.contains("--crate-name")
+                    && line.contains(&format!("CARGO_CRATE_NAME={}", project_name))
+                {
+                    let line = line.trim_start().trim_end().to_string();
+                    let line = line
+                        .strip_prefix("Running `")
+                        .ok_or(anyhow!("strip_prefix error"))?;
+                    let line = line
+                        .strip_suffix("`")
+                        .ok_or(anyhow!("strip_suffix error"))?;
+                    let contents: String = line.replace("&& ", "\n");
+                    let mut contents = contents.replace(
+                        "--error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat",
+                        "",
+                    );
+                    contents.insert_str(0, "echo off\n");
+                    std::fs::write(projcet_folder.join("build.bat"), contents)?;
+                    break;
+                }
+            }
+            std::env::set_current_dir(old_dir)?;
+        }
+        crate::cli::ModeType::Standalone => {
+            create_load_plugins_file("rs_desktop_standalone", Some(project_name.to_string()))?;
+            add_plugin_dependencies_file(
+                &engine_root_dir.join("rs_desktop_standalone/Cargo.toml"),
+                project_name,
+                &projcet_folder,
+            )?;
+            disable_dylib_file(&projcet_folder.join("Cargo.toml"))?;
         }
     }
-
-    std::env::set_current_dir(old_dir)?;
 
     Ok(())
 }
 
-pub fn clean(hotreload_args: &HotreloadArgs) -> anyhow::Result<()> {
-    let project_name = hotreload_args
+pub fn clean(project_args: &ProjectArgs) -> anyhow::Result<()> {
+    let projcet_folder = project_args
+        .project_file
+        .parent()
+        .ok_or(anyhow!("No parent folder."))?
+        .canonicalize_slash()?;
+    let project_name = project_args
         .project_file
         .file_stem()
         .ok_or(anyhow!("No project name"))?
@@ -163,26 +135,21 @@ pub fn clean(hotreload_args: &HotreloadArgs) -> anyhow::Result<()> {
 
     let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();
 
-    let crate_names = support_crate_names();
+    let crate_names = vec!["rs_editor", "rs_engine", "rs_render"];
     let manifest_files = crate_names
         .iter()
         .map(|x| engine_root_dir.join(x).join("Cargo.toml"));
 
     for path in manifest_files {
-        let content: String = std::fs::read_to_string(&path)?;
-        let mut doc = content.parse::<DocumentMut>()?;
-        doc.remove_entry("lib");
-        doc.remove_entry("profile");
-        std::fs::write(&path, doc.to_string())?;
+        disable_dylib_file(&path)?;
     }
 
-    {
-        let editor_manifest_file = engine_root_dir.join("rs_editor/Cargo.toml");
-        let content = std::fs::read_to_string(&editor_manifest_file)?;
-        let mut doc = content.parse::<DocumentMut>()?;
-        doc["dependencies"][project_name] = Item::None;
-        doc["profile"] = Item::None;
-        std::fs::write(&editor_manifest_file, doc.to_string())?;
-    }
+    let manifest_file = engine_root_dir.join("rs_editor/Cargo.toml");
+    remove_plugin_dependencies_file(&manifest_file, project_name)?;
+    let manifest_file = engine_root_dir.join("rs_desktop_standalone/Cargo.toml");
+    remove_plugin_dependencies_file(&manifest_file, project_name)?;
+    create_load_plugins_file("rs_desktop_standalone", None)?;
+    let project_manifest_file = projcet_folder.join("Cargo.toml");
+    disable_dylib_file(&project_manifest_file)?;
     Ok(())
 }

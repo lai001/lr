@@ -14,6 +14,13 @@ pub trait Plugin {
         player_viewport: &mut PlayerViewport,
         files: &[EContentFileType],
     );
+
     #[cfg(not(target_os = "android"))]
-    fn on_input(&mut self, ty: crate::input_type::EInputType) -> Vec<winit::keyboard::KeyCode>;
+    fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent);
+    #[cfg(not(target_os = "android"))]
+    fn on_window_input(
+        &mut self,
+        window: &mut winit::window::Window,
+        ty: crate::input_type::EInputType,
+    ) -> Vec<winit::keyboard::KeyCode>;
 }

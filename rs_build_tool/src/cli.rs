@@ -1,4 +1,11 @@
-use clap::{Args, Parser};
+use clap::{Args, Parser, ValueEnum};
+
+#[derive(Debug, Clone, ValueEnum, Default)]
+pub enum ModeType {
+    #[default]
+    Editor,
+    Standalone,
+}
 
 #[derive(Debug, Clone, Args)]
 pub struct ProjectFilesArgs {
@@ -7,11 +14,13 @@ pub struct ProjectFilesArgs {
 }
 
 #[derive(Debug, Clone, Args)]
-pub struct HotreloadArgs {
+pub struct ProjectArgs {
     #[arg(short, long, default_value_t = false)]
     pub is_enable: bool,
     #[arg(short, long)]
     pub project_file: std::path::PathBuf,
+    #[arg(short, long)]
+    pub mode_type: ModeType,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -19,5 +28,5 @@ pub struct HotreloadArgs {
 #[command(propagate_version = true)]
 pub enum Cli {
     ProjectFiles(ProjectFilesArgs),
-    Hotreload(HotreloadArgs),
+    Project(ProjectArgs),
 }
