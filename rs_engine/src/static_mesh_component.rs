@@ -106,11 +106,11 @@ impl StaticMeshComponent {
 
     pub fn initialize(
         &mut self,
-        resource_manager: ResourceManager,
         engine: &mut Engine,
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
+        let resource_manager = engine.get_resource_manager();
         let mut find_static_mesh: Option<Arc<StaticMesh>> = None;
 
         for file in files {
@@ -147,6 +147,8 @@ impl StaticMeshComponent {
                     Some(find_static_mesh.name.clone()),
                     material,
                     player_viewport.global_constants_handle.clone(),
+                    player_viewport.point_lights_constants_handle.clone(),
+                    player_viewport.spot_lights_constants_handle.clone(),
                 );
             } else {
                 draw_object = engine.create_draw_object_from_static_mesh(
@@ -177,12 +179,14 @@ impl StaticMeshComponent {
         }
     }
 
-    pub fn update(
+    pub fn tick(
         &mut self,
         time: f32,
         engine: &mut Engine,
-        mut rigid_body_set: Option<&mut RigidBodySet>,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
     ) {
+        let _ = collider_set;
         let _ = time;
         let _ = engine;
         let Some(run_time) = &mut self.run_time else {
@@ -200,10 +204,10 @@ impl StaticMeshComponent {
 
         match (
             run_time.physics.as_mut(),
-            rigid_body_set.as_mut(),
+            // rigid_body_set.as_mut(),
             is_simulate,
         ) {
-            (Some(physics), Some(rigid_body_set), true) => {
+            (Some(physics), true) => {
                 let rigid_body = &rigid_body_set[physics.rigid_body_handle];
                 let translation = rigid_body.translation();
                 let translation = glam::vec3(translation.x, translation.y, translation.z);
@@ -302,6 +306,8 @@ impl StaticMeshComponent {
                 Some(static_mesh.name.clone()),
                 material,
                 player_viewport.global_constants_handle.clone(),
+                player_viewport.point_lights_constants_handle.clone(),
+                player_viewport.spot_lights_constants_handle.clone(),
             );
         } else {
             draw_object = engine.create_draw_object_from_static_mesh(
@@ -375,7 +381,7 @@ impl StaticMeshComponent {
         })
     }
 
-    pub fn init_physics(
+    pub fn initialize_physics(
         &mut self,
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
@@ -556,6 +562,8 @@ impl StaticMeshComponent {
                 Some(find_static_mesh.name.clone()),
                 material,
                 player_viewport.global_constants_handle.clone(),
+                player_viewport.point_lights_constants_handle.clone(),
+                player_viewport.spot_lights_constants_handle.clone(),
             );
         } else {
             draw_object = engine.create_draw_object_from_static_mesh(

@@ -1,7 +1,18 @@
 use crate::{
-    camera_component::CameraComponent, collision_componenet::CollisionComponent,
-    skeleton_mesh_component::SkeletonMeshComponent, static_mesh_component::StaticMeshComponent,
+    camera_component::CameraComponent,
+    collision_componenet::CollisionComponent,
+    components::{
+        component::Component, point_light_component::PointLightComponent,
+        spot_light_component::SpotLightComponent,
+    },
+    content::content_file_type::EContentFileType,
+    engine::Engine,
+    player_viewport::PlayerViewport,
+    skeleton_mesh_component::SkeletonMeshComponent,
+    static_mesh_component::StaticMeshComponent,
 };
+use rapier3d::prelude::ColliderSet;
+use rapier3d::prelude::RigidBodySet;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +42,15 @@ impl SceneComponent {
         }
     }
 
-    pub fn initialize(&mut self) {
+    pub fn initialize(
+        &mut self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
+        let _ = player_viewport;
+        let _ = files;
+        let _ = engine;
         self.run_time = Some(SceneComponentRuntime {
             final_transformation: glam::Mat4::IDENTITY,
             parent_final_transformation: glam::Mat4::IDENTITY,
@@ -86,6 +105,28 @@ impl SceneComponent {
     pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
         vec![]
     }
+
+    pub fn initialize_physics(
+        &mut self,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let _ = collider_set;
+        let _ = rigid_body_set;
+    }
+
+    pub fn tick(
+        &mut self,
+        time: f32,
+        engine: &mut Engine,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let _ = engine;
+        let _ = time;
+        let _ = collider_set;
+        let _ = rigid_body_set;
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -95,6 +136,8 @@ pub enum EComponentType {
     SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
     CameraComponent(SingleThreadMutType<CameraComponent>),
     CollisionComponent(SingleThreadMutType<CollisionComponent>),
+    SpotLightComponent(SingleThreadMutType<SpotLightComponent>),
+    PointLightComponent(SingleThreadMutType<PointLightComponent>),
 }
 
 macro_rules! copy_fn {
@@ -119,7 +162,9 @@ impl EComponentType {
         StaticMeshComponent,
         SkeletonMeshComponent,
         CameraComponent,
-        CollisionComponent
+        CollisionComponent,
+        SpotLightComponent,
+        PointLightComponent
     );
 }
 
@@ -230,6 +275,53 @@ macro_rules! common_fn {
                 )*
             }
         }
+
+        pub fn initialize(&mut self,
+            engine: &mut Engine,
+            files: &[EContentFileType],
+            player_viewport: &mut PlayerViewport,
+        ) {
+            match &mut self.component {
+                $(
+                    EComponentType::$x(component) => {
+                        let mut component = component.borrow_mut();
+                        component.initialize(engine, files, player_viewport);
+                    }
+                )*
+            }
+        }
+
+        pub fn initialize_physics(
+            &mut self,
+            rigid_body_set: &mut RigidBodySet,
+            collider_set: &mut ColliderSet,
+        ) {
+            match &mut self.component {
+                $(
+                    EComponentType::$x(component) => {
+                        let mut component = component.borrow_mut();
+                        component.initialize_physics(rigid_body_set, collider_set);
+                    }
+                )*
+            }
+        }
+
+        pub fn tick(
+            &mut self,
+            time: f32,
+            engine: &mut Engine,
+            rigid_body_set: &mut RigidBodySet,
+            collider_set: &mut ColliderSet,
+        ) {
+            match &mut self.component {
+                $(
+                    EComponentType::$x(component) => {
+                        let mut component = component.borrow_mut();
+                        component.tick(time, engine, rigid_body_set, collider_set);
+                    }
+                )*
+            }
+        }
     };
 }
 
@@ -255,6 +347,8 @@ impl SceneNode {
             EComponentType::SkeletonMeshComponent(_) => None,
             EComponentType::CameraComponent(_) => None,
             EComponentType::CollisionComponent(_) => None,
+            EComponentType::SpotLightComponent(_) => None,
+            EComponentType::PointLightComponent(_) => None,
         }
     }
 
@@ -300,6 +394,8 @@ impl SceneNode {
         StaticMeshComponent,
         SkeletonMeshComponent,
         CameraComponent,
-        CollisionComponent
+        CollisionComponent,
+        SpotLightComponent,
+        PointLightComponent
     );
 }

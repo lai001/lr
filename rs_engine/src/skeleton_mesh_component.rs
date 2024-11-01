@@ -120,11 +120,11 @@ impl SkeletonMeshComponent {
 
     pub fn initialize(
         &mut self,
-        resource_manager: ResourceManager,
         engine: &mut Engine,
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
+        let resource_manager = engine.get_resource_manager().clone();
         let mut skeleton: Option<Arc<Skeleton>> = None;
 
         if let Some(skeleton_url) = &self.skeleton_url {
@@ -202,6 +202,8 @@ impl SkeletonMeshComponent {
                     Some(skin_mesh.name.clone()),
                     material,
                     player_viewport.global_constants_handle.clone(),
+                    player_viewport.point_lights_constants_handle.clone(),
+                    player_viewport.spot_lights_constants_handle.clone(),
                 );
             } else {
                 draw_object = engine.create_draw_object_from_skin_mesh(
@@ -237,7 +239,15 @@ impl SkeletonMeshComponent {
         self.run_time.as_mut().unwrap().physics = physics;
     }
 
-    pub fn update(&mut self, time: f32, engine: &mut Engine) {
+    pub fn tick(
+        &mut self,
+        time: f32,
+        engine: &mut Engine,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let _ = rigid_body_set;
+        let _ = collider_set;
         let _ = engine;
         let Some(run_time) = self.run_time.as_mut() else {
             return;
@@ -349,6 +359,8 @@ impl SkeletonMeshComponent {
                             Some(skin_mesh.name.clone()),
                             material.clone(),
                             player_viewport.global_constants_handle.clone(),
+                            player_viewport.point_lights_constants_handle.clone(),
+                            player_viewport.spot_lights_constants_handle.clone(),
                         );
                     }
                 }
@@ -409,7 +421,7 @@ impl SkeletonMeshComponent {
         })
     }
 
-    pub fn init_physics(
+    pub fn initialize_physics(
         &mut self,
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,

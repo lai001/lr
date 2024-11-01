@@ -4,8 +4,8 @@ use crate::console_cmd::ConsoleCmd;
 use crate::content::content_file_type::EContentFileType;
 use crate::default_textures::DefaultTextures;
 use crate::drawable::{
-    EDrawObjectType, MaterialDrawObject, SkinMeshDrawObject, StaticMeshDrawObject,
-    StaticMeshMaterialDrawObject,
+    EDrawObjectType, MaterialDrawObject, PBRBindingResources, SkinMeshDrawObject,
+    StaticMeshDrawObject, StaticMeshMaterialDrawObject,
 };
 use crate::error::Result;
 use crate::handle::{EGUITextureHandle, TextureHandle};
@@ -92,7 +92,7 @@ impl Engine {
         surface_width: u32,
         surface_height: u32,
         scale_factor: f32,
-        logger: Logger,
+        mut logger: Logger,
         mut artifact_reader: Option<ArtifactReader>,
         mut shaders: HashMap<String, String>,
     ) -> Result<Engine>
@@ -117,6 +117,7 @@ impl Engine {
             }
             log::trace!("Use default settings: {:?}", settings);
         }
+        logger.config_log_to_file(settings.editor_settings.is_enable_log_to_file);
 
         #[cfg(target_os = "android")]
         (|| {
@@ -971,6 +972,8 @@ impl Engine {
         name: Option<String>,
         material: Rc<RefCell<crate::content::material::Material>>,
         global_constants_handle: crate::handle::BufferHandle,
+        point_lights_constants_resource: crate::handle::BufferHandle,
+        spot_lights_constants_resource: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
         let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
@@ -1055,13 +1058,45 @@ impl Engine {
             .get_builtin_resources()
             .global_sampler_handle
             .clone();
-
+        let pbr_binding_resources = self.make_pbr_binding_resources(
+            global_constants_handle,
+            global_sampler_handle,
+            constants_buffer_handle.clone(),
+            virtual_texture_constants_buffer_handle.clone(),
+            point_lights_constants_resource,
+            spot_lights_constants_resource,
+        );
         let object = MaterialDrawObject {
             id,
             vertex_buffers: vertex_buffer_handles,
             vertex_count: vertexes0.len() as u32,
             index_buffer: Some(index_buffer_handle),
             index_count: Some(indexes.len() as u32),
+            pbr_binding_resources,
+            skin_constants_resource: EBindingResource::Constants(*skin_constants_buffer_handle),
+            user_textures_resources: vec![],
+            material,
+            constants_buffer_handle,
+            skin_constants_buffer_handle,
+            virtual_texture_constants_buffer_handle,
+            window_id: self.main_window_id,
+            constants: Default::default(),
+            skin_constants: Default::default(),
+            virtual_texture_constants: Default::default(),
+        };
+        EDrawObjectType::SkinMaterial(object)
+    }
+
+    fn make_pbr_binding_resources(
+        &mut self,
+        global_constants_handle: crate::handle::BufferHandle,
+        global_sampler_handle: crate::handle::SamplerHandle,
+        constants_buffer_handle: crate::handle::BufferHandle,
+        virtual_texture_constants_buffer_handle: crate::handle::BufferHandle,
+        point_lights_constants_resource: crate::handle::BufferHandle,
+        spot_lights_constants_resource: crate::handle::BufferHandle,
+    ) -> PBRBindingResources {
+        let pbr_binding_resources = PBRBindingResources {
             global_constants_resource: EBindingResource::Constants(*global_constants_handle),
             base_color_sampler_resource: EBindingResource::Sampler(*global_sampler_handle),
             physical_texture_resource: EBindingResource::Texture(
@@ -1078,15 +1113,6 @@ impl Engine {
                     .unwrap()
                     .page_table_texture_handle,
             ),
-            material,
-            constants_buffer_handle: constants_buffer_handle.clone(),
-            skin_constants_buffer_handle: skin_constants_buffer_handle.clone(),
-            virtual_texture_constants_buffer_handle: virtual_texture_constants_buffer_handle
-                .clone(),
-            constants: Default::default(),
-            skin_constants: Default::default(),
-            virtual_texture_constants: Default::default(),
-            window_id: self.main_window_id,
             brdflut_texture_resource: EBindingResource::Texture(
                 *self.default_textures.get_ibl_textures().brdflut,
             ),
@@ -1096,17 +1122,21 @@ impl Engine {
             irradiance_texture_resource: EBindingResource::Texture(
                 *self.default_textures.get_ibl_textures().irradiance,
             ),
-            constants_resource: EBindingResource::Constants(*constants_buffer_handle),
-            skin_constants_resource: EBindingResource::Constants(*skin_constants_buffer_handle),
-            virtual_texture_constants_resource: EBindingResource::Constants(
-                *virtual_texture_constants_buffer_handle,
-            ),
-            user_textures_resources: vec![],
             shadow_map_texture_resource: EBindingResource::Texture(
                 *self.default_textures.get_depth_texture_handle(),
             ),
+            constants_resource: EBindingResource::Constants(*constants_buffer_handle),
+            virtual_texture_constants_resource: EBindingResource::Constants(
+                *virtual_texture_constants_buffer_handle,
+            ),
+            point_lights_constants_resource: EBindingResource::Constants(
+                *point_lights_constants_resource,
+            ),
+            spot_lights_constants_resource: EBindingResource::Constants(
+                *spot_lights_constants_resource,
+            ),
         };
-        EDrawObjectType::SkinMaterial(object)
+        pbr_binding_resources
     }
 
     pub fn create_gpu_buffer<T: Sized>(
@@ -1167,6 +1197,8 @@ impl Engine {
         name: Option<String>,
         material: Rc<RefCell<crate::content::material::Material>>,
         global_constants_handle: crate::handle::BufferHandle,
+        point_lights_constants_resource: crate::handle::BufferHandle,
+        spot_lights_constants_resource: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
         let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
@@ -1243,53 +1275,28 @@ impl Engine {
             .get_builtin_resources()
             .global_sampler_handle
             .clone();
-
+        let pbr_binding_resources = self.make_pbr_binding_resources(
+            global_constants_handle,
+            global_sampler_handle,
+            constants_buffer_handle.clone(),
+            virtual_texture_constants_buffer_handle.clone(),
+            point_lights_constants_resource,
+            spot_lights_constants_resource,
+        );
         let object = StaticMeshMaterialDrawObject {
             id,
             vertex_buffers: vertex_buffer_handles,
             vertex_count: vertexes0.len() as u32,
             index_buffer: Some(index_buffer_handle),
             index_count: Some(indexes.len() as u32),
-            global_constants_resource: EBindingResource::Constants(*global_constants_handle),
-            base_color_sampler_resource: EBindingResource::Sampler(*global_sampler_handle),
-            physical_texture_resource: EBindingResource::Texture(
-                self.virtual_pass_handle
-                    .clone()
-                    .map(|x| x.key())
-                    .unwrap()
-                    .physical_texture_handle,
-            ),
-            page_table_texture_resource: EBindingResource::Texture(
-                self.virtual_pass_handle
-                    .clone()
-                    .map(|x| x.key())
-                    .unwrap()
-                    .page_table_texture_handle,
-            ),
+            pbr_binding_resources,
+            user_textures_resources: vec![],
             material,
-            constants_buffer_handle: constants_buffer_handle.clone(),
-            virtual_texture_constants_buffer_handle: virtual_texture_constants_buffer_handle
-                .clone(),
+            constants_buffer_handle,
+            virtual_texture_constants_buffer_handle,
+            window_id: self.main_window_id,
             constants: Default::default(),
             virtual_texture_constants: Default::default(),
-            window_id: self.main_window_id,
-            brdflut_texture_resource: EBindingResource::Texture(
-                *self.default_textures.get_ibl_textures().brdflut,
-            ),
-            pre_filter_cube_map_texture_resource: EBindingResource::Texture(
-                *self.default_textures.get_ibl_textures().pre_filter_cube_map,
-            ),
-            irradiance_texture_resource: EBindingResource::Texture(
-                *self.default_textures.get_ibl_textures().irradiance,
-            ),
-            constants_resource: EBindingResource::Constants(*constants_buffer_handle),
-            virtual_texture_constants_resource: EBindingResource::Constants(
-                *virtual_texture_constants_buffer_handle,
-            ),
-            user_textures_resources: vec![],
-            shadow_map_texture_resource: EBindingResource::Texture(
-                *self.default_textures.get_depth_texture_handle(),
-            ),
         };
         EDrawObjectType::StaticMeshMaterial(object)
     }
@@ -1480,6 +1487,16 @@ impl Engine {
         self.console_cmds
             .borrow_mut()
             .insert(key.to_string(), SingleThreadMut::new(c));
+    }
+
+    pub fn insert_console_cmd_with_value(&mut self, key: &str, value: crate::console_cmd::EValue) {
+        let cmd = ConsoleCmd {
+            key: key.to_string(),
+            value,
+        };
+        self.console_cmds
+            .borrow_mut()
+            .insert(key.to_string(), SingleThreadMut::new(cmd));
     }
 
     pub fn get_console_cmds(

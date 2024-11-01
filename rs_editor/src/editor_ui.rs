@@ -12,6 +12,7 @@ use crate::ui::{
     project_settings, top_menu,
 };
 use egui::*;
+use rs_engine::components::component::Component;
 use rs_engine::input_mode::EInputMode;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
@@ -141,6 +142,14 @@ impl EditorUI {
                             Some(component.get_final_transformation())
                         }
                         rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
+                            let component = component.borrow();
+                            Some(component.get_final_transformation())
+                        }
+                        rs_engine::scene_node::EComponentType::SpotLightComponent(component) => {
+                            let component = component.borrow();
+                            Some(component.get_final_transformation())
+                        }
+                        rs_engine::scene_node::EComponentType::PointLightComponent(component) => {
                             let component = component.borrow();
                             Some(component.get_final_transformation())
                         }

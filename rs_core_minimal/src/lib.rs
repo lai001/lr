@@ -1,3 +1,4 @@
+pub mod color;
 pub mod error;
 pub mod file_manager;
 pub mod frustum;

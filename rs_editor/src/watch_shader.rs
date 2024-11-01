@@ -2,7 +2,12 @@ use anyhow::Result;
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{new_debouncer, DebouncedEvent, Debouncer};
 use rs_render::{command::BuiltinShaderChanged, global_shaders::global_shader::GlobalShader};
-use std::sync::mpsc::Receiver;
+use std::{path::Path, sync::mpsc::Receiver};
+
+pub enum ShaderSourceChangedType {
+    Builtin(BuiltinShaderChanged),
+    Material,
+}
 
 pub struct WatchShader {
     receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>,
@@ -28,7 +33,7 @@ impl WatchShader {
         })
     }
 
-    pub fn get_changed_results(&self) -> Vec<BuiltinShaderChanged> {
+    pub fn get_changed_results(&self) -> Vec<ShaderSourceChangedType> {
         let mut builtin_shader_changeds = vec![];
         if !rs_core_minimal::misc::is_run_from_ide() {
             return builtin_shader_changeds;
@@ -48,16 +53,28 @@ impl WatchShader {
                 );
                 match pre_process_code {
                     Ok(source) => {
-                        builtin_shader_changeds.push(BuiltinShaderChanged { name, source });
-                        continue;
+                        builtin_shader_changeds.push(ShaderSourceChangedType::Builtin(
+                            BuiltinShaderChanged { name, source },
+                        ));
                     }
                     Err(err) => {
                         log::trace!("{err}");
                     }
                 }
             }
+            if Self::is_material_shader_changed(&event.path) {
+                builtin_shader_changeds.push(ShaderSourceChangedType::Material);
+            }
         }
 
         builtin_shader_changeds
+    }
+
+    fn is_material_shader_changed(path: &Path) -> bool {
+        path.ends_with("pbr_shading.wgsl")
+            || path.ends_with("light.wgsl")
+            || path.ends_with("constants.wgsl")
+            || path.ends_with("common.wgsl")
+            || path.ends_with("global_constants.wgsl")
     }
 }

@@ -18,6 +18,8 @@ pub enum EClickEventType {
     CopyPath(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
     DeleteNode(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
     CreateCollisionComponent(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
+    CreateSpotLightComponent(SingleThreadMutType<SceneNode>),
+    CreatePointLightComponent(SingleThreadMutType<SceneNode>),
 }
 
 fn draw_scene_node(
@@ -52,6 +54,20 @@ fn draw_scene_node(
                         if response.clicked() {
                             *event = Some(EClickEventType::CreateCollisionComponent(
                                 actor.clone(),
+                                scene_node.clone(),
+                            ));
+                            ui.close_menu();
+                        }
+                        let response = ui.button("Spot Light");
+                        if response.clicked() {
+                            *event = Some(EClickEventType::CreateSpotLightComponent(
+                                scene_node.clone(),
+                            ));
+                            ui.close_menu();
+                        }
+                        let response = ui.button("Point Light");
+                        if response.clicked() {
+                            *event = Some(EClickEventType::CreatePointLightComponent(
                                 scene_node.clone(),
                             ));
                             ui.close_menu();

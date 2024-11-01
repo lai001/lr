@@ -5,7 +5,8 @@ pub const UP_VECTOR: glam::Vec3 = glam::Vec3::Y;
 pub const RIGHT_VECTOR: glam::Vec3 = glam::Vec3::X;
 
 fn compute_forward_vector(transformation: &glam::Mat4) -> glam::Vec3 {
-    crate::rotator::Rotator::from_matrix(transformation).to_forward_vector()
+    transformation.transform_vector3(FORWARD_VECTOR)
+    // crate::rotator::Rotator::from_matrix(transformation).to_forward_vector()
 }
 
 pub fn project_to_world(

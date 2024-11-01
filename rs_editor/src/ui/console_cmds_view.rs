@@ -42,6 +42,21 @@ pub fn draw(
                             rs_engine::console_cmd::EValue::F32(value) => {
                                 ui.add(egui::DragValue::new(value).speed(0.1));
                             }
+                            rs_engine::console_cmd::EValue::Vec2(vec2) => {
+                                ui.add(egui::DragValue::new(&mut vec2.x).speed(0.1).prefix("x: "));
+                                ui.add(egui::DragValue::new(&mut vec2.y).speed(0.1).prefix("y: "));
+                            }
+                            rs_engine::console_cmd::EValue::Vec3(vec3) => {
+                                ui.add(egui::DragValue::new(&mut vec3.x).speed(0.1).prefix("x: "));
+                                ui.add(egui::DragValue::new(&mut vec3.y).speed(0.1).prefix("y: "));
+                                ui.add(egui::DragValue::new(&mut vec3.z).speed(0.1).prefix("z: "));
+                            }
+                            rs_engine::console_cmd::EValue::Vec4(vec4) => {
+                                ui.add(egui::DragValue::new(&mut vec4.x).speed(0.1).prefix("x: "));
+                                ui.add(egui::DragValue::new(&mut vec4.y).speed(0.1).prefix("y: "));
+                                ui.add(egui::DragValue::new(&mut vec4.z).speed(0.1).prefix("z: "));
+                                ui.add(egui::DragValue::new(&mut vec4.w).speed(0.1).prefix("w: "));
+                            }
                         }
                         ui.end_row();
                     }

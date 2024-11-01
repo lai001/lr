@@ -296,7 +296,10 @@ impl Renderer {
             }),
             Some(wgpu::InstanceDescriptor {
                 dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
-                flags: wgpu::InstanceFlags::default(),
+                flags: match settings.is_enable_debugging {
+                    true => wgpu::InstanceFlags::debugging(),
+                    false => wgpu::InstanceFlags::default(),
+                },
                 gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
                 backends: match settings.get_backends_platform() {
                     settings::Backends::Primary => Backends::PRIMARY,
@@ -973,6 +976,7 @@ impl Renderer {
                 let all_options = MaterialOptions::all();
                 let handle = create_render_pipeline.handle;
                 let device = self.wgpu_context.get_device();
+                let mut is_success = true;
                 for option in all_options.iter() {
                     let name = ShaderLibrary::get_material_shader_name(handle, option);
                     let create_shader_result = self.shader_library.load_shader_from(
@@ -984,10 +988,17 @@ impl Renderer {
                             .clone(),
                         device,
                     );
+                    if is_success {
+                        is_success = create_shader_result.is_ok();
+                    }
                     match create_shader_result {
-                        Ok(_) => {}
+                        Ok(_) => {
+                            log::trace!("Create material render pipeline: {}", name);
+                        }
                         Err(err) => match err {
-                            crate::error::Error::ShaderReflection(_, _) => {}
+                            crate::error::Error::ShaderReflection(err, _) => {
+                                log::warn!("{}", err);
+                            }
                             crate::error::Error::Wgpu(err) => match err.lock().unwrap().deref() {
                                 Error::OutOfMemory { .. } => {
                                     todo!()
@@ -1000,7 +1011,9 @@ impl Renderer {
                             _ => unreachable!(),
                         },
                     }
-                    log::trace!("Create material render pipeline: {}", name);
+                }
+                if !is_success {
+                    return None;
                 }
                 let current_swapchain_format = self
                     .wgpu_context
@@ -1775,29 +1788,32 @@ impl Renderer {
 
                     let pipeline = match &draw_object_command.pipeline {
                         EPipelineType::Builtin(ty) => match ty {
-                            EBuiltinPipelineType::SkinMeshPhong => self
-                                .skin_mesh_shading_pipeline
-                                .base_render_pipeline
-                                .as_ref(),
+                            EBuiltinPipelineType::SkinMeshPhong => Some(
+                                self.skin_mesh_shading_pipeline
+                                    .base_render_pipeline
+                                    .as_ref(),
+                            ),
                             EBuiltinPipelineType::StaticMeshPhong => {
-                                &self.shading_pipeline.base_render_pipeline
+                                Some(&self.shading_pipeline.base_render_pipeline)
                             }
                             EBuiltinPipelineType::Grid => {
-                                self.grid_render_pipeline.base_render_pipeline.as_ref()
+                                Some(self.grid_render_pipeline.base_render_pipeline.as_ref())
                             }
                             EBuiltinPipelineType::MeshView => {
-                                &self.mesh_view_pipeline.base_render_pipeline
+                                Some(self.mesh_view_pipeline.base_render_pipeline.as_ref())
                             }
-                            EBuiltinPipelineType::MeshViewMultipleDraw => {
-                                &self.mesh_view_multiple_draw_pipeline.base_render_pipeline
-                            }
+                            EBuiltinPipelineType::MeshViewMultipleDraw => Some(
+                                self.mesh_view_multiple_draw_pipeline
+                                    .base_render_pipeline
+                                    .as_ref(),
+                            ),
                             EBuiltinPipelineType::ShadowDepthSkinMesh => unimplemented!(),
                             EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
                             EBuiltinPipelineType::Particle => {
-                                &self.particle_pipeline.base_render_pipeline
+                                Some(self.particle_pipeline.base_render_pipeline.as_ref())
                             }
                             EBuiltinPipelineType::Primitive => {
-                                &self.primitive_render_pipeline.base_render_pipeline
+                                Some(self.primitive_render_pipeline.base_render_pipeline.as_ref())
                             }
                         },
                         EPipelineType::Material(material_pipeline) => {
@@ -1805,54 +1821,68 @@ impl Renderer {
                                 .material_render_pipelines
                                 .get(&material_pipeline.handle)
                             {
-                                Some(pipeline) => match pipeline.get(&material_pipeline.options) {
-                                    Some(render_pipeline) => {
-                                        render_pipeline.base_render_pipeline.as_ref()
+                                Some(pipeline) => {
+                                    match pipeline.get(&material_pipeline.options) {
+                                        Some(render_pipeline) => {
+                                            Some(render_pipeline.base_render_pipeline.as_ref())
+                                        }
+                                        None => {
+                                            log::warn!(
+                                                "{} no match options",
+                                                &material_pipeline.handle
+                                            );
+                                            None
+                                            // panic!("{} no match options", &material_pipeline.handle);
+                                        }
                                     }
-                                    None => {
-                                        // log::warn!("{} no match options", &material_pipeline.handle);
-                                        panic!("{} no match options", &material_pipeline.handle);
-                                    }
-                                },
+                                }
                                 None => {
-                                    // log::warn!("{} is not found", &material_pipeline.handle);.
-                                    panic!("{} is not found", &material_pipeline.handle);
+                                    log::warn!("{} is not found", &material_pipeline.handle);
+                                    None
+                                    // panic!("{} is not found", &material_pipeline.handle);
                                 }
                             }
                         }
                     };
 
-                    let bind_groups =
-                        pipeline.make_bind_groups_binding_resources(device, group_binding_resource);
-                    all_bind_groups.push(bind_groups);
+                    if let Some(pipeline) = pipeline {
+                        let bind_groups = pipeline
+                            .make_bind_groups_binding_resources(device, group_binding_resource);
+                        all_bind_groups.push(bind_groups);
+                    } else {
+                        all_bind_groups.push(vec![]);
+                    }
                 }
             }
             for (i, draw_object_command) in draw_object_commands.iter().enumerate() {
                 let pipeline = match &draw_object_command.pipeline {
                     EPipelineType::Builtin(ty) => match ty {
-                        EBuiltinPipelineType::SkinMeshPhong => self
-                            .skin_mesh_shading_pipeline
-                            .base_render_pipeline
-                            .as_ref(),
+                        EBuiltinPipelineType::SkinMeshPhong => Some(
+                            self.skin_mesh_shading_pipeline
+                                .base_render_pipeline
+                                .as_ref(),
+                        ),
                         EBuiltinPipelineType::StaticMeshPhong => {
-                            &self.shading_pipeline.base_render_pipeline
+                            Some(&self.shading_pipeline.base_render_pipeline)
                         }
                         EBuiltinPipelineType::Grid => {
-                            self.grid_render_pipeline.base_render_pipeline.as_ref()
+                            Some(self.grid_render_pipeline.base_render_pipeline.as_ref())
                         }
                         EBuiltinPipelineType::MeshView => {
-                            &self.mesh_view_pipeline.base_render_pipeline
+                            Some(self.mesh_view_pipeline.base_render_pipeline.as_ref())
                         }
-                        EBuiltinPipelineType::MeshViewMultipleDraw => {
-                            &self.mesh_view_multiple_draw_pipeline.base_render_pipeline
-                        }
+                        EBuiltinPipelineType::MeshViewMultipleDraw => Some(
+                            self.mesh_view_multiple_draw_pipeline
+                                .base_render_pipeline
+                                .as_ref(),
+                        ),
                         EBuiltinPipelineType::ShadowDepthSkinMesh => unimplemented!(),
                         EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
                         EBuiltinPipelineType::Particle => {
-                            &self.particle_pipeline.base_render_pipeline
+                            Some(self.particle_pipeline.base_render_pipeline.as_ref())
                         }
                         EBuiltinPipelineType::Primitive => {
-                            &self.primitive_render_pipeline.base_render_pipeline
+                            Some(self.primitive_render_pipeline.base_render_pipeline.as_ref())
                         }
                     },
                     EPipelineType::Material(material_pipeline) => {
@@ -1862,19 +1892,24 @@ impl Renderer {
                         {
                             Some(pipeline) => match pipeline.get(&material_pipeline.options) {
                                 Some(render_pipeline) => {
-                                    render_pipeline.base_render_pipeline.as_ref()
+                                    Some(render_pipeline.base_render_pipeline.as_ref())
                                 }
                                 None => {
-                                    // log::warn!("{} no match options", &material_pipeline.handle);
-                                    panic!("{} no match options", &material_pipeline.handle);
+                                    log::warn!("{} no match options", &material_pipeline.handle);
+                                    None
+                                    // panic!("{} no match options", &material_pipeline.handle);
                                 }
                             },
                             None => {
-                                // log::warn!("{} is not found", &material_pipeline.handle);.
-                                panic!("{} is not found", &material_pipeline.handle);
+                                log::warn!("{} is not found", &material_pipeline.handle);
+                                None
+                                // panic!("{} is not found", &material_pipeline.handle);
                             }
                         }
                     }
+                };
+                let Some(pipeline) = pipeline else {
+                    continue;
                 };
 
                 if let Some(rect) = &draw_object_command.scissor_rect {

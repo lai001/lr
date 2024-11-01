@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["standalone"]
+default = ["editor"]
 editor = []
 standalone = []
 
@@ -18,3 +18,6 @@ path-slash = "0.2.1"
 walkdir = "2.5.0"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
+
+[dev-dependencies]
+rs_core_minimal = { path = "../rs_core_minimal" }

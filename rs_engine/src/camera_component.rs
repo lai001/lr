@@ -1,11 +1,13 @@
 use crate::{
     build_built_in_resouce_url,
     camera::Camera,
+    content::content_file_type::EContentFileType,
     drawable::{CustomDrawObject, EDrawObjectType},
     engine::Engine,
     input_mode::EInputMode,
     player_viewport::PlayerViewport,
 };
+use rapier3d::prelude::{ColliderSet, RigidBodySet};
 use rs_core_minimal::{frustum::Frustum, misc::frustum_from_perspective};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_render::{
@@ -85,7 +87,13 @@ impl CameraComponent {
         }
     }
 
-    pub fn initialize(&mut self, engine: &mut Engine, level_player_viewport: &mut PlayerViewport) {
+    pub fn initialize(
+        &mut self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        level_player_viewport: &mut PlayerViewport,
+    ) {
+        let _ = files;
         let Ok(rt_url) = build_built_in_resouce_url("CameraComponent.RT") else {
             return;
         };
@@ -252,7 +260,15 @@ impl CameraComponent {
         )
     }
 
-    pub fn update(&mut self, time: f32, engine: &mut Engine) {
+    pub fn tick(
+        &mut self,
+        time: f32,
+        engine: &mut Engine,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let _ = rigid_body_set;
+        let _ = collider_set;
         let _ = time;
         let _ = engine;
         let Some(run_time) = &mut self.run_time else {
@@ -294,5 +310,14 @@ impl CameraComponent {
         level_physics: Option<&mut crate::content::level::Physics>,
     ) {
         let _ = level_physics;
+    }
+
+    pub fn initialize_physics(
+        &mut self,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let _ = collider_set;
+        let _ = rigid_body_set;
     }
 }

@@ -35,9 +35,19 @@ pub fn pre_process(
             crate::error::Error::IO(err, Some(format!("{:?} is not exist.", include_dir)))
         })?;
         let include_dir = include_dir.to_slash_lossy();
+        if include_dir.is_empty() {
+            return Err(crate::error::Error::ProcessFail(Some(String::from(
+                "Empty include path",
+            ))));
+        }
         clang.arg(format!("-I{}", include_dir));
     }
     for definition in definitions {
+        if definition.as_ref().is_empty() {
+            return Err(crate::error::Error::ProcessFail(Some(String::from(
+                "Empty macro definition",
+            ))));
+        }
         clang.arg(format!("-D{}", definition.as_ref()));
     }
     let path_arg = shader_path.to_str().ok_or(crate::error::Error::IO(

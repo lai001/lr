@@ -1,15 +1,17 @@
 use crate::camera::Camera;
+use crate::components::component::Component;
 use crate::directional_light::DirectionalLight;
-use crate::drawable::EDrawObjectType;
+use crate::drawable::{EDrawObjectType, PBRBindingResources};
 use crate::engine::{Engine, VirtualPassHandle};
 use crate::handle::TextureHandle;
 use crate::input_mode::EInputMode;
-use crate::misc::{FORWARD_VECTOR, UP_VECTOR};
+use crate::misc::{Mat4Extension, FORWARD_VECTOR, UP_VECTOR};
 use crate::physics_debug_render::{PhysicsDebugRender, RenderRigidBodiesBundle};
 use crate::resource_manager::ResourceManager;
 use crate::{build_built_in_resouce_url, BUILT_IN_RESOURCE};
 use glam::Vec4Swizzles;
 use rapier3d::prelude::*;
+use rs_artifact::material::GroupBinding;
 use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
 use rs_render::antialias_type::{FXAAInfo, MSAAInfo};
 use rs_render::command::{
@@ -42,6 +44,10 @@ pub struct PlayerViewport {
     pub global_sampler_handle: crate::handle::SamplerHandle,
     pub global_constants: rs_render::global_uniform::Constants,
     pub global_constants_handle: crate::handle::BufferHandle,
+    pub point_lights_constants: rs_render::constants::PointLights,
+    pub point_lights_constants_handle: crate::handle::BufferHandle,
+    pub spot_lights_constants: rs_render::constants::SpotLights,
+    pub spot_lights_constants_handle: crate::handle::BufferHandle,
     pub virtual_pass_handle: Option<VirtualPassHandle>,
     pub shadow_depth_texture_handle: Option<TextureHandle>,
     grid_draw_object: Option<DrawObject>,
@@ -83,6 +89,31 @@ impl PlayerViewport {
             },
         });
         engine.get_render_thread_mode_mut().send_command(command);
+
+        let point_lights_constants_handle = engine.get_resource_manager().next_buffer();
+        let point_lights_constants = rs_render::constants::PointLights::default();
+        let command = RenderCommand::CreateBuffer(CreateBuffer {
+            handle: *point_lights_constants_handle,
+            buffer_create_info: BufferCreateInfo {
+                label: Some("PointLights".to_string()),
+                contents: rs_foundation::cast_any_as_u8_slice(&point_lights_constants).to_vec(),
+                usage: wgpu::BufferUsages::all(),
+            },
+        });
+        engine.get_render_thread_mode_mut().send_command(command);
+
+        let spot_lights_constants_handle = engine.get_resource_manager().next_buffer();
+        let spot_lights_constants = rs_render::constants::SpotLights::default();
+        let command = RenderCommand::CreateBuffer(CreateBuffer {
+            handle: *spot_lights_constants_handle,
+            buffer_create_info: BufferCreateInfo {
+                label: Some("SpotLights".to_string()),
+                contents: rs_foundation::cast_any_as_u8_slice(&spot_lights_constants).to_vec(),
+                usage: wgpu::BufferUsages::all(),
+            },
+        });
+        engine.get_render_thread_mode_mut().send_command(command);
+
         let mut camera = Camera::default(width, height);
         camera.set_world_location(glam::vec3(0.0, 1.0, 0.0));
         let physics_debug_render = Some(PhysicsDebugRender::new());
@@ -134,6 +165,7 @@ impl PlayerViewport {
             .global_sampler_handle
             .clone();
         let virtual_texture_source_infos = engine.get_virtual_texture_source_infos();
+
         PlayerViewport {
             render_target_type,
             scene_viewport,
@@ -157,6 +189,10 @@ impl PlayerViewport {
             _camera_motion_speed: 0.1,
             is_use_default_input_process: true,
             is_grid_visible: true,
+            point_lights_constants,
+            point_lights_constants_handle,
+            spot_lights_constants,
+            spot_lights_constants_handle,
         }
     }
 
@@ -367,6 +403,18 @@ impl PlayerViewport {
             data: rs_foundation::cast_to_raw_buffer(&vec![self.global_constants]).to_vec(),
         });
         engine.get_render_thread_mode_mut().send_command(command);
+
+        let command = RenderCommand::UpdateBuffer(UpdateBuffer {
+            handle: *self.point_lights_constants_handle,
+            data: rs_foundation::cast_any_as_u8_slice(&self.point_lights_constants).to_vec(),
+        });
+        engine.get_render_thread_mode_mut().send_command(command);
+
+        let command = RenderCommand::UpdateBuffer(UpdateBuffer {
+            handle: *self.spot_lights_constants_handle,
+            data: rs_foundation::cast_any_as_u8_slice(&self.spot_lights_constants).to_vec(),
+        });
+        engine.get_render_thread_mode_mut().send_command(command);
     }
 
     pub fn update_draw_object(&mut self, engine: &mut Engine, object: &mut EDrawObjectType) {
@@ -528,22 +576,32 @@ impl PlayerViewport {
                 }) else {
                     return;
                 };
-                object.brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
-                object.pre_filter_cube_map_texture_resource =
+
+                let PBRBindingResources {
+                    brdflut_texture_resource,
+                    pre_filter_cube_map_texture_resource,
+                    irradiance_texture_resource,
+                    shadow_map_texture_resource,
+                    point_lights_constants_resource,
+                    ..
+                } = &mut object.pbr_binding_resources;
+
+                *brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
+                *pre_filter_cube_map_texture_resource =
                     EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
-                object.irradiance_texture_resource =
-                    EBindingResource::Texture(*ibl_textures.irradiance);
-                object.shadow_map_texture_resource = EBindingResource::Texture(
+                *irradiance_texture_resource = EBindingResource::Texture(*ibl_textures.irradiance);
+                *shadow_map_texture_resource = EBindingResource::Texture(
                     *self
                         .shadow_depth_texture_handle
                         .clone()
                         .unwrap_or(engine.get_default_textures().get_depth_texture_handle()),
                 );
+                *point_lights_constants_resource =
+                    EBindingResource::Constants(*self.point_lights_constants_handle);
             }
             EDrawObjectType::StaticMeshMaterial(object) => {
                 let settings = engine.get_settings();
-                object.global_constants_resource =
-                    EBindingResource::Constants(*self.global_constants_handle);
+
                 let material_info = object.material.borrow().get_material_info().clone();
                 let map_textures = &material_info
                     .get(&MaterialOptions { is_skin: true })
@@ -610,20 +668,104 @@ impl PlayerViewport {
                 }) else {
                     return;
                 };
-                object.brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
-                object.pre_filter_cube_map_texture_resource =
+
+                let PBRBindingResources {
+                    global_constants_resource,
+                    brdflut_texture_resource,
+                    pre_filter_cube_map_texture_resource,
+                    irradiance_texture_resource,
+                    shadow_map_texture_resource,
+                    point_lights_constants_resource,
+                    ..
+                } = &mut object.pbr_binding_resources;
+
+                *global_constants_resource =
+                    EBindingResource::Constants(*self.global_constants_handle);
+                *brdflut_texture_resource = EBindingResource::Texture(*ibl_textures.brdflut);
+                *pre_filter_cube_map_texture_resource =
                     EBindingResource::Texture(*ibl_textures.pre_filter_cube_map);
-                object.irradiance_texture_resource =
-                    EBindingResource::Texture(*ibl_textures.irradiance);
-                object.shadow_map_texture_resource = EBindingResource::Texture(
+                *irradiance_texture_resource = EBindingResource::Texture(*ibl_textures.irradiance);
+                *shadow_map_texture_resource = EBindingResource::Texture(
                     *self
                         .shadow_depth_texture_handle
                         .clone()
                         .unwrap_or(engine.get_default_textures().get_depth_texture_handle()),
                 );
+                *point_lights_constants_resource =
+                    EBindingResource::Constants(*self.point_lights_constants_handle);
             }
             EDrawObjectType::Custom(_) => {}
         }
+    }
+
+    fn load_group_binding_to_resource(
+        pbrbinding_resources: PBRBindingResources,
+        material_info: &rs_artifact::material::MaterialInfo,
+    ) -> Vec<(GroupBinding, EBindingResource)> {
+        let mut group_binding_to_resource: Vec<(GroupBinding, EBindingResource)> = vec![];
+        let PBRBindingResources {
+            global_constants_resource,
+            base_color_sampler_resource,
+            physical_texture_resource,
+            page_table_texture_resource,
+            brdflut_texture_resource,
+            pre_filter_cube_map_texture_resource,
+            irradiance_texture_resource,
+            shadow_map_texture_resource,
+            constants_resource,
+            virtual_texture_constants_resource,
+            point_lights_constants_resource,
+            spot_lights_constants_resource,
+        } = pbrbinding_resources;
+        if let Some(group_binding) = &material_info.global_constants_binding {
+            group_binding_to_resource.push((*group_binding, global_constants_resource.clone()));
+        }
+        if let Some(group_binding) = &material_info.base_color_sampler_binding {
+            group_binding_to_resource.push((*group_binding, base_color_sampler_resource));
+        }
+        if let Some(group_binding) = &material_info.physical_texture_binding {
+            group_binding_to_resource.push((*group_binding, physical_texture_resource));
+        }
+        if let Some(group_binding) = &material_info.page_table_texture_binding {
+            group_binding_to_resource.push((*group_binding, page_table_texture_resource));
+        }
+        if let Some(group_binding) = &material_info.brdflut_texture_binding {
+            group_binding_to_resource.push((*group_binding, brdflut_texture_resource));
+        }
+        if let Some(group_binding) = &material_info.pre_filter_cube_map_texture_binding {
+            group_binding_to_resource.push((*group_binding, pre_filter_cube_map_texture_resource));
+        }
+        if let Some(group_binding) = &material_info.irradiance_texture_binding {
+            group_binding_to_resource.push((*group_binding, irradiance_texture_resource));
+        }
+        if let Some(group_binding) = &material_info.shadow_map_binding {
+            group_binding_to_resource.push((*group_binding, shadow_map_texture_resource));
+        }
+        if let Some(group_binding) = &material_info.constants_binding {
+            group_binding_to_resource.push((*group_binding, constants_resource.clone()));
+        }
+        if let Some(group_binding) = &material_info.virtual_texture_constants_binding {
+            group_binding_to_resource.push((*group_binding, virtual_texture_constants_resource));
+        }
+        if let Some(group_binding) = &material_info.point_lights_binding {
+            group_binding_to_resource.push((*group_binding, point_lights_constants_resource));
+        }
+        if let Some(group_binding) = &material_info.spot_lights_binding {
+            group_binding_to_resource.push((*group_binding, spot_lights_constants_resource));
+        }
+        group_binding_to_resource
+    }
+
+    fn make_binding_resources(
+        mut group_binding_to_resource: Vec<(GroupBinding, EBindingResource)>,
+    ) -> Vec<Vec<EBindingResource>> {
+        let mut binding_resources: Vec<Vec<EBindingResource>> = vec![];
+        group_binding_to_resource.sort_unstable_by_key(|item| (item.0.group, item.0.binding));
+        for (group_binding, binding_resource) in group_binding_to_resource {
+            binding_resources.resize(group_binding.group + 1, vec![]);
+            binding_resources[group_binding.group].push(binding_resource);
+        }
+        binding_resources
     }
 
     pub fn to_render_draw_object(
@@ -686,127 +828,134 @@ impl PlayerViewport {
             EDrawObjectType::SkinMaterial(skin_objcet) => {
                 let skin_objcet = skin_objcet.clone();
                 let material = skin_objcet.material.borrow();
-                if let Some(pipeline_handle) = material.get_pipeline_handle() {
-                    let mut draw_object = DrawObject::new(
-                        skin_objcet.id,
-                        skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
-                        skin_objcet.vertex_count,
-                        EPipelineType::Material(MaterialPipelineType {
-                            handle: *pipeline_handle,
-                            options: MaterialOptions { is_skin: true },
-                        }),
-                        skin_objcet.index_buffer.clone().map(|x| *x),
-                        skin_objcet.index_count,
+                let pipeline_handle = material
+                    .get_pipeline_handle()
+                    .ok_or(crate::error::Error::Other(None))?;
+                let material_info = material
+                    .get_material_info()
+                    .get(&MaterialOptions { is_skin: true })
+                    .ok_or(crate::error::Error::Other(None))?;
+
+                let mut group_binding_to_resource = Self::load_group_binding_to_resource(
+                    skin_objcet.pbr_binding_resources.clone(),
+                    material_info,
+                );
+
+                if let Some(group_binding) = &material_info.skin_constants_binding {
+                    group_binding_to_resource
+                        .push((*group_binding, skin_objcet.skin_constants_resource.clone()));
+                }
+
+                let mut binding_resources = Self::make_binding_resources(group_binding_to_resource);
+                binding_resources[0].append(&mut skin_objcet.user_textures_resources.clone());
+                let PBRBindingResources {
+                    global_constants_resource,
+                    constants_resource,
+                    ..
+                } = skin_objcet.pbr_binding_resources;
+
+                let mut draw_object = DrawObject::new(
+                    skin_objcet.id,
+                    skin_objcet.vertex_buffers.iter().map(|x| **x).collect(),
+                    skin_objcet.vertex_count,
+                    EPipelineType::Material(MaterialPipelineType {
+                        handle: *pipeline_handle,
+                        options: MaterialOptions { is_skin: true },
+                    }),
+                    skin_objcet.index_buffer.clone().map(|x| *x),
+                    skin_objcet.index_count,
+                    binding_resources,
+                );
+                draw_object.virtual_pass_set = Some(VirtualPassSet {
+                    vertex_buffers: vec![
+                        *skin_objcet.vertex_buffers[0],
+                        *skin_objcet.vertex_buffers[2],
+                    ],
+                    binding_resources: vec![
+                        vec![global_constants_resource.clone()],
                         vec![
-                            vec![
-                                skin_objcet.global_constants_resource.clone(),
-                                skin_objcet.base_color_sampler_resource,
-                                skin_objcet.physical_texture_resource,
-                                skin_objcet.page_table_texture_resource,
-                                skin_objcet.brdflut_texture_resource,
-                                skin_objcet.pre_filter_cube_map_texture_resource,
-                                skin_objcet.irradiance_texture_resource,
-                                skin_objcet.shadow_map_texture_resource,
-                            ],
-                            vec![
-                                skin_objcet.constants_resource.clone(),
-                                skin_objcet.skin_constants_resource.clone(),
-                                skin_objcet.virtual_texture_constants_resource,
-                            ],
-                            skin_objcet.user_textures_resources,
+                            constants_resource.clone(),
+                            skin_objcet.skin_constants_resource.clone(),
                         ],
-                    );
-                    draw_object.virtual_pass_set = Some(VirtualPassSet {
+                    ],
+                });
+                if let Some(handle) = shadow_depth_texture_handle.clone() {
+                    draw_object.shadow_mapping = Some(ShadowMapping {
                         vertex_buffers: vec![
                             *skin_objcet.vertex_buffers[0],
                             *skin_objcet.vertex_buffers[2],
                         ],
-                        binding_resources: vec![
-                            vec![skin_objcet.global_constants_resource.clone()],
-                            vec![
-                                skin_objcet.constants_resource.clone(),
-                                skin_objcet.skin_constants_resource.clone(),
-                            ],
-                        ],
+                        depth_texture_handle: *handle,
+                        binding_resources: vec![vec![
+                            global_constants_resource.clone(),
+                            constants_resource.clone(),
+                            skin_objcet.skin_constants_resource.clone(),
+                        ]],
+                        is_skin: true,
                     });
-                    if let Some(handle) = shadow_depth_texture_handle.clone() {
-                        draw_object.shadow_mapping = Some(ShadowMapping {
-                            vertex_buffers: vec![
-                                *skin_objcet.vertex_buffers[0],
-                                *skin_objcet.vertex_buffers[2],
-                            ],
-                            depth_texture_handle: *handle,
-                            binding_resources: vec![vec![
-                                skin_objcet.global_constants_resource.clone(),
-                                skin_objcet.constants_resource.clone(),
-                                skin_objcet.skin_constants_resource.clone(),
-                            ]],
-                            is_skin: true,
-                        });
-                    }
-                    Ok(draw_object)
-                } else {
-                    Err(crate::error::Error::Other(None))
                 }
+                Ok(draw_object)
             }
             EDrawObjectType::StaticMeshMaterial(static_mesh_draw_objcet) => {
                 let static_mesh_draw_objcet = static_mesh_draw_objcet.clone();
                 let material = static_mesh_draw_objcet.material.borrow();
-                if let Some(pipeline_handle) = material.get_pipeline_handle() {
-                    let mut draw_object = DrawObject::new(
-                        static_mesh_draw_objcet.id,
-                        static_mesh_draw_objcet
-                            .vertex_buffers
-                            .iter()
-                            .map(|x| **x)
-                            .collect(),
-                        static_mesh_draw_objcet.vertex_count,
-                        EPipelineType::Material(MaterialPipelineType {
-                            handle: *pipeline_handle,
-                            options: MaterialOptions { is_skin: false },
-                        }),
-                        static_mesh_draw_objcet.index_buffer.clone().map(|x| *x),
-                        static_mesh_draw_objcet.index_count,
-                        vec![
-                            vec![
-                                static_mesh_draw_objcet.global_constants_resource.clone(),
-                                static_mesh_draw_objcet.base_color_sampler_resource,
-                                static_mesh_draw_objcet.physical_texture_resource,
-                                static_mesh_draw_objcet.page_table_texture_resource,
-                                static_mesh_draw_objcet.brdflut_texture_resource,
-                                static_mesh_draw_objcet.pre_filter_cube_map_texture_resource,
-                                static_mesh_draw_objcet.irradiance_texture_resource,
-                                static_mesh_draw_objcet.shadow_map_texture_resource,
-                            ],
-                            vec![
-                                static_mesh_draw_objcet.constants_resource.clone(),
-                                static_mesh_draw_objcet.virtual_texture_constants_resource,
-                            ],
-                            static_mesh_draw_objcet.user_textures_resources,
-                        ],
-                    );
-                    draw_object.virtual_pass_set = Some(VirtualPassSet {
+                let pipeline_handle = material
+                    .get_pipeline_handle()
+                    .ok_or(crate::error::Error::Other(None))?;
+                let material_info = material
+                    .get_material_info()
+                    .get(&MaterialOptions { is_skin: false })
+                    .ok_or(crate::error::Error::Other(None))?;
+
+                let group_binding_to_resource = Self::load_group_binding_to_resource(
+                    static_mesh_draw_objcet.pbr_binding_resources.clone(),
+                    material_info,
+                );
+                let mut binding_resources = Self::make_binding_resources(group_binding_to_resource);
+                binding_resources[0]
+                    .append(&mut static_mesh_draw_objcet.user_textures_resources.clone());
+
+                let PBRBindingResources {
+                    global_constants_resource,
+                    constants_resource,
+                    ..
+                } = static_mesh_draw_objcet.pbr_binding_resources;
+
+                let mut draw_object = DrawObject::new(
+                    static_mesh_draw_objcet.id,
+                    static_mesh_draw_objcet
+                        .vertex_buffers
+                        .iter()
+                        .map(|x| **x)
+                        .collect(),
+                    static_mesh_draw_objcet.vertex_count,
+                    EPipelineType::Material(MaterialPipelineType {
+                        handle: *pipeline_handle,
+                        options: MaterialOptions { is_skin: false },
+                    }),
+                    static_mesh_draw_objcet.index_buffer.clone().map(|x| *x),
+                    static_mesh_draw_objcet.index_count,
+                    binding_resources,
+                );
+                draw_object.virtual_pass_set = Some(VirtualPassSet {
+                    vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
+                    binding_resources: vec![
+                        vec![global_constants_resource.clone()],
+                        vec![constants_resource.clone()],
+                    ],
+                });
+                if let Some(handle) = shadow_depth_texture_handle.clone() {
+                    draw_object.shadow_mapping = Some(ShadowMapping {
                         vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
-                        binding_resources: vec![
-                            vec![static_mesh_draw_objcet.global_constants_resource.clone()],
-                            vec![static_mesh_draw_objcet.constants_resource.clone()],
-                        ],
+                        depth_texture_handle: *handle,
+                        binding_resources: vec![vec![
+                            global_constants_resource.clone(),
+                            constants_resource.clone(),
+                        ]],
+                        is_skin: false,
                     });
-                    if let Some(handle) = shadow_depth_texture_handle.clone() {
-                        draw_object.shadow_mapping = Some(ShadowMapping {
-                            vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
-                            depth_texture_handle: *handle,
-                            binding_resources: vec![vec![
-                                static_mesh_draw_objcet.global_constants_resource.clone(),
-                                static_mesh_draw_objcet.constants_resource.clone(),
-                            ]],
-                            is_skin: false,
-                        });
-                    }
-                    Ok(draw_object)
-                } else {
-                    Err(crate::error::Error::Other(None))
                 }
+                Ok(draw_object)
             }
             EDrawObjectType::Custom(custom_objcet) => Ok(custom_objcet.draw_object.clone()),
         }
@@ -826,7 +975,15 @@ impl PlayerViewport {
     pub fn append_to_draw_list(&mut self, draw_objects: &[EDrawObjectType]) {
         let mut draw_objects = draw_objects
             .iter()
-            .map(|x| Self::to_render_draw_object(x, self.shadow_depth_texture_handle.clone()))
+            .map(|x| {
+                match Self::to_render_draw_object(x, self.shadow_depth_texture_handle.clone()) {
+                    Ok(ret) => Ok(ret),
+                    Err(err) => {
+                        log::warn!("{}", err);
+                        Err(err)
+                    }
+                }
+            })
             .flatten()
             .collect();
         self.draw_objects.append(&mut draw_objects);
@@ -1031,11 +1188,15 @@ impl PlayerViewport {
         self.global_constants.light_space_matrix = light.get_light_space_matrix();
     }
 
-    fn update_light3(&mut self, view_matrix: glam::Mat4, projection_matrix: glam::Mat4) {
+    fn update_light_with_view_projection(
+        &mut self,
+        view_matrix: glam::Mat4,
+        projection_matrix: glam::Mat4,
+    ) {
         self.global_constants.light_space_matrix = projection_matrix * view_matrix;
     }
 
-    pub fn update_light2(
+    pub fn update_light_concentrate_scene(
         &mut self,
         offset_look_and_projection_matrix: (f32, glam::Vec3, glam::Mat4),
         directional_lights: Vec<SingleThreadMutType<DirectionalLight>>,
@@ -1054,7 +1215,65 @@ impl PlayerViewport {
                     .transform_vector3(FORWARD_VECTOR),
                 UP_VECTOR,
             );
-            self.update_light3(view_matrix, projection_matrix);
+            self.update_light_with_view_projection(view_matrix, projection_matrix);
+        }
+    }
+
+    pub fn update_point_lights(
+        &mut self,
+        lights: Vec<
+            SingleThreadMutType<crate::components::point_light_component::PointLightComponent>,
+        >,
+    ) {
+        self.point_lights_constants.available = lights.len() as u32;
+        let num = lights.len().min(self.point_lights_constants.lights.len());
+        for i in 0..num {
+            let light = lights[i].borrow();
+            let point_light_attributes = light.point_light;
+            self.point_lights_constants.lights[i].ambient = point_light_attributes.ambient;
+            self.point_lights_constants.lights[i].diffuse = point_light_attributes.diffuse;
+            self.point_lights_constants.lights[i].specular = point_light_attributes.specular;
+            self.point_lights_constants.lights[i].linear = point_light_attributes.linear;
+            self.point_lights_constants.lights[i].constant = point_light_attributes.constant;
+            self.point_lights_constants.lights[i].quadratic = point_light_attributes.quadratic;
+            self.point_lights_constants.lights[i].position = light
+                .get_final_transformation()
+                .to_scale_rotation_translation()
+                .2;
+        }
+    }
+
+    pub fn update_spot_lights(
+        &mut self,
+        lights: Vec<
+            SingleThreadMutType<crate::components::spot_light_component::SpotLightComponent>,
+        >,
+    ) {
+        self.spot_lights_constants.available = lights.len() as u32;
+        let num = lights.len().min(self.spot_lights_constants.lights.len());
+        for i in 0..num {
+            let light = lights[i].borrow();
+            let spot_light_attributes = &light.spot_light;
+            self.spot_lights_constants.lights[i].light.ambient =
+                spot_light_attributes.light.ambient;
+            self.spot_lights_constants.lights[i].light.diffuse =
+                spot_light_attributes.light.diffuse;
+            self.spot_lights_constants.lights[i].light.specular =
+                spot_light_attributes.light.specular;
+            self.spot_lights_constants.lights[i].light.linear = spot_light_attributes.light.linear;
+            self.spot_lights_constants.lights[i].light.constant =
+                spot_light_attributes.light.constant;
+            self.spot_lights_constants.lights[i].light.quadratic =
+                spot_light_attributes.light.quadratic;
+            self.spot_lights_constants.lights[i].cut_off = spot_light_attributes.cut_off;
+            self.spot_lights_constants.lights[i].outer_cut_off =
+                spot_light_attributes.outer_cut_off;
+            self.spot_lights_constants.lights[i].light.position = light
+                .get_final_transformation()
+                .to_scale_rotation_translation()
+                .2;
+            self.spot_lights_constants.lights[i].direction =
+                light.get_final_transformation().get_forward_vector();
         }
     }
 

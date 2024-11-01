@@ -22,10 +22,10 @@ impl EDrawObjectType {
                 draw_object.global_constants_resource = resource;
             }
             EDrawObjectType::SkinMaterial(draw_object) => {
-                draw_object.global_constants_resource = resource;
+                draw_object.pbr_binding_resources.global_constants_resource = resource;
             }
             EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                draw_object.global_constants_resource = resource;
+                draw_object.pbr_binding_resources.global_constants_resource = resource;
             }
             EDrawObjectType::Custom(_) => {
                 // unimplemented!()
@@ -84,12 +84,7 @@ pub struct SkinMeshDrawObject {
 }
 
 #[derive(Clone, Debug)]
-pub struct MaterialDrawObject {
-    pub(crate) id: u32,
-    pub(crate) vertex_buffers: Vec<BufferHandle>,
-    pub(crate) vertex_count: u32,
-    pub(crate) index_buffer: Option<BufferHandle>,
-    pub(crate) index_count: Option<u32>,
+pub struct PBRBindingResources {
     pub(crate) global_constants_resource: EBindingResource,
     pub(crate) base_color_sampler_resource: EBindingResource,
     pub(crate) physical_texture_resource: EBindingResource,
@@ -98,10 +93,22 @@ pub struct MaterialDrawObject {
     pub(crate) pre_filter_cube_map_texture_resource: EBindingResource,
     pub(crate) irradiance_texture_resource: EBindingResource,
     pub(crate) shadow_map_texture_resource: EBindingResource,
-
     pub(crate) constants_resource: EBindingResource,
-    pub(crate) skin_constants_resource: EBindingResource,
     pub(crate) virtual_texture_constants_resource: EBindingResource,
+    pub(crate) point_lights_constants_resource: EBindingResource,
+    pub(crate) spot_lights_constants_resource: EBindingResource,
+}
+
+#[derive(Clone, Debug)]
+pub struct MaterialDrawObject {
+    pub(crate) id: u32,
+    pub(crate) vertex_buffers: Vec<BufferHandle>,
+    pub(crate) vertex_count: u32,
+    pub(crate) index_buffer: Option<BufferHandle>,
+    pub(crate) index_count: Option<u32>,
+    pub(crate) pbr_binding_resources: PBRBindingResources,
+
+    pub(crate) skin_constants_resource: EBindingResource,
 
     pub(crate) user_textures_resources: Vec<EBindingResource>,
 
@@ -122,17 +129,7 @@ pub struct StaticMeshMaterialDrawObject {
     pub(crate) vertex_count: u32,
     pub(crate) index_buffer: Option<BufferHandle>,
     pub(crate) index_count: Option<u32>,
-    pub(crate) global_constants_resource: EBindingResource,
-    pub(crate) base_color_sampler_resource: EBindingResource,
-    pub(crate) physical_texture_resource: EBindingResource,
-    pub(crate) page_table_texture_resource: EBindingResource,
-    pub(crate) brdflut_texture_resource: EBindingResource,
-    pub(crate) pre_filter_cube_map_texture_resource: EBindingResource,
-    pub(crate) irradiance_texture_resource: EBindingResource,
-    pub(crate) shadow_map_texture_resource: EBindingResource,
-
-    pub(crate) constants_resource: EBindingResource,
-    pub(crate) virtual_texture_constants_resource: EBindingResource,
+    pub(crate) pbr_binding_resources: PBRBindingResources,
 
     pub(crate) user_textures_resources: Vec<EBindingResource>,
 

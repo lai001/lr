@@ -10,6 +10,7 @@ pub struct LoggerConfiguration {
 }
 
 pub struct Logger {
+    cfg: LoggerConfiguration,
     world_file: Arc<RwLock<Option<BufWriter<File>>>>,
 }
 
@@ -75,7 +76,7 @@ impl Logger {
             });
 
         android_logger::init_once(config);
-        Logger { world_file }
+        Logger { cfg, world_file }
     }
 
     pub fn flush(&self) {
@@ -94,5 +95,31 @@ impl Logger {
                 );
             },
         }
+    }
+
+    pub fn config_log_to_file(&mut self, is_enable: bool) {
+        self.cfg.is_write_to_file = is_enable;
+
+        let mut buf_writer: Option<BufWriter<File>> = None;
+        if self.cfg.is_write_to_file {
+            let writer = (|| {
+                let _ = std::fs::create_dir_all("./log")?;
+                let file = std::fs::File::create(format!(
+                    "./log/{}.log",
+                    chrono::Local::now().format("%Y_%m_%d-%H_%M_%S")
+                ))?;
+                std::io::Result::Ok(std::io::BufWriter::new(file))
+            })();
+            match writer {
+                Ok(writer) => {
+                    buf_writer = Some(writer);
+                }
+                Err(err) => {
+                    println!("{err}");
+                }
+            }
+        }
+        let mut file = self.world_file.write().unwrap();
+        *file = buf_writer;
     }
 }

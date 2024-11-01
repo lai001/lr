@@ -4,7 +4,6 @@ use crate::{
     engine::Engine,
     misc,
     player_viewport::PlayerViewport,
-    resource_manager::ResourceManager,
     scene_node::{EComponentType, SceneNode},
 };
 use rapier3d::prelude::{ColliderSet, RigidBodySet};
@@ -41,36 +40,13 @@ impl Actor {
 
     pub fn initialize(
         &mut self,
-        resource_manager: ResourceManager,
         engine: &mut Engine,
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
-        Actor::walk_node(
-            self.scene_node.clone(),
-            &mut |node| match &node.borrow().component {
-                EComponentType::SceneComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.initialize();
-                }
-                EComponentType::StaticMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.initialize(resource_manager.clone(), engine, files, player_viewport);
-                }
-                EComponentType::SkeletonMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.initialize(resource_manager.clone(), engine, files, player_viewport);
-                }
-                EComponentType::CameraComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.initialize(engine, player_viewport);
-                }
-                EComponentType::CollisionComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.initialize(engine, player_viewport);
-                }
-            },
-        );
+        Actor::walk_node(self.scene_node.clone(), &mut |node| {
+            node.borrow_mut().initialize(engine, files, player_viewport);
+        });
         self.update_components_world_transformation();
     }
 
@@ -79,25 +55,10 @@ impl Actor {
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
     ) {
-        Actor::walk_node(
-            self.scene_node.clone(),
-            &mut |node| match &node.borrow().component {
-                EComponentType::SceneComponent(_) => {}
-                EComponentType::StaticMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.init_physics(rigid_body_set, collider_set)
-                }
-                EComponentType::SkeletonMeshComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.init_physics(rigid_body_set, collider_set)
-                }
-                EComponentType::CameraComponent(_) => {}
-                EComponentType::CollisionComponent(component) => {
-                    let mut component = component.borrow_mut();
-                    component.init_physics(rigid_body_set, collider_set)
-                }
-            },
-        );
+        Actor::walk_node(self.scene_node.clone(), &mut |node| {
+            node.borrow_mut()
+                .initialize_physics(rigid_body_set, collider_set);
+        });
     }
 
     pub fn collect_draw_objects(&self) -> Vec<EDrawObjectType> {
@@ -142,6 +103,8 @@ impl Actor {
                         .collect();
                     draw_objects.append(&mut sub_draw_objects);
                 }
+                EComponentType::SpotLightComponent(_) => {}
+                EComponentType::PointLightComponent(_) => {}
             },
         );
         draw_objects
@@ -151,87 +114,40 @@ impl Actor {
         &mut self,
         time: f32,
         engine: &mut Engine,
-        rigid_body_set: Option<&mut RigidBodySet>,
-    ) {
-        self.update_components_world_transformation();
-
-        match rigid_body_set {
-            Some(rigid_body_set) => {
-                Actor::walk_node(self.scene_node.clone(), {
-                    &mut |node| {
-                        let node = node.borrow_mut();
-                        match &node.component {
-                            EComponentType::SceneComponent(_) => {}
-                            EComponentType::StaticMeshComponent(component) => {
-                                let mut component = component.borrow_mut();
-                                component.update(time, engine, Some(rigid_body_set));
-                            }
-                            EComponentType::SkeletonMeshComponent(component) => {
-                                let mut component = component.borrow_mut();
-                                component.update(time, engine);
-                            }
-                            EComponentType::CameraComponent(component) => {
-                                let mut component = component.borrow_mut();
-                                component.update(time, engine);
-                            }
-                            EComponentType::CollisionComponent(component) => {
-                                let mut component = component.borrow_mut();
-                                component.update(time, engine);
-                            }
-                        }
-                    }
-                });
-            }
-            None => {
-                Actor::walk_node(self.scene_node.clone(), {
-                    &mut |node| {
-                        let node = node.borrow_mut();
-                        match &node.component {
-                            EComponentType::SceneComponent(_) => {}
-                            EComponentType::StaticMeshComponent(component) => {
-                                let mut component = component.borrow_mut();
-                                component.update(time, engine, None);
-                            }
-                            EComponentType::SkeletonMeshComponent(component) => {
-                                let mut component = component.borrow_mut();
-                                component.update(time, engine);
-                            }
-                            EComponentType::CameraComponent(component) => {
-                                let mut component = component.borrow_mut();
-                                component.update(time, engine);
-                            }
-                            EComponentType::CollisionComponent(component) => {
-                                let mut component = component.borrow_mut();
-                                component.update(time, engine);
-                            }
-                        }
-                    }
-                });
-            }
-        }
-    }
-
-    pub fn tick_physics(
-        &mut self,
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
     ) {
+        self.update_components_world_transformation();
+
         Actor::walk_node(self.scene_node.clone(), {
             &mut |node| {
-                let node = node.borrow_mut();
-                match &node.component {
-                    EComponentType::SceneComponent(_) => {}
-                    EComponentType::StaticMeshComponent(_) => {}
-                    EComponentType::SkeletonMeshComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        component.update_physics(rigid_body_set, collider_set);
-                    }
-                    EComponentType::CameraComponent(_) => {}
-                    EComponentType::CollisionComponent(_) => {}
-                }
+                let mut node = node.borrow_mut();
+                node.tick(time, engine, rigid_body_set, collider_set);
             }
         });
     }
+
+    // pub fn tick_physics(
+    //     &mut self,
+    //     rigid_body_set: &mut RigidBodySet,
+    //     collider_set: &mut ColliderSet,
+    // ) {
+    //     Actor::walk_node(self.scene_node.clone(), {
+    //         &mut |node| {
+    //             let node = node.borrow_mut();
+    //             match &node.component {
+    //                 EComponentType::SceneComponent(_) => {}
+    //                 EComponentType::StaticMeshComponent(_) => {}
+    //                 EComponentType::SkeletonMeshComponent(component) => {
+    //                     let mut component = component.borrow_mut();
+    //                     component.update_physics(rigid_body_set, collider_set);
+    //                 }
+    //                 EComponentType::CameraComponent(_) => {}
+    //                 EComponentType::CollisionComponent(_) => {}
+    //             }
+    //         }
+    //     });
+    // }
 
     pub fn set_world_transformation_recursion(
         scene_node: &mut SceneNode,
@@ -378,6 +294,8 @@ impl Actor {
                             return true;
                         }
                     }
+                    EComponentType::SpotLightComponent(_) => return false,
+                    EComponentType::PointLightComponent(_) => return false,
                 }
                 false
             })();

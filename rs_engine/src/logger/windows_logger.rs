@@ -1,11 +1,10 @@
+use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 use std::{
     collections::HashSet,
     fs::File,
     io::{BufWriter, Write},
     sync::{Arc, RwLock},
 };
-
-use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 
 #[derive(Debug, Clone, Default)]
 pub struct LoggerConfiguration {
@@ -140,6 +139,32 @@ impl Logger {
     pub fn add_white_list(&mut self, name: String) {
         let mut list = self.white_list.lock().unwrap();
         list.insert(name);
+    }
+
+    pub fn config_log_to_file(&mut self, is_enable: bool) {
+        self.cfg.is_write_to_file = is_enable;
+
+        let mut buf_writer: Option<BufWriter<File>> = None;
+        if self.cfg.is_write_to_file {
+            let writer = (|| {
+                let _ = std::fs::create_dir_all("./log")?;
+                let file = std::fs::File::create(format!(
+                    "./log/{}.log",
+                    chrono::Local::now().format("%Y_%m_%d-%H_%M_%S")
+                ))?;
+                std::io::Result::Ok(std::io::BufWriter::new(file))
+            })();
+            match writer {
+                Ok(writer) => {
+                    buf_writer = Some(writer);
+                }
+                Err(err) => {
+                    println!("{err}");
+                }
+            }
+        }
+        let mut file = self.world_file.write().unwrap();
+        *file = buf_writer;
     }
 }
 

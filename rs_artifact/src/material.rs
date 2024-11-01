@@ -3,6 +3,18 @@ use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, Copy)]
+pub struct GroupBinding {
+    pub group: usize,
+    pub binding: usize,
+}
+
+impl GroupBinding {
+    pub fn new(group: usize, binding: usize) -> Self {
+        Self { group, binding }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct TextureBinding {
     pub group: usize,
@@ -20,6 +32,19 @@ impl TextureBinding {
 pub struct MaterialInfo {
     pub map_textures: HashSet<TextureBinding>,
     pub virtual_textures: HashSet<url::Url>,
+    pub global_constants_binding: Option<GroupBinding>,
+    pub base_color_sampler_binding: Option<GroupBinding>,
+    pub physical_texture_binding: Option<GroupBinding>,
+    pub page_table_texture_binding: Option<GroupBinding>,
+    pub brdflut_texture_binding: Option<GroupBinding>,
+    pub pre_filter_cube_map_texture_binding: Option<GroupBinding>,
+    pub irradiance_texture_binding: Option<GroupBinding>,
+    pub shadow_map_binding: Option<GroupBinding>,
+    pub constants_binding: Option<GroupBinding>,
+    pub point_lights_binding: Option<GroupBinding>,
+    pub spot_lights_binding: Option<GroupBinding>,
+    pub skin_constants_binding: Option<GroupBinding>,
+    pub virtual_texture_constants_binding: Option<GroupBinding>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

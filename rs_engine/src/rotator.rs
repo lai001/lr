@@ -50,7 +50,7 @@ impl Rotator {
         forward_vector.z = pitch.cos() * self.yaw.cos();
         forward_vector
         // glam::Mat4::from_euler(glam::EulerRot::XYZ, self.pitch, self.yaw, self.roll)
-        //     .transform_vector3(FORWARD_VECTOR)
+        //     .transform_vector3(crate::misc::FORWARD_VECTOR)
     }
 
     pub fn from_forward_vector(forward_vector: glam::Vec3) -> Rotator {

@@ -2,6 +2,7 @@
 #include "common.wgsl"
 #include "global_constants.wgsl"
 #include "virtual_texture.wgsl"
+#include "light.wgsl"
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
@@ -50,59 +51,63 @@ struct UserAttributes {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-	@location(0) frag_position: vec3<f32>,
-	@location(1) normal: vec3<f32>,
-	@location(2) tex_coord0: vec2<f32>,
-	@location(3) vertex_color: vec4<f32>,
-	@location(4) tbn_t: vec3<f32>,
-	@location(5) tbn_b: vec3<f32>,
-	@location(6) tbn_n: vec3<f32>,
+    @location(0) frag_position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) tex_coord0: vec2<f32>,
+    @location(3) vertex_color: vec4<f32>,
+    @location(4) tbn_t: vec3<f32>,
+    @location(5) tbn_b: vec3<f32>,
+    @location(6) tbn_n: vec3<f32>,
     @location(7) frag_position_at_light_space: vec4<f32>,
 };
 
 struct ClearCoatInfo {
-	attenuation: f32,
-	specular: vec3<f32>,
+    attenuation: f32,
+    specular: vec3<f32>,
 };
 
 struct ShadingInfo {
-	normal: vec3<f32>,
-	view_direction: vec3<f32>,
-	base_color: vec3<f32>,
+    normal: vec3<f32>,
+    view_direction: vec3<f32>,
+    base_color: vec3<f32>,
     shading_reflected: vec3<f32>,
-	metallic: f32,
-	roughness: f32,
+    metallic: f32,
+    roughness: f32,
     opacity: f32,
-	nov: f32,
-	noh: f32,
-	f0: vec3<f32>,
+    nov: f32,
+    noh: f32,
+    f0: vec3<f32>,
     clear_coat_info: ClearCoatInfo,
 };
 
-@group(0) @binding(0) var<uniform> global_constants: GlobalConstants;
+GROUP_BINDING(GLOBAL_CONSTANTS) var<uniform> global_constants: GlobalConstants;
 
-@group(0) @binding(1) var base_color_sampler: sampler;
+GROUP_BINDING(BASE_COLOR_SAMPLER) var base_color_sampler: sampler;
 
-@group(0) @binding(2) var physical_texture: texture_2d<f32>;
+GROUP_BINDING(PHYSICAL_TEXTURE) var physical_texture: texture_2d<f32>;
 
-@group(0) @binding(3) var page_table_texture: texture_2d<u32>;
+GROUP_BINDING(PAGE_TABLE_TEXTURE) var page_table_texture: texture_2d<u32>;
 
-@group(0) @binding(4) var brdflut_texture: texture_2d<f32>;
+GROUP_BINDING(BRDFLUT_TEXTURE) var brdflut_texture: texture_2d<f32>;
 
-@group(0) @binding(5) var pre_filter_cube_map_texture: texture_cube<f32>;
+GROUP_BINDING(PRE_FILTER_CUBE_MAP_TEXTURE) var pre_filter_cube_map_texture: texture_cube<f32>;
 
-@group(0) @binding(6) var irradiance_texture: texture_cube<f32>;
+GROUP_BINDING(IRRADIANCE_TEXTURE) var irradiance_texture: texture_cube<f32>;
 
-@group(0) @binding(7) var shadow_map: texture_depth_2d;
+GROUP_BINDING(SHADOW_MAP) var shadow_map: texture_depth_2d;
 
-@group(1) @binding(0) var<uniform> constants: Constants;
+GROUP_BINDING(CONSTANTS) var<uniform> constants: Constants;
+
+GROUP_BINDING(POINT_LIGHTS) var<uniform> point_lights: PointLights;
+
+GROUP_BINDING(SPOT_LIGHTS) var<uniform> spot_lights: SpotLights;
 
 #ifdef SKELETON_MAX_BONES
-@group(1) @binding(SKIN_CONSTANTS_BINDING) var<uniform> skin_constants: SkinConstants;
+GROUP_BINDING(SKIN_CONSTANTS) var<uniform> skin_constants: SkinConstants;
 #endif
 
 #ifdef VIRTUAL_TEXTURE
-@group(1) @binding(VIRTUAL_TEXTURE_CONSTANTS_BINDING) var<uniform> virtual_texture_constants: VirtualTextureConstants;
+GROUP_BINDING(VIRTUAL_TEXTURE_CONSTANTS) var<uniform> virtual_texture_constants: VirtualTextureConstants;
 #endif
 
 #ifdef USER_TEXTURES
@@ -114,7 +119,7 @@ fn shadow_calculation(shadow_map: texture_depth_2d, frag_position_at_light_space
     var proj_coords: vec3<f32> = frag_position_at_light_space.xyz / frag_position_at_light_space.w;
     var proj_coords_uv = proj_coords * 0.5 + 0.5;
     proj_coords_uv.y = 1.0 - proj_coords_uv.y;
-    var closest_depth = textureSample(shadow_map, base_color_sampler, proj_coords_uv.xy); 
+    var closest_depth = textureSample(shadow_map, base_color_sampler, proj_coords_uv.xy);
     var current_depth = proj_coords.z - bias;
     var shadow = 0.0;
     if (current_depth > closest_depth) {
@@ -250,24 +255,24 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
     );
     var view_direction = normalize(global_constants.view_position - vertex_output.frag_position.xyz);
     var normal_world_space = get_normal(user_attributes.normal, tbn);
-    var nov = dot(normal_world_space, view_direction);
-    var shadingInfo: ShadingInfo;
-    shadingInfo.base_color = user_attributes.base_color;
-    shadingInfo.metallic = user_attributes.metallic;
-    shadingInfo.roughness = user_attributes.roughness;
-    shadingInfo.normal = normal_world_space;
-    shadingInfo.view_direction = view_direction;
-    shadingInfo.f0 = mix(vec3<f32>(1.0, 1.0, 1.0) * 0.04, user_attributes.base_color.xyz, user_attributes.metallic);
-    shadingInfo.nov = nov;
-    shadingInfo.opacity = user_attributes.opacity;
-    shadingInfo.shading_reflected = reflect(view_direction, normal_world_space);
+    var nov = max(dot(normal_world_space, view_direction), 0.0001);
+    var shading_info: ShadingInfo;
+    shading_info.base_color = user_attributes.base_color;
+    shading_info.metallic = user_attributes.metallic;
+    shading_info.roughness = user_attributes.roughness;
+    shading_info.normal = normal_world_space;
+    shading_info.view_direction = view_direction;
+    shading_info.f0 = mix(vec3<f32>(1.0, 1.0, 1.0) * 0.04, user_attributes.base_color.xyz, user_attributes.metallic);
+    shading_info.nov = nov;
+    shading_info.opacity = user_attributes.opacity;
+    shading_info.shading_reflected = reflect(view_direction, normal_world_space);
 
-    shadingInfo.clear_coat_info = fetch_clear_coat_info(pre_filter_cube_map_texture,
+    shading_info.clear_coat_info = fetch_clear_coat_info(pre_filter_cube_map_texture,
         nov,
-        shadingInfo.shading_reflected,
+        shading_info.shading_reflected,
         user_attributes.clear_coat,
         user_attributes.clear_coat_roughness);
-    return shadingInfo;
+    return shading_info;
 }
 
 @vertex fn vs_main(vertex_in: VertexIn) -> VertexOutput {
@@ -313,7 +318,25 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
 
     var shadow = shadow_calculation(shadow_map, vertex_output.frag_position_at_light_space);
 
-    fragment_output.color = vec4<f32>(mix(ibl_color, ibl_color * vec3<f32>(0.5), shadow), 1.0);
+    var point_light_color: vec3<f32>;
+    for (var i = 0u; i < MAX_POINT_LIGHTS_NUM ; i++) {
+        if (i >= point_lights.available) {
+            break;
+        }
+        point_light_color = point_light_color + point_light(point_lights.lights[i], shading_info.normal, vertex_output.frag_position, shading_info.view_direction);
+    }
+
+    var spot_light_color: vec3<f32>;
+    for (var i = 0u; i < MAX_SPOT_LIGHTS_NUM ; i++) {
+        if (i >= spot_lights.available) {
+            break;
+        }
+        spot_light_color = spot_light_color + spot_light(spot_lights.lights[i], shading_info.normal, vertex_output.frag_position, shading_info.view_direction);
+    }
+
+    var light_color = ibl_color + point_light_color + spot_light_color;
+    fragment_output.color = vec4<f32>(mix(light_color, light_color * vec3<f32>(0.5), shadow), 1.0);
+
     // fragment_output.color = vec4<f32>(ibl_color, 1.0);
     if (global_constants.debug_shading == DEBUG_SHADING_TYPE_BASE_COLOR) {
         fragment_output.color = vec4<f32>(shading_info.base_color, 1.0);

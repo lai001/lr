@@ -12,7 +12,6 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
     player_viewport::PlayerViewport,
-    resource_manager::ResourceManager,
     skeleton_animation_provider::SkeletonAnimationBlendType,
     skeleton_mesh_component::SkeletonMeshComponent,
 };
@@ -39,6 +38,7 @@ pub struct BlendAnimationUIWindow {
     skeleton_meshes: Vec<SingleThreadMutType<SkeletonMesh>>,
     pub content: SingleThreadMutType<crate::content_folder::ContentFolder>,
     start: std::time::Instant,
+    level: rs_engine::content::level::Level,
 }
 
 impl BlendAnimationUIWindow {
@@ -101,6 +101,7 @@ impl BlendAnimationUIWindow {
             content,
             skeleton_meshes: vec![],
             start: std::time::Instant::now(),
+            level: rs_engine::content::level::Level::empty_level(),
         })
     }
 
@@ -233,13 +234,8 @@ impl BlendAnimationUIWindow {
                         glam::Mat4::IDENTITY,
                     );
                     let files = &self.content.borrow().files;
-                    let resource_manager = ResourceManager::default();
-                    skeleton_mesh_component.initialize(
-                        resource_manager,
-                        engine,
-                        files,
-                        &mut self.player_view_port,
-                    );
+
+                    skeleton_mesh_component.initialize(engine, files, &mut self.player_view_port);
                     self.preview_skeleton_mesh_component = Some(skeleton_mesh_component);
                 } else {
                     self.preview_skeleton_mesh_component = None;
@@ -357,7 +353,14 @@ impl UIWindow for BlendAnimationUIWindow {
                 if let Some(preview_skeleton_mesh_component) =
                     self.preview_skeleton_mesh_component.as_mut()
                 {
-                    preview_skeleton_mesh_component.update(time.as_secs_f32(), engine);
+                    if let Some(level_physics) = self.level.get_physics_mut() {
+                        preview_skeleton_mesh_component.tick(
+                            time.as_secs_f32(),
+                            engine,
+                            &mut level_physics.rigid_body_set,
+                            &mut level_physics.collider_set,
+                        );
+                    }
                     let mut draw_objects: Vec<_> = preview_skeleton_mesh_component
                         .get_draw_objects()
                         .iter()

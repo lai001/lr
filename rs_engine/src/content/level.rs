@@ -1,12 +1,13 @@
 use super::content_file_type::EContentFileType;
 use crate::actor::Actor;
 use crate::camera_component::CameraComponent;
+use crate::components::point_light_component::PointLightComponent;
+use crate::components::spot_light_component::SpotLightComponent;
 use crate::directional_light::DirectionalLight;
 use crate::drawable::EDrawObjectType;
 use crate::engine::Engine;
 use crate::misc::{compute_appropriate_offset_look_and_projection_matrix, merge_aabb};
 use crate::player_viewport::PlayerViewport;
-use crate::resource_manager::ResourceManager;
 use crate::scene_node::{EComponentType, SceneNode};
 use crate::{build_content_file_url, url_extension::UrlExtension};
 use rapier3d::prelude::*;
@@ -162,7 +163,10 @@ impl Level {
             actors: vec![],
             url: build_content_file_url("Empty").unwrap(),
             directional_lights: vec![],
-            runtime: None,
+            runtime: Some(Runtime {
+                physics: Self::default_physics(),
+                is_simulate: false,
+            }),
         }
     }
 
@@ -170,17 +174,7 @@ impl Level {
         self.url.get_name_in_editor()
     }
 
-    pub fn initialize(
-        &mut self,
-        engine: &mut Engine,
-        files: &[EContentFileType],
-        player_viewport: &mut PlayerViewport,
-    ) {
-        for light in self.directional_lights.iter_mut() {
-            let mut light = light.borrow_mut();
-            light.initialize(engine, player_viewport);
-        }
-
+    fn default_physics() -> Physics {
         let rigid_body_set: RigidBodySet = RigidBodySet::new();
         let collider_set: ColliderSet = ColliderSet::new();
 
@@ -219,8 +213,60 @@ impl Level {
             collision_events: VecDeque::new(),
             contact_force_events: VecDeque::new(),
         };
+        physics
+    }
+
+    pub fn initialize(
+        &mut self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
+        for light in self.directional_lights.iter_mut() {
+            let mut light = light.borrow_mut();
+            light.initialize(engine, player_viewport);
+        }
+
+        // let rigid_body_set: RigidBodySet = RigidBodySet::new();
+        // let collider_set: ColliderSet = ColliderSet::new();
+
+        // let gravity: nalgebra::Vector3<f32> = vector![0.0, -9.81, 0.0];
+        // let integration_parameters: IntegrationParameters = IntegrationParameters::default();
+        // let physics_pipeline: PhysicsPipeline = PhysicsPipeline::new();
+        // let island_manager: IslandManager = IslandManager::new();
+        // let broad_phase: BroadPhaseMultiSap = DefaultBroadPhase::new();
+        // let narrow_phase: NarrowPhase = NarrowPhase::new();
+        // let impulse_joint_set: ImpulseJointSet = ImpulseJointSet::new();
+        // let multibody_joint_set: MultibodyJointSet = MultibodyJointSet::new();
+        // let ccd_solver: CCDSolver = CCDSolver::new();
+        // let query_pipeline: QueryPipeline = QueryPipeline::new();
+        // let physics_hooks: () = ();
+        // let (collision_send, collision_recv) = rapier3d::crossbeam::channel::unbounded();
+        // let (contact_force_send, contact_force_recv) = rapier3d::crossbeam::channel::unbounded();
+        // let event_handler = ChannelEventCollector::new(collision_send, contact_force_send);
+
+        // let physics = Physics {
+        //     rigid_body_set,
+        //     collider_set,
+        //     gravity,
+        //     integration_parameters,
+        //     physics_pipeline,
+        //     island_manager,
+        //     broad_phase,
+        //     narrow_phase,
+        //     impulse_joint_set,
+        //     multibody_joint_set,
+        //     ccd_solver,
+        //     query_pipeline,
+        //     physics_hooks,
+        //     event_handler,
+        //     collision_recv,
+        //     contact_force_recv,
+        //     collision_events: VecDeque::new(),
+        //     contact_force_events: VecDeque::new(),
+        // };
         self.runtime = Some(Runtime {
-            physics,
+            physics: Self::default_physics(),
             is_simulate: false,
         });
         let actors = self.actors.clone();
@@ -240,7 +286,7 @@ impl Level {
     ) {
         for actor in actors {
             let mut actor = actor.borrow_mut();
-            actor.initialize(ResourceManager::default(), engine, files, player_viewport);
+            actor.initialize(engine, files, player_viewport);
         }
     }
 
@@ -254,15 +300,15 @@ impl Level {
         actor.initialize_physics(rigid_body_set, collider_set);
     }
 
-    pub fn update_actor_physics(&mut self, actor: SingleThreadMutType<Actor>) {
-        let Some(physics) = self.get_physics_mut() else {
-            return;
-        };
-        let rigid_body_set = &mut physics.rigid_body_set;
-        let collider_set = &mut physics.collider_set;
-        let mut actor = actor.borrow_mut();
-        actor.tick_physics(rigid_body_set, collider_set);
-    }
+    // pub fn update_actor_physics(&mut self, actor: SingleThreadMutType<Actor>) {
+    //     let Some(physics) = self.get_physics_mut() else {
+    //         return;
+    //     };
+    //     let rigid_body_set = &mut physics.rigid_body_set;
+    //     let collider_set = &mut physics.collider_set;
+    //     let mut actor = actor.borrow_mut();
+    //     actor.tick_physics(rigid_body_set, collider_set);
+    // }
 
     pub fn tick(&mut self, time: f32, engine: &mut Engine, player_viewport: &mut PlayerViewport) {
         for light in self.directional_lights.clone() {
@@ -274,7 +320,7 @@ impl Level {
             if let Some(offset_look_and_projection_matrix) =
                 compute_appropriate_offset_look_and_projection_matrix(self)
             {
-                player_viewport.update_light2(
+                player_viewport.update_light_concentrate_scene(
                     offset_look_and_projection_matrix,
                     self.directional_lights.clone(),
                 );
@@ -293,9 +339,14 @@ impl Level {
         let collider_set = &mut runtime.physics.collider_set;
         for actor in self.actors.clone() {
             let mut actor = actor.borrow_mut();
-            actor.tick(time, engine, Some(rigid_body_set));
-            actor.tick_physics(rigid_body_set, collider_set);
+            actor.tick(time, engine, rigid_body_set, collider_set);
+            // actor.tick_physics(rigid_body_set, collider_set);
         }
+
+        let light_components = self.collect_point_light_components();
+        player_viewport.update_point_lights(light_components);
+        let spot_light_components = self.collect_spot_light_components();
+        player_viewport.update_spot_lights(spot_light_components);
     }
 
     pub fn get_rigid_body_set_mut(&mut self) -> Option<&mut RigidBodySet> {
@@ -469,6 +520,8 @@ impl Level {
                     return;
                 }
             }
+            EComponentType::SpotLightComponent(_) => {}
+            EComponentType::PointLightComponent(_) => {}
         }
         for child in scene_node.childs.clone() {
             self.find_node(child, handle, search_node);
@@ -559,6 +612,8 @@ impl Level {
                         level_physics.remove_rigid_body(component_physics.rigid_body_handle);
                     }
                 }
+                EComponentType::SpotLightComponent(_) => {}
+                EComponentType::PointLightComponent(_) => {}
             }
         });
     }
@@ -608,5 +663,41 @@ impl Level {
         let name = self.make_actor_name(&actor.name);
         let duplicated_actor = SingleThreadMut::new(actor.copy_without_initialization(name));
         self.add_new_actors(engine, vec![duplicated_actor], files, player_viewport);
+    }
+
+    pub fn collect_point_light_components(&self) -> Vec<SingleThreadMutType<PointLightComponent>> {
+        let mut lights = vec![];
+        for actor in self.actors.clone() {
+            let actor = actor.borrow();
+            let scene_node = actor.scene_node.clone();
+            Actor::walk_node(scene_node, &mut |node| {
+                let node = node.borrow();
+                match &node.component {
+                    EComponentType::PointLightComponent(component) => {
+                        lights.push(component.clone());
+                    }
+                    _ => {}
+                }
+            });
+        }
+        lights
+    }
+
+    pub fn collect_spot_light_components(&self) -> Vec<SingleThreadMutType<SpotLightComponent>> {
+        let mut lights = vec![];
+        for actor in self.actors.clone() {
+            let actor = actor.borrow();
+            let scene_node = actor.scene_node.clone();
+            Actor::walk_node(scene_node, &mut |node| {
+                let node = node.borrow();
+                match &node.component {
+                    EComponentType::SpotLightComponent(component) => {
+                        lights.push(component.clone());
+                    }
+                    _ => {}
+                }
+            });
+        }
+        lights
     }
 }

@@ -67,3 +67,11 @@ pub fn get_current_project_dir() -> PathBuf {
 pub fn set_current_project_dir(path: &Path) {
     *GLOBAL_CURRENT_PROJECT_DIR.lock().unwrap() = path.to_path_buf();
 }
+
+pub fn get_current_exe_dir() -> crate::error::Result<PathBuf> {
+    let current_exe = std::env::current_exe().map_err(|err| crate::error::Error::IO(err))?;
+    let parent = current_exe
+        .parent()
+        .ok_or(crate::error::Error::IO(std::io::ErrorKind::NotFound.into()))?;
+    Ok(parent.to_path_buf())
+}

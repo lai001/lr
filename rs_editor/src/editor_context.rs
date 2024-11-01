@@ -39,6 +39,10 @@ use rs_engine::{
     build_asset_url, build_built_in_resouce_url, build_content_file_url,
     camera_component::CameraComponent,
     collision_componenet::CollisionComponent,
+    components::{
+        component::Component, point_light_component::PointLightComponent,
+        spot_light_component::SpotLightComponent,
+    },
     content::{
         blend_animations::BlendAnimations, content_file_type::EContentFileType,
         texture::TextureFile,
@@ -48,6 +52,7 @@ use rs_engine::{
     input_mode::EInputMode,
     player_viewport::PlayerViewport,
     scene_node::SceneNode,
+    url_extension::UrlExtension,
 };
 use rs_engine::{
     file_type::EFileType,
@@ -202,7 +207,7 @@ impl EditorContext {
         let _span = tracy_client::span!();
         rs_foundation::change_working_directory();
         let logger = Logger::new(LoggerConfiguration {
-            is_write_to_file: true,
+            is_write_to_file: false,
             is_flush_before_drop: false,
         });
         log::trace!(
@@ -314,7 +319,9 @@ impl EditorContext {
         };
 
         if let Some(file_path) = last_project_path {
-            let _ = editor_context.open_project(&file_path, window);
+            if let Err(err) = editor_context.open_project(&file_path, window) {
+                log::warn!("{} {}", err, err.root_cause());
+            }
         }
 
         Ok(editor_context)
@@ -459,8 +466,17 @@ impl EditorContext {
 
                 let changed_results = self.watch_shader.get_changed_results();
                 for changed_result in changed_results {
-                    self.engine
-                        .send_render_command(RenderCommand::BuiltinShaderChanged(changed_result))
+                    match changed_result {
+                        crate::watch_shader::ShaderSourceChangedType::Builtin(changed_result) => {
+                            self.engine
+                                .send_render_command(RenderCommand::BuiltinShaderChanged(
+                                    changed_result,
+                                ))
+                        }
+                        crate::watch_shader::ShaderSourceChangedType::Material => {
+                            self.hotreload_material();
+                        }
+                    }
                 }
                 if let Some(project_context) = &mut self.project_context {
                     if project_context.is_need_reload_plugin() {
@@ -514,6 +530,51 @@ impl EditorContext {
             }
             WindowEvent::Destroyed => {}
             _ => {}
+        }
+    }
+
+    fn do_reload_material(
+        engine: &mut rs_engine::engine::Engine,
+        material_editor: &crate::material::Material,
+        resolve_result: &HashMap<MaterialOptions, material_resolve::ResolveResult>,
+    ) {
+        if engine
+            .get_settings()
+            .render_setting
+            .is_enable_dump_material_shader_code
+        {
+            if let Err(err) = Self::write_debug_shader(&material_editor, &resolve_result) {
+                log::warn!("{}", err);
+            }
+        }
+        let mut shader_code = HashMap::new();
+        let mut material_info = HashMap::new();
+        for (k, v) in resolve_result.iter() {
+            shader_code.insert(k.clone(), v.shader_code.clone());
+            material_info.insert(k.clone(), v.material_info.clone());
+        }
+        let handle = engine.create_material(shader_code);
+        let material_content = material_editor.get_associated_material();
+        let Some(material_content) = material_content else {
+            return;
+        };
+        let mut material_content = material_content.borrow_mut();
+        material_content.set_pipeline_handle(handle);
+        material_content.set_material_info(material_info);
+    }
+
+    fn hotreload_material(&mut self) {
+        let Some(project_context) = self.project_context.as_mut() else {
+            return;
+        };
+        for material_editor in project_context.project.materials.clone() {
+            let material_editor = material_editor.borrow();
+            let snarl = &material_editor.snarl;
+            let resolve_result = material_resolve::resolve(snarl, MaterialOptions::all());
+            let Ok(resolve_result) = resolve_result else {
+                continue;
+            };
+            Self::do_reload_material(&mut self.engine, &material_editor, &resolve_result);
         }
     }
 
@@ -641,20 +702,11 @@ impl EditorContext {
                 {
                     match event {
                         material_view::EEventType::Update(material, resolve_result) => {
-                            let mut shader_code = HashMap::new();
-                            let mut material_info = HashMap::new();
-                            for (k, v) in resolve_result.iter() {
-                                shader_code.insert(k.clone(), v.shader_code.clone());
-                                material_info.insert(k.clone(), v.material_info.clone());
-                            }
-                            let handle = self.engine.create_material(shader_code);
-                            let material_content = material.borrow().get_associated_material();
-                            let Some(material_content) = material_content else {
-                                return;
-                            };
-                            let mut material_content = material_content.borrow_mut();
-                            material_content.set_pipeline_handle(handle);
-                            material_content.set_material_info(material_info);
+                            Self::do_reload_material(
+                                &mut self.engine,
+                                &material.borrow(),
+                                resolve_result,
+                            );
                         }
                     }
                 }
@@ -1017,6 +1069,43 @@ impl EditorContext {
         Ok(())
     }
 
+    fn write_debug_shader(
+        material_editor: &crate::material::Material,
+        resolve_result: &HashMap<MaterialOptions, material_resolve::ResolveResult>,
+    ) -> anyhow::Result<()> {
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct DebugInfo {
+            name: String,
+            material_options: MaterialOptions,
+        }
+        let name = material_editor.url.get_name_in_editor();
+        for (option, result) in resolve_result.clone() {
+            let mut hasher = std::hash::DefaultHasher::new();
+            std::hash::Hash::hash(&option, &mut hasher);
+            let output_file_name = format!("{}_{}.wgsl", name, std::hash::Hasher::finish(&hasher));
+            let output_folder = file_manager::get_current_exe_dir()?.join("debug_shader");
+            std::fs::create_dir_all(&output_folder)?;
+            let output_file = output_folder.join(output_file_name);
+            let debug_info = DebugInfo {
+                name: name.clone(),
+                material_options: option,
+            };
+            let string = serde_json::to_string_pretty(&debug_info)?;
+            let lines = string.split("\n");
+            let mut contents = String::new();
+            for line in lines {
+                contents.push_str(&format!("// {}\n", line));
+            }
+            contents.push_str("\n");
+            contents.push_str(&result.shader_code);
+            if output_file.exists() {
+                std::fs::remove_file(&output_file)?;
+            }
+            std::fs::write(output_file, contents)?;
+        }
+        Ok(())
+    }
+
     fn content_load_resources(
         engine: &mut rs_engine::engine::Engine,
         model_loader: &mut ModelLoader,
@@ -1119,6 +1208,17 @@ impl EditorContext {
                             MaterialOptions::all(),
                         ) {
                             Ok(resolve_result) => {
+                                if engine
+                                    .get_settings()
+                                    .render_setting
+                                    .is_enable_dump_material_shader_code
+                                {
+                                    if let Err(err) =
+                                        Self::write_debug_shader(&material_editor, &resolve_result)
+                                    {
+                                        log::warn!("{}", err);
+                                    }
+                                }
                                 for (option, result) in resolve_result {
                                     shader_code.insert(option.clone(), result.shader_code);
                                     material_info.insert(option, result.material_info);
@@ -2163,9 +2263,18 @@ impl EditorContext {
                 self.data_source.is_object_property_view_open = true;
             }
             crate::ui::level_view::EClickEventType::CreateCameraComponent(parent_node) => {
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+                let content = project_context.project.content.clone();
+                let content = content.borrow_mut();
                 let mut camera_component =
                     CameraComponent::new("Camera".to_string(), glam::Mat4::IDENTITY);
-                camera_component.initialize(&mut self.engine, &mut self.player_viewport);
+                camera_component.initialize(
+                    &mut self.engine,
+                    &content.files,
+                    &mut self.player_viewport,
+                );
                 let camera_component = SingleThreadMut::new(camera_component);
                 let mut parent_node = parent_node.borrow_mut();
                 parent_node.childs.push(SingleThreadMut::new(SceneNode {
@@ -2210,6 +2319,11 @@ impl EditorContext {
                 let Some(active_level) = self.data_source.level.as_mut() else {
                     return;
                 };
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+                let content = project_context.project.content.clone();
+                let content = content.borrow_mut();
                 let mut active_level = active_level.borrow_mut();
                 let new_actor = active_level.create_and_insert_actor();
                 let new_actor = new_actor.borrow_mut();
@@ -2218,7 +2332,11 @@ impl EditorContext {
                     .set_transformation(self.player_viewport.camera.get_world_transformation());
                 let mut camera_component =
                     CameraComponent::new("Camera".to_string(), glam::Mat4::IDENTITY);
-                camera_component.initialize(&mut self.engine, &mut self.player_viewport);
+                camera_component.initialize(
+                    &mut self.engine,
+                    &content.files,
+                    &mut self.player_viewport,
+                );
                 let camera_component = SingleThreadMut::new(camera_component);
                 scene_node.childs.push(SingleThreadMut::new(SceneNode {
                     component: rs_engine::scene_node::EComponentType::CameraComponent(
@@ -2228,6 +2346,11 @@ impl EditorContext {
                 }));
             }
             crate::ui::level_view::EClickEventType::CreateCollisionComponent(_, parent_node) => {
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+                let content = project_context.project.content.clone();
+                let content = content.borrow_mut();
                 let mut parent_node = parent_node.borrow_mut();
                 let names = parent_node
                     .childs
@@ -2239,13 +2362,11 @@ impl EditorContext {
                     CollisionComponent::new_scene_node(new_name, glam::Mat4::IDENTITY);
                 {
                     let mut collision_component = collision_component.borrow_mut();
-                    match &mut collision_component.component {
-                        rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
-                            let mut component = component.borrow_mut();
-                            component.initialize(&mut self.engine, &mut self.player_viewport);
-                        }
-                        _ => unreachable!(),
-                    }
+                    collision_component.initialize(
+                        &mut self.engine,
+                        &content.files,
+                        &mut self.player_viewport,
+                    );
                 }
                 parent_node.childs.push(collision_component);
             }
@@ -2266,6 +2387,56 @@ impl EditorContext {
                     &content.files,
                     &mut self.player_viewport,
                 );
+            }
+            crate::ui::level_view::EClickEventType::CreateSpotLightComponent(parent_node) => {
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+                let content = project_context.project.content.clone();
+                let content = content.borrow_mut();
+                let mut parent_node = parent_node.borrow_mut();
+                let names = parent_node
+                    .childs
+                    .iter()
+                    .map(|x| x.borrow().get_name())
+                    .collect();
+                let new_name = make_unique_name(names, "SpotLight");
+                let spot_light_component =
+                    SpotLightComponent::new_scene_node(new_name, glam::Mat4::IDENTITY);
+                {
+                    let mut spot_light_component = spot_light_component.borrow_mut();
+                    spot_light_component.initialize(
+                        &mut self.engine,
+                        &content.files,
+                        &mut self.player_viewport,
+                    );
+                }
+                parent_node.childs.push(spot_light_component);
+            }
+            crate::ui::level_view::EClickEventType::CreatePointLightComponent(parent_node) => {
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+                let content = project_context.project.content.clone();
+                let content = content.borrow_mut();
+                let mut parent_node = parent_node.borrow_mut();
+                let names = parent_node
+                    .childs
+                    .iter()
+                    .map(|x| x.borrow().get_name())
+                    .collect();
+                let new_name = make_unique_name(names, "PointLight");
+                let point_light_component =
+                    PointLightComponent::new_scene_node(new_name, glam::Mat4::IDENTITY);
+                {
+                    let mut point_light_component = point_light_component.borrow_mut();
+                    point_light_component.initialize(
+                        &mut self.engine,
+                        &content.files,
+                        &mut self.player_viewport,
+                    );
+                }
+                parent_node.childs.push(point_light_component);
             }
         }
     }
@@ -2361,8 +2532,8 @@ impl EditorContext {
                     build_content_file_url(&name).unwrap(),
                     build_asset_url(format!("material/{}", &name)).unwrap(),
                 );
+                let resolve_result = material_view::MaterialView::default_resolve().unwrap();
                 {
-                    let resolve_result = material_view::MaterialView::default_resolve().unwrap();
                     let mut shader_code = HashMap::new();
                     let mut material_info = HashMap::new();
                     for (k, v) in resolve_result.iter() {
@@ -2381,7 +2552,16 @@ impl EditorContext {
                     snarl.insert_node(egui::pos2(0.0, 0.0), node);
                     snarl
                 });
-
+                if self
+                    .engine
+                    .get_settings()
+                    .render_setting
+                    .is_enable_dump_material_shader_code
+                {
+                    if let Err(err) = Self::write_debug_shader(&material_editor, &resolve_result) {
+                        log::warn!("{}", err);
+                    }
+                }
                 project_context
                     .project
                     .materials
@@ -2761,6 +2941,12 @@ impl EditorContext {
                             rs_engine::scene_node::EComponentType::CollisionComponent(_) => {
                                 unimplemented!()
                             }
+                            rs_engine::scene_node::EComponentType::SpotLightComponent(_) => {
+                                unimplemented!()
+                            }
+                            rs_engine::scene_node::EComponentType::PointLightComponent(_) => {
+                                unimplemented!()
+                            }
                         }
                     }
                 }
@@ -2857,7 +3043,7 @@ impl EditorContext {
                                 let mut active_level = active_level.borrow_mut();
                                 let physics = active_level.get_physics_mut();
                                 if let Some(physics) = physics {
-                                    static_mesh_component.init_physics(
+                                    static_mesh_component.initialize_physics(
                                         &mut physics.rigid_body_set,
                                         &mut physics.collider_set,
                                     );
@@ -2948,6 +3134,26 @@ impl EditorContext {
                             let model_matrix = component.get_transformation_mut();
                             *model_matrix =
                                 parent_final_transformation.inverse() * gizmo_final_transformation;
+                        }
+                    }
+                    rs_engine::scene_node::EComponentType::SpotLightComponent(component) => {
+                        let mut component = component.borrow_mut();
+                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                            let parent_final_transformation =
+                                component.get_parent_final_transformation();
+                            let model_matrix =
+                                parent_final_transformation.inverse() * gizmo_final_transformation;
+                            component.set_transformation(model_matrix);
+                        }
+                    }
+                    rs_engine::scene_node::EComponentType::PointLightComponent(component) => {
+                        let mut component = component.borrow_mut();
+                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
+                            let parent_final_transformation =
+                                component.get_parent_final_transformation();
+                            let model_matrix =
+                                parent_final_transformation.inverse() * gizmo_final_transformation;
+                            component.set_transformation(model_matrix);
                         }
                     }
                 }

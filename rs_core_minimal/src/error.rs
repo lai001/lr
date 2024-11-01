@@ -1,6 +1,7 @@
 #[derive(Debug)]
 pub enum Error {
     NulError(std::ffi::NulError),
+    IO(std::io::Error),
 }
 
 impl std::fmt::Display for Error {

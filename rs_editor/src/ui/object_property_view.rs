@@ -1,5 +1,8 @@
 use rapier3d::prelude::RigidBodyType;
-use rs_engine::{actor::Actor, directional_light::DirectionalLight, scene_node::*};
+use rs_engine::{
+    actor::Actor, components::component::Component, directional_light::DirectionalLight,
+    scene_node::*,
+};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 
 use super::misc::{render_combo_box, render_combo_box_not_null};
@@ -293,6 +296,116 @@ impl ObjectPropertyView {
 
                         Self::transformation_detail_mut(component.get_transformation_mut(), ui);
                         Self::transformation_detail(&component.get_final_transformation(), ui);
+                    }
+                    EComponentType::SpotLightComponent(component) => {
+                        ui.label(format!("Type: SpotLightComponent"));
+                        let mut component = component.borrow_mut();
+                        if let Some(new_name) = Self::edit_name(&component.name, ui) {
+                            event = Some(EEventType::ChangeName(
+                                selected_object_clone.clone(),
+                                new_name,
+                            ));
+                        }
+                        let mut transformation = component.get_transformation();
+                        Self::transformation_detail_mut(&mut transformation, ui);
+                        component.set_transformation(transformation);
+                        Self::transformation_detail(&component.get_final_transformation(), ui);
+
+                        ui.vertical(|ui| {
+                            Self::detail_view_mut(
+                                &mut component.spot_light.light.ambient,
+                                ui,
+                                "Ambient",
+                                true,
+                            );
+                            Self::detail_view_mut(
+                                &mut component.spot_light.light.diffuse,
+                                ui,
+                                "Diffuse",
+                                true,
+                            );
+                            Self::detail_view_mut(
+                                &mut component.spot_light.light.specular,
+                                ui,
+                                "Specular",
+                                true,
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut component.spot_light.light.constant)
+                                    .speed(0.1)
+                                    .prefix("Constant: "),
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut component.spot_light.light.linear)
+                                    .speed(0.1)
+                                    .prefix("Linear: "),
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut component.spot_light.light.quadratic)
+                                    .speed(0.1)
+                                    .prefix("Quadratic: "),
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut component.spot_light.cut_off)
+                                    .speed(0.1)
+                                    .prefix("Cut off: "),
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut component.spot_light.outer_cut_off)
+                                    .speed(0.1)
+                                    .prefix("Outer cut off: "),
+                            );
+                        });
+                    }
+                    EComponentType::PointLightComponent(component) => {
+                        ui.label(format!("Type: PointLightComponent"));
+                        let mut component = component.borrow_mut();
+                        if let Some(new_name) = Self::edit_name(&component.name, ui) {
+                            event = Some(EEventType::ChangeName(
+                                selected_object_clone.clone(),
+                                new_name,
+                            ));
+                        }
+                        let mut transformation = component.get_transformation();
+                        Self::transformation_detail_mut(&mut transformation, ui);
+                        component.set_transformation(transformation);
+                        Self::transformation_detail(&component.get_final_transformation(), ui);
+
+                        ui.vertical(|ui| {
+                            Self::detail_view_mut(
+                                &mut component.point_light.ambient,
+                                ui,
+                                "Ambient",
+                                true,
+                            );
+                            Self::detail_view_mut(
+                                &mut component.point_light.diffuse,
+                                ui,
+                                "Diffuse",
+                                true,
+                            );
+                            Self::detail_view_mut(
+                                &mut component.point_light.specular,
+                                ui,
+                                "Specular",
+                                true,
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut component.point_light.constant)
+                                    .speed(0.1)
+                                    .prefix("Constant: "),
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut component.point_light.linear)
+                                    .speed(0.1)
+                                    .prefix("Linear: "),
+                            );
+                            ui.add(
+                                egui::DragValue::new(&mut component.point_light.quadratic)
+                                    .speed(0.1)
+                                    .prefix("Quadratic: "),
+                            );
+                        });
                     }
                 }
             }

@@ -1,6 +1,7 @@
 use crate::ui::material_view::{EMaterialNodeType, MaterialNode};
 use egui_snarl::{InPinId, NodeId, OutPinId, Snarl};
-use rs_artifact::material::{MaterialInfo, TextureBinding};
+use rs_artifact::material::{GroupBinding, MaterialInfo, TextureBinding};
+use rs_render::constants::{MAX_POINT_LIGHTS_NUM, MAX_SPOT_LIGHTS_NUM};
 use rs_render_types::MaterialOptions;
 use std::{
     collections::{HashMap, HashSet},
@@ -73,6 +74,55 @@ pub fn resolve(
     Ok(results)
 }
 
+fn compose_definitions(
+    definitions: &mut Vec<String>,
+    options: &MaterialOptions,
+    material_info: &mut MaterialInfo,
+) -> usize {
+    // https://www.reddit.com/r/vulkan/comments/abjk81/comment/ed0ut27/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button
+    // Note: The maximum binding number specified should be as compact as possible to avoid wasted memory.
+    let group: usize = 0;
+    let mut binding: usize = 0;
+    macro_rules! group_binding {
+        ($name:literal, $g:ty, $b:ty) => {
+            definitions.append(&mut vec![
+                format!("{}_GROUP={}", $name, group),
+                format!("{}_BINDING={}", $name, binding),
+            ]);
+            binding += 1;
+        };
+    }
+    material_info.global_constants_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("GLOBAL_CONSTANTS", group, binding);
+    material_info.base_color_sampler_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("BASE_COLOR_SAMPLER", group, binding);
+    material_info.physical_texture_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("PHYSICAL_TEXTURE", group, binding);
+    material_info.page_table_texture_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("PAGE_TABLE_TEXTURE", group, binding);
+    material_info.brdflut_texture_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("BRDFLUT_TEXTURE", group, binding);
+    material_info.pre_filter_cube_map_texture_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("PRE_FILTER_CUBE_MAP_TEXTURE", group, binding);
+    material_info.irradiance_texture_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("IRRADIANCE_TEXTURE", group, binding);
+    material_info.shadow_map_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("SHADOW_MAP", group, binding);
+    material_info.constants_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("CONSTANTS", group, binding);
+    material_info.point_lights_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("POINT_LIGHTS", group, binding);
+    material_info.spot_lights_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("SPOT_LIGHTS", group, binding);
+    material_info.virtual_texture_constants_binding = Some(GroupBinding::new(group, binding));
+    group_binding!("VIRTUAL_TEXTURE_CONSTANTS", group, binding);
+    if options.is_skin {
+        material_info.skin_constants_binding = Some(GroupBinding::new(group, binding));
+        group_binding!("SKIN_CONSTANTS", group, binding);
+    }
+    return binding;
+}
+
 fn resolve_internal(
     snarl: &Snarl<MaterialNode>,
     options: &MaterialOptions,
@@ -80,7 +130,28 @@ fn resolve_internal(
     let mut material_info = MaterialInfo {
         map_textures: HashSet::new(),
         virtual_textures: HashSet::new(),
+        global_constants_binding: None,
+        base_color_sampler_binding: None,
+        physical_texture_binding: None,
+        page_table_texture_binding: None,
+        brdflut_texture_binding: None,
+        pre_filter_cube_map_texture_binding: None,
+        irradiance_texture_binding: None,
+        shadow_map_binding: None,
+        constants_binding: None,
+        point_lights_binding: None,
+        skin_constants_binding: None,
+        virtual_texture_constants_binding: None,
+        spot_lights_binding: None,
     };
+    let mut definitions: Vec<String> = vec![
+        "VIRTUAL_TEXTURE=1".to_string(),
+        "MATERIAL_SHADER_CODE=@MATERIAL_SHADER_CODE@".to_string(),
+        "USER_TEXTURES=@USER_TEXTURES@".to_string(),
+        format!("MAX_POINT_LIGHTS_NUM={}", MAX_POINT_LIGHTS_NUM),
+        format!("MAX_SPOT_LIGHTS_NUM={}", MAX_SPOT_LIGHTS_NUM),
+    ];
+    let current_max_binding = compose_definitions(&mut definitions, options, &mut material_info);
     let resolve_context = ResolveContext::from_snarl(snarl);
     let attribute_node_id = egui_snarl::NodeId(0);
     let result = resolve_attribute_node(
@@ -88,6 +159,7 @@ fn resolve_internal(
         &resolve_context,
         snarl,
         &mut material_info,
+        current_max_binding,
     )?;
     let mut lines: Vec<String> = vec![];
     for resolve_result in result.iter() {
@@ -96,20 +168,12 @@ fn resolve_internal(
     let material_shader_code = lines.join("\n");
     let shader_path = rs_render::get_buildin_shader_dir().join("pbr_shading.wgsl");
     let include_dirs: Vec<PathBuf> = vec![];
-    let mut definitions: Vec<String> = vec![
-        "VIRTUAL_TEXTURE=1".to_string(),
-        "MATERIAL_SHADER_CODE=@MATERIAL_SHADER_CODE@".to_string(),
-        "USER_TEXTURES=@USER_TEXTURES@".to_string(),
-    ];
+
     if options.is_skin {
         definitions.push(format!(
             "SKELETON_MAX_BONES={}",
             rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE
         ));
-        definitions.push(format!("SKIN_CONSTANTS_BINDING={}", 1));
-        definitions.push(format!("VIRTUAL_TEXTURE_CONSTANTS_BINDING={}", 2));
-    } else {
-        definitions.push(format!("VIRTUAL_TEXTURE_CONSTANTS_BINDING={}", 1));
     }
     let shader_code = rs_shader_compiler::pre_process::pre_process(
         &shader_path,
@@ -145,6 +209,7 @@ fn resolve_attribute_node(
     resolve_context: &ResolveContext,
     snarl: &Snarl<MaterialNode>,
     material_info: &mut MaterialInfo,
+    user_texture_binding_start: usize,
 ) -> anyhow::Result<Vec<ResolveResultInternal>> {
     let mut result: Vec<ResolveResultInternal> = Vec::new();
 
@@ -166,6 +231,7 @@ fn resolve_attribute_node(
                 resolve_context,
                 snarl,
                 material_info,
+                user_texture_binding_start,
             )?;
             result.push(value);
         }};
@@ -190,6 +256,7 @@ fn resolve_attribute(
     resolve_context: &ResolveContext,
     snarl: &Snarl<MaterialNode>,
     material_info: &mut MaterialInfo,
+    user_texture_binding_start: usize,
 ) -> anyhow::Result<ResolveResultInternal> {
     let node_io_info = resolve_context
         .nodes
@@ -200,7 +267,14 @@ fn resolve_attribute(
         .get(&input)
         .and_then(|x| {
             let mut lines: Vec<String> = vec![];
-            walk_resolve_node(x.node, resolve_context, snarl, &mut lines, material_info);
+            walk_resolve_node(
+                x.node,
+                resolve_context,
+                snarl,
+                &mut lines,
+                material_info,
+                user_texture_binding_start,
+            );
             lines.reverse();
             Some(lines)
         })
@@ -225,9 +299,17 @@ fn walk_resolve_node(
     snarl: &Snarl<MaterialNode>,
     lines: &mut Vec<String>,
     material_info: &mut MaterialInfo,
+    user_texture_binding_start: usize,
 ) {
     let node = snarl.get_node(node_id).expect("Not null");
-    let line = resolve_node(node_id, node, resolve_context, material_info, snarl);
+    let line = resolve_node(
+        node_id,
+        node,
+        resolve_context,
+        material_info,
+        snarl,
+        user_texture_binding_start,
+    );
     lines.push(line);
     let node_io_info = resolve_context.nodes.get(&node_id).unwrap();
     for (_, out_pin_id) in &node_io_info.inputs {
@@ -237,6 +319,7 @@ fn walk_resolve_node(
             snarl,
             lines,
             material_info,
+            user_texture_binding_start,
         );
     }
 }
@@ -247,6 +330,7 @@ fn resolve_node(
     resolve_context: &ResolveContext,
     material_info: &mut MaterialInfo,
     snarl: &Snarl<MaterialNode>,
+    user_texture_binding_start: usize,
 ) -> String {
     let _ = snarl;
     let var_name = node_var_name(node_id);
@@ -275,8 +359,8 @@ fn resolve_node(
                     .expect("This node should not be null")
                     .inputs;
                 let binding = TextureBinding {
-                    group: 2,
-                    binding: material_info.map_textures.len(),
+                    group: 0,
+                    binding: user_texture_binding_start + material_info.map_textures.len(),
                     texture_url: texture_url.clone(),
                 };
                 let texture_var_name: String;

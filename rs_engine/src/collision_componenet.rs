@@ -1,4 +1,5 @@
 use crate::{
+    content::content_file_type::EContentFileType,
     drawable::{CustomDrawObject, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
@@ -93,7 +94,13 @@ impl CollisionComponent {
         &self.transformation
     }
 
-    pub fn initialize(&mut self, engine: &mut Engine, player_viewport: &mut PlayerViewport) {
+    pub fn initialize(
+        &mut self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
+        let _ = files;
         match self.collision_type {
             ECollisionType::Cube => {
                 let cube = PrimitiveData::cube_lines();
@@ -189,7 +196,7 @@ impl CollisionComponent {
         })
     }
 
-    pub fn init_physics(
+    pub fn initialize_physics(
         &mut self,
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
@@ -217,7 +224,7 @@ impl CollisionComponent {
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
     ) {
-        self.init_physics(rigid_body_set, collider_set);
+        self.initialize_physics(rigid_body_set, collider_set);
     }
 
     pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
@@ -227,7 +234,15 @@ impl CollisionComponent {
             .unwrap_or(vec![])
     }
 
-    pub fn update(&mut self, time: f32, engine: &mut Engine) {
+    pub fn tick(
+        &mut self,
+        time: f32,
+        engine: &mut Engine,
+        rigid_body_set: &mut RigidBodySet,
+        collider_set: &mut ColliderSet,
+    ) {
+        let _ = collider_set;
+        let _ = rigid_body_set;
         let _ = time;
         if let Some(run_time) = self.run_time.as_mut() {
             run_time.constants.model = run_time.final_transformation;

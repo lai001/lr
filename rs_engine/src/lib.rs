@@ -4,6 +4,7 @@ pub mod camera_component;
 #[cfg(not(target_os = "android"))]
 pub mod camera_input_event_handle;
 pub mod collision_componenet;
+pub mod components;
 pub mod console_cmd;
 pub mod content;
 pub mod default_textures;

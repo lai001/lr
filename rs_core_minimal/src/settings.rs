@@ -46,6 +46,8 @@ pub struct RenderSettings {
     #[serde(default)]
     pub antialias_type: EAntialiasType,
     pub is_enable_multithread_rendering: bool,
+    pub is_enable_debugging: bool,
+    pub is_enable_dump_material_shader_code: bool,
 }
 
 impl RenderSettings {
@@ -60,6 +62,7 @@ impl RenderSettings {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EditorSettings {
     pub is_auto_open_last_project: bool,
+    pub is_enable_log_to_file: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -90,9 +93,12 @@ impl Default for Settings {
                 android_backends: Backends::Primary,
                 antialias_type: EAntialiasType::None,
                 is_enable_multithread_rendering: false,
+                is_enable_debugging: true,
+                is_enable_dump_material_shader_code: true,
             },
             editor_settings: EditorSettings {
                 is_auto_open_last_project: true,
+                is_enable_log_to_file: false,
             },
         }
     }
