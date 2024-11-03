@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-v8 = "129.0.0"
-notify = "6.1.1"
-notify-debouncer-mini = { version = "0.4.1" }
+v8 = "130.0.0"
+notify = "7.0.0"
+notify-debouncer-mini = { version = "0.5.0" }
 walkdir = "2.5.0"
 log = "0.4.22"
 rs_engine = { path = "../rs_engine" }

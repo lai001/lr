@@ -12,10 +12,10 @@ editor = []
 [dependencies]
 dunce = "1.0.5"
 path-slash = "0.2.1"
-serde = { version = "1.0.210", features = ["derive", "rc"] }
-glam = { version = "0.29.0", features = ["mint", "serde"] }
+serde = { version = "1.0.214", features = ["derive", "rc"] }
+glam = { version = "0.29.1", features = ["mint", "serde"] }
 md-5 = { version = "0.10.6" }
 rayon = "1.10.0"
 lazy_static = "1.5.0"
-regex = "1.11.0"
+regex = "1.11.1"
 rs_foundation = { path = "../rs_foundation" }
