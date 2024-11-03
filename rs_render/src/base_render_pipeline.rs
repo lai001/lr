@@ -345,6 +345,86 @@ impl BaseRenderPipeline {
         queue.submit(Some(encoder.finish()))
     }
 
+    pub fn draw_with_pass(
+        &self,
+        render_pass: &mut RenderPass<'_>,
+        bind_groups: &[BindGroup],
+        mesh_buffers: &[GpuVertexBufferImp],
+        scissor_rect: Option<glam::UVec4>,
+        viewport: Option<Viewport>,
+        debug_group_label: Option<&str>,
+    ) {
+        if let Some(debug_group_label) = debug_group_label {
+            render_pass.push_debug_group(debug_group_label);
+        }
+        if let Some(rect) = scissor_rect {
+            render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
+        }
+        if let Some(viewport) = viewport {
+            let rect = &viewport.rect;
+            let depth_range = &viewport.depth_range;
+            render_pass.set_viewport(
+                rect.x,
+                rect.y,
+                rect.z,
+                rect.w,
+                depth_range.start,
+                depth_range.end,
+            );
+        }
+        render_pass.set_pipeline(&self.render_pipeline);
+        for (index, bind_group) in bind_groups.iter().enumerate() {
+            render_pass.set_bind_group(index as u32, bind_group, &[]);
+        }
+
+        for mesh_buffer in mesh_buffers {
+            if self.slots as usize != mesh_buffer.vertex_buffers.len() {
+                panic!(
+                    "{}, slots {} != vertex buffers len {}",
+                    self.tag,
+                    self.slots,
+                    mesh_buffer.vertex_buffers.len()
+                );
+            }
+            for (slot, vertex_buffer) in mesh_buffer.vertex_buffers.iter().enumerate() {
+                render_pass.set_vertex_buffer(slot as u32, vertex_buffer.slice(..));
+            }
+            if let (Some(index_buffer), Some(index_count)) =
+                (mesh_buffer.index_buffer, mesh_buffer.index_count)
+            {
+                render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
+                match &mesh_buffer.draw_type {
+                    EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                        render_pass.multi_draw_indexed_indirect(
+                            multi_draw_indirect.indirect_buffer,
+                            multi_draw_indirect.indirect_offset,
+                            multi_draw_indirect.count,
+                        );
+                    }
+                    EDrawCallType::Draw(draw) => {
+                        render_pass.draw_indexed(0..index_count, 0, draw.instances.clone());
+                    }
+                }
+            } else {
+                match &mesh_buffer.draw_type {
+                    EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                        render_pass.multi_draw_indirect(
+                            multi_draw_indirect.indirect_buffer,
+                            multi_draw_indirect.indirect_offset,
+                            multi_draw_indirect.count,
+                        );
+                    }
+                    EDrawCallType::Draw(draw) => {
+                        render_pass.draw(0..mesh_buffer.vertex_count, draw.instances.clone());
+                    }
+                }
+            }
+        }
+        if debug_group_label.is_some() {
+            render_pass.pop_debug_group();
+        }
+    }
+
     pub fn draw_multiple_threading(
         render_pipeline: &RenderPipeline,
         tag: String,

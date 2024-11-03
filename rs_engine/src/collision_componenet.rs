@@ -125,7 +125,7 @@ impl CollisionComponent {
                     Some(format!("rs.Constants")),
                 );
 
-                let draw_object = DrawObject::new(
+                let mut draw_object = DrawObject::new(
                     0,
                     vec![*vertex_buffer_handle],
                     vertex_count as u32,
@@ -139,6 +139,7 @@ impl CollisionComponent {
                         vec![EBindingResource::Constants(*constants_handle)],
                     ],
                 );
+                draw_object.debug_group_label = Some(format!("{} preview collision", &self.name));
                 self.run_time = Some(CollisionComponentRuntime {
                     physics: None,
                     parent_final_transformation: glam::Mat4::IDENTITY,

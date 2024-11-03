@@ -120,6 +120,8 @@ pub struct MaterialDrawObject {
     pub constants: rs_render::constants::Constants,
     pub skin_constants: rs_render::constants::SkinConstants,
     pub virtual_texture_constants: rs_render::constants::VirtualTextureConstants,
+
+    pub debug_group_label: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -139,4 +141,6 @@ pub struct StaticMeshMaterialDrawObject {
     pub window_id: isize,
     pub constants: rs_render::constants::Constants,
     pub virtual_texture_constants: rs_render::constants::VirtualTextureConstants,
+
+    pub debug_group_label: Option<String>,
 }

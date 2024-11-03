@@ -144,7 +144,7 @@ impl StaticMeshComponent {
                 draw_object = engine.create_material_draw_object_from_static_mesh(
                     &find_static_mesh.vertexes,
                     &find_static_mesh.indexes,
-                    Some(find_static_mesh.name.clone()),
+                    Some(format!("{} - {}", &self.name, &find_static_mesh.name)),
                     material,
                     player_viewport.global_constants_handle.clone(),
                     player_viewport.point_lights_constants_handle.clone(),
@@ -303,7 +303,7 @@ impl StaticMeshComponent {
             draw_object = engine.create_material_draw_object_from_static_mesh(
                 &static_mesh.vertexes,
                 &static_mesh.indexes,
-                Some(static_mesh.name.clone()),
+                Some(format!("{} - {}", &self.name, &static_mesh.name)),
                 material,
                 player_viewport.global_constants_handle.clone(),
                 player_viewport.point_lights_constants_handle.clone(),
@@ -559,7 +559,7 @@ impl StaticMeshComponent {
             draw_object = engine.create_material_draw_object_from_static_mesh(
                 &find_static_mesh.vertexes,
                 &find_static_mesh.indexes,
-                Some(find_static_mesh.name.clone()),
+                Some(format!("{} - {}", &self.name, &find_static_mesh.name)),
                 material,
                 player_viewport.global_constants_handle.clone(),
                 player_viewport.point_lights_constants_handle.clone(),

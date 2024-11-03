@@ -185,7 +185,6 @@ pub enum EDrawCallType {
 pub struct ShadowMapping {
     pub is_skin: bool,
     pub vertex_buffers: Vec<BufferHandle>,
-    pub depth_texture_handle: TextureHandle,
     pub binding_resources: Vec<Vec<EBindingResource>>,
 }
 
@@ -210,6 +209,7 @@ pub struct DrawObject {
     pub shadow_mapping: Option<ShadowMapping>,
     pub scissor_rect: Option<glam::UVec4>,
     pub viewport: Option<Viewport>,
+    pub debug_group_label: Option<String>,
 }
 
 impl DrawObject {
@@ -235,6 +235,7 @@ impl DrawObject {
             scissor_rect: None,
             viewport: None,
             draw_call_type: EDrawCallType::Draw(Draw { instances: 0..1 }),
+            debug_group_label: None,
         }
     }
 }
@@ -332,6 +333,7 @@ pub struct PresentInfo {
     pub draw_objects: Vec<DrawObject>,
     pub virtual_texture_pass: Option<VirtualTexturePassKey>,
     pub scene_viewport: SceneViewport,
+    pub depth_texture_handle: Option<TextureHandle>,
 }
 
 #[derive(Clone)]

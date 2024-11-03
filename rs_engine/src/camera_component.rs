@@ -159,8 +159,12 @@ impl CameraComponent {
             crate::camera::ECameraType::Orthographic(_) => unimplemented!(),
         };
 
-        let (draw_object, constants_handle) =
-            Self::make_draw_object(engine, &frustum, level_player_viewport);
+        let (draw_object, constants_handle) = Self::make_draw_object(
+            engine,
+            &frustum,
+            level_player_viewport,
+            format!("{} camera frustum", &self.name),
+        );
 
         let render_target_type = *level_player_viewport.get_render_target_type();
         self.run_time = Some(CameraComponentRuntime {
@@ -180,6 +184,7 @@ impl CameraComponent {
         engine: &mut Engine,
         frustum: &Frustum,
         player_viewport: &mut PlayerViewport,
+        debug_group_label: String,
     ) -> (DrawObject, crate::handle::BufferHandle) {
         let lines = frustum.make_lines();
         let mut v1 = lines[0..4]
@@ -241,23 +246,22 @@ impl CameraComponent {
             &vec![constants::Constants::default()],
             Some(format!("rs.Constants")),
         );
-        (
-            DrawObject::new(
-                0,
-                vec![*vertex_buffer_handle],
-                vertex_count as u32,
-                EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
-                None,
-                None,
-                vec![
-                    vec![EBindingResource::Constants(
-                        *player_viewport.global_constants_handle,
-                    )],
-                    vec![EBindingResource::Constants(*constants_handle)],
-                ],
-            ),
-            constants_handle,
-        )
+        let mut draw_object = DrawObject::new(
+            0,
+            vec![*vertex_buffer_handle],
+            vertex_count as u32,
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+            None,
+            None,
+            vec![
+                vec![EBindingResource::Constants(
+                    *player_viewport.global_constants_handle,
+                )],
+                vec![EBindingResource::Constants(*constants_handle)],
+            ],
+        );
+        draw_object.debug_group_label = Some(debug_group_label);
+        (draw_object, constants_handle)
     }
 
     pub fn tick(

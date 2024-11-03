@@ -770,7 +770,7 @@ impl PlayerViewport {
 
     pub fn to_render_draw_object(
         draw_object: &EDrawObjectType,
-        shadow_depth_texture_handle: Option<TextureHandle>,
+        is_enable_shadow: bool,
     ) -> crate::error::Result<DrawObject> {
         match draw_object {
             EDrawObjectType::Static(static_objcet) => {
@@ -866,6 +866,7 @@ impl PlayerViewport {
                     skin_objcet.index_count,
                     binding_resources,
                 );
+                draw_object.debug_group_label = skin_objcet.debug_group_label;
                 draw_object.virtual_pass_set = Some(VirtualPassSet {
                     vertex_buffers: vec![
                         *skin_objcet.vertex_buffers[0],
@@ -879,13 +880,12 @@ impl PlayerViewport {
                         ],
                     ],
                 });
-                if let Some(handle) = shadow_depth_texture_handle.clone() {
+                if is_enable_shadow {
                     draw_object.shadow_mapping = Some(ShadowMapping {
                         vertex_buffers: vec![
                             *skin_objcet.vertex_buffers[0],
                             *skin_objcet.vertex_buffers[2],
                         ],
-                        depth_texture_handle: *handle,
                         binding_resources: vec![vec![
                             global_constants_resource.clone(),
                             constants_resource.clone(),
@@ -937,6 +937,7 @@ impl PlayerViewport {
                     static_mesh_draw_objcet.index_count,
                     binding_resources,
                 );
+                draw_object.debug_group_label = static_mesh_draw_objcet.debug_group_label;
                 draw_object.virtual_pass_set = Some(VirtualPassSet {
                     vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
                     binding_resources: vec![
@@ -944,10 +945,9 @@ impl PlayerViewport {
                         vec![constants_resource.clone()],
                     ],
                 });
-                if let Some(handle) = shadow_depth_texture_handle.clone() {
+                if is_enable_shadow {
                     draw_object.shadow_mapping = Some(ShadowMapping {
                         vertex_buffers: vec![*static_mesh_draw_objcet.vertex_buffers[0]],
-                        depth_texture_handle: *handle,
                         binding_resources: vec![vec![
                             global_constants_resource.clone(),
                             constants_resource.clone(),
@@ -962,7 +962,7 @@ impl PlayerViewport {
     }
 
     pub fn push_to_draw_list(&mut self, draw_object: &EDrawObjectType) {
-        match Self::to_render_draw_object(draw_object, self.shadow_depth_texture_handle.clone()) {
+        match Self::to_render_draw_object(draw_object, self.shadow_depth_texture_handle.is_some()) {
             Ok(draw_object) => {
                 self.draw_objects.push(draw_object);
             }
@@ -976,7 +976,7 @@ impl PlayerViewport {
         let mut draw_objects = draw_objects
             .iter()
             .map(|x| {
-                match Self::to_render_draw_object(x, self.shadow_depth_texture_handle.clone()) {
+                match Self::to_render_draw_object(x, self.shadow_depth_texture_handle.is_some()) {
                     Ok(ret) => Ok(ret),
                     Err(err) => {
                         log::warn!("{}", err);

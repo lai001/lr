@@ -199,7 +199,7 @@ impl SkeletonMeshComponent {
                 draw_object = engine.create_material_draw_object_from_skin_mesh(
                     &skin_mesh.vertexes,
                     &skin_mesh.indexes,
-                    Some(skin_mesh.name.clone()),
+                    Some(format!("{} - {}", &self.name, &skin_mesh.name)),
                     material,
                     player_viewport.global_constants_handle.clone(),
                     player_viewport.point_lights_constants_handle.clone(),
@@ -356,7 +356,7 @@ impl SkeletonMeshComponent {
                         *draw_object = engine.create_material_draw_object_from_skin_mesh(
                             &skin_mesh.vertexes,
                             &skin_mesh.indexes,
-                            Some(skin_mesh.name.clone()),
+                            Some(format!("{} - {}", &self.name, &skin_mesh.name)),
                             material.clone(),
                             player_viewport.global_constants_handle.clone(),
                             player_viewport.point_lights_constants_handle.clone(),

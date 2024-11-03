@@ -163,6 +163,7 @@ impl UIWindow for MultipleDrawUiWindow {
                     draw_objects: present_draw_objects,
                     virtual_texture_pass: None,
                     scene_viewport: SceneViewport::new(),
+                    depth_texture_handle: None,
                 }));
                 self.frame_sync.sync(60.0);
                 engine.window_redraw_requested_end(window_id);

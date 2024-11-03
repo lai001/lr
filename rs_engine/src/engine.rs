@@ -23,8 +23,8 @@ use rs_foundation::new::{
 };
 use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
-    BufferCreateInfo, ClearDepthTexture, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline,
-    CreateSampler, CreateTexture, CreateUITexture, CreateVirtualTexture, CreateVirtualTexturePass,
+    BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline, CreateSampler,
+    CreateTexture, CreateUITexture, CreateVirtualTexture, CreateVirtualTexturePass,
     EBindingResource, InitTextureData, PresentInfo, RenderCommand, TextureDescriptorCreateInfo,
     UpdateBuffer, UploadPrebakeIBL, VirtualTexturePassKey,
 };
@@ -620,14 +620,14 @@ impl Engine {
                 .send_command(RenderCommand::ClearVirtualTexturePass(key));
         }
 
-        if let Some(shadow_depth_texture_handle) =
-            player_viewport.shadow_depth_texture_handle.clone()
-        {
-            self.render_thread_mode
-                .send_command(RenderCommand::ClearDepthTexture(ClearDepthTexture {
-                    handle: *shadow_depth_texture_handle,
-                }));
-        }
+        // if let Some(shadow_depth_texture_handle) =
+        //     player_viewport.shadow_depth_texture_handle.clone()
+        // {
+        //     self.render_thread_mode
+        //         .send_command(RenderCommand::ClearDepthTexture(ClearDepthTexture {
+        //             handle: *shadow_depth_texture_handle,
+        //         }));
+        // }
 
         let virtual_texture_pass = player_viewport.virtual_pass_handle.clone().map(|x| x.key());
         self.render_thread_mode
@@ -636,6 +636,10 @@ impl Engine {
                 draw_objects,
                 virtual_texture_pass,
                 scene_viewport: player_viewport.scene_viewport.clone(),
+                depth_texture_handle: player_viewport
+                    .shadow_depth_texture_handle
+                    .as_deref()
+                    .copied(),
             }));
 
         let pending_destroy_textures = ResourceManager::default().get_pending_destroy_textures();
@@ -1083,6 +1087,7 @@ impl Engine {
             constants: Default::default(),
             skin_constants: Default::default(),
             virtual_texture_constants: Default::default(),
+            debug_group_label: Some(name),
         };
         EDrawObjectType::SkinMaterial(object)
     }
@@ -1297,6 +1302,7 @@ impl Engine {
             window_id: self.main_window_id,
             constants: Default::default(),
             virtual_texture_constants: Default::default(),
+            debug_group_label: Some(name),
         };
         EDrawObjectType::StaticMeshMaterial(object)
     }
@@ -1575,7 +1581,7 @@ impl Engine {
             render_thread_mode.send_command(message);
             vertex_buffer_handles.push(vertex_buffer_handle);
         }
-        let draw_object = rs_render::command::DrawObject::new(
+        let mut draw_object = rs_render::command::DrawObject::new(
             id,
             vertex_buffer_handles.iter().map(|x| **x).collect(),
             vertexes0.len() as u32,
@@ -1586,6 +1592,7 @@ impl Engine {
             Some(grid_data.indices.len() as u32),
             vec![vec![EBindingResource::Constants(*global_constants_handle)]],
         );
+        draw_object.debug_group_label = Some(String::from("Grid"));
         draw_object
     }
 

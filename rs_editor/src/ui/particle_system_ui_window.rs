@@ -280,6 +280,7 @@ impl UIWindow for ParticleSystemUIWindow {
                     draw_objects,
                     virtual_texture_pass: None,
                     scene_viewport: SceneViewport::new(),
+                    depth_texture_handle: None,
                 }));
 
                 engine.send_render_command(RenderCommand::UiOutput(gui_render_output));

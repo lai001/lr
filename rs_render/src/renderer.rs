@@ -28,6 +28,7 @@ use rs_core_minimal::settings::{self, RenderSettings};
 use rs_core_minimal::thread_pool::ThreadPool;
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
@@ -109,6 +110,8 @@ pub struct Renderer {
     is_enable_multiple_thread: bool,
 
     surface_textures: HashMap<isize, SurfaceTexture>,
+
+    bind_groups_collection: moka::sync::Cache<u64, Arc<Vec<BindGroup>>>,
 }
 
 impl Renderer {
@@ -267,6 +270,7 @@ impl Renderer {
             primitive_render_pipeline,
             texture_views: HashMap::new(),
             surface_textures: HashMap::new(),
+            bind_groups_collection: moka::sync::Cache::new(1000),
         };
         Ok(renderer)
     }
@@ -564,8 +568,12 @@ impl Renderer {
         //     let depth_texture_view = depth_texture.get_view();
         //     self.clear_buffer(&output_view, &depth_texture_view, None);
         // }
+
         self.vt_pass(&present_info);
-        self.shadow_for_draw_objects(present_info.draw_objects.as_slice());
+        self.shadow_for_draw_objects(
+            present_info.draw_objects.as_slice(),
+            present_info.depth_texture_handle,
+        );
 
         let color_texture = match present_info.render_target_type {
             ERenderTargetType::SurfaceTexture(window_id) => {
@@ -689,8 +697,6 @@ impl Renderer {
         }
 
         (|| {
-            let _span = tracy_client::span!("fxaa");
-
             let anti_type = &present_info.scene_viewport.anti_type;
             let EAntialiasType::FXAA(fxaa_info) = anti_type else {
                 return;
@@ -704,6 +710,8 @@ impl Renderer {
             let Some(texture) = self.textures.get(&fxaa_info.texture) else {
                 return;
             };
+            let _span = tracy_client::span!("fxaa");
+
             let queue = self.wgpu_context.get_queue();
             let device = self.wgpu_context.get_device();
             let mut command_encoder =
@@ -862,7 +870,15 @@ impl Renderer {
                 // self.create_buffer_commands.push(command)
             }
             RenderCommand::UpdateBuffer(update_buffer_command) => {
-                let _span = tracy_client::span!("update_buffer_command");
+                let span = tracy_client::span!("update_buffer_command");
+                span.emit_text(&if let Some(buffer_create_info) =
+                    self.buffer_infos.get(&update_buffer_command.handle)
+                {
+                    buffer_create_info.label.clone().unwrap_or_default()
+                } else {
+                    "update_buffer_command".to_string()
+                });
+
                 let device = self.wgpu_context.get_device();
                 if let Some(buffer) = self.buffers.get(&update_buffer_command.handle) {
                     let (sender, receiver) = std::sync::mpsc::channel();
@@ -1619,9 +1635,8 @@ impl Renderer {
 
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
-        let tag = "Render scene";
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some(&format!("{} command encoder", tag)),
+            label: Some(&format!("Render scene command encoder")),
         });
         let depth_stencil_attachment = RenderPassDepthStencilAttachment {
             view: resolve_depth_target.unwrap_or(depth_texture_view),
@@ -1648,11 +1663,11 @@ impl Renderer {
                 Some(surface_texture_view)
             },
         })];
-        let mut all_bind_groups: Vec<Vec<BindGroup>> =
-            Vec::with_capacity(draw_object_commands.len());
+
+        let mut all_bind_groups: Vec<u64> = vec![];
         {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some(&format!("{} render pass", tag)),
+                label: Some(&format!("Scene render pass")),
                 color_attachments: &color_attachments,
                 depth_stencil_attachment: Some(depth_stencil_attachment),
                 timestamp_writes: None,
@@ -1737,6 +1752,7 @@ impl Renderer {
                         }
                     }
 
+                    let mut hasher = std::hash::DefaultHasher::new();
                     let mut group_binding_resource: Vec<Vec<BindingResource>> =
                         Vec::with_capacity(draw_object_command.binding_resources.len());
                     for (group, binding_resource) in
@@ -1748,6 +1764,7 @@ impl Renderer {
                         {
                             match binding_resource_type {
                                 EBindingResource::Texture(handle) => {
+                                    handle.hash(&mut hasher);
                                     let texture_view = tmp_texture_views
                                         .get(handle)
                                         .ok_or(crate::error::Error::Other(Some(format!(
@@ -1759,6 +1776,7 @@ impl Renderer {
                                         .push(BindingResource::TextureView(texture_view));
                                 }
                                 EBindingResource::Constants(buffer_handle) => {
+                                    buffer_handle.hash(&mut hasher);
                                     let buffer = self
                                         .buffers
                                         .get(buffer_handle)
@@ -1771,6 +1789,7 @@ impl Renderer {
                                     binding_resources.push(buffer);
                                 }
                                 EBindingResource::Sampler(handle) => {
+                                    handle.hash(&mut hasher);
                                     let sampler = self
                                         .samplers
                                         .get(handle)
@@ -1846,11 +1865,20 @@ impl Renderer {
                     };
 
                     if let Some(pipeline) = pipeline {
-                        let bind_groups = pipeline
-                            .make_bind_groups_binding_resources(device, group_binding_resource);
-                        all_bind_groups.push(bind_groups);
+                        let cache_key = hasher.finish();
+                        if !self.bind_groups_collection.contains_key(&cache_key) {
+                            self.bind_groups_collection.insert(
+                                cache_key,
+                                Arc::new(pipeline.make_bind_groups_binding_resources(
+                                    device,
+                                    group_binding_resource,
+                                )),
+                            );
+                        }
+
+                        all_bind_groups.push(cache_key);
                     } else {
-                        all_bind_groups.push(vec![]);
+                        all_bind_groups.push(0);
                     }
                 }
             }
@@ -1912,67 +1940,19 @@ impl Renderer {
                     continue;
                 };
 
-                if let Some(rect) = &draw_object_command.scissor_rect {
-                    render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
-                }
-                if let Some(viewport) = &draw_object_command.viewport {
-                    let rect = &viewport.rect;
-                    let depth_range = &viewport.depth_range;
-                    render_pass.set_viewport(
-                        rect.x,
-                        rect.y,
-                        rect.z,
-                        rect.w,
-                        depth_range.start,
-                        depth_range.end,
-                    );
-                }
-                render_pass.set_pipeline(&pipeline.render_pipeline);
+                let bind_groups = self
+                    .bind_groups_collection
+                    .get(&all_bind_groups[i])
+                    .expect("Should not be nll.");
 
-                for (index, bind_group) in all_bind_groups[i].iter().enumerate() {
-                    render_pass.set_bind_group(index as u32, bind_group, &[]);
-                }
-
-                for mesh_buffer in vec![mesh_buffers[i].clone()] {
-                    for (slot, vertex_buffer) in mesh_buffer.vertex_buffers.iter().enumerate() {
-                        render_pass.set_vertex_buffer(slot as u32, vertex_buffer.slice(..));
-                    }
-                    if let (Some(index_buffer), Some(index_count)) =
-                        (mesh_buffer.index_buffer, mesh_buffer.index_count)
-                    {
-                        render_pass.set_index_buffer(index_buffer.slice(..), IndexFormat::Uint32);
-                        match &mesh_buffer.draw_type {
-                            crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
-                                multi_draw_indirect,
-                            ) => {
-                                render_pass.multi_draw_indexed_indirect(
-                                    multi_draw_indirect.indirect_buffer,
-                                    multi_draw_indirect.indirect_offset,
-                                    multi_draw_indirect.count,
-                                );
-                            }
-                            crate::gpu_vertex_buffer::EDrawCallType::Draw(draw) => {
-                                render_pass.draw_indexed(0..index_count, 0, draw.instances.clone());
-                            }
-                        }
-                    } else {
-                        match &mesh_buffer.draw_type {
-                            crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
-                                multi_draw_indirect,
-                            ) => {
-                                render_pass.multi_draw_indirect(
-                                    multi_draw_indirect.indirect_buffer,
-                                    multi_draw_indirect.indirect_offset,
-                                    multi_draw_indirect.count,
-                                );
-                            }
-                            crate::gpu_vertex_buffer::EDrawCallType::Draw(draw) => {
-                                render_pass
-                                    .draw(0..mesh_buffer.vertex_count, draw.instances.clone());
-                            }
-                        }
-                    }
-                }
+                pipeline.draw_with_pass(
+                    &mut render_pass,
+                    &bind_groups,
+                    &vec![mesh_buffers[i].clone()],
+                    draw_object_command.scissor_rect,
+                    draw_object_command.viewport.clone(),
+                    draw_object_command.debug_group_label.as_deref(),
+                );
             }
         }
         queue.submit(vec![encoder.finish()]);
@@ -2346,118 +2326,181 @@ impl Renderer {
         &self.shader_library
     }
 
-    fn shadow_for_draw_objects(&mut self, draw_objects: &[DrawObject]) {
-        let _span = tracy_client::span!();
-
-        for draw_object in draw_objects {
-            self.shadow_for_draw_object(draw_object);
-        }
-    }
-
-    fn shadow_for_draw_object(&mut self, draw_object: &DrawObject) {
+    fn shadow_for_draw_objects(
+        &mut self,
+        draw_objects: &[DrawObject],
+        depth_texture_handle: Option<TextureHandle>,
+    ) {
         let Some(shadow_pipilines) = self.shadow_pipilines.as_mut() else {
             return;
         };
-
-        let Some(shadow_mapping) = &draw_object.shadow_mapping else {
-            return;
-        };
-        let Some(shadow_depth_texture) = self.textures.get(&shadow_mapping.depth_texture_handle)
-        else {
+        let Some(depth_texture_handle) = depth_texture_handle else {
             return;
         };
 
+        let Some(depth_view) = self.texture_views.get(&depth_texture_handle) else {
+            return;
+        };
+        let _span = tracy_client::span!();
+
+        let mut vertex_bufferss: Vec<Vec<&Buffer>> = Vec::with_capacity(draw_objects.len());
+        let mut index_bufferss: Vec<Option<&Buffer>> = Vec::with_capacity(draw_objects.len());
+        let mut bind_groupss: Vec<u64> = Vec::with_capacity(draw_objects.len());
+        let mut mesh_buffers: Vec<GpuVertexBufferImp<'_>> = Vec::with_capacity(draw_objects.len());
         let device = self.wgpu_context.get_device();
-        let queue = self.wgpu_context.get_queue();
 
-        let depth_ops: Option<Operations<f32>> = None;
-        let stencil_ops: Option<Operations<u32>> = None;
+        for draw_object in draw_objects {
+            let Some(shadow_mapping) = &draw_object.shadow_mapping else {
+                vertex_bufferss.push(vec![]);
+                index_bufferss.push(None);
+                bind_groupss.push(0);
+                continue;
+            };
+            let base_render_pipeline = if shadow_mapping.is_skin {
+                shadow_pipilines
+                    .depth_skin_pipeline
+                    .base_render_pipeline
+                    .clone()
+            } else {
+                shadow_pipilines.depth_pipeline.base_render_pipeline.clone()
+            };
+            let vertex_buffers: Vec<&Buffer> = shadow_mapping
+                .vertex_buffers
+                .iter()
+                .flat_map(|handle| self.buffers.get(handle))
+                .map(|x| x.as_ref())
+                .collect();
+            vertex_bufferss.push(vertex_buffers);
+            let index_buffer: Option<&Buffer> = draw_object
+                .index_buffer
+                .map(|x| self.buffers.get(&x))
+                .map(|x| x.map(|x| x.as_ref()))
+                .flatten();
+            index_bufferss.push(index_buffer);
 
-        let depth_view = shadow_depth_texture.create_view(&TextureViewDescriptor::default());
-
-        let vertex_buffers: Vec<&Buffer> = shadow_mapping
-            .vertex_buffers
-            .iter()
-            .flat_map(|handle| self.buffers.get(handle))
-            .map(|x| x.as_ref())
-            .collect();
-        let index_buffer: Option<&Buffer> = draw_object
-            .index_buffer
-            .map(|x| self.buffers.get(&x))
-            .map(|x| x.map(|x| x.as_ref()))
-            .flatten();
-
-        let mut group_binding_resources: Vec<Vec<BindingResource>> = vec![];
-        for (group, group_binding_resource) in shadow_mapping.binding_resources.iter().enumerate() {
-            let mut binding_resources: Vec<BindingResource> = vec![];
-            for (binding, binding_resource) in group_binding_resource.iter().enumerate() {
-                match binding_resource {
-                    EBindingResource::Texture(_) => panic!(),
-                    EBindingResource::Constants(buffer_handle) => {
-                        let _ = self
-                            .buffers
-                            .get(buffer_handle)
-                            .ok_or(crate::error::Error::Other(Some(format!(
-                                "{}, {}, constants is null",
-                                group, binding
-                            ))))
-                            .map(|x| x.as_entire_binding())
-                            .and_then(|x| Ok(binding_resources.push(x)));
+            let mut hasher = std::hash::DefaultHasher::new();
+            let mut group_binding_resources: Vec<Vec<BindingResource>> = vec![];
+            for (group, group_binding_resource) in
+                shadow_mapping.binding_resources.iter().enumerate()
+            {
+                let mut binding_resources: Vec<BindingResource> = vec![];
+                for (binding, binding_resource) in group_binding_resource.iter().enumerate() {
+                    match binding_resource {
+                        EBindingResource::Texture(_) => panic!(),
+                        EBindingResource::Constants(buffer_handle) => {
+                            buffer_handle.hash(&mut hasher);
+                            let _ = self
+                                .buffers
+                                .get(buffer_handle)
+                                .ok_or(crate::error::Error::Other(Some(format!(
+                                    "{}, {}, constants is null",
+                                    group, binding
+                                ))))
+                                .map(|x| x.as_entire_binding())
+                                .and_then(|x| Ok(binding_resources.push(x)));
+                        }
+                        EBindingResource::Sampler(_) => panic!(),
                     }
-                    EBindingResource::Sampler(_) => panic!(),
                 }
+                group_binding_resources.push(binding_resources);
             }
-            group_binding_resources.push(binding_resources);
+            let cache_key = hasher.finish();
+            if !self.bind_groups_collection.contains_key(&cache_key) {
+                self.bind_groups_collection.insert(
+                    cache_key,
+                    Arc::new(
+                        base_render_pipeline
+                            .make_bind_groups_binding_resources(device, group_binding_resources),
+                    ),
+                );
+            }
+            bind_groupss.push(cache_key);
         }
 
-        let mesh_buffer = GpuVertexBufferImp {
-            vertex_buffers: &vertex_buffers,
-            vertex_count: draw_object.vertex_count,
-            index_buffer,
-            index_count: draw_object.index_count,
-            draw_type: match &draw_object.draw_call_type {
-                EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
-                    let indirect_buffer = self
-                        .buffers
-                        .get(&multi_draw_indirect.indirect_buffer_handle)
-                        .unwrap();
-                    crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
-                        crate::gpu_vertex_buffer::MultiDrawIndirect {
-                            indirect_buffer,
-                            indirect_offset: multi_draw_indirect.indirect_offset,
-                            count: multi_draw_indirect.count,
+        for (i, draw_object) in draw_objects.iter().enumerate() {
+            let vertex_buffers = &vertex_bufferss[i];
+            let index_buffer = index_bufferss[i];
+            let mesh_buffer = GpuVertexBufferImp {
+                vertex_buffers: &vertex_buffers,
+                vertex_count: draw_object.vertex_count,
+                index_buffer,
+                index_count: draw_object.index_count,
+                draw_type: match &draw_object.draw_call_type {
+                    EDrawCallType::MultiDrawIndirect(multi_draw_indirect) => {
+                        let indirect_buffer = self
+                            .buffers
+                            .get(&multi_draw_indirect.indirect_buffer_handle)
+                            .unwrap();
+                        crate::gpu_vertex_buffer::EDrawCallType::MultiDrawIndirect(
+                            crate::gpu_vertex_buffer::MultiDrawIndirect {
+                                indirect_buffer,
+                                indirect_offset: multi_draw_indirect.indirect_offset,
+                                count: multi_draw_indirect.count,
+                            },
+                        )
+                    }
+                    EDrawCallType::Draw(draw) => crate::gpu_vertex_buffer::EDrawCallType::Draw(
+                        crate::gpu_vertex_buffer::Draw {
+                            instances: draw.instances.clone(),
                         },
-                    )
-                }
-                EDrawCallType::Draw(draw) => {
-                    crate::gpu_vertex_buffer::EDrawCallType::Draw(crate::gpu_vertex_buffer::Draw {
-                        instances: draw.instances.clone(),
-                    })
-                }
-            },
+                    ),
+                },
+            };
+            mesh_buffers.push(mesh_buffer);
+        }
+
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some(&format!("{} command encoder", "Shadow")),
+        });
+        let render_pass_color_attachments: Vec<Option<RenderPassColorAttachment>> = Vec::new();
+        let depth_stencil_attachment = RenderPassDepthStencilAttachment {
+            view: &depth_view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(1.0),
+                store: StoreOp::Store,
+            }),
+            stencil_ops: None,
         };
 
-        let base_render_pipeline = if shadow_mapping.is_skin {
-            shadow_pipilines
-                .depth_skin_pipeline
-                .base_render_pipeline
-                .clone()
-        } else {
-            shadow_pipilines.depth_pipeline.base_render_pipeline.clone()
-        };
+        {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some(&format!("Shadow pass")),
+                color_attachments: &render_pass_color_attachments,
+                occlusion_query_set: None,
+                depth_stencil_attachment: Some(depth_stencil_attachment),
+                timestamp_writes: None,
+            });
 
-        base_render_pipeline.draw_resources(
-            device,
-            queue,
-            group_binding_resources,
-            &vec![mesh_buffer],
-            &[],
-            depth_ops,
-            stencil_ops,
-            Some(&depth_view),
-            None,
-            None,
-        );
+            for (i, bind_groups_key) in bind_groupss.drain(..).enumerate() {
+                let draw_object = &draw_objects[i];
+                let Some(shadow_mapping) = &draw_object.shadow_mapping else {
+                    continue;
+                };
+                let base_render_pipeline = if shadow_mapping.is_skin {
+                    shadow_pipilines
+                        .depth_skin_pipeline
+                        .base_render_pipeline
+                        .clone()
+                } else {
+                    shadow_pipilines.depth_pipeline.base_render_pipeline.clone()
+                };
+
+                let bind_groups = self
+                    .bind_groups_collection
+                    .get(&bind_groups_key)
+                    .expect("Should not be null.");
+                base_render_pipeline.draw_with_pass(
+                    &mut render_pass,
+                    &bind_groups,
+                    &vec![mesh_buffers[i].clone()],
+                    None,
+                    None,
+                    draw_object.debug_group_label.as_deref(),
+                );
+            }
+        }
+
+        self.wgpu_context.get_queue().submit(Some(encoder.finish()));
     }
 
     pub fn insert_new_texture(&mut self, handle: TextureHandle, texture: Texture) {

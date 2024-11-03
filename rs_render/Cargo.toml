@@ -29,6 +29,7 @@ image_dds = { version = "0.6.0" }
 ddsfile = "0.5.2"
 tracy-client = { version = "0.17.4", default-features = false }
 bitflags = "2.6.0"
+moka = { version = "0.12.8", default-features = false, features = ["sync"] }
 rs_foundation = { path = "../rs_foundation" }
 rs_shader_compiler = { path = "../rs_shader_compiler" }
 rs_core_minimal = { path = "../rs_core_minimal" }

@@ -18,7 +18,7 @@ standalone = [
     "rs_render/standalone",
     "rs_core_minimal/standalone",
 ]
-profiler = ["tracy-client/default", "rs_render/default"]
+profiler = ["tracy-client/default", "rs_render/profiler"]
 plugin_shared_crate = []
 
 [dependencies]
