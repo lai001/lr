@@ -190,6 +190,18 @@ pub fn get_vec_from_raw_mut<'a, T>(
     result
 }
 
+pub fn is_program_in_path(program: &str) -> bool {
+    if let Ok(path) = env::var("PATH") {
+        for p in path.split(";") {
+            let p_str = format!("{}/{}", p, program);
+            if std::fs::metadata(p_str).is_ok() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 pub mod test {
     use crate::{alignment, math_remap_value_range, next_highest_power_of_two};

@@ -24,6 +24,7 @@ plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 plugin_dotnet = ["dep:rs_dotnet", "dep:rs_dotnet_host"]
 plugin_v8 = ["dep:rs_v8_host"]
 exit_check = []
+detect_encoding = ["rs_shader_compiler/detect_encoding"]
 
 [dependencies]
 egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "036b076", version = "0.5.0", features = [

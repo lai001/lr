@@ -1,9 +1,11 @@
-# rs_computer_graphics
+# lr
 
-Windows 10  
-Android     
-.net6   
-Rust 1.78.0 
+Windows 10
+Android
+.net8
+Rust 1.78.0
+xmake
+clang（optional）
 
 ## Feature
 - Hot reload
