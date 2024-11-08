@@ -28,6 +28,13 @@ impl TextureBinding {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
+pub struct MaterialParamentersCollectionBinding {
+    pub group: usize,
+    pub binding: usize,
+    pub material_paramenters_collection_url: url::Url,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct MaterialInfo {
     pub map_textures: HashSet<TextureBinding>,
@@ -45,6 +52,7 @@ pub struct MaterialInfo {
     pub spot_lights_binding: Option<GroupBinding>,
     pub skin_constants_binding: Option<GroupBinding>,
     pub virtual_texture_constants_binding: Option<GroupBinding>,
+    pub material_paramenters_collection_bindings: HashSet<MaterialParamentersCollectionBinding>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -40,6 +40,7 @@ pub enum EClickEventType {
     SingleClickFile(EContentFileType),
     Back,
     Rename(EContentFileType, String),
+    CreateMaterialParametersCollection,
 }
 
 enum EItemType {
@@ -118,6 +119,13 @@ pub fn draw(
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateBlendAnimations);
+                                ui.close_menu();
+                            }
+                        });
+                        ui.menu_button("Material Parameters Collection", |ui| {
+                            ui.text_edit_singleline(&mut data_source.new_content_name);
+                            if ui.button("Ok").clicked() {
+                                click = Some(EClickEventType::CreateMaterialParametersCollection);
                                 ui.close_menu();
                             }
                         });
@@ -322,6 +330,9 @@ fn render_thumbnail(
             ui.image(egui::include_image!(
                 "../../../Resource/Editor/blend_animations.svg"
             ));
+        }
+        EContentFileType::MaterialParamentersCollection(_) => {
+            ui.image(egui::include_image!("../../../Resource/Editor/file.svg"));
         }
     }
 }

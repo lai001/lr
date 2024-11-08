@@ -114,6 +114,10 @@ GROUP_BINDING(VIRTUAL_TEXTURE_CONSTANTS) var<uniform> virtual_texture_constants:
     USER_TEXTURES
 #endif
 
+#ifdef MATERIAL_PARAMENTERS_COLLECTION_UNIFORMS
+    MATERIAL_PARAMENTERS_COLLECTION_UNIFORMS
+#endif
+
 fn shadow_calculation(shadow_map: texture_depth_2d, frag_position_at_light_space: vec4<f32>) -> f32 {
     var bias = 0.005;
     var proj_coords: vec3<f32> = frag_position_at_light_space.xyz / frag_position_at_light_space.w;

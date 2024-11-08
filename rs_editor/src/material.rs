@@ -8,7 +8,7 @@ struct MaterialRuntime {
     material: SingleThreadMutType<rs_engine::content::material::Material>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Material {
     pub url: url::Url,
     pub snarl: Snarl<MaterialNode>,

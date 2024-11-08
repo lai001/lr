@@ -15,4 +15,5 @@ pub enum EContentType {
     Sound,
     Curve,
     BlendAnimations,
+    MaterialParamentersCollection,
 }

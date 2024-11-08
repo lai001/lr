@@ -202,6 +202,10 @@ pub fn is_program_in_path(program: &str) -> bool {
     false
 }
 
+pub fn size_padding_of(current_size: usize, align: usize) -> usize {
+    (alignment(current_size as isize, align as isize) as usize) - current_size
+}
+
 #[cfg(test)]
 pub mod test {
     use crate::{alignment, math_remap_value_range, next_highest_power_of_two};

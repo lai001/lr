@@ -330,6 +330,11 @@ impl ProjectContext {
             rs_engine::content::blend_animations::BlendAnimations,
         > = HashMap::new();
 
+        let mut material_paramenters_collections: HashMap<
+            url::Url,
+            rs_engine::content::material_paramenters_collection::MaterialParamentersCollection,
+        > = HashMap::new();
+
         for file in &self.project.content.borrow().files {
             match file {
                 EContentFileType::StaticMesh(asset) => {
@@ -524,6 +529,15 @@ impl ProjectContext {
                     let blend_animation = blend_animation.borrow();
                     blend_animations.insert(blend_animation.url.clone(), blend_animation.clone());
                 }
+                EContentFileType::MaterialParamentersCollection(
+                    material_paramenters_collection,
+                ) => {
+                    let material_paramenters_collection = material_paramenters_collection.borrow();
+                    material_paramenters_collections.insert(
+                        material_paramenters_collection.url.clone(),
+                        material_paramenters_collection.clone(),
+                    );
+                }
             }
         }
 
@@ -579,6 +593,9 @@ impl ProjectContext {
             artifact_asset_encoder.encode(asset);
         }
         for asset in blend_animations.values() {
+            artifact_asset_encoder.encode(asset);
+        }
+        for asset in material_paramenters_collections.values() {
             artifact_asset_encoder.encode(asset);
         }
         let _ = artifact_asset_encoder.finish()?;

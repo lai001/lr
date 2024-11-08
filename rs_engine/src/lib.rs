@@ -41,6 +41,7 @@ pub mod standalone;
 pub mod static_mesh_component;
 pub mod static_virtual_texture_source;
 pub mod sync;
+pub mod uniform_map;
 pub mod url_extension;
 
 pub use rs_core_minimal::thread_pool;

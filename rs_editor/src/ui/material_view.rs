@@ -1,4 +1,5 @@
 use crate::{
+    content_folder::ContentFolder,
     editor_ui,
     material_resolve::{self, ResolveResult},
 };
@@ -7,6 +8,7 @@ use egui_snarl::{
     ui::{Grid, PinInfo, SnarlStyle, SnarlViewer},
     InPin, NodeId, OutPin, Snarl,
 };
+use rs_engine::content::material_paramenters_collection::MaterialParamentersCollection;
 use rs_foundation::new::SingleThreadMutType;
 use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
@@ -17,7 +19,9 @@ const NODE_IO_COLOR: Color32 = Color32::WHITE;
 pub struct GraphViewer {
     pub texture_urls: Vec<url::Url>,
     pub virtual_texture_urls: Vec<url::Url>,
+    pub material_parameters_collection_urls: Vec<url::Url>,
     pub is_updated: bool,
+    pub folder: SingleThreadMutType<ContentFolder>,
 }
 
 impl GraphViewer {
@@ -110,6 +114,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::VirtualTexture(_) => 1,
             EMaterialNodeType::Time => 1,
             EMaterialNodeType::Sin(_) => 1,
+            EMaterialNodeType::MaterialParamentersCollection(_) => 1,
         }
     }
 
@@ -122,6 +127,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::VirtualTexture(_) => 1,
             EMaterialNodeType::Time => 0,
             EMaterialNodeType::Sin(_) => 1,
+            EMaterialNodeType::MaterialParamentersCollection(_) => 2,
         }
     }
 
@@ -289,6 +295,106 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 }
                 PinInfo::square().with_fill(NODE_IO_COLOR)
             }
+            EMaterialNodeType::MaterialParamentersCollection((current_value, current_name)) => {
+                //
+                match pin.id.input {
+                    0 => {
+                        let text = if let Some(current_value) = current_value.as_ref() {
+                            current_value.borrow().url.to_string()
+                        } else {
+                            "None".to_string()
+                        };
+                        ui.push_id("value", |ui| {
+                            egui::ComboBox::from_label("")
+                                .selected_text(format!("{}", text))
+                                .show_ui(ui, |ui| {
+                                    if ui
+                                        .add(SelectableLabel::new(current_value.is_none(), "None"))
+                                        .clicked()
+                                    {
+                                        *current_value = None;
+                                        self.is_updated = true;
+                                    }
+
+                                    let material_parameters_collections = {
+                                        self.folder
+                                            .borrow()
+                                            .collect_material_parameters_collections(true)
+                                    };
+
+                                    for material_parameters_collection in
+                                        material_parameters_collections
+                                    {
+                                        let (is_selected, text) = {
+                                            let material_parameters_collection =
+                                                material_parameters_collection.borrow();
+                                            let current_url = current_value
+                                                .as_ref()
+                                                .map(|x| x.borrow().url.clone());
+                                            (
+                                                current_url
+                                                    == Some(
+                                                        material_parameters_collection.url.clone(),
+                                                    ),
+                                                material_parameters_collection.url.to_string(),
+                                            )
+                                        };
+                                        if ui
+                                            .add(SelectableLabel::new(is_selected, &text))
+                                            .clicked()
+                                        {
+                                            *current_value = Some(material_parameters_collection);
+                                            self.is_updated = true;
+                                        }
+                                    }
+                                });
+                        });
+                    }
+                    1 => {
+                        let text = if let Some(current_name) = current_name.as_ref() {
+                            current_name.to_string()
+                        } else {
+                            "None".to_string()
+                        };
+                        ui.push_id("name", |ui| {
+                            egui::ComboBox::from_label("")
+                                .selected_text(format!("{}", text))
+                                .show_ui(ui, |ui| {
+                                    let mut names: Vec<Option<String>> =
+                                        vec![Some("None".to_string())];
+                                    let mut field_names = current_value
+                                        .as_ref()
+                                        .map(|x| {
+                                            x.borrow()
+                                                .fields
+                                                .iter()
+                                                .map(|x| Some(x.name.clone()))
+                                                .collect::<Vec<_>>()
+                                        })
+                                        .unwrap_or(vec![]);
+                                    names.append(&mut field_names);
+
+                                    for selected_value in names {
+                                        let text = selected_value
+                                            .as_ref()
+                                            .cloned()
+                                            .unwrap_or("None".to_string());
+                                        self.is_updated = self.is_updated
+                                            || ui
+                                                .selectable_value(
+                                                    current_name,
+                                                    selected_value,
+                                                    text,
+                                                )
+                                                .changed();
+                                    }
+                                });
+                        });
+                    }
+                    _ => unimplemented!(),
+                }
+                PinInfo::default()
+            }
         }
     }
 
@@ -328,6 +434,9 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::VirtualTexture(_) => PinInfo::square().with_fill(NODE_IO_COLOR),
             EMaterialNodeType::Time => todo!(),
             EMaterialNodeType::Sin(_) => PinInfo::square().with_fill(NODE_IO_COLOR),
+            EMaterialNodeType::MaterialParamentersCollection(_) => {
+                PinInfo::square().with_fill(NODE_IO_COLOR)
+            }
         }
     }
 
@@ -398,6 +507,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::VirtualTexture(None),
             EMaterialNodeType::Time,
             EMaterialNodeType::Sin(EValueType::F32(0.0)),
+            EMaterialNodeType::MaterialParamentersCollection((None, None)),
         ];
 
         for node_type in node_types {
@@ -505,7 +615,7 @@ impl EValueType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub enum EMaterialNodeType {
     Add(EValueType, EValueType),
     Texture(Option<url::Url>),
@@ -514,6 +624,12 @@ pub enum EMaterialNodeType {
     Sink(Attribute),
     Time,
     Sin(EValueType),
+    MaterialParamentersCollection(
+        (
+            Option<SingleThreadMutType<MaterialParamentersCollection>>,
+            Option<String>,
+        ),
+    ),
 }
 
 impl EMaterialNodeType {
@@ -526,11 +642,14 @@ impl EMaterialNodeType {
             EMaterialNodeType::Sink(_) => format!("Sink"),
             EMaterialNodeType::Time => format!("Time"),
             EMaterialNodeType::Sin(_) => format!("Sin"),
+            EMaterialNodeType::MaterialParamentersCollection(_) => {
+                format!("MaterialParamentersCollection")
+            }
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct MaterialNode {
     pub node_type: EMaterialNodeType,
 }
@@ -555,10 +674,11 @@ pub struct MaterialView {
     pub event: Option<EEventType>,
     pub current_resolve_result: Option<HashMap<MaterialOptions, ResolveResult>>,
     pub validate: Option<HashMap<MaterialOptions, rs_render::error::Result<()>>>,
+    pub folder: SingleThreadMutType<ContentFolder>,
 }
 
 impl MaterialView {
-    pub fn new() -> MaterialView {
+    pub fn new(folder: SingleThreadMutType<ContentFolder>) -> MaterialView {
         let mut snarl = Snarl::new();
         let mut style = SnarlStyle::new();
         style.bg_pattern = Some(egui_snarl::ui::BackgroundPattern::Grid(Grid {
@@ -566,10 +686,21 @@ impl MaterialView {
             angle: 0.0,
         }));
         style.wire_style = Some(egui_snarl::ui::WireStyle::AxisAligned { corner_radius: 5.0 });
+
+        let material_parameters_collection_urls = {
+            folder
+                .borrow()
+                .collect_material_parameters_collections(true)
+                .iter()
+                .map(|x| x.borrow().url.clone())
+                .collect()
+        };
         let viewer = GraphViewer {
             texture_urls: vec![],
             virtual_texture_urls: vec![],
             is_updated: false,
+            material_parameters_collection_urls,
+            folder: folder.clone(),
         };
 
         let node = MaterialNode {
@@ -585,6 +716,7 @@ impl MaterialView {
             event: None,
             current_resolve_result: None,
             validate: None,
+            folder,
         }
     }
 

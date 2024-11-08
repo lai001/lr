@@ -1,6 +1,10 @@
-use rs_engine::content::content_file_type::EContentFileType;
+use rs_engine::content::{
+    content_file_type::EContentFileType,
+    material_paramenters_collection::MaterialParamentersCollection,
+};
+use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ContentFolder {
@@ -35,6 +39,47 @@ impl ContentFolder {
         }
         let url = url::Url::parse(&format!("content:/{}", path)).unwrap();
         url
+    }
+
+    pub fn collect_material_parameters_collections(
+        &self,
+        is_recursion: bool,
+    ) -> Vec<SingleThreadMutType<MaterialParamentersCollection>> {
+        let mut material_parameters_collections = vec![];
+        for file in self.files.clone() {
+            match file {
+                EContentFileType::MaterialParamentersCollection(material_parameters_collection) => {
+                    material_parameters_collections.push(material_parameters_collection);
+                }
+                _ => {}
+            }
+        }
+        if is_recursion {
+            for folder in self.folders.clone() {
+                let folder = folder.borrow();
+                let mut child_folder_files =
+                    folder.collect_material_parameters_collections(is_recursion);
+                material_parameters_collections.append(&mut child_folder_files);
+            }
+        }
+        material_parameters_collections
+    }
+
+    pub fn files_to_map(&self, is_recursion: bool) -> HashMap<url::Url, EContentFileType> {
+        let mut map = HashMap::new();
+        for file in self.files.clone() {
+            map.insert(file.get_url(), file);
+        }
+        if is_recursion {
+            for folder in self.folders.clone() {
+                let folder = folder.borrow();
+                let child_map = folder.files_to_map(is_recursion);
+                for (key, value) in child_map {
+                    map.insert(key, value);
+                }
+            }
+        }
+        map
     }
 }
 

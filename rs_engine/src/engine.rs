@@ -253,6 +253,11 @@ impl Engine {
         level
     }
 
+    #[cfg(feature = "editor")]
+    pub fn on_content_files_changed(&mut self, content_files: HashMap<url::Url, EContentFileType>) {
+        self.content_files = content_files;
+    }
+
     fn collect_content_files() -> HashMap<url::Url, EContentFileType> {
         let resource_manager = ResourceManager::default();
         let mut files: HashMap<url::Url, EContentFileType> = HashMap::new();
@@ -403,6 +408,25 @@ impl Engine {
                             }
                         }
                     }
+                    EContentType::MaterialParamentersCollection => {
+                        match resource_manager
+                            .get_resource::<crate::content::material_paramenters_collection::MaterialParamentersCollection>(
+                                url,
+                                Some(EResourceType::Content(EContentType::MaterialParamentersCollection)),
+                            ) {
+                            Ok(material_paramenters_collection) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::MaterialParamentersCollection(SingleThreadMut::new(
+                                        material_paramenters_collection,
+                                    )),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{err}");
+                            }
+                        }
+                    },
                 },
                 _ => {}
             }
@@ -1140,6 +1164,7 @@ impl Engine {
             spot_lights_constants_resource: EBindingResource::Constants(
                 *spot_lights_constants_resource,
             ),
+            material_parameters_collection_resources: HashMap::new(),
         };
         pbr_binding_resources
     }

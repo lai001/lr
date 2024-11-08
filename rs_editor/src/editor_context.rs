@@ -1263,6 +1263,13 @@ impl EditorContext {
                 }
                 EContentFileType::Curve(_) => {}
                 EContentFileType::BlendAnimations(_) => {}
+                EContentFileType::MaterialParamentersCollection(
+                    material_paramenters_collection,
+                ) => {
+                    let mut material_paramenters_collection =
+                        material_paramenters_collection.borrow_mut();
+                    material_paramenters_collection.initialize(engine);
+                }
             }
         }
     }
@@ -1305,6 +1312,9 @@ impl EditorContext {
             &project_context,
             project_context.project.content.borrow().files.clone(),
         );
+
+        self.engine
+            .on_content_files_changed(project_context.project.content.borrow().files_to_map(true));
 
         self.engine
             .set_settings(project_context.project.settings.borrow().clone());
@@ -1752,11 +1762,16 @@ impl EditorContext {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         open_material: Option<Rc<RefCell<rs_engine::content::material::Material>>>,
     ) {
+        let Some(project_context) = &mut self.project_context else {
+            return;
+        };
+        let folder = project_context.project.content.clone();
         let mut ui_window = MaterialUIWindow::new(
             self.editor_ui.egui_context.clone(),
             &mut *self.window_manager.borrow_mut(),
             event_loop_window_target,
             &mut self.engine,
+            folder,
         )
         .expect("Should be opened");
         if let Some(open_material) = open_material {
@@ -2513,6 +2528,7 @@ impl EditorContext {
                             event_loop_window_target,
                         );
                     }
+                    EContentFileType::MaterialParamentersCollection(_) => {}
                 }
             }
             content_browser::EClickEventType::SingleClickFile(file) => {
@@ -2674,6 +2690,28 @@ impl EditorContext {
                     .files
                     .push(EContentFileType::BlendAnimations(blend_animation));
             }
+            content_browser::EClickEventType::CreateMaterialParametersCollection => {
+                let names = self.get_all_content_names();
+                let name = make_unique_name(
+                    names,
+                    &self.data_source.content_data_source.new_content_name,
+                );
+                let Some(project_context) = &mut self.project_context else {
+                    return;
+                };
+                let Ok(content_url) = build_content_file_url(&name) else {
+                    return;
+                };
+                let material_paramenters_collection =
+                    rs_engine::content::material_paramenters_collection::MaterialParamentersCollection::new(content_url);
+                let material_paramenters_collection =
+                    SingleThreadMut::new(material_paramenters_collection);
+                project_context.project.content.borrow_mut().files.push(
+                    EContentFileType::MaterialParamentersCollection(
+                        material_paramenters_collection,
+                    ),
+                );
+            }
         }
     }
 
@@ -2790,11 +2828,11 @@ impl EditorContext {
     }
 
     fn process_content_item_property_view_event(&mut self) {
-        let Some(click) = &self.editor_ui.content_item_property_view.click else {
+        let Some(event) = &self.editor_ui.content_item_property_view.click else {
             return;
         };
-        match click {
-            content_item_property_view::EClickType::IBL(ibl, old, new) => {
+        match event {
+            content_item_property_view::EEventType::IBL(ibl, old, new) => {
                 let url = ibl.borrow().url.clone();
                 let Some(new) = new.as_ref() else {
                     return;
@@ -2828,7 +2866,7 @@ impl EditorContext {
                     }
                 }
             }
-            content_item_property_view::EClickType::IsVirtualTexture(
+            content_item_property_view::EEventType::IsVirtualTexture(
                 texture_file,
                 is_virtual_texture,
             ) => {
@@ -2859,7 +2897,7 @@ impl EditorContext {
                 })();
                 log::trace!("{:?}", result);
             }
-            content_item_property_view::EClickType::SDF2D(texture) => {
+            content_item_property_view::EEventType::SDF2D(texture) => {
                 let result: anyhow::Result<()> = (|| {
                     let texture = texture.borrow();
                     let image_reference = texture.image_reference.as_ref().ok_or(anyhow!(""))?;
@@ -2871,6 +2909,13 @@ impl EditorContext {
                     Ok(())
                 })();
                 log::trace!("{:?}", result);
+            }
+            content_item_property_view::EEventType::UpdateMaterialParamentersCollection(
+                update_info,
+            ) => {
+                let mut material_paramenters_collection = update_info.0.borrow_mut();
+                material_paramenters_collection.fields = update_info.1.fields.clone();
+                material_paramenters_collection.initialize(&mut self.engine);
             }
         }
     }

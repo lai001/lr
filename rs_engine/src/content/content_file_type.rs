@@ -1,5 +1,6 @@
 use super::{
     blend_animations::BlendAnimations, curve::Curve, ibl::IBL, level::Level, material::Material,
+    material_paramenters_collection::MaterialParamentersCollection,
     particle_system::ParticleSystem, skeleton::Skeleton, skeleton_animation::SkeletonAnimation,
     skeleton_mesh::SkeletonMesh, sound::Sound, static_mesh::StaticMesh, texture::TextureFile,
 };
@@ -22,6 +23,7 @@ pub enum EContentFileType {
     Sound(Rc<RefCell<Sound>>),
     Curve(Rc<RefCell<Curve>>),
     BlendAnimations(Rc<RefCell<BlendAnimations>>),
+    MaterialParamentersCollection(Rc<RefCell<MaterialParamentersCollection>>),
 }
 
 macro_rules! common_fn {
@@ -70,6 +72,7 @@ impl EContentFileType {
         ParticleSystem,
         Sound,
         Curve,
-        BlendAnimations
+        BlendAnimations,
+        MaterialParamentersCollection
     );
 }

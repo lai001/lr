@@ -568,7 +568,7 @@ impl Renderer {
         //     let depth_texture_view = depth_texture.get_view();
         //     self.clear_buffer(&output_view, &depth_texture_view, None);
         // }
-
+        self.bind_groups_collection.run_pending_tasks();
         self.vt_pass(&present_info);
         self.shadow_for_draw_objects(
             present_info.draw_objects.as_slice(),

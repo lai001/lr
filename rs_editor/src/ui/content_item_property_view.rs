@@ -1,16 +1,30 @@
-use rs_engine::content::{content_file_type::EContentFileType, ibl::IBL, texture::TextureFile};
+use rs_core_minimal::name_generator::NameGenerator;
+use rs_engine::{
+    content::{
+        content_file_type::EContentFileType, ibl::IBL,
+        material_paramenters_collection::MaterialParamentersCollection, texture::TextureFile,
+    },
+    uniform_map::{BaseDataValueType, StructField},
+};
+use rs_foundation::new::SingleThreadMutType;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
-pub enum EClickType {
+pub enum EEventType {
     IBL(Rc<RefCell<IBL>>, Option<PathBuf>, Option<PathBuf>),
     IsVirtualTexture(Rc<RefCell<TextureFile>>, bool),
     SDF2D(Rc<RefCell<TextureFile>>),
+    UpdateMaterialParamentersCollection(
+        (
+            SingleThreadMutType<MaterialParamentersCollection>,
+            MaterialParamentersCollection,
+        ),
+    ),
 }
 
 pub struct ContentItemPropertyView {
     pub content: Option<EContentFileType>,
     pub image_asset_files: Vec<PathBuf>,
-    pub click: Option<EClickType>,
+    pub click: Option<EEventType>,
 }
 
 impl ContentItemPropertyView {
@@ -51,13 +65,13 @@ impl ContentItemPropertyView {
                     .checkbox(&mut texture_file.is_virtual_texture, "Is Virtual Texture")
                     .changed()
                 {
-                    self.click = Some(EClickType::IsVirtualTexture(
+                    self.click = Some(EEventType::IsVirtualTexture(
                         texture_file_clone.clone(),
                         texture_file.is_virtual_texture,
                     ));
                 }
                 if ui.button("SDF 2D").clicked() {
-                    self.click = Some(EClickType::SDF2D(texture_file_clone));
+                    self.click = Some(EEventType::SDF2D(texture_file_clone));
                 }
             }
             EContentFileType::Level(_) => {}
@@ -124,7 +138,7 @@ impl ContentItemPropertyView {
                             .clicked()
                         {
                             self.click =
-                                Some(EClickType::IBL(ibl_clone.clone(), old.clone(), None));
+                                Some(EEventType::IBL(ibl_clone.clone(), old.clone(), None));
                         }
                         for image_asset_file in self.image_asset_files.iter() {
                             if ui
@@ -135,7 +149,7 @@ impl ContentItemPropertyView {
                                 )
                                 .clicked()
                             {
-                                self.click = Some(EClickType::IBL(
+                                self.click = Some(EEventType::IBL(
                                     ibl_clone.clone(),
                                     old.clone(),
                                     Some(image_asset_file.clone()),
@@ -148,6 +162,168 @@ impl ContentItemPropertyView {
             EContentFileType::Sound(_) => {}
             EContentFileType::Curve(_) => {}
             EContentFileType::BlendAnimations(_) => {}
+            EContentFileType::MaterialParamentersCollection(material_paramenters_collection) => {
+                let material_paramenters_collection_response =
+                    material_paramenters_collection.clone();
+
+                let material_paramenters_collection = material_paramenters_collection.borrow();
+
+                let mut material_paramenters_collection = material_paramenters_collection.clone();
+
+                let mut is_need_update = false;
+                let mut delete_field_index: Option<usize> = None;
+
+                let is_add = ui
+                    .button(egui::WidgetText::RichText(
+                        egui::RichText::new("+").strong(),
+                    ))
+                    .clicked();
+                if is_add {
+                    let names = material_paramenters_collection
+                        .fields
+                        .iter()
+                        .map(|x| x.name.clone())
+                        .collect();
+                    let mut generator = NameGenerator::new(names);
+                    let new_name = generator.next("field");
+                    material_paramenters_collection.fields.push(StructField {
+                        name: new_name,
+                        data_type: BaseDataValueType::F32(0.0),
+                    });
+                    is_need_update = true;
+                }
+
+                for (index, field) in material_paramenters_collection
+                    .fields
+                    .iter_mut()
+                    .enumerate()
+                {
+                    ui.horizontal(|ui| {
+                        let candidate_items = vec![
+                            BaseDataValueType::F32(0.0),
+                            BaseDataValueType::Vec2(glam::Vec2::ZERO),
+                            BaseDataValueType::Vec3(glam::Vec3::ZERO),
+                            BaseDataValueType::Vec4(glam::Vec4::ZERO),
+                        ];
+
+                        if ui
+                            .add(egui::TextEdit::singleline(&mut field.name))
+                            .changed()
+                        {
+                            is_need_update = true;
+                        }
+
+                        {
+                            let text = get_base_data_type_text(&field.data_type);
+
+                            egui::ComboBox::from_label(format!("{}", index))
+                                .selected_text(text)
+                                .show_ui(ui, |ui| {
+                                    for selected_value in candidate_items {
+                                        let text = get_base_data_type_text(&selected_value);
+                                        let is_changed = ui
+                                            .selectable_value(
+                                                &mut field.data_type,
+                                                selected_value,
+                                                text,
+                                            )
+                                            .changed();
+                                        if is_changed {
+                                            is_need_update = true;
+                                        }
+                                    }
+                                });
+                        }
+
+                        match &mut field.data_type {
+                            BaseDataValueType::F32(value) => {
+                                if ui.add(egui::DragValue::new(value)).changed() {
+                                    is_need_update = true;
+                                }
+                            }
+                            BaseDataValueType::Vec2(value) => {
+                                if ui.add(egui::DragValue::new(&mut value.x)).changed() {
+                                    is_need_update = true;
+                                }
+                                if ui.add(egui::DragValue::new(&mut value.y)).changed() {
+                                    is_need_update = true;
+                                }
+                            }
+                            BaseDataValueType::Vec3(value) => {
+                                if ui.add(egui::DragValue::new(&mut value.x)).changed() {
+                                    is_need_update = true;
+                                }
+                                if ui.add(egui::DragValue::new(&mut value.y)).changed() {
+                                    is_need_update = true;
+                                }
+                                if ui.add(egui::DragValue::new(&mut value.z)).changed() {
+                                    is_need_update = true;
+                                }
+                                let mut rgba_unmul = [value.x, value.y, value.z,1.0];
+                                if ui.color_edit_button_rgba_unmultiplied(&mut rgba_unmul).changed() {
+                                    value.x = rgba_unmul[0];
+                                    value.y = rgba_unmul[1];
+                                    value.z = rgba_unmul[2];
+                                    is_need_update = true;
+                                }
+                            }
+                            BaseDataValueType::Vec4(value) => {
+                                if ui.add(egui::DragValue::new(&mut value.x)).changed() {
+                                    is_need_update = true;
+                                }
+                                if ui.add(egui::DragValue::new(&mut value.y)).changed() {
+                                    is_need_update = true;
+                                }
+                                if ui.add(egui::DragValue::new(&mut value.z)).changed() {
+                                    is_need_update = true;
+                                }
+                                if ui.add(egui::DragValue::new(&mut value.w)).changed() {
+                                    is_need_update = true;
+                                }
+                                let mut rgba_unmul = [value.x, value.y, value.z,  value.w];
+                                if ui.color_edit_button_rgba_unmultiplied(&mut rgba_unmul).changed() {
+                                    value.x = rgba_unmul[0];
+                                    value.y = rgba_unmul[1];
+                                    value.z = rgba_unmul[2];
+                                    value.w = rgba_unmul[3];
+                                    is_need_update = true;
+                                }
+                            }
+                        }
+
+                        let is_delete = ui
+                            .button(egui::WidgetText::RichText(
+                                egui::RichText::new("-").strong(),
+                            ))
+                            .clicked();
+                        if is_delete {
+                            delete_field_index = Some(index);
+                        }
+                    });
+                }
+                if let Some(delete_field_index) = delete_field_index {
+                    material_paramenters_collection
+                        .fields
+                        .remove(delete_field_index);
+                    is_need_update = true;
+                }
+                if is_need_update {
+                    self.click = Some(EEventType::UpdateMaterialParamentersCollection((
+                        material_paramenters_collection_response,
+                        material_paramenters_collection,
+                    )));
+                }
+            }
         }
     }
+}
+
+fn get_base_data_type_text(base_data_type: &BaseDataValueType) -> String {
+    let text = match base_data_type {
+        BaseDataValueType::F32(_) => "float32".to_string(),
+        BaseDataValueType::Vec2(_) => format!("Vec{}", 2),
+        BaseDataValueType::Vec3(_) => format!("Vec{}", 3),
+        BaseDataValueType::Vec4(_) => format!("Vec{}", 4),
+    };
+    text
 }

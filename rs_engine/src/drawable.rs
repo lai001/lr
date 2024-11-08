@@ -1,6 +1,7 @@
 use crate::{handle::BufferHandle, player_viewport::PlayerViewport};
+use rs_artifact::material::GroupBinding;
 use rs_render::command::{DrawObject, EBindingResource};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Clone)]
 pub enum EDrawObjectType {
@@ -97,6 +98,7 @@ pub struct PBRBindingResources {
     pub(crate) virtual_texture_constants_resource: EBindingResource,
     pub(crate) point_lights_constants_resource: EBindingResource,
     pub(crate) spot_lights_constants_resource: EBindingResource,
+    pub(crate) material_parameters_collection_resources: HashMap<GroupBinding, EBindingResource>,
 }
 
 #[derive(Clone, Debug)]

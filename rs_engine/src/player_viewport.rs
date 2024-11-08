@@ -1,5 +1,6 @@
 use crate::camera::Camera;
 use crate::components::component::Component;
+use crate::content::content_file_type::EContentFileType;
 use crate::directional_light::DirectionalLight;
 use crate::drawable::{EDrawObjectType, PBRBindingResources};
 use crate::engine::{Engine, VirtualPassHandle};
@@ -583,6 +584,7 @@ impl PlayerViewport {
                     irradiance_texture_resource,
                     shadow_map_texture_resource,
                     point_lights_constants_resource,
+                    material_parameters_collection_resources,
                     ..
                 } = &mut object.pbr_binding_resources;
 
@@ -598,6 +600,37 @@ impl PlayerViewport {
                 );
                 *point_lights_constants_resource =
                     EBindingResource::Constants(*self.point_lights_constants_handle);
+
+                let material_info = material_info
+                    .get(&MaterialOptions { is_skin: true })
+                    .unwrap();
+                material_parameters_collection_resources.clear();
+                for material_paramenters_collection_binding in
+                    &material_info.material_paramenters_collection_bindings
+                {
+                    let material_paramenters_collection_url =
+                        &material_paramenters_collection_binding
+                            .material_paramenters_collection_url;
+                    let content = engine
+                        .content_files
+                        .get(material_paramenters_collection_url)
+                        .unwrap();
+                    let buffer_handle = match content {
+                        EContentFileType::MaterialParamentersCollection(rc) => {
+                            rc.borrow().get_buffer_handle().unwrap()
+                        }
+                        _ => {
+                            panic!()
+                        }
+                    };
+                    material_parameters_collection_resources.insert(
+                        GroupBinding {
+                            group: material_paramenters_collection_binding.group,
+                            binding: material_paramenters_collection_binding.binding,
+                        },
+                        EBindingResource::Constants(*buffer_handle),
+                    );
+                }
             }
             EDrawObjectType::StaticMeshMaterial(object) => {
                 let settings = engine.get_settings();
@@ -676,6 +709,7 @@ impl PlayerViewport {
                     irradiance_texture_resource,
                     shadow_map_texture_resource,
                     point_lights_constants_resource,
+                    material_parameters_collection_resources,
                     ..
                 } = &mut object.pbr_binding_resources;
 
@@ -693,6 +727,37 @@ impl PlayerViewport {
                 );
                 *point_lights_constants_resource =
                     EBindingResource::Constants(*self.point_lights_constants_handle);
+
+                let material_info = material_info
+                    .get(&MaterialOptions { is_skin: false })
+                    .unwrap();
+                material_parameters_collection_resources.clear();
+                for material_paramenters_collection_binding in
+                    &material_info.material_paramenters_collection_bindings
+                {
+                    let material_paramenters_collection_url =
+                        &material_paramenters_collection_binding
+                            .material_paramenters_collection_url;
+                    let content = engine
+                        .content_files
+                        .get(material_paramenters_collection_url)
+                        .unwrap();
+                    let buffer_handle = match content {
+                        EContentFileType::MaterialParamentersCollection(rc) => {
+                            rc.borrow().get_buffer_handle().unwrap()
+                        }
+                        _ => {
+                            panic!()
+                        }
+                    };
+                    material_parameters_collection_resources.insert(
+                        GroupBinding {
+                            group: material_paramenters_collection_binding.group,
+                            binding: material_paramenters_collection_binding.binding,
+                        },
+                        EBindingResource::Constants(*buffer_handle),
+                    );
+                }
             }
             EDrawObjectType::Custom(_) => {}
         }
@@ -716,6 +781,7 @@ impl PlayerViewport {
             virtual_texture_constants_resource,
             point_lights_constants_resource,
             spot_lights_constants_resource,
+            material_parameters_collection_resources,
         } = pbrbinding_resources;
         if let Some(group_binding) = &material_info.global_constants_binding {
             group_binding_to_resource.push((*group_binding, global_constants_resource.clone()));
@@ -752,6 +818,12 @@ impl PlayerViewport {
         }
         if let Some(group_binding) = &material_info.spot_lights_binding {
             group_binding_to_resource.push((*group_binding, spot_lights_constants_resource));
+        }
+        for (group_binding, material_parameters_collection_resource) in
+            material_parameters_collection_resources
+        {
+            group_binding_to_resource
+                .push((group_binding, material_parameters_collection_resource));
         }
         group_binding_to_resource
     }
