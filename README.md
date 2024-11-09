@@ -3,8 +3,8 @@
 Windows 10
 Android
 .net8
-Rust 1.78.0
-xmake
+Rust 1.82.0
+xmake 2.9.5
 clang（optional）
 
 ## Feature

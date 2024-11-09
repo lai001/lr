@@ -85,7 +85,7 @@ unsafe extern "C" fn read_packet(
     let mut stream_io = Box::from_raw(opaque as *mut Box<dyn StreamIO>);
     let buffer = std::slice::from_raw_parts_mut(buf, buf_size as usize);
     let read = stream_io.read_packet(buffer);
-    Box::into_raw(stream_io);
+    let _ = Box::into_raw(stream_io);
     read
 }
 
@@ -100,6 +100,6 @@ unsafe extern "C" fn seek(
         let whence = EWhenceType::try_from(whence).expect("Should be a vaild value");
         stream_io.seek(offset, whence)
     };
-    Box::into_raw(stream_io);
+    let _ = Box::into_raw(stream_io);
     pos
 }

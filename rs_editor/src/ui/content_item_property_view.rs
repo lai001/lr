@@ -259,8 +259,11 @@ impl ContentItemPropertyView {
                                 if ui.add(egui::DragValue::new(&mut value.z)).changed() {
                                     is_need_update = true;
                                 }
-                                let mut rgba_unmul = [value.x, value.y, value.z,1.0];
-                                if ui.color_edit_button_rgba_unmultiplied(&mut rgba_unmul).changed() {
+                                let mut rgba_unmul = [value.x, value.y, value.z, 1.0];
+                                if ui
+                                    .color_edit_button_rgba_unmultiplied(&mut rgba_unmul)
+                                    .changed()
+                                {
                                     value.x = rgba_unmul[0];
                                     value.y = rgba_unmul[1];
                                     value.z = rgba_unmul[2];
@@ -280,8 +283,11 @@ impl ContentItemPropertyView {
                                 if ui.add(egui::DragValue::new(&mut value.w)).changed() {
                                     is_need_update = true;
                                 }
-                                let mut rgba_unmul = [value.x, value.y, value.z,  value.w];
-                                if ui.color_edit_button_rgba_unmultiplied(&mut rgba_unmul).changed() {
+                                let mut rgba_unmul = [value.x, value.y, value.z, value.w];
+                                if ui
+                                    .color_edit_button_rgba_unmultiplied(&mut rgba_unmul)
+                                    .changed()
+                                {
                                     value.x = rgba_unmul[0];
                                     value.y = rgba_unmul[1];
                                     value.z = rgba_unmul[2];

@@ -179,7 +179,7 @@ pub fn Application_setNewSurface(
     if let Some(native_window) = native_window {
         let mut application: Box<Application> = unsafe { Box::from_raw(application) };
         let result = application.set_new_window(native_window);
-        Box::into_raw(Box::new(application));
+        let _ = Box::into_raw(Box::new(application));
         match result {
             Ok(_) => jni::sys::JNI_TRUE,
             Err(_) => jni::sys::JNI_FALSE,
@@ -282,7 +282,7 @@ pub fn Application_redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: 
 
     application.redraw();
     application.raw_input.events.clear();
-    Box::into_raw(Box::new(application));
+    let _ = Box::into_raw(Box::new(application));
 }
 
 #[no_mangle]
@@ -300,7 +300,7 @@ pub fn Application_onTouchEvent(
     let new_geometry = motion_event.to_geometry();
     application.geometries.push(new_geometry);
 
-    Box::into_raw(Box::new(application));
+    let _ = Box::into_raw(Box::new(application));
     return jni::sys::JNI_TRUE;
 }
 
@@ -328,7 +328,7 @@ pub fn Application_surfaceChanged(
         h as u32,
         application.native_window.get_format(),
     );
-    Box::into_raw(Box::new(application));
+    let _ = Box::into_raw(Box::new(application));
 }
 
 #[no_mangle]
@@ -353,5 +353,5 @@ pub fn Application_setEnvironment(
 
     let mut application: Box<Application> = unsafe { Box::from_raw(application) };
     application.enviroment = Some(Enviroment::new(&mut env, &mut android_enviroment));
-    Box::into_raw(Box::new(application));
+    let _ = Box::into_raw(Box::new(application));
 }
