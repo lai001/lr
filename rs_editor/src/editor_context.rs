@@ -50,6 +50,7 @@ use rs_engine::{
     directional_light::DirectionalLight,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
+    logger::SlotFlags,
     player_viewport::PlayerViewport,
     scene_node::SceneNode,
     url_extension::UrlExtension,
@@ -209,6 +210,7 @@ impl EditorContext {
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: false,
             is_flush_before_drop: false,
+            slot_flags: SlotFlags::empty(),
         });
         log::trace!(
             "Engine Root Dir: {:?}",

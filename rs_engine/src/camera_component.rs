@@ -35,6 +35,7 @@ pub struct CameraComponent {
     pub width: u32,
     pub height: u32,
     pub is_enable: bool,
+    pub is_show_preview: bool,
     #[serde(skip)]
     pub run_time: Option<CameraComponentRuntime>,
 }
@@ -84,6 +85,7 @@ impl CameraComponent {
             width: 1024,
             height: 1024,
             is_enable: true,
+            is_show_preview: true,
         }
     }
 
@@ -303,6 +305,9 @@ impl CameraComponent {
     }
 
     pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
+        if !self.is_show_preview {
+            return vec![];
+        }
         self.run_time
             .as_ref()
             .map(|x| vec![&x.draw_object])

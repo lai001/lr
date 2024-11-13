@@ -6,6 +6,7 @@ use crate::{
 use anyhow::anyhow;
 use clap::*;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
+use rs_engine::logger::SlotFlags;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event_loop::EventLoop,
@@ -58,6 +59,7 @@ impl Editor {
         let _ = rs_engine::logger::Logger::new(rs_engine::logger::LoggerConfiguration {
             is_write_to_file: false,
             is_flush_before_drop: true,
+            slot_flags: SlotFlags::empty(),
         });
         match args.input_file {
             Some(input_file) => {

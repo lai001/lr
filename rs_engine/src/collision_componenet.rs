@@ -51,6 +51,7 @@ pub struct CollisionComponent {
     pub name: String,
     pub transformation: glam::Mat4,
     pub collision_type: ECollisionType,
+    pub is_show_preview: bool,
     #[serde(skip)]
     pub run_time: Option<CollisionComponentRuntime>,
 }
@@ -76,6 +77,7 @@ impl CollisionComponent {
             transformation,
             run_time: None,
             collision_type: ECollisionType::Cube,
+            is_show_preview: true,
         }
     }
 
@@ -229,6 +231,9 @@ impl CollisionComponent {
     }
 
     pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
+        if !self.is_show_preview {
+            return vec![];
+        }
         self.run_time
             .as_ref()
             .map(|x| vec![&x.draw_object])

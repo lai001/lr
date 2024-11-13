@@ -5,7 +5,7 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
     input_type::EInputType,
-    logger::{Logger, LoggerConfiguration},
+    logger::{Logger, LoggerConfiguration, SlotFlags},
 };
 use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
 use std::{collections::HashMap, path::Path};
@@ -31,6 +31,7 @@ impl ApplicationContext {
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: true,
             is_flush_before_drop: false,
+            slot_flags: SlotFlags::empty(),
         });
         let window_size = window.inner_size();
         let scale_factor = window.scale_factor() as f32;

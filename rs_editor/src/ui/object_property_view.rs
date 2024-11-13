@@ -279,6 +279,7 @@ impl ObjectPropertyView {
                                 new_name,
                             ));
                         }
+                        ui.checkbox(&mut component.is_show_preview, "Is show preview");
 
                         Self::transformation_detail_mut(component.get_transformation_mut(), ui);
                         Self::transformation_detail(&component.get_final_transformation(), ui);
@@ -293,6 +294,7 @@ impl ObjectPropertyView {
                                 new_name,
                             ));
                         }
+                        ui.checkbox(&mut component.is_show_preview, "Is show preview");
 
                         Self::transformation_detail_mut(component.get_transformation_mut(), ui);
                         Self::transformation_detail(&component.get_final_transformation(), ui);
@@ -416,6 +418,8 @@ impl ObjectPropertyView {
                 if let Some(new_name) = Self::edit_name(&component.name, ui) {
                     event = Some(EEventType::ChangeName(selected_object_clone, new_name));
                 }
+                ui.checkbox(&mut component.is_show_preview, "Is show preview");
+
                 Self::transformation_detail_mut(component.get_transformation_mut(), ui);
 
                 let mut is_changed = false;

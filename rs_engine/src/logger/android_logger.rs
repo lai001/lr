@@ -1,17 +1,16 @@
+use super::{LoggerConfiguration, SlotFlags};
+use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::{Arc, RwLock};
 
 const TAG: &str = "RS_ENGINE\0";
 
-#[derive(Debug, Clone)]
-pub struct LoggerConfiguration {
-    pub is_write_to_file: bool,
-}
-
 pub struct Logger {
     cfg: LoggerConfiguration,
     world_file: Arc<RwLock<Option<BufWriter<File>>>>,
+    white_list: MultipleThreadMutType<HashSet<String>>,
 }
 
 impl Logger {
@@ -41,24 +40,39 @@ impl Logger {
             }
         }
         let world_file = Arc::new(std::sync::RwLock::new(buf_writer));
+        let white_list = MultipleThreadMut::new(HashSet::new());
 
         let config = android_logger::Config::default()
             .with_max_level(log::LevelFilter::Trace)
             .format({
                 let world_file = world_file.clone();
+                let slot_flags = cfg.slot_flags.clone();
+                let white_list = white_list.clone();
                 move |buf, record| {
-                    if !record.target().starts_with("rs_") {
+                    let white_list = {
+                        let list = white_list.lock().unwrap();
+                        list.clone()
+                    };
+                    let is_in_white_list = {
+                        let mut ret = false;
+                        for name in white_list {
+                            if record.target().starts_with(&name) {
+                                ret = true;
+                                break;
+                            }
+                        }
+                        ret
+                    };
+                    let level = record.level();
+                    if !record.target().starts_with("rs_")
+                        && level >= log::Level::Warn
+                        && !is_in_white_list
+                    {
                         return Err(std::fmt::Error {});
                     }
                     let current_thread = std::thread::current();
                     let thread_name = format!("{}", current_thread.name().unwrap_or("Unknown"));
-                    let content = format!(
-                        "[{}] {}:{} {}",
-                        thread_name,
-                        record.file().unwrap_or("Unknown"),
-                        record.line().unwrap_or(0),
-                        record.args()
-                    );
+                    let content = Self::make_final_output(&slot_flags, record, &thread_name);
                     let writer = world_file.write();
                     match writer {
                         Ok(mut writer) => {
@@ -76,7 +90,36 @@ impl Logger {
             });
 
         android_logger::init_once(config);
-        Logger { cfg, world_file }
+        Logger {
+            cfg,
+            world_file,
+            white_list,
+        }
+    }
+
+    fn make_final_output(
+        slot_flags: &SlotFlags,
+        record: &log::Record<'_>,
+        thread_name: &str,
+    ) -> String {
+        let mut final_output = "".to_string();
+        if slot_flags.contains(SlotFlags::ThreadName) {
+            final_output.push_str(&format!("[{}] ", thread_name));
+        }
+        if slot_flags.contains(SlotFlags::FileLine) {
+            final_output.push_str(&format!(
+                "{}:{} ",
+                record.file().unwrap_or("Unknown"),
+                record.line().unwrap_or(0)
+            ));
+        }
+        final_output.push_str(&record.args().to_string());
+        final_output
+    }
+
+    pub fn add_white_list(&mut self, name: String) {
+        let mut list = self.white_list.lock().unwrap();
+        list.insert(name);
     }
 
     pub fn flush(&self) {
@@ -121,5 +164,13 @@ impl Logger {
         }
         let mut file = self.world_file.write().unwrap();
         *file = buf_writer;
+    }
+}
+
+impl Drop for Logger {
+    fn drop(&mut self) {
+        if self.cfg.is_flush_before_drop {
+            self.flush();
+        }
     }
 }

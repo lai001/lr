@@ -7,7 +7,7 @@ use rs_artifact::{
     file_header::{FileHeader, ARTIFACT_FILE_MAGIC_NUMBERS},
     EEndianType,
 };
-use rs_engine::logger::Logger;
+use rs_engine::logger::{Logger, SlotFlags};
 
 const WINDOW_ID: isize = 0;
 
@@ -140,6 +140,8 @@ pub fn Application_fromSurface(
     debug_assert_ne!(surface, std::ptr::null_mut());
     let logger = rs_engine::logger::Logger::new(rs_engine::logger::LoggerConfiguration {
         is_write_to_file: false,
+        is_flush_before_drop: false,
+        slot_flags: SlotFlags::empty(),
     });
     let result: crate::error::Result<*mut Application> = (|| {
         let native_window = crate::native_window::NativeWindow::new(&mut env, surface)

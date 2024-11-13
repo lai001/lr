@@ -1,3 +1,5 @@
+use crate::logger::LoggerConfiguration;
+use crate::logger::SlotFlags;
 use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 use std::{
     collections::HashSet,
@@ -5,12 +7,6 @@ use std::{
     io::{BufWriter, Write},
     sync::{Arc, RwLock},
 };
-
-#[derive(Debug, Clone, Default)]
-pub struct LoggerConfiguration {
-    pub is_write_to_file: bool,
-    pub is_flush_before_drop: bool,
-}
 
 pub struct Logger {
     world_file: Arc<RwLock<Option<BufWriter<File>>>>,
@@ -53,12 +49,12 @@ impl Logger {
             .format({
                 let world_file = world_file.clone();
                 let white_list = white_list.clone();
+                let slot_flags = cfg.slot_flags.clone();
                 move |buf, record| {
                     let white_list = {
                         let list = white_list.lock().unwrap();
                         list.clone()
                     };
-                    let level = record.level();
                     let is_in_white_list = {
                         let mut ret = false;
                         for name in white_list {
@@ -69,6 +65,7 @@ impl Logger {
                         }
                         ret
                     };
+                    let level = record.level();
                     if !record.target().starts_with("rs_")
                         && level >= log::Level::Warn
                         && !is_in_white_list
@@ -77,24 +74,23 @@ impl Logger {
                     }
                     let level_style = buf.default_level_style(level);
                     let current_thread = std::thread::current();
-                    let thread_name = format!("{}", current_thread.name().unwrap_or("Unknown"));
-                    let content = format!(
-                        "{} [{}] [{}] {}:{} {}",
-                        buf.timestamp_millis(),
-                        level,
-                        thread_name,
-                        record.file().unwrap_or("Unknown"),
-                        record.line().unwrap_or(0),
-                        record.args()
-                    );
+                    let thread_name = current_thread.name().unwrap_or("Unknown");
                     let writer = world_file.write();
                     match writer {
                         Ok(mut writer) => {
                             if writer.is_some() {
+                                let final_output = Self::make_final_output(
+                                    &slot_flags,
+                                    buf,
+                                    record,
+                                    &thread_name,
+                                    level,
+                                    None,
+                                );
                                 let _ = writer
                                     .as_mut()
                                     .unwrap()
-                                    .write_fmt(format_args!("{}\n", content));
+                                    .write_fmt(format_args!("{}\n", final_output));
                                 match level {
                                     log::Level::Error | log::Level::Warn => {
                                         let _ = writer.as_mut().unwrap().flush();
@@ -105,16 +101,15 @@ impl Logger {
                         }
                         Err(_) => {}
                     }
-                    writeln!(
+                    let final_output = Self::make_final_output(
+                        &slot_flags,
                         buf,
-                        "{} [{level_style}{}{level_style:#}] [{}] {}:{} {}",
-                        buf.timestamp_millis(),
+                        record,
+                        &thread_name,
                         level,
-                        thread_name,
-                        record.file().unwrap_or("Unknown"),
-                        record.line().unwrap_or(0),
-                        record.args()
-                    )
+                        Some(level_style),
+                    );
+                    writeln!(buf, "{}", final_output)
                 }
             })
             .init();
@@ -123,6 +118,39 @@ impl Logger {
             cfg,
             white_list,
         }
+    }
+
+    fn make_final_output(
+        slot_flags: &SlotFlags,
+        buf: &mut env_logger::fmt::Formatter,
+        record: &log::Record<'_>,
+        thread_name: &str,
+        level: log::Level,
+        level_style: Option<env_logger::fmt::style::Style>,
+    ) -> String {
+        let mut final_output = "".to_string();
+        if slot_flags.contains(SlotFlags::Timestamp) {
+            final_output.push_str(&format!("{} ", buf.timestamp_millis()));
+        }
+        if slot_flags.contains(SlotFlags::Level) {
+            if let Some(level_style) = level_style {
+                final_output.push_str(&format!("[{level_style}{}{level_style:#}] ", level));
+            } else {
+                final_output.push_str(&format!("[{}] ", level));
+            }
+        }
+        if slot_flags.contains(SlotFlags::ThreadName) {
+            final_output.push_str(&format!("[{}] ", thread_name));
+        }
+        if slot_flags.contains(SlotFlags::FileLine) {
+            final_output.push_str(&format!(
+                "{}:{} ",
+                record.file().unwrap_or("Unknown"),
+                record.line().unwrap_or(0)
+            ));
+        }
+        final_output.push_str(&record.args().to_string());
+        final_output
     }
 
     pub fn flush(&self) {

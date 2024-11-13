@@ -29,6 +29,7 @@ pub struct DirectionalLight {
     pub top: f32,
     pub near: f32,
     pub far: f32,
+    pub is_show_preview: bool,
     #[serde(skip)]
     runtime: Option<Runtime>,
 }
@@ -75,6 +76,7 @@ impl DirectionalLight {
             transformation,
             runtime: None,
             name,
+            is_show_preview: true,
         }
     }
 
@@ -190,6 +192,9 @@ impl DirectionalLight {
     }
 
     pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
+        if !self.is_show_preview {
+            return vec![];
+        }
         self.runtime
             .as_ref()
             .map(|x| vec![&x.draw_object])
