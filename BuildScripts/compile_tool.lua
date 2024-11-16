@@ -12,6 +12,9 @@ do
         os.cd(path.join(engine_root_dir, "rs_media_cmd"))
         os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd")
         os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd --release")
+        os.cd(path.join(engine_root_dir, "programs/rs_reflection_generator"))
+        os.exec("cargo build --package rs_reflection_generator --bin rs_reflection_generator")
+        os.exec("cargo build --package rs_reflection_generator --bin rs_reflection_generator --release")
     end)
     set_menu {
         usage = "xmake compile_tool",

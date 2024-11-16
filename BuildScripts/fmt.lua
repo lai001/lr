@@ -9,7 +9,7 @@ end
 task("fmt") do
     on_run(function()
         import("lib.detect.find_program")
-        local rs_projects = os.dirs("rs_*")
+        local rs_projects = table.join(os.dirs("rs_*"), os.dirs("programs/rs_*"), os.dirs("crates/rs_*"))
         local rustfmt_args = { "--edition=2018" }
         for _, project in ipairs(rs_projects) do
             for _, file in ipairs(os.files(project .. "/src/**.rs")) do

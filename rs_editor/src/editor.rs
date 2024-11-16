@@ -43,17 +43,17 @@ impl Editor {
     }
 
     fn run_internal(mut self) -> anyhow::Result<()> {
-        let is_run_app = self.parse_args();
+        let is_run_app = self.parse_args()?;
         if is_run_app {
             self.run_app()?;
         }
         Ok(())
     }
 
-    fn parse_args(&mut self) -> bool {
-        let args = Args::parse();
+    fn parse_args(&mut self) -> anyhow::Result<bool> {
+        let args = Args::try_parse()?;
         if !args.cmd {
-            return true;
+            return Ok(true);
         }
         rs_foundation::change_working_directory();
         let _ = rs_engine::logger::Logger::new(rs_engine::logger::LoggerConfiguration {
@@ -89,8 +89,8 @@ impl Editor {
             None => {
                 let result: anyhow::Result<()> = (|| {
                     EditorContext::prepreocess_shader()?;
-                    let output_path = rs_core_minimal::file_manager::get_engine_root_dir()
-                        .join("rs_editor/target/shaders");
+                    let output_path = rs_core_minimal::file_manager::get_engine_output_target_dir()
+                        .join("shaders");
                     for entry in walkdir::WalkDir::new(output_path) {
                         let entry = entry?;
                         if !entry.path().is_file() {
@@ -110,7 +110,7 @@ impl Editor {
                 }
             }
         }
-        return false;
+        return Ok(false);
     }
 
     fn run_app(self) -> anyhow::Result<()> {
@@ -129,7 +129,8 @@ impl Editor {
     }
 
     pub fn default_icon() -> anyhow::Result<winit::window::Icon> {
-        let icon_image = image::load_from_memory(include_bytes!("../target/editor.ico"))?;
+        let path = rs_core_minimal::file_manager::get_engine_output_target_dir().join("editor.ico");
+        let icon_image = image::open(path)?;
         let icon_image = icon_image.as_rgba8().ok_or(anyhow!("Bad icon"))?;
         let icon = winit::window::Icon::from_rgba(
             icon_image.to_vec(),

@@ -2,8 +2,8 @@ pub fn create_load_plugins_file(
     crate_name: &str,
     plugin_name: Option<String>,
 ) -> anyhow::Result<()> {
-    let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();
-    let load_plugins_file_dir = engine_root_dir.join(format!("{}/target/generated", crate_name));
+    let engine_output_target_dir = rs_core_minimal::file_manager::get_engine_output_target_dir();
+    let load_plugins_file_dir = engine_output_target_dir.join(format!("generated/{}", crate_name));
     if !load_plugins_file_dir.exists() {
         std::fs::create_dir_all(&load_plugins_file_dir)?;
     }

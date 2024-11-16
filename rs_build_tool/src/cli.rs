@@ -7,6 +7,13 @@ pub enum ModeType {
     Standalone,
 }
 
+#[derive(Debug, Clone, ValueEnum, Default, Eq, PartialEq)]
+pub enum ProfileType {
+    #[default]
+    Release,
+    Debug,
+}
+
 #[derive(Debug, Clone, Args)]
 pub struct ProjectFilesArgs {
     #[arg(short, long)]
@@ -21,6 +28,8 @@ pub struct ProjectArgs {
     pub project_file: std::path::PathBuf,
     #[arg(short, long)]
     pub mode_type: ModeType,
+    #[arg(short, long)]
+    pub profile_type: ProfileType,
 }
 
 #[derive(Parser, Debug, Clone)]

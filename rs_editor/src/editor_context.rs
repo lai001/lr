@@ -1684,7 +1684,7 @@ impl EditorContext {
     pub fn prepreocess_shader() -> anyhow::Result<()> {
         let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
         let output_path =
-            rs_core_minimal::file_manager::get_engine_root_dir().join("rs_editor/target/shaders");
+            rs_core_minimal::file_manager::get_engine_output_target_dir().join("shaders");
         if !output_path.exists() {
             std::fs::create_dir(output_path.clone())
                 .context(anyhow!("Can not create dir {:?}", output_path))?;

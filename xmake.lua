@@ -12,6 +12,7 @@ russimp_prebuild_dir = path.absolute(deps_dir)
 engine_root_dir = path.absolute("./")
 tracy_root_dir = path.absolute(deps_dir .. "tracy")
 dotnet_sdk_dir = path.absolute(deps_dir .. "dotnetSDK")
+rs_target_dir = path.join(engine_root_dir, "build/target")
 
 includes("BuildScripts/gen_config.lua")
 includes("BuildScripts/build_android_target.lua")

@@ -39,10 +39,10 @@ do
             os.cp(src, target)
         end
         if mode == "debug" then
-            cp_print(format("%s/target/%s/debug/lib%s.so", project_name, target, project_name),
+            cp_print(format("build/target/%s/debug/lib%s.so", target, project_name),
                 format("Android/Template/%s/src/main/jniLibs/%s/lib%s.so", project_name, arch, project_name))
         else
-            cp_print(format("%s/target/%s/release/lib%s.so", project_name, target, project_name),
+            cp_print(format("build/target/%s/release/lib%s.so", target, project_name),
                 format("Android/Template/%s/src/main/jniLibs/%s/lib%s.so", project_name, arch, project_name))
         end
     end)

@@ -11,7 +11,7 @@ use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
 use std::{collections::HashMap, path::Path};
 use winit::event::{Event, WindowEvent};
 
-include!("../target/generated/load_plugins.generated.rs");
+include!("../../build/target/generated/rs_desktop_standalone/load_plugins.generated.rs");
 
 pub struct ApplicationContext {
     engine: Engine,

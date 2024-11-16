@@ -36,6 +36,7 @@ rustflags = ["-Clink-args=--target=@target@@api@"]
 [build]
 # rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
 rustflags = ["-C", "rpath"]
+target-dir = "./build/target"
         ]]
         local ffmpeg_block = [[
 [env]

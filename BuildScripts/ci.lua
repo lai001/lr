@@ -23,7 +23,8 @@ do
         os.cd(path.join(engine_root_dir, "rs_editor"))
         os.exec("cargo build --package rs_editor --bin editor --features editor --features renderdoc --features plugin_shared_crate --features plugin_dotnet --features plugin_v8")
         os.exec("cargo build --package rs_editor --bin editor --features editor --features renderdoc --features plugin_shared_crate --features plugin_dotnet --features plugin_v8 --release")
-        os.exec("./target/release/editor.exe -c")
+        os.cd(path.join(engine_root_dir, "build/target/release"))
+        os.exec("./editor.exe --cmd")
         os.cd(path.join(engine_root_dir, "rs_desktop_standalone"))
         os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --features plugin_shared_crate --features standalone --features plugin_v8")
         os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --features plugin_shared_crate --features standalone --features plugin_v8 --release")
@@ -34,9 +35,6 @@ do
         envs["TRACY_CLIENT_LIB_PATH"] = path.join(engine_root_dir, "/build/android/arm64-v8a/release")
         os.setenvs(envs)
         os.exec("xmake build_android_target --mode=release --target=aarch64-linux-android")
-        os.cd(path.join(engine_root_dir, "rs_media_cmd"))
-        os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd")
-        os.exec("cargo build --package rs_media_cmd --bin rs_media_cmd --release")
     end)
     set_menu {
         usage = "xmake ci",

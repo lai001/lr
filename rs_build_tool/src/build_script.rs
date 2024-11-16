@@ -1,5 +1,5 @@
 use crate::{
-    cli::ProjectArgs,
+    cli::{ProfileType, ProjectArgs},
     load_plugins::create_load_plugins_file,
     toml_edit::{
         add_plugin_dependencies_document_mut, add_plugin_dependencies_file, disable_dylib_file,
@@ -71,6 +71,10 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
                 .arg("--features")
                 .arg("plugin_shared_crate");
 
+            if project_args.profile_type == ProfileType::Release {
+                command.arg("--release");
+            }
+
             let output = command.output()?;
             if !output.status.success() {
                 return Err(anyhow!(
@@ -82,6 +86,7 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
 
             let stderr = String::from_utf8(output.stderr)?;
             let lines = stderr.split("\n");
+            let mut is_created = false;
             for line in lines {
                 if line.contains("Running")
                     && line.contains("--crate-name")
@@ -101,8 +106,12 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
                     );
                     contents.insert_str(0, "echo off\n");
                     std::fs::write(projcet_folder.join("build.bat"), contents)?;
+                    is_created = true;
                     break;
                 }
+            }
+            if !is_created {
+                return Err(anyhow!("Failed to create build.bat file"));
             }
             std::env::set_current_dir(old_dir)?;
         }

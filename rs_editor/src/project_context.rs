@@ -632,7 +632,7 @@ impl ProjectContext {
                         };
                         let _ = sender.send(result);
                     } else {
-                        let path = rs_render::get_buildin_shader_dir().join(name.clone());
+                        let path = Path::new("../shaders").join(name.clone());
                         let code = std::fs::read_to_string(path.clone());
                         let result = TaskResult {
                             name: name.clone(),
