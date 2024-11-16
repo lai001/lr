@@ -1,0 +1,8 @@
+[package]
+name = "rs_reflection_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dyn-clone = "1.0.17"
+downcast-rs = "1.2.1"

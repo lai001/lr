@@ -3,6 +3,22 @@ local rs_project_name = rs_project_name
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
 
+local function reflection_generator_workspace_file(json)
+    local extraArgs = { "--release" }
+    local media_cmd = {
+        ["folders"] = { {
+            ["path"] = path.absolute("./")
+        } },
+        ["settings"] = {
+            ["rust-analyzer.linkedProjects"] = {
+                path.absolute("./programs/rs_reflection_generator/Cargo.toml"),
+            },
+            ["rust-analyzer.runnables.extraArgs"] = extraArgs
+        }
+    }
+    json.savefile(path.join(path.absolute("./"), "media_cmd.code-workspace"), media_cmd)
+end
+
 local function media_cmd_workspace_file(json)
     local extraEnv = {
         ["FFMPEG_DIR"] = ffmpeg_dir,
@@ -85,7 +101,7 @@ task("code_workspace") do
         import("core.base.option")
         import("core.base.json")
         config.load()
-
+        local is_enable_debug_refcell = false
         local is_enable_dotnet = get_config("enable_dotnet")
         is_enable_dotnet = (is_enable_dotnet and {is_enable_dotnet} or {false})[1]
 
@@ -111,6 +127,11 @@ task("code_workspace") do
         local extraArgs = {}
         if mode == "release" then
             table.join2(extraArgs, "--release")
+        end
+        if is_enable_debug_refcell then
+            table.join2(extraArgs, "--target=x86_64-pc-windows-msvc")
+            table.join2(extraArgs, "-Zbuild-std")
+            table.join2(extraArgs, "-Zbuild-std-features=debug_refcell")
         end
         local linkedProjects = {}
 
@@ -173,6 +194,7 @@ task("code_workspace") do
         media_cmd_workspace_file(json)
         audio_workspace_file(json)
         build_tool_workspace_file(json)
+        reflection_generator_workspace_file(json)
     end)
     set_menu {
         usage = "xmake code_workspace",

@@ -32,7 +32,7 @@ google-services.json
 # Android Profiling
 *.hprof
 
-rs_*/target
+**/rs_*/target
 Cargo.lock
 .xmake
 .vscode
