@@ -180,6 +180,14 @@ impl ApplicationHandler<ECustomEventType> for EditorApplicationHandler {
                 )
                 .expect("Should not be null");
                 self.editor_context = Some(editor_context);
+                if let Err(err) = self
+                    .editor_context
+                    .as_mut()
+                    .expect("Should not be null")
+                    .init_v8()
+                {
+                    log::warn!("{err}");
+                }
                 self.window_manager
                     .borrow_mut()
                     .add_new_window(EWindowType::Main, window);

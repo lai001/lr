@@ -16,3 +16,18 @@ pub(crate) fn println_callback(
         .join(" ");
     println!("{}", message);
 }
+
+pub fn return_exception(scope: &mut v8::HandleScope, ret_val: &mut v8::ReturnValue, reason: &str) {
+    let exception = v8::String::new(scope, reason);
+    match exception {
+        Some(exception) => {
+            ret_val.set(scope.throw_exception(exception.into()));
+        }
+        None => match scope.terminate_execution() {
+            true => {}
+            false => {
+                panic!("Isolate was already destroyed.")
+            }
+        },
+    }
+}

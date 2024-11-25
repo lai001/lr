@@ -7,6 +7,7 @@ pub enum Error {
     Null(String),
     Debouncer(notify::Error),
     Other(String),
+    DataError(v8::DataError),
 }
 
 impl std::fmt::Display for Error {

@@ -1,0 +1,32 @@
+[package]
+name = "rs_v8_binding_api_generator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ra_ap_hir = "0.0.238"
+ra_ap_ide = "0.0.238"
+ra_ap_ide_assists = "0.0.238"
+ra_ap_ide_db = "0.0.238"
+ra_ap_load-cargo = "0.0.238"
+ra_ap_project_model = "0.0.238"
+ra_ap_rust-analyzer = "0.0.238"
+ra_ap_vfs = "0.0.238"
+ra_ap_parser = "0.0.238"
+ra_ap_syntax = "0.0.238"
+ra_ap_paths = "0.0.238"
+ra_ap_proc_macro_api = "0.0.238"
+ra_ap_salsa = "0.0.238"
+ra_ap_hir_ty = "0.0.238"
+ra_ap_stdx = "0.0.238"
+ra_ap_hir_def = "0.0.238"
+proc-macro2 = "1.0.89"
+syn = { version = "2.0.87", features = ["full", "extra-traits"] }
+quote = "1.0.37"
+prettyplease = "0.2.25"
+log = "0.4.22"
+env_logger = "0.11.5"
+anyhow = { version = "1.0.92" }
+rowan = "0.15.15"
+convert_case = "0.6.0"
+rs_core_minimal = { path = "../../rs_core_minimal" }

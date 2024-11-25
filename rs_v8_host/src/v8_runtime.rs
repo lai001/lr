@@ -1,8 +1,8 @@
-use crate::engine::{engine_set_view_mode, NativeEngine};
 use crate::{platform_wrapper::PlatformWrapper, util::println_callback};
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::DebouncedEvent;
 use notify_debouncer_mini::Debouncer;
+use std::cell::RefCell;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
@@ -12,6 +12,21 @@ use v8::OwnedIsolate;
 
 // const CPPGC_TAG: u16 = 1;
 // const INNER_KEY: &'static str = "__inner__";
+pub const V8_RUNTIME_DATA_OFFSET: u32 = 0;
+pub const CPPGC_TAG: u16 = 1;
+
+pub(crate) fn cppgc_template_constructor(
+    _scope: &mut v8::HandleScope,
+    _args: v8::FunctionCallbackArguments,
+    _rv: v8::ReturnValue,
+) {
+}
+
+pub(crate) fn make_cppgc_template<'s>(
+    scope: &mut v8::HandleScope<'s, ()>,
+) -> v8::Local<'s, v8::FunctionTemplate> {
+    v8::FunctionTemplate::new(scope, cppgc_template_constructor)
+}
 
 struct ScriptWatcher {
     receiver: Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>,
@@ -21,11 +36,12 @@ struct ScriptWatcher {
 }
 
 pub struct V8Runtime {
-    pub(crate) isolate: OwnedIsolate,
-    pub(crate) _platform_wrapper: PlatformWrapper,
+    pub isolate: OwnedIsolate,
+    _platform_wrapper: PlatformWrapper,
     script_watcher: Option<ScriptWatcher>,
-    global_context: Global<Context>,
-    // pub isolate: ManuallyDrop<OwnedIsolate>,
+    pub global_context: Global<Context>,
+    pub gc_template: RefCell<v8::Global<v8::FunctionTemplate>>,
+    pub plugins: Vec<v8::Global<v8::Object>>, // pub isolate: ManuallyDrop<OwnedIsolate>,
 }
 
 impl V8Runtime {
@@ -48,12 +64,58 @@ impl V8Runtime {
             Global::new(&mut context_scope, local_context)
         };
 
-        V8Runtime {
+        let cppgc_template = {
+            let mut handle_scope = v8::HandleScope::new(&mut isolate);
+            let cppgc_template = make_cppgc_template(&mut handle_scope);
+            let cppgc_template = RefCell::new(v8::Global::new(&mut handle_scope, cppgc_template));
+            cppgc_template
+        };
+        let runtime = V8Runtime {
             _platform_wrapper: platform_wrapper,
             script_watcher: None,
             isolate,
             global_context,
+            gc_template: cppgc_template,
+            plugins: vec![],
+        };
+        runtime
+    }
+
+    pub fn associate_embedder_specific_data(&mut self) {
+        let raw_ptr: *mut V8Runtime = self as *mut _;
+        let mut context_scope: v8::HandleScope =
+            v8::HandleScope::with_context(&mut self.isolate, &self.global_context);
+        let scope = &mut context_scope;
+        scope.set_data(V8_RUNTIME_DATA_OFFSET, raw_ptr as *mut std::ffi::c_void);
+    }
+
+    fn create_plugin(&mut self) -> crate::error::Result<v8::Global<v8::Object>> {
+        let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
+        let context = v8::Local::new(handle_scope, self.global_context.clone());
+        let scope = &mut v8::ContextScope::new(handle_scope, context);
+        let global_this = context.global(scope);
+        let name = v8::String::new(scope, "createPlugin").ok_or(crate::error::Error::Null(
+            format!("Failed to create string"),
+        ))?;
+        let create_plugin_function = global_this
+            .get(scope, name.into())
+            .map(|x| v8::Local::<v8::Function>::try_from(x).ok())
+            .flatten()
+            .ok_or(crate::error::Error::Null(format!("No method")))?;
+        let plugin = create_plugin_function
+            .call(scope, global_this.into(), &[])
+            .ok_or_else(|| crate::error::Error::Other(format!("Failed to create plugin")))?;
+        if !plugin.is_object() {
+            return Err(crate::error::Error::Other(format!("Expect an object")));
         }
+        let plugin: v8::Local<v8::Object> = plugin.cast();
+        let plugin = v8::Global::new(scope, plugin);
+
+        Ok(plugin)
+    }
+
+    fn get_plugin(&self) -> Option<v8::Global<v8::Object>> {
+        self.plugins.last().cloned()
     }
 
     pub fn register_func_global(&mut self) -> crate::error::Result<()> {
@@ -90,23 +152,22 @@ impl V8Runtime {
         &mut self,
         path: impl AsRef<Path>,
     ) -> crate::error::Result<()> {
-        let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
-        // let context = v8::Context::new(handle_scope);
-        let context = v8::Local::new(handle_scope, self.global_context.clone());
-        let scope = &mut v8::ContextScope::new(handle_scope, context);
         let source = std::fs::read_to_string(path.as_ref())
             .map_err(|err| crate::error::Error::IO(err, None))?;
-        let source = v8::String::new(scope, &source).ok_or(crate::error::Error::Null(format!(
-            "Failed to create string"
-        )))?;
-        Self::execute_script(scope, source)
+        self.execute_script_code(source)?;
+        match self.create_plugin() {
+            Ok(plugin) => {
+                self.plugins.push(plugin);
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
     }
 
     pub fn execute_script_code(&mut self, source: String) -> crate::error::Result<()> {
         let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
-        // let context = v8::Context::new(handle_scope);
-        let context = v8::Local::new(handle_scope, self.global_context.clone());
-        let scope = &mut v8::ContextScope::new(handle_scope, context);
+        let global_context = v8::Local::new(handle_scope, self.global_context.clone());
+        let scope = &mut v8::ContextScope::new(handle_scope, global_context);
         let source = v8::String::new(scope, &source).ok_or(crate::error::Error::Null(format!(
             "Failed to create string"
         )))?;
@@ -187,88 +248,34 @@ impl V8Runtime {
         self.script_watcher.is_some()
     }
 
-    pub fn register_engine_global(
+    pub fn tick(
         &mut self,
-        engine: &mut rs_engine::engine::Engine,
+        engine: v8::Global<v8::Object>,
+        level: v8::Global<v8::Object>,
+        player_viewport: v8::Global<v8::Object>,
     ) -> crate::error::Result<()> {
+        let plugin = self
+            .get_plugin()
+            .ok_or(crate::error::Error::Null(format!("No plugin")))?;
         let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
         let context = v8::Local::new(handle_scope, self.global_context.clone());
         let scope = &mut v8::ContextScope::new(handle_scope, context);
-        let native_engine = unsafe { NativeEngine::new(engine) };
-        let native_engine = Box::new(native_engine);
-        let native_engine = Box::into_raw(native_engine);
-
-        let engine_object_template = v8::ObjectTemplate::new(scope);
-        engine_object_template.set_internal_field_count(1);
-        let engine_object =
-            engine_object_template
-                .new_instance(scope)
-                .ok_or(crate::error::Error::Other(format!(
-                    "Failed to create object"
-                )))?;
-
-        engine_object.set_aligned_pointer_in_internal_field(0, native_engine as _);
-
-        let name = v8::String::new(scope, "setViewMode").ok_or(crate::error::Error::Null(
-            format!("Failed to create string"),
-        ))?;
-        let function = v8::Function::new(scope, engine_set_view_mode).ok_or(
-            crate::error::Error::Null(format!("Failed to create function")),
-        )?;
-        engine_object.set(scope, name.into(), function.into());
-
         let global_this = context.global(scope);
-        let name = v8::String::new(scope, "engine").ok_or(crate::error::Error::Null(format!(
+        let plugin = v8::Local::new(scope, plugin);
+        let name = v8::String::new(scope, "tick").ok_or(crate::error::Error::Null(format!(
             "Failed to create string"
         )))?;
-        global_this.set(scope, name.into(), engine_object.into());
-        Ok(())
-    }
-
-    // fn empty(_: &mut v8::HandleScope, _: v8::FunctionCallbackArguments, _: v8::ReturnValue) {}
-
-    pub fn tick(&mut self, engine: &mut rs_engine::engine::Engine) -> crate::error::Result<()> {
-        let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
-        let context = v8::Local::new(handle_scope, self.global_context.clone());
-        let scope = &mut v8::ContextScope::new(handle_scope, context);
-        let global_this = context.global(scope);
-        let name = v8::String::new(scope, "engineTick").ok_or(crate::error::Error::Null(
-            format!("Failed to create string"),
-        ))?;
-        let tick = global_this
+        let tick = plugin
             .get(scope, name.into())
             .map(|x| v8::Local::<v8::Function>::try_from(x).ok())
             .flatten()
             .ok_or(crate::error::Error::Null(format!("No method")))?;
-
-        let native_engine = unsafe { NativeEngine::new(engine) };
-        let native_engine = Box::new(native_engine);
-        let native_engine = Box::into_raw(native_engine);
-
-        let engine_object_template = v8::ObjectTemplate::new(scope);
-        engine_object_template.set_internal_field_count(1);
-        // let name = v8::String::new(scope, "getCameraMut").ok_or(crate::error::Error::Null(
-        //     format!("Failed to create string"),
-        // ))?;
-        // let function = v8::FunctionTemplate::new(scope, engine_get_camera_mut);
-        // engine_object_template.set(name.into(), function.into());
-
-        let name = v8::String::new(scope, "setViewMode").ok_or(crate::error::Error::Null(
-            format!("Failed to create string"),
-        ))?;
-        let function = v8::FunctionTemplate::new(scope, engine_set_view_mode);
-        engine_object_template.set(name.into(), function.into());
-
-        let engine_object =
-            engine_object_template
-                .new_instance(scope)
-                .ok_or(crate::error::Error::Other(format!(
-                    "Failed to create object"
-                )))?;
-
-        engine_object.set_aligned_pointer_in_internal_field(0, native_engine as _);
-
-        tick.call(scope, global_this.into(), &[engine_object.into()]);
+        let parameters = [
+            v8::Local::new(scope, engine).into(),
+            v8::Local::new(scope, level).into(),
+            v8::Local::new(scope, player_viewport).into(),
+        ];
+        tick.call(scope, global_this.into(), &parameters);
         Ok(())
     }
 }

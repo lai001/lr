@@ -139,6 +139,12 @@ struct MouseState {
     position: glam::Vec2,
 }
 
+#[cfg(feature = "plugin_v8")]
+struct V8Plugin {
+    runtime: rs_v8_host::v8_runtime::V8Runtime,
+    binding_api_manager: rs_v8_binding_api_manager::BindingApiManager,
+}
+
 pub struct EditorContext {
     event_loop_proxy: winit::event_loop::EventLoopProxy<ECustomEventType>,
     engine: rs_engine::engine::Engine,
@@ -150,7 +156,7 @@ pub struct EditorContext {
     // #[cfg(any(feature = "plugin_shared_crate"))]
     // plugins: Vec<Box<dyn Plugin>>,
     #[cfg(feature = "plugin_v8")]
-    v8_runtime: Option<rs_v8_host::v8_runtime::V8Runtime>,
+    v8_plugin: Option<V8Plugin>,
     frame_sync: FrameSync,
     model_loader: ModelLoader,
     window_manager: Rc<RefCell<WindowsManager>>,
@@ -210,7 +216,7 @@ impl EditorContext {
         let logger = Logger::new(LoggerConfiguration {
             is_write_to_file: false,
             is_flush_before_drop: false,
-            slot_flags: SlotFlags::empty(),
+            slot_flags: SlotFlags::Level,
         });
         log::trace!(
             "Engine Root Dir: {:?}",
@@ -261,13 +267,6 @@ impl EditorContext {
 
         #[cfg(feature = "plugin_dotnet")]
         let donet_host = rs_dotnet_host::dotnet_runtime::DotnetRuntime::default().ok();
-        #[cfg(feature = "plugin_v8")]
-        let v8_runtime = {
-            let mut v8_runtime = rs_v8_host::v8_runtime::V8Runtime::new();
-            let _ = v8_runtime.register_func_global();
-            // let _ = v8_runtime.register_engine_global(&mut editor_context.engine);
-            v8_runtime
-        };
 
         let player_viewport = PlayerViewport::from_window_surface(
             window_id,
@@ -314,10 +313,10 @@ impl EditorContext {
                 position: glam::vec2(0.0, 0.0),
             },
             player_viewport,
-            #[cfg(feature = "plugin_v8")]
-            v8_runtime: Some(v8_runtime),
             #[cfg(feature = "plugin_dotnet")]
             donet_host,
+            #[cfg(feature = "plugin_v8")]
+            v8_plugin: None,
         };
 
         if let Some(file_path) = last_project_path {
@@ -327,6 +326,35 @@ impl EditorContext {
         }
 
         Ok(editor_context)
+    }
+
+    pub fn init_v8(&mut self) -> anyhow::Result<()> {
+        #[cfg(feature = "plugin_v8")]
+        {
+            let mut v8_runtime = rs_v8_host::v8_runtime::V8Runtime::new();
+            let manager = rs_v8_binding_api_manager::BindingApiManager::new(
+                rs_v8_engine_binding_api::native_engine::EngineBindingApi::new(
+                    &mut v8_runtime,
+                    &mut self.engine,
+                )?,
+                rs_v8_engine_binding_api::native_level::RcRefLevelBindingApi::new(&mut v8_runtime)?,
+                rs_v8_engine_binding_api::native_player_viewport::PlayerViewportBindingApi::new(
+                    &mut v8_runtime,
+                    &mut self.player_viewport,
+                )?,
+            );
+            v8_runtime.register_func_global()?;
+            self.v8_plugin = Some(V8Plugin {
+                runtime: v8_runtime,
+                binding_api_manager: manager,
+            });
+            self.v8_plugin
+                .as_mut()
+                .expect("Not null")
+                .runtime
+                .associate_embedder_specific_data();
+        }
+        Ok(())
     }
 
     fn insert_cmds(engine: &mut rs_engine::engine::Engine) {
@@ -493,7 +521,9 @@ impl EditorContext {
                     }
                 }
                 let _ = self.try_load_dotnet_plugin();
-                let _ = self.try_load_js_plugin();
+                if let Err(err) = self.try_load_js_plugin() {
+                    log::warn!("{}", err);
+                }
                 if let Some(project_context) = &mut self.project_context {
                     if let Some(folder_update_type) = project_context.check_folder_notification() {
                         match folder_update_type {
@@ -777,7 +807,7 @@ impl EditorContext {
     fn try_load_js_plugin(&mut self) -> anyhow::Result<()> {
         #[cfg(feature = "plugin_v8")]
         if let Some(project_context) = self.project_context.as_mut() {
-            if let Some(v8_runtime) = self.v8_runtime.as_mut() {
+            if let Some(v8_runtime) = self.v8_plugin.as_mut().map(|x| &mut x.runtime) {
                 if !v8_runtime.is_watching() {
                     let entry_path = project_context.get_js_script_entry_path();
                     let root_dir = project_context.get_js_script_root_dir();
@@ -1393,7 +1423,9 @@ impl EditorContext {
         self.project_context = Some(project_context);
         // log::trace!("{:?}", self.try_load_plugin());
         let _ = self.try_load_dotnet_plugin();
-        let _ = self.try_load_js_plugin();
+        if let Err(err) = self.try_load_js_plugin() {
+            log::warn!("{}", err);
+        }
         self.data_source
             .recent_projects
             .paths
@@ -1561,6 +1593,30 @@ impl EditorContext {
         Ok(())
     }
 
+    #[cfg(feature = "plugin_v8")]
+    fn process_v8_plugin_tick(&mut self) -> anyhow::Result<()> {
+        if let (Some(v8_plugin), Some(level)) =
+            (self.v8_plugin.as_mut(), self.data_source.level.as_mut())
+        {
+            let v8_runtime = &mut v8_plugin.runtime;
+            let v8_register_manager = &mut v8_plugin.binding_api_manager;
+            let wrapped_engine = v8_register_manager.engine_api.get_wrapped_value();
+            let wrapped_level = v8_register_manager
+                .level_api
+                .make_wrapped_value(v8_runtime, level.clone())?;
+
+            let wrapped_player_viewport = v8_register_manager
+                .player_viewport_binding_api
+                .get_wrapped_value();
+
+            let result = v8_runtime
+                .tick(wrapped_engine, wrapped_level, wrapped_player_viewport)
+                .map_err(|err| anyhow!("{err}"));
+            return result;
+        }
+        Ok(())
+    }
+
     fn process_redraw_request(
         &mut self,
         window_id: isize,
@@ -1618,8 +1674,8 @@ impl EditorContext {
         }
 
         #[cfg(feature = "plugin_v8")]
-        if let Some(v8_runtime) = self.v8_runtime.as_mut() {
-            let _ = v8_runtime.tick(&mut self.engine);
+        if let Err(err) = self.process_v8_plugin_tick() {
+            log::warn!("{err}");
         }
 
         if let Some(ui_window) = &mut self.particle_system_ui_window {

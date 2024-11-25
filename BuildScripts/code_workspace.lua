@@ -3,6 +3,24 @@ local rs_project_name = rs_project_name
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
 
+local function v8_binding_api_generator_workspace_file(json)
+    local extraArgs = { "--release" }
+    local media_cmd = {
+        ["folders"] = { 
+            {
+                ["path"] = path.absolute("./")
+            } 
+        },
+        ["settings"] = {
+            ["rust-analyzer.linkedProjects"] = {
+                path.absolute("./programs/rs_v8_binding_api_generator/Cargo.toml"),
+            },
+            ["rust-analyzer.runnables.extraArgs"] = extraArgs
+        }
+    }
+    json.savefile(path.join(path.absolute("./"), "rs_v8_binding_api_generator.code-workspace"), media_cmd)
+end
+
 local function reflection_generator_workspace_file(json)
     local extraArgs = { "--release" }
     local media_cmd = {
@@ -16,7 +34,7 @@ local function reflection_generator_workspace_file(json)
             ["rust-analyzer.runnables.extraArgs"] = extraArgs
         }
     }
-    json.savefile(path.join(path.absolute("./"), "media_cmd.code-workspace"), media_cmd)
+    json.savefile(path.join(path.absolute("./"), "reflection_generator.code-workspace"), media_cmd)
 end
 
 local function media_cmd_workspace_file(json)
@@ -195,6 +213,7 @@ task("code_workspace") do
         audio_workspace_file(json)
         build_tool_workspace_file(json)
         reflection_generator_workspace_file(json)
+        v8_binding_api_generator_workspace_file(json)
     end)
     set_menu {
         usage = "xmake code_workspace",

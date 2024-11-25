@@ -1,6 +1,4 @@
 use crate::misc::is_dev_mode;
-use lazy_static::lazy_static;
-use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "editor")]
@@ -54,23 +52,20 @@ pub fn get_gpmetis_program_path() -> PathBuf {
     get_engine_root_dir().join("build/windows/x64/release/gpmetis.exe")
 }
 
-lazy_static! {
-    static ref GLOBAL_CURRENT_PROJECT_DIR: MultipleThreadMutType<PathBuf> =
-        MultipleThreadMut::new(Path::new("").to_path_buf());
+thread_local! {
+    pub static GLOBAL_CURRENT_PROJECT_DIR: std::cell::RefCell<PathBuf>  = std::cell::RefCell::new(PathBuf::new()) ;
 }
 
 #[cfg(feature = "editor")]
 pub fn get_current_project_dir() -> PathBuf {
-    GLOBAL_CURRENT_PROJECT_DIR
-        .clone()
-        .lock()
-        .unwrap()
-        .to_path_buf()
+    GLOBAL_CURRENT_PROJECT_DIR.with(|x| x.borrow().clone())
 }
 
 #[cfg(feature = "editor")]
 pub fn set_current_project_dir(path: &Path) {
-    *GLOBAL_CURRENT_PROJECT_DIR.lock().unwrap() = path.to_path_buf();
+    GLOBAL_CURRENT_PROJECT_DIR.with_borrow_mut(|x| {
+        *x = path.to_path_buf();
+    });
 }
 
 pub fn get_current_exe_dir() -> crate::error::Result<PathBuf> {
