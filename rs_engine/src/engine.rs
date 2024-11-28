@@ -215,8 +215,20 @@ impl Engine {
         };
 
         ResourceManager::default().create_builtin_resources(&mut engine);
-
+        engine.initialize_content();
         Ok(engine)
+    }
+
+    pub fn initialize_content(&mut self) {
+        for (_, content_file) in self.content_files.clone() {
+            match content_file {
+                EContentFileType::MaterialParamentersCollection(material_paramenters_collection) => {
+                    let mut material_paramenters_collection=material_paramenters_collection.borrow_mut();
+                    material_paramenters_collection.initialize(self);
+                },
+                _ => {}
+            }
+        }
     }
 
     #[cfg(feature = "editor")]
