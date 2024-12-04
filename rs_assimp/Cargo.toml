@@ -9,7 +9,7 @@ edition = "2021"
 log = "0.4.22"
 russimp-sys = { version = "2.0.2", features = ["prebuilt", "static-link"] }
 bitflags = "2.6.0"
-glam = { version = "0.29.1", features = ["mint", "serde"] }
+glam = { version = "0.29.2", features = ["mint", "serde"] }
 strum = "0.26.3"
 strum_macros = "0.26.4"
 lazy_static = "1.5.0"

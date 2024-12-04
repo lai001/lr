@@ -244,7 +244,7 @@ standalone = [
 profiler = ["rs_engine/profiler", "rs_render/profiler"]
 
 [dependencies]
-egui = { version = "0.28.1" }
+egui = { version = "0.29.1" }
 log = "0.4.22"
 rs_engine = { path = "@engine_path@/rs_engine" }
 rs_render = { path = "@engine_path@/rs_render" }
@@ -300,10 +300,26 @@ fn fill_cargo_toml_template(name: &str, engine_path: &str) -> String {
 }
 
 fn get_js_script_template() -> &'static str {
-    return r#"function engineTick(engine) {
-    engine.setViewMode(0);
+    return r#"Plugin = class {
+    constructor() {
+    }
+
+    onInit() {
+    }
+
+    tick(engine, level, player_viewport) {
+    }
+
+    onDeviceEvent() {
+    }
+
+    onWindowInput() {
+    }
 }
-    "#;
+
+function createPlugin() {
+    return new Plugin();
+}"#;
 }
 
 fn get_dotnet_script_template() -> &'static str {

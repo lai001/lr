@@ -8,7 +8,7 @@ edition = "2021"
 rs_dotnet = []
 
 [dependencies]
-libc = "0.2.161"
+libc = "0.2.167"
 lazy_static = "1.5.0"
 log = "0.4.22"
 env_logger = "0.11.5"

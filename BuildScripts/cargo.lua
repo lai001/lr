@@ -9,7 +9,7 @@ do
         if option.get("incompatible") then
             is_incompatible = true
         end
-        for _, dir in ipairs(os.dirs("rs_*")) do
+        for _, dir in ipairs(table.join(os.dirs("rs_*"), os.dirs("crates/rs_*"), os.dirs("programs/rs_*"))) do
             if black_list[dir] == nil then
                 local old = os.cd(dir)
                 if is_incompatible then
