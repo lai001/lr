@@ -79,6 +79,7 @@ pub struct DataSource {
     pub curve_data_source: CurveViewDataSource,
     pub is_gizmo_focused: bool,
     pub is_gizmo_setting_open: bool,
+    pub is_show_debug: bool,
 }
 
 impl DataSource {
@@ -119,6 +120,7 @@ impl DataSource {
             curve_data_source: CurveViewDataSource::default(),
             is_gizmo_focused: false,
             is_gizmo_setting_open: false,
+            is_show_debug: true,
         }
     }
 

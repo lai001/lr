@@ -1,3 +1,5 @@
+use std::{iter::zip, num::NonZeroUsize};
+
 #[derive(Debug)]
 pub struct PrimitiveData {
     pub vertex_colors: Vec<glam::Vec4>,
@@ -171,6 +173,113 @@ impl PrimitiveData {
             ],
             indices,
         }
+    }
+
+    pub fn sphere(
+        radius: f32,
+        h_subdivide: NonZeroUsize,
+        v_subdivide: NonZeroUsize,
+        is_cylinder: bool,
+    ) -> PrimitiveData {
+        let h_subdivide = h_subdivide.get();
+        let v_subdivide = v_subdivide.get();
+        assert!(v_subdivide >= 2);
+
+        let mut primitive_data = PrimitiveData {
+            vertex_colors: vec![],
+            vertex_positions: vec![],
+            vertex_normals: vec![],
+            vertex_tangents: vec![],
+            vertex_bitangents: vec![],
+            vertex_tex_coords: vec![],
+            indices: vec![],
+        };
+
+        let north = glam::Vec3::Y;
+        let south = glam::Vec3::NEG_Y;
+
+        let mut vertexes: Vec<Vec<glam::Vec3>> =
+            vec![vec![glam::Vec3::ZERO; v_subdivide]; h_subdivide];
+
+        for i in 0..h_subdivide {
+            let radian = (i + 1) as f32 * std::f32::consts::PI / (h_subdivide as f32 + 1.0f32);
+            let y = (radian + std::f32::consts::FRAC_PI_2).sin();
+            if is_cylinder {
+                for j in 0..v_subdivide {
+                    let radian = std::f32::consts::TAU * (j as f32 / v_subdivide as f32);
+                    let x = radian.cos();
+                    let z = radian.sin();
+                    let vertex = glam::vec3(x, y, z);
+                    vertexes[i][j] = vertex;
+                }
+            } else {
+                let projection_length = radian.sin();
+                for j in 0..v_subdivide {
+                    let radian = std::f32::consts::TAU * (j as f32 / v_subdivide as f32);
+                    let x = radian.cos() * projection_length;
+                    let z = radian.sin() * projection_length;
+                    let vertex = glam::vec3(x, y, z);
+                    vertexes[i][j] = vertex;
+                }
+            }
+        }
+
+        let top = vertexes.first().expect("Not null");
+        for item in top.windows(2) {
+            let mut triangles = vec![north, item[0], item[1]];
+            primitive_data.vertex_positions.append(&mut triangles);
+        }
+
+        for group in (0..vertexes.len())
+            .map(|x| x)
+            .collect::<Vec<usize>>()
+            .windows(2)
+        {
+            let i = group[0];
+            let j = group[1];
+            let mut vertexes_0 = vertexes[i].clone();
+            vertexes_0.push(vertexes[i][0]);
+            let mut vertexes_1 = vertexes[j].clone();
+            vertexes_1.push(vertexes[j][0]);
+
+            for (item0, item1) in zip(vertexes_0.windows(2), vertexes_1.windows(2)) {
+                let mut triangle = vec![item0[0], item0[1], item1[0]];
+                primitive_data.vertex_positions.append(&mut triangle);
+                let mut triangle = vec![item0[1], item1[1], item1[0]];
+                primitive_data.vertex_positions.append(&mut triangle);
+            }
+        }
+
+        let bottom = vertexes.last().expect("Not null");
+        for item in bottom.windows(2) {
+            let mut triangle = vec![south, item[0], item[1]];
+            primitive_data.vertex_positions.append(&mut triangle);
+        }
+
+        for position in &mut primitive_data.vertex_positions {
+            *position = *position * radius;
+        }
+
+        primitive_data
+            .vertex_colors
+            .resize(primitive_data.vertex_positions.len(), Default::default());
+        primitive_data
+            .vertex_normals
+            .resize(primitive_data.vertex_positions.len(), Default::default());
+        primitive_data
+            .vertex_tangents
+            .resize(primitive_data.vertex_positions.len(), Default::default());
+        primitive_data
+            .vertex_bitangents
+            .resize(primitive_data.vertex_positions.len(), Default::default());
+        primitive_data
+            .vertex_tex_coords
+            .resize(primitive_data.vertex_positions.len(), Default::default());
+        primitive_data.indices = (0..primitive_data.vertex_positions.len())
+            .map(|x| x as u32)
+            .collect();
+
+        primitive_data
     }
 }
 

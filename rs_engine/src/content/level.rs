@@ -344,7 +344,7 @@ impl Level {
         }
 
         let light_components = self.collect_point_light_components();
-        player_viewport.update_point_lights(light_components);
+        player_viewport.update_point_lights(engine, light_components);
         let spot_light_components = self.collect_spot_light_components();
         player_viewport.update_spot_lights(spot_light_components);
     }
@@ -699,5 +699,30 @@ impl Level {
             });
         }
         lights
+    }
+
+    pub fn set_debug_show_flag(&mut self, flag: crate::debug_show_flag::DebugShowFlag) {
+        for actor in self.actors.clone() {
+            let actor = actor.borrow_mut();
+            let scene_node = actor.scene_node.clone();
+            Actor::walk_node(scene_node, &mut |node| {
+                let mut node = node.borrow_mut();
+                match &mut node.component {
+                    EComponentType::PointLightComponent(component) => {
+                        let mut component = component.borrow_mut();
+                        component.set_is_show_preview(
+                            flag.contains(crate::debug_show_flag::DebugShowFlag::PointLightSphere),
+                        );
+                    }
+                    EComponentType::CameraComponent(component) => {
+                        let mut component = component.borrow_mut();
+                        component.set_is_show_preview(
+                            flag.contains(crate::debug_show_flag::DebugShowFlag::CameraFrustum),
+                        );
+                    }
+                    _ => {}
+                }
+            });
+        }
     }
 }

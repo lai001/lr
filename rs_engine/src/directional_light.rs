@@ -177,7 +177,7 @@ impl DirectionalLight {
                 0,
                 vec![*vertex_buffer_handle],
                 vertex_count as u32,
-                EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+                EPipelineType::Builtin(EBuiltinPipelineType::Primitive(None)),
                 None,
                 None,
                 vec![

@@ -104,7 +104,15 @@ impl Actor {
                     draw_objects.append(&mut sub_draw_objects);
                 }
                 EComponentType::SpotLightComponent(_) => {}
-                EComponentType::PointLightComponent(_) => {}
+                EComponentType::PointLightComponent(component) => {
+                    let component = component.borrow();
+                    let mut sub_draw_objects: Vec<_> = component
+                        .get_draw_objects()
+                        .iter()
+                        .map(|x| (*x).clone())
+                        .collect();
+                    draw_objects.append(&mut sub_draw_objects);
+                }
             },
         );
         draw_objects

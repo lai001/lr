@@ -65,11 +65,13 @@ impl MaterialParamentersCollection {
         self.uniform_map = Some(UniformMap::new(&self.fields));
         let uniform_map = self.uniform_map.as_ref().unwrap();
         let name = self.get_name();
-        self.buffer_handle = Some(engine.create_buffer(
-            uniform_map.get_data(),
-            wgpu::BufferUsages::all(),
-            Some(name.as_ref()),
-        ));
+        self.buffer_handle = engine
+            .create_buffer(
+                uniform_map.get_data().to_vec(),
+                wgpu::BufferUsages::all(),
+                Some(name),
+            )
+            .ok();
     }
 
     pub fn update(&self, engine: &mut Engine) {

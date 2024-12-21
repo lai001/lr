@@ -3,6 +3,7 @@
 #include "global_constants.wgsl"
 #include "virtual_texture.wgsl"
 #include "light.wgsl"
+#include "cluster_light.wgsl"
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
@@ -98,9 +99,15 @@ GROUP_BINDING(SHADOW_MAP) var shadow_map: texture_depth_2d;
 
 GROUP_BINDING(CONSTANTS) var<uniform> constants: Constants;
 
-GROUP_BINDING(POINT_LIGHTS) var<uniform> point_lights: PointLights;
-
 GROUP_BINDING(SPOT_LIGHTS) var<uniform> spot_lights: SpotLights;
+
+#ifdef SUPPORT_CLUSTER_LIGHTS
+GROUP_BINDING(POINT_LIGHTS) var<storage, read> point_lights: array<PointLight>;
+GROUP_BINDING(CLUSTER_LIGHT) var<storage, read> cluster_lights: array<u32>;
+GROUP_BINDING(CLUSTER_LIGHT_INDEX) var<storage, read> cluster_light_indices: array<ClusterLightIndex>;
+#else
+GROUP_BINDING(POINT_LIGHTS) var<uniform> point_lights: PointLights;
+#endif
 
 #ifdef SKELETON_MAX_BONES
 GROUP_BINDING(SKIN_CONSTANTS) var<uniform> skin_constants: SkinConstants;
@@ -281,10 +288,14 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
 
 @vertex fn vs_main(vertex_in: VertexIn) -> VertexOutput {
 #ifdef SKELETON_MAX_BONES
-    var bone_transform = skin_constants.bones[vertex_in.bone_ids[0]] * vertex_in.bone_weights[0];
-    bone_transform += skin_constants.bones[vertex_in.bone_ids[1]] * vertex_in.bone_weights[1];
-    bone_transform += skin_constants.bones[vertex_in.bone_ids[2]] * vertex_in.bone_weights[2];
-    bone_transform += skin_constants.bones[vertex_in.bone_ids[3]] * vertex_in.bone_weights[3];
+    var bone_index_0 = vertex_in.bone_ids[0];
+    var bone_index_1 = vertex_in.bone_ids[1];
+    var bone_index_2 = vertex_in.bone_ids[2];
+    var bone_index_3 = vertex_in.bone_ids[3];
+    var bone_transform = skin_constants.bones[bone_index_0] * vertex_in.bone_weights[0];
+    bone_transform += skin_constants.bones[bone_index_1] * vertex_in.bone_weights[1];
+    bone_transform += skin_constants.bones[bone_index_2] * vertex_in.bone_weights[2];
+    bone_transform += skin_constants.bones[bone_index_3] * vertex_in.bone_weights[3];
 #endif
     let mvp = global_constants.view_projection * constants.model;
     var vertex_output: VertexOutput;
@@ -322,13 +333,30 @@ fn get_shading_info(user_attributes: UserAttributes, vertex_output: VertexOutput
 
     var shadow = shadow_calculation(shadow_map, vertex_output.frag_position_at_light_space);
 
-    var point_light_color: vec3<f32>;
+    var point_light_color: vec3<f32> = vec3<f32>(0.0);
+#ifdef SUPPORT_CLUSTER_LIGHTS
+    var split_num = i32(10);
+    var indirect_index = get_indirect_index_by_position(global_constants.camera_frustum_apply_transformation, vertex_output.frag_position, split_num, split_num, split_num);
+    if (indirect_index > -1) {
+        var cluster_light_index = cluster_light_indices[indirect_index];
+        fragment_output.color = vec4<f32>(f32(cluster_light_index.count));
+        var start = cluster_light_index.offset;
+        var end = start + cluster_light_index.count;
+        for (var i = start; i < end ; i++) {
+            var light_index = cluster_lights[i];
+            var light_color = point_light(point_lights[light_index], shading_info.normal, vertex_output.frag_position, shading_info.view_direction);
+            light_color = max(vec3<f32>(0.0), light_color);
+            point_light_color = point_light_color + light_color;
+        }
+    }
+#else
     for (var i = 0u; i < MAX_POINT_LIGHTS_NUM ; i++) {
         if (i >= point_lights.available) {
             break;
         }
         point_light_color = point_light_color + point_light(point_lights.lights[i], shading_info.normal, vertex_output.frag_position, shading_info.view_direction);
     }
+#endif
 
     var spot_light_color: vec3<f32>;
     for (var i = 0u; i < MAX_SPOT_LIGHTS_NUM ; i++) {

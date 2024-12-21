@@ -7,12 +7,12 @@ use crate::{
     vertex_data_type::mesh_vertex::MeshVertex3,
     VertexBufferType,
 };
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use type_layout::TypeLayout;
 use wgpu::*;
 
 pub struct PrimitiveRenderPipeline {
-    pub base_render_pipeline: Arc<BaseRenderPipeline>,
+    base_render_pipelines: HashMap<PrimitiveState, Arc<BaseRenderPipeline>>,
     _builder: BaseRenderPipelineBuilder,
 }
 
@@ -41,19 +41,54 @@ impl PrimitiveRenderPipeline {
             MeshVertex3::type_layout(),
         ]));
 
-        builder.primitive = Some(PrimitiveState {
+        // builder.primitive = Some(PrimitiveState {
+        //     topology: PrimitiveTopology::LineList,
+        //     cull_mode: None,
+        //     polygon_mode: PolygonMode::Line,
+        //     ..Default::default()
+        // });
+
+        let mut base_render_pipelines = HashMap::new();
+        for topology in vec![
+            PrimitiveTopology::PointList,
+            PrimitiveTopology::LineList,
+            PrimitiveTopology::LineStrip,
+            PrimitiveTopology::TriangleList,
+            PrimitiveTopology::TriangleStrip,
+        ] {
+            let mut polygon_modes = vec![PolygonMode::Fill];
+            if device.features().contains(Features::POLYGON_MODE_LINE) {
+                polygon_modes.push(PolygonMode::Line);
+            }
+            if device.features().contains(Features::POLYGON_MODE_POINT) {
+                polygon_modes.push(PolygonMode::Point);
+            }
+            for polygon_mode in polygon_modes {
+                let primitive = PrimitiveState {
+                    topology,
+                    cull_mode: None,
+                    polygon_mode,
+                    ..Default::default()
+                };
+                builder.primitive = Some(primitive.clone());
+                let base_render_pipeline = pool.get(device, shader_library, &builder);
+                base_render_pipelines.insert(primitive, base_render_pipeline);
+            }
+        }
+
+        Ok(PrimitiveRenderPipeline {
+            base_render_pipelines,
+            _builder: builder,
+        })
+    }
+
+    fn default_primitive_state() -> PrimitiveState {
+        PrimitiveState {
             topology: PrimitiveTopology::LineList,
             cull_mode: None,
             polygon_mode: PolygonMode::Line,
             ..Default::default()
-        });
-
-        let base_render_pipeline = pool.get(device, shader_library, &builder);
-
-        Ok(PrimitiveRenderPipeline {
-            base_render_pipeline,
-            _builder: builder,
-        })
+        }
     }
 
     pub fn draw(
@@ -65,21 +100,34 @@ impl PrimitiveRenderPipeline {
         mesh_buffers: &[GpuVertexBufferImp],
         binding_resource: Vec<Vec<BindingResource<'_>>>,
     ) {
-        self.base_render_pipeline.draw_resources(
-            device,
-            queue,
-            binding_resource,
-            mesh_buffers,
-            &[ColorAttachment {
-                color_ops: None,
-                view: output_view,
-                resolve_target: None,
-            }],
-            None,
-            None,
-            Some(depth_view),
-            None,
-            None,
-        );
+        self.base_render_pipelines
+            .get(&Self::default_primitive_state())
+            .expect("Not null")
+            .draw_resources(
+                device,
+                queue,
+                binding_resource,
+                mesh_buffers,
+                &[ColorAttachment {
+                    color_ops: None,
+                    view: output_view,
+                    resolve_target: None,
+                }],
+                None,
+                None,
+                Some(depth_view),
+                None,
+                None,
+            );
+    }
+
+    pub fn get_base_render_pipeline(
+        &self,
+        primitive_state: Option<&PrimitiveState>,
+    ) -> Option<&BaseRenderPipeline> {
+        let pipeline = self
+            .base_render_pipelines
+            .get(primitive_state.unwrap_or(&Self::default_primitive_state()));
+        pipeline.as_ref().map(|v| &***v)
     }
 }

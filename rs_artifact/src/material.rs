@@ -52,6 +52,8 @@ pub struct MaterialInfo {
     pub spot_lights_binding: Option<GroupBinding>,
     pub skin_constants_binding: Option<GroupBinding>,
     pub virtual_texture_constants_binding: Option<GroupBinding>,
+    pub cluster_light_binding: Option<GroupBinding>,
+    pub cluster_light_index_binding: Option<GroupBinding>,
     pub material_paramenters_collection_bindings: HashSet<MaterialParamentersCollectionBinding>,
 }
 

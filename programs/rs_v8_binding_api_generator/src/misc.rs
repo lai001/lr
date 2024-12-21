@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use convert_case::Casing;
 use proc_macro2::TokenStream;
-use ra_ap_hir::db::DefDatabase;
+use ra_ap_hir::{db::DefDatabase, HasCrate, HirDisplay};
 use ra_ap_hir_def::builtin_type;
 use ra_ap_ide::RootDatabase;
 
@@ -624,4 +624,22 @@ pub fn make_return_value_expr(
         }
     }
     return Err(anyhow!("Not support"));
+}
+
+pub fn is_clone(ty: &ra_ap_hir::Type, db: &dyn ra_ap_hir::db::HirDatabase) -> bool {
+    let krate = ty.krate(db);
+    let lang_item = db.lang_item(krate.into(), ra_ap_hir::LangItem::Clone);
+    let clone_trait = match lang_item {
+        Some(ra_ap_hir_def::lang_item::LangItemTarget::Trait(it)) => it,
+        _ => return false,
+    };
+    return ty.impls_trait(db, clone_trait.into(), &[]);
+}
+
+pub fn readable_type_description(
+    ty: &ra_ap_hir::Type,
+    db: &dyn ra_ap_hir::db::HirDatabase,
+) -> String {
+    let display = ty.display(db, ra_ap_ide::Edition::Edition2021);
+    ra_ap_syntax::ToSmolStr::to_smolstr(&display).to_string()
 }

@@ -88,13 +88,16 @@ impl<'a> ResolveContext<'a> {
         definitions: &mut Vec<String>,
         options: &MaterialOptions,
         material_info: &mut MaterialInfo,
+        is_support_cluster_light: bool,
         // group: usize,
         // binding_start: &mut usize,
     ) {
         // https://www.reddit.com/r/vulkan/comments/abjk81/comment/ed0ut27/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button
         // Note: The maximum binding number specified should be as compact as possible to avoid wasted memory.
         macro_rules! group_binding {
-            ($name:literal, $g:ty, $b:ty) => {
+            ($member:ident, $name:literal) => {
+                material_info.$member =
+                    Some(GroupBinding::new(self.current_group, self.current_binding));
                 definitions.append(&mut vec![
                     format!("{}_GROUP={}", $name, self.current_group),
                     format!("{}_BINDING={}", $name, self.current_binding),
@@ -102,46 +105,30 @@ impl<'a> ResolveContext<'a> {
                 self.current_binding += 1;
             };
         }
-        material_info.global_constants_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("GLOBAL_CONSTANTS", group, binding);
-        material_info.base_color_sampler_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("BASE_COLOR_SAMPLER", group, binding);
-        material_info.physical_texture_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("PHYSICAL_TEXTURE", group, binding);
-        material_info.page_table_texture_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("PAGE_TABLE_TEXTURE", group, binding);
-        material_info.brdflut_texture_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("BRDFLUT_TEXTURE", group, binding);
-        material_info.pre_filter_cube_map_texture_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("PRE_FILTER_CUBE_MAP_TEXTURE", group, binding);
-        material_info.irradiance_texture_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("IRRADIANCE_TEXTURE", group, binding);
-        material_info.shadow_map_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("SHADOW_MAP", group, binding);
-        material_info.constants_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("CONSTANTS", group, binding);
-        material_info.point_lights_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("POINT_LIGHTS", group, binding);
-        material_info.spot_lights_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("SPOT_LIGHTS", group, binding);
-        material_info.virtual_texture_constants_binding =
-            Some(GroupBinding::new(self.current_group, self.current_binding));
-        group_binding!("VIRTUAL_TEXTURE_CONSTANTS", group, binding);
+        group_binding!(global_constants_binding, "GLOBAL_CONSTANTS");
+        group_binding!(base_color_sampler_binding, "BASE_COLOR_SAMPLER");
+        group_binding!(physical_texture_binding, "PHYSICAL_TEXTURE");
+        group_binding!(page_table_texture_binding, "PAGE_TABLE_TEXTURE");
+        group_binding!(brdflut_texture_binding, "BRDFLUT_TEXTURE");
+        group_binding!(
+            pre_filter_cube_map_texture_binding,
+            "PRE_FILTER_CUBE_MAP_TEXTURE"
+        );
+        group_binding!(irradiance_texture_binding, "IRRADIANCE_TEXTURE");
+        group_binding!(shadow_map_binding, "SHADOW_MAP");
+        group_binding!(constants_binding, "CONSTANTS");
+        group_binding!(point_lights_binding, "POINT_LIGHTS");
+        group_binding!(spot_lights_binding, "SPOT_LIGHTS");
+        group_binding!(
+            virtual_texture_constants_binding,
+            "VIRTUAL_TEXTURE_CONSTANTS"
+        );
+        if is_support_cluster_light {
+            group_binding!(cluster_light_binding, "CLUSTER_LIGHT");
+            group_binding!(cluster_light_index_binding, "CLUSTER_LIGHT_INDEX");
+        }
         if options.is_skin {
-            material_info.skin_constants_binding =
-                Some(GroupBinding::new(self.current_group, self.current_binding));
-            group_binding!("SKIN_CONSTANTS", group, binding);
+            group_binding!(skin_constants_binding, "SKIN_CONSTANTS");
         }
     }
 
@@ -159,11 +146,14 @@ impl<'a> ResolveContext<'a> {
             shadow_map_binding: None,
             constants_binding: None,
             point_lights_binding: None,
+            spot_lights_binding: None,
             skin_constants_binding: None,
             virtual_texture_constants_binding: None,
-            spot_lights_binding: None,
+            cluster_light_binding: None,
+            cluster_light_index_binding: None,
             material_paramenters_collection_bindings: HashSet::new(),
         };
+        let is_support_cluster_light = true;
         let mut definitions: Vec<String> = vec![
             "VIRTUAL_TEXTURE=1".to_string(),
             "MATERIAL_SHADER_CODE=@MATERIAL_SHADER_CODE@".to_string(),
@@ -173,8 +163,16 @@ impl<'a> ResolveContext<'a> {
             format!("MAX_POINT_LIGHTS_NUM={}", MAX_POINT_LIGHTS_NUM),
             format!("MAX_SPOT_LIGHTS_NUM={}", MAX_SPOT_LIGHTS_NUM),
         ];
+        if is_support_cluster_light {
+            definitions.push("SUPPORT_CLUSTER_LIGHTS=1".to_string());
+        }
         // let current_max_binding =
-        self.compose_definitions(&mut definitions, options, &mut material_info);
+        self.compose_definitions(
+            &mut definitions,
+            options,
+            &mut material_info,
+            is_support_cluster_light,
+        );
         // let resolve_context = ResolveContext::from_snarl(snarl);
         let attribute_node_id = egui_snarl::NodeId(0);
         let result = self.resolve_attribute_node(

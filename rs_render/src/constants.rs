@@ -184,3 +184,10 @@ impl Default for SpotLights {
         }
     }
 }
+
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct ClusterLightIndex {
+    pub offset: u32,
+    pub count: u32,
+}

@@ -1,4 +1,4 @@
-use crate::frustum::Frustum;
+use crate::frustum::{Frustum, FrustumPlanes};
 
 pub fn calculate_max_mips(length: u32) -> u32 {
     32 - length.leading_zeros()
@@ -149,9 +149,144 @@ pub fn is_valid_name(name: &str) -> bool {
     re.is_match(name)
 }
 
+pub fn subdivide_two_points(subdivide: usize, p0: &glam::Vec3, p1: &glam::Vec3) -> Vec<glam::Vec3> {
+    let mut points = Vec::with_capacity(2 + subdivide);
+    points.push(*p0);
+    for i in 0..subdivide {
+        let point = p0.lerp(*p1, (1.0 / (subdivide + 1) as f32) * (i + 1) as f32);
+        points.push(point);
+    }
+    points.push(*p1);
+    points
+}
+
+fn subdivide_four_points(
+    subdivide_i: usize,
+    subdivide_j: usize,
+    p0: &glam::Vec3,
+    p1: &glam::Vec3,
+    p2: &glam::Vec3,
+    p3: &glam::Vec3,
+) -> Vec<(glam::Vec3, glam::Vec3, glam::Vec3, glam::Vec3)> {
+    let mut plane_points = Vec::with_capacity((subdivide_i + 1) * (subdivide_j + 1));
+    let points0 = subdivide_two_points(subdivide_j, p0, p1);
+    let points2 = subdivide_two_points(subdivide_j, p3, p2);
+    for (lhs, rhs) in points2.windows(2).zip(points0.windows(2)) {
+        let first_line = subdivide_two_points(subdivide_i, &lhs[0], &rhs[0]);
+        let second_line = subdivide_two_points(subdivide_i, &lhs[1], &rhs[1]);
+        for (first_line, second_line) in first_line.windows(2).zip(second_line.windows(2)) {
+            let plane = (first_line[1], second_line[1], second_line[0], first_line[0]);
+            plane_points.push(plane);
+        }
+    }
+    plane_points
+}
+
+pub fn split_frustum(
+    frustum: &Frustum,
+    subdivide_i: usize,
+    subdivide_j: usize,
+    subdivide_k: usize,
+) -> Vec<Frustum> {
+    let mut clusters =
+        Vec::with_capacity((subdivide_i + 1) * (subdivide_j + 1) * (subdivide_k + 1));
+
+    let points0 = subdivide_two_points(subdivide_k, &frustum.near_0, &frustum.far_0);
+    let points1 = subdivide_two_points(subdivide_k, &frustum.near_1, &frustum.far_1);
+    let points2 = subdivide_two_points(subdivide_k, &frustum.near_2, &frustum.far_2);
+    let points3 = subdivide_two_points(subdivide_k, &frustum.near_3, &frustum.far_3);
+
+    let zip = points0
+        .windows(2)
+        .zip(points1.windows(2))
+        .zip(points2.windows(2))
+        .zip(points3.windows(2));
+
+    for item in zip {
+        let points3 = item.1;
+        let points2 = item.0 .1;
+        let points1 = item.0 .0 .1;
+        let points0 = item.0 .0 .0;
+        let near_planes = subdivide_four_points(
+            subdivide_i,
+            subdivide_j,
+            &points0[0],
+            &points1[0],
+            &points2[0],
+            &points3[0],
+        );
+
+        let far_planes = subdivide_four_points(
+            subdivide_i,
+            subdivide_j,
+            &points0[1],
+            &points1[1],
+            &points2[1],
+            &points3[1],
+        );
+
+        for (near_plane, far_plane) in near_planes.iter().zip(far_planes) {
+            let frustum = Frustum {
+                near_0: near_plane.0,
+                near_1: near_plane.1,
+                near_2: near_plane.2,
+                near_3: near_plane.3,
+                far_0: far_plane.0,
+                far_1: far_plane.1,
+                far_2: far_plane.2,
+                far_3: far_plane.3,
+            };
+            clusters.push(frustum);
+        }
+    }
+
+    clusters
+}
+
+pub fn point_light_radius(
+    quadratic: f32,
+    linear: f32,
+    constant: f32,
+    attenuation_threshold: f32,
+) -> f32 {
+    debug_assert_ne!(quadratic, 0.0);
+    debug_assert!(attenuation_threshold > 0.0);
+    let c = constant - (1.0 / attenuation_threshold);
+    let delta = linear.powf(2.0) - 4.0 * quadratic * c;
+    debug_assert!(delta >= 0.0);
+    let x1 = (-linear + delta.sqrt()) / (2.0 * quadratic);
+    let x2 = (-linear - delta.sqrt()) / (2.0 * quadratic);
+    x1.max(x2)
+}
+
+pub fn is_sphere_visible_to_frustum(
+    sphere3d: &crate::sphere_3d::Sphere3D,
+    frustum: &Frustum,
+) -> bool {
+    let FrustumPlanes {
+        left_plane,
+        right_plane,
+        top_plane,
+        bottom_plane,
+        front_plane,
+        back_plane,
+    } = FrustumPlanes::new(frustum);
+
+    left_plane.is_inside(sphere3d)
+        && right_plane.is_inside(sphere3d)
+        && top_plane.is_inside(sphere3d)
+        && bottom_plane.is_inside(sphere3d)
+        && front_plane.is_inside(sphere3d)
+        && back_plane.is_inside(sphere3d)
+}
+
 #[cfg(test)]
 mod test {
-    use crate::misc::is_valid_name;
+    use super::{
+        frustum_from_perspective, is_sphere_visible_to_frustum, point_light_radius, split_frustum,
+        subdivide_four_points, subdivide_two_points,
+    };
+    use crate::{misc::is_valid_name, sphere_3d::Sphere3D};
 
     #[test]
     fn is_valid_name_test() {
@@ -165,5 +300,99 @@ mod test {
         assert_eq!(is_valid_name("🔥"), false);
         assert_eq!(is_valid_name("."), false);
         assert_eq!(is_valid_name("**"), false);
+    }
+
+    #[test]
+    fn point_light_radius_test() {
+        let radius = point_light_radius(0.1, 0.2, 0.3, 0.001);
+        assert_eq!(98.98999, radius);
+    }
+
+    #[test]
+    fn is_sphere_visible_to_frustum_test() {
+        let frustum = frustum_from_perspective(39.6_f32.to_radians(), 1280.0 / 720.0, 0.01, 1000.0);
+        let sphere = Sphere3D::new(glam::vec3(-300.0, 0.0, 0.0), 5.0);
+        assert_eq!(is_sphere_visible_to_frustum(&sphere, &frustum), false);
+
+        let frustum = frustum_from_perspective(39.6_f32.to_radians(), 1280.0 / 720.0, 0.01, 1000.0);
+        let sphere = Sphere3D::new(glam::vec3(0.0, 0.0, 0.0), 5.0);
+        assert_eq!(is_sphere_visible_to_frustum(&sphere, &frustum), true);
+
+        let frustum = frustum_from_perspective(39.6_f32.to_radians(), 1280.0 / 720.0, 0.01, 1000.0);
+        let sphere = Sphere3D::new(glam::vec3(0.0, 0.0, 1005.0), 5.0);
+        assert_eq!(is_sphere_visible_to_frustum(&sphere, &frustum), true);
+
+        let frustum = frustum_from_perspective(39.6_f32.to_radians(), 1280.0 / 720.0, 0.01, 1000.0);
+        let sphere = Sphere3D::new(glam::vec3(0.0, 0.0, -10.0), 5.0);
+        assert_eq!(is_sphere_visible_to_frustum(&sphere, &frustum), false);
+    }
+
+    #[test]
+    fn split_frustum_test() {
+        let frustum = frustum_from_perspective(39.6_f32.to_radians(), 1280.0 / 720.0, 0.01, 1000.0);
+        let clusters = split_frustum(&frustum, 9, 9, 9);
+        assert_eq!(clusters.len(), 1000);
+        for cluster in clusters.chunks(100) {
+            let mut iter = cluster.chunks(10);
+            if let Some(frustums) = iter.next() {
+                assert!(frustums[0].near_3.eq(&frustum.near_3));
+            }
+            break;
+        }
+    }
+
+    #[test]
+    fn split_frustum_test2() {
+        let frustum = frustum_from_perspective(39.6_f32.to_radians(), 1280.0 / 720.0, 0.01, 1000.0);
+        let frustums = split_frustum(&frustum, 0, 0, 0);
+        assert_eq!(frustums.len(), 1);
+        assert!(frustums[0] == frustum, "{:?} == {:?}", frustums[0], frustum);
+    }
+
+    #[test]
+    fn split_frustum_test3() {
+        let frustum = frustum_from_perspective(39.6_f32.to_radians(), 1280.0 / 720.0, 0.01, 1000.0);
+        let rotation = glam::Quat::from_euler(glam::EulerRot::XYZ, -0.0, 1.532398, -0.0);
+        let transform = glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::ONE,
+            rotation,
+            glam::Vec3::ZERO,
+        );
+        let new_frustum = frustum.transform(&transform);
+        let frustums = split_frustum(&new_frustum, 0, 0, 0);
+        assert_eq!(frustums.len(), 1);
+        assert!(
+            frustums[0] == new_frustum,
+            "{:?} == {:?}",
+            frustums[0],
+            new_frustum
+        );
+    }
+
+    #[test]
+    fn subdivide_two_points_test() {
+        let points =
+            subdivide_two_points(9, &glam::vec3(0.0, 0.0, 0.0), &glam::vec3(10.0, 0.0, 0.0));
+        assert_eq!(points.len(), 11);
+        assert!(points[0].abs_diff_eq(glam::vec3(0.0, 0.0, 0.0), 0.001));
+        assert!(points[9].abs_diff_eq(glam::vec3(9.0, 0.0, 0.0), 0.001));
+        assert!(points[10].abs_diff_eq(glam::vec3(10.0, 0.0, 0.0), 0.001));
+    }
+
+    #[test]
+    fn subdivide_four_points_test() {
+        let points = subdivide_four_points(
+            9,
+            9,
+            &glam::vec3(10.0, 0.0, 0.0),
+            &glam::vec3(10.0, 0.0, -10.0),
+            &glam::vec3(0.0, 0.0, -10.0),
+            &glam::vec3(0.0, 0.0, 0.0),
+        );
+        assert_eq!(points.len(), 100);
+        assert!(points[0].0.abs_diff_eq(glam::vec3(1.0, 0.0, 0.0), 0.001));
+        assert!(points[0].1.abs_diff_eq(glam::vec3(1.0, 0.0, -1.0), 0.001));
+        assert!(points[0].2.abs_diff_eq(glam::vec3(0.0, 0.0, -1.0), 0.001));
+        assert!(points[0].3.abs_diff_eq(glam::vec3(0.0, 0.0, 0.0), 0.001));
     }
 }

@@ -1,6 +1,19 @@
-use crate::scene_node::{EComponentType, SceneNode};
+use crate::{
+    drawable::{CustomDrawObject, EDrawObjectType},
+    engine::Engine,
+    player_viewport::PlayerViewport,
+    scene_node::{EComponentType, SceneNode},
+};
+use rs_core_minimal::misc::point_light_radius;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
+use rs_render::{
+    command::{DrawObject, EBindingResource},
+    constants,
+    renderer::{EBuiltinPipelineType, EPipelineType},
+    vertex_data_type::mesh_vertex::MeshVertex3,
+};
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct PointLight {
@@ -29,6 +42,10 @@ impl Default for PointLight {
 pub struct PointLightComponentRuntime {
     pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
+    draw_object: EDrawObjectType,
+    constants_handle: crate::handle::BufferHandle,
+    constants: constants::Constants,
+    pub is_show_preview: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -64,6 +81,83 @@ impl PointLightComponent {
         };
         let scene_node = SingleThreadMut::new(scene_node);
         scene_node
+    }
+
+    fn make_draw_object(
+        engine: &mut Engine,
+        player_viewport: &mut PlayerViewport,
+        debug_group_label: String,
+    ) -> (DrawObject, crate::handle::BufferHandle) {
+        let sphere_data = rs_core_minimal::primitive_data::PrimitiveData::sphere(
+            1.0,
+            NonZeroUsize::new(16).unwrap(),
+            NonZeroUsize::new(16).unwrap(),
+            false,
+        );
+
+        let vertexes: Vec<MeshVertex3> = sphere_data
+            .into_iter()
+            .map(|x| MeshVertex3 {
+                position: *x.1,
+                vertex_color: rs_core_minimal::color::RED,
+            })
+            .collect();
+
+        let vertex_count = vertexes.len();
+        let vertex_buffer_handle =
+            engine.create_vertex_buffer(&vertexes, Some(format!("rs.VertexBuffer")));
+        let constants_handle = engine.create_constants_buffer(
+            &vec![constants::Constants::default()],
+            Some(format!("rs.Constants")),
+        );
+        let mut draw_object = DrawObject::new(
+            0,
+            vec![*vertex_buffer_handle],
+            vertex_count as u32,
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive(Some(
+                wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Line,
+                    ..Default::default()
+                },
+            ))),
+            None,
+            None,
+            vec![
+                vec![EBindingResource::Constants(
+                    *player_viewport.global_constants_handle,
+                )],
+                vec![EBindingResource::Constants(*constants_handle)],
+            ],
+        );
+        draw_object.debug_group_label = Some(debug_group_label);
+        (draw_object, constants_handle)
+    }
+
+    pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
+        let Some(run_time) = &self.run_time else {
+            return vec![];
+        };
+        if !run_time.is_show_preview {
+            return vec![];
+        }
+        vec![&run_time.draw_object]
+    }
+
+    pub fn get_radius(&self) -> f32 {
+        point_light_radius(
+            self.point_light.quadratic,
+            self.point_light.linear,
+            self.point_light.constant,
+            0.0001,
+        )
+    }
+
+    pub fn set_is_show_preview(&mut self, is_show_preview: bool) {
+        if let Some(run_time) = &mut self.run_time {
+            run_time.is_show_preview = is_show_preview;
+        }
     }
 }
 
@@ -125,12 +219,23 @@ impl super::component::Component for PointLightComponent {
         files: &[crate::content::content_file_type::EContentFileType],
         player_viewport: &mut crate::player_viewport::PlayerViewport,
     ) {
-        let _ = player_viewport;
         let _ = files;
-        let _ = engine;
+        let (draw_object, constants_handle) = Self::make_draw_object(
+            engine,
+            player_viewport,
+            format!("{} point light", &self.name),
+        );
+        let render_target_type = *player_viewport.get_render_target_type();
         self.run_time = Some(PointLightComponentRuntime {
             parent_final_transformation: glam::Mat4::IDENTITY,
             final_transformation: glam::Mat4::IDENTITY,
+            draw_object: EDrawObjectType::Custom(CustomDrawObject {
+                draw_object,
+                render_target_type,
+            }),
+            constants_handle,
+            constants: constants::Constants::default(),
+            is_show_preview: true,
         })
     }
 
@@ -154,5 +259,21 @@ impl super::component::Component for PointLightComponent {
         let _ = rigid_body_set;
         let _ = engine;
         let _ = time;
+        let radius = self.get_radius();
+        let Some(run_time) = &mut self.run_time else {
+            return;
+        };
+        let final_transformation = run_time.final_transformation;
+        let (_, rotation, translation) = final_transformation.to_scale_rotation_translation();
+        let final_transformation = glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::splat(radius),
+            rotation,
+            translation,
+        );
+        run_time.constants.model = final_transformation;
+        engine.update_buffer(
+            run_time.constants_handle.clone(),
+            rs_foundation::cast_any_as_u8_slice(&run_time.constants),
+        );
     }
 }

@@ -98,6 +98,8 @@ pub struct PBRBindingResources {
     pub(crate) virtual_texture_constants_resource: EBindingResource,
     pub(crate) point_lights_constants_resource: EBindingResource,
     pub(crate) spot_lights_constants_resource: EBindingResource,
+    pub(crate) cluster_light: Option<EBindingResource>,
+    pub(crate) cluster_light_index: Option<EBindingResource>,
     pub(crate) material_parameters_collection_resources: HashMap<GroupBinding, EBindingResource>,
 }
 

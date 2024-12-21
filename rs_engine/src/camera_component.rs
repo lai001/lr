@@ -8,7 +8,7 @@ use crate::{
     player_viewport::PlayerViewport,
 };
 use rapier3d::prelude::{ColliderSet, RigidBodySet};
-use rs_core_minimal::{frustum::Frustum, misc::frustum_from_perspective};
+use rs_core_minimal::{frustum::Frustum, misc::split_frustum};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_render::{
     command::{DrawObject, EBindingResource, TextureDescriptorCreateInfo},
@@ -19,13 +19,18 @@ use rs_render::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
+struct DrawObjectBundle {
+    draw_object: EDrawObjectType,
+    constants_handle: crate::handle::BufferHandle,
+    constants: constants::Constants,
+}
+
+#[derive(Clone)]
 pub struct CameraComponentRuntime {
     pub player_viewport: SingleThreadMutType<PlayerViewport>,
     pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
-    draw_object: EDrawObjectType,
-    constants_handle: crate::handle::BufferHandle,
-    constants: constants::Constants,
+    bundles: Vec<DrawObjectBundle>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -146,104 +151,114 @@ impl CameraComponent {
             false,
         );
 
-        let z_near = player_viewport.camera.get_z_near();
-        let z_far = player_viewport.camera.get_z_far();
-        let frustum = match player_viewport.camera.get_camera_type() {
-            crate::camera::ECameraType::Perspective(perspective_properties) => {
-                let frustum = frustum_from_perspective(
-                    perspective_properties.fov_y_radians,
-                    perspective_properties.aspect_ratio,
-                    z_near,
-                    z_far,
-                );
-                frustum
-            }
-            crate::camera::ECameraType::Orthographic(_) => unimplemented!(),
-        };
-
+        let frustum = player_viewport.camera.get_frustum_no_apply_tramsformation();
+        const SPLIT_NUM: usize = 0;
+        let frustums = split_frustum(&frustum, SPLIT_NUM, SPLIT_NUM, SPLIT_NUM);
         let (draw_object, constants_handle) = Self::make_draw_object(
             engine,
-            &frustum,
-            level_player_viewport,
+            &frustums,
+            &level_player_viewport,
             format!("{} camera frustum", &self.name),
         );
-
+        let mut bundles = Vec::with_capacity(1);
         let render_target_type = *level_player_viewport.get_render_target_type();
-        self.run_time = Some(CameraComponentRuntime {
-            final_transformation: glam::Mat4::IDENTITY,
-            parent_final_transformation: glam::Mat4::IDENTITY,
-            player_viewport: SingleThreadMut::new(player_viewport),
+        let bundle = DrawObjectBundle {
             draw_object: EDrawObjectType::Custom(CustomDrawObject {
                 draw_object,
                 render_target_type,
             }),
             constants_handle,
             constants: constants::Constants::default(),
+        };
+
+        bundles.push(bundle);
+
+        self.run_time = Some(CameraComponentRuntime {
+            final_transformation: glam::Mat4::IDENTITY,
+            parent_final_transformation: glam::Mat4::IDENTITY,
+            player_viewport: SingleThreadMut::new(player_viewport),
+            bundles,
         })
     }
 
     fn make_draw_object(
         engine: &mut Engine,
-        frustum: &Frustum,
-        player_viewport: &mut PlayerViewport,
+        frustums: &Vec<Frustum>,
+        player_viewport: &PlayerViewport,
         debug_group_label: String,
     ) -> (DrawObject, crate::handle::BufferHandle) {
-        let lines = frustum.make_lines();
-        let mut v1 = lines[0..4]
-            .iter()
-            .flat_map(|x| {
-                vec![
-                    MeshVertex3 {
-                        position: x.p_0,
-                        vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
-                    },
-                    MeshVertex3 {
-                        position: x.p_1,
-                        vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
-                    },
-                ]
-            })
-            .collect::<Vec<MeshVertex3>>();
-        let mut v2 = lines[4..8]
-            .iter()
-            .flat_map(|x| {
-                vec![
-                    MeshVertex3 {
-                        position: x.p_0,
-                        vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
-                    },
-                    MeshVertex3 {
-                        position: x.p_1,
-                        vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
-                    },
-                ]
-            })
-            .collect::<Vec<MeshVertex3>>();
+        let vertices = Self::make_vertices(frustums);
+        Self::make_draw_object_from_vertices(vertices, engine, player_viewport, debug_group_label)
+    }
 
-        let mut v3 = lines[8..]
-            .iter()
-            .flat_map(|x| {
-                vec![
-                    MeshVertex3 {
-                        position: x.p_0,
-                        vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
-                    },
-                    MeshVertex3 {
-                        position: x.p_1,
-                        vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
-                    },
-                ]
-            })
-            .collect::<Vec<MeshVertex3>>();
+    fn make_vertices(frustums: &Vec<Frustum>) -> Vec<MeshVertex3> {
+        let mut vertices: Vec<MeshVertex3> = Vec::with_capacity(frustums.len() * 12 * 2);
 
-        let mut vertex: Vec<MeshVertex3> = vec![];
-        vertex.append(&mut v1);
-        vertex.append(&mut v2);
-        vertex.append(&mut v3);
+        for frustum in frustums {
+            let lines = frustum.make_lines();
+            let mut v1 = lines[0..4]
+                .iter()
+                .flat_map(|x| {
+                    vec![
+                        MeshVertex3 {
+                            position: x.p_0,
+                            vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
+                        },
+                        MeshVertex3 {
+                            position: x.p_1,
+                            vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
+                        },
+                    ]
+                })
+                .collect::<Vec<MeshVertex3>>();
+            let mut v2 = lines[4..8]
+                .iter()
+                .flat_map(|x| {
+                    vec![
+                        MeshVertex3 {
+                            position: x.p_0,
+                            vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
+                        },
+                        MeshVertex3 {
+                            position: x.p_1,
+                            vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
+                        },
+                    ]
+                })
+                .collect::<Vec<MeshVertex3>>();
 
-        let vertex_count = vertex.len();
+            let mut v3 = lines[8..]
+                .iter()
+                .flat_map(|x| {
+                    vec![
+                        MeshVertex3 {
+                            position: x.p_0,
+                            vertex_color: glam::vec4(0.0, 1.0, 0.0, 1.0),
+                        },
+                        MeshVertex3 {
+                            position: x.p_1,
+                            vertex_color: glam::vec4(1.0, 0.0, 0.0, 1.0),
+                        },
+                    ]
+                })
+                .collect::<Vec<MeshVertex3>>();
+            vertices.append(&mut v1);
+            vertices.append(&mut v2);
+            vertices.append(&mut v3);
+        }
+
+        vertices
+    }
+
+    fn make_draw_object_from_vertices(
+        vertices: Vec<MeshVertex3>,
+        engine: &mut Engine,
+        player_viewport: &PlayerViewport,
+        debug_group_label: String,
+    ) -> (DrawObject, crate::handle::BufferHandle) {
+        let vertex_count = vertices.len();
         let vertex_buffer_handle =
-            engine.create_vertex_buffer(&vertex, Some(format!("rs.VertexBuffer")));
+            engine.create_vertex_buffer(&vertices, Some(format!("rs.VertexBuffer")));
         let constants_handle = engine.create_constants_buffer(
             &vec![constants::Constants::default()],
             Some(format!("rs.Constants")),
@@ -252,7 +267,7 @@ impl CameraComponent {
             0,
             vec![*vertex_buffer_handle],
             vertex_count as u32,
-            EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive(None)),
             None,
             None,
             vec![
@@ -287,11 +302,13 @@ impl CameraComponent {
         camera.set_forward_vector(
             final_transformation.transform_vector3(Camera::default_forward_vector()),
         );
-        run_time.constants.model = final_transformation;
-        engine.update_buffer(
-            run_time.constants_handle.clone(),
-            rs_foundation::cast_any_as_u8_slice(&run_time.constants),
-        );
+        for bundle in run_time.bundles.iter_mut() {
+            bundle.constants.model = final_transformation;
+            engine.update_buffer(
+                bundle.constants_handle.clone(),
+                rs_foundation::cast_any_as_u8_slice(&bundle.constants),
+            );
+        }
     }
 
     pub fn get_player_viewport(&self) -> Option<SingleThreadMutType<PlayerViewport>> {
@@ -308,10 +325,10 @@ impl CameraComponent {
         if !self.is_show_preview {
             return vec![];
         }
-        self.run_time
-            .as_ref()
-            .map(|x| vec![&x.draw_object])
-            .unwrap_or(vec![])
+        let Some(run_time) = &self.run_time else {
+            return vec![];
+        };
+        run_time.bundles.iter().map(|x| &x.draw_object).collect()
     }
 
     pub fn on_post_update_transformation(
@@ -328,5 +345,9 @@ impl CameraComponent {
     ) {
         let _ = collider_set;
         let _ = rigid_body_set;
+    }
+
+    pub fn set_is_show_preview(&mut self, is_show_preview: bool) {
+        self.is_show_preview = is_show_preview;
     }
 }

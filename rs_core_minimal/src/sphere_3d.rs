@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub struct Sphere3D {
     pub center: glam::Vec3,
     pub radius: f32,

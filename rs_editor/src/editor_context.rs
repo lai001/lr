@@ -991,6 +991,16 @@ impl EditorContext {
             false,
         ) {
             self.player_viewport.toggle_grid_visible();
+            let is_show_debug = !self.data_source.is_show_debug;
+            if let Some(level) = &mut self.data_source.level {
+                let mut level = level.borrow_mut();
+                if is_show_debug {
+                    level.set_debug_show_flag(rs_engine::debug_show_flag::DebugShowFlag::all());
+                } else {
+                    level.set_debug_show_flag(rs_engine::debug_show_flag::DebugShowFlag::empty());
+                }
+            }
+            self.data_source.is_show_debug = is_show_debug;
         }
 
         if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::Escape], true) {

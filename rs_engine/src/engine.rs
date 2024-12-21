@@ -1108,6 +1108,7 @@ impl Engine {
             virtual_texture_constants_buffer_handle.clone(),
             point_lights_constants_resource,
             spot_lights_constants_resource,
+            None,
         );
         let object = MaterialDrawObject {
             id,
@@ -1139,6 +1140,7 @@ impl Engine {
         virtual_texture_constants_buffer_handle: crate::handle::BufferHandle,
         point_lights_constants_resource: crate::handle::BufferHandle,
         spot_lights_constants_resource: crate::handle::BufferHandle,
+        cluster_light: Option<&crate::cluster_light::ClusterLight>,
     ) -> PBRBindingResources {
         let pbr_binding_resources = PBRBindingResources {
             global_constants_resource: EBindingResource::Constants(*global_constants_handle),
@@ -1180,6 +1182,20 @@ impl Engine {
                 *spot_lights_constants_resource,
             ),
             material_parameters_collection_resources: HashMap::new(),
+            cluster_light: if let Some(cluster_light) = cluster_light {
+                Some(EBindingResource::Constants(
+                    *cluster_light.cluster_light_handle,
+                ))
+            } else {
+                None
+            },
+            cluster_light_index: if let Some(cluster_light) = cluster_light {
+                Some(EBindingResource::Constants(
+                    *cluster_light.cluster_light_index_handle,
+                ))
+            } else {
+                None
+            },
         };
         pbr_binding_resources
     }
@@ -1327,6 +1343,7 @@ impl Engine {
             virtual_texture_constants_buffer_handle.clone(),
             point_lights_constants_resource,
             spot_lights_constants_resource,
+            None,
         );
         let object = StaticMeshMaterialDrawObject {
             id,
@@ -1497,14 +1514,17 @@ impl Engine {
 
     pub fn create_buffer(
         &mut self,
-        buffer: &[u8],
+        buffer: Vec<u8>,
         usage: wgpu::BufferUsages,
-        name: Option<&str>,
-    ) -> crate::handle::BufferHandle {
+        name: Option<String>,
+    ) -> crate::error::Result<crate::handle::BufferHandle> {
+        if buffer.is_empty() {
+            return Err(crate::error::Error::BufferTooSmall);
+        }
         let handle = self.resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
-            label: Some(format!("{}", name.clone().unwrap_or(""))),
-            contents: buffer.to_vec(),
+            label: Some(format!("{}", name.unwrap_or_default())),
+            contents: buffer,
             usage,
         };
         let create_buffer = CreateBuffer {
@@ -1513,7 +1533,7 @@ impl Engine {
         };
         let message = RenderCommand::CreateBuffer(create_buffer);
         self.render_thread_mode.send_command(message);
-        handle.clone()
+        Ok(handle)
     }
 
     pub fn update_buffer(&mut self, handle: crate::handle::BufferHandle, buffer: &[u8]) {

@@ -45,7 +45,7 @@ pub enum EBuiltinPipelineType {
     ShadowDepthSkinMesh,
     ShadowDepthStaticMesh,
     Particle,
-    Primitive,
+    Primitive(Option<wgpu::PrimitiveState>),
 }
 
 #[derive(Clone)]
@@ -1574,7 +1574,7 @@ impl Renderer {
                         group_binding_resource,
                     );
                 }
-                EBuiltinPipelineType::Primitive => {
+                EBuiltinPipelineType::Primitive(_) => {
                     self.primitive_render_pipeline.draw(
                         device,
                         queue,
@@ -1831,8 +1831,13 @@ impl Renderer {
                             EBuiltinPipelineType::Particle => {
                                 Some(self.particle_pipeline.base_render_pipeline.as_ref())
                             }
-                            EBuiltinPipelineType::Primitive => {
-                                Some(self.primitive_render_pipeline.base_render_pipeline.as_ref())
+                            EBuiltinPipelineType::Primitive(primitive) => {
+                                let base_render_pipeline = self
+                                    .primitive_render_pipeline
+                                    .get_base_render_pipeline(primitive.as_ref());
+                                base_render_pipeline
+                                // Some(base_render_pipeline)
+                                // Some(self.primitive_render_pipeline.base_render_pipeline.as_ref())
                             }
                         },
                         EPipelineType::Material(material_pipeline) => {
@@ -1909,8 +1914,12 @@ impl Renderer {
                         EBuiltinPipelineType::Particle => {
                             Some(self.particle_pipeline.base_render_pipeline.as_ref())
                         }
-                        EBuiltinPipelineType::Primitive => {
-                            Some(self.primitive_render_pipeline.base_render_pipeline.as_ref())
+                        EBuiltinPipelineType::Primitive(primitive) => {
+                            let base_render_pipeline = self
+                                .primitive_render_pipeline
+                                .get_base_render_pipeline(primitive.as_ref());
+                            base_render_pipeline
+                            // Some(self.primitive_render_pipeline.base_render_pipeline.as_ref())
                         }
                     },
                     EPipelineType::Material(material_pipeline) => {
@@ -1943,7 +1952,7 @@ impl Renderer {
                 let bind_groups = self
                     .bind_groups_collection
                     .get(&all_bind_groups[i])
-                    .expect("Should not be nll.");
+                    .expect("Too many draw objects");
 
                 pipeline.draw_with_pass(
                     &mut render_pass,

@@ -27,6 +27,7 @@ use rs_render::virtual_texture_source::TVirtualTextureSource;
 use rs_render::{antialias_type::EAntialiasType, scene_viewport::SceneViewport};
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
+use std::ops::Deref;
 
 bitflags::bitflags! {
     #[derive(PartialEq, Debug, Copy, Clone, Hash, Eq)]
@@ -66,6 +67,7 @@ pub struct PlayerViewport {
     _camera_motion_speed: f32,
     pub is_use_default_input_process: bool,
     pub is_grid_visible: bool,
+    cluster_light: Option<crate::cluster_light::ClusterLight>,
 }
 
 impl PlayerViewport {
@@ -194,6 +196,7 @@ impl PlayerViewport {
             point_lights_constants_handle,
             spot_lights_constants,
             spot_lights_constants_handle,
+            cluster_light: None,
         }
     }
 
@@ -398,6 +401,8 @@ impl PlayerViewport {
         self.global_constants.view_projection =
             self.global_constants.projection * self.global_constants.view;
         self.global_constants.view_position = world_location;
+        self.global_constants.camera_frustum =
+            self.camera.get_render_frustum_apply_tramsformation();
 
         let command = RenderCommand::UpdateBuffer(UpdateBuffer {
             handle: *self.global_constants_handle,
@@ -631,6 +636,17 @@ impl PlayerViewport {
                         EBindingResource::Constants(*buffer_handle),
                     );
                 }
+
+                if let Some(cluster_light) = &self.cluster_light {
+                    object.pbr_binding_resources.point_lights_constants_resource =
+                        EBindingResource::Constants(*cluster_light.point_lights_handle);
+                    object.pbr_binding_resources.cluster_light = Some(EBindingResource::Constants(
+                        *cluster_light.cluster_light_handle,
+                    ));
+                    object.pbr_binding_resources.cluster_light_index = Some(
+                        EBindingResource::Constants(*cluster_light.cluster_light_index_handle),
+                    );
+                }
             }
             EDrawObjectType::StaticMeshMaterial(object) => {
                 let settings = engine.get_settings();
@@ -758,6 +774,17 @@ impl PlayerViewport {
                         EBindingResource::Constants(*buffer_handle),
                     );
                 }
+
+                if let Some(cluster_light) = &self.cluster_light {
+                    object.pbr_binding_resources.point_lights_constants_resource =
+                        EBindingResource::Constants(*cluster_light.point_lights_handle);
+                    object.pbr_binding_resources.cluster_light = Some(EBindingResource::Constants(
+                        *cluster_light.cluster_light_handle,
+                    ));
+                    object.pbr_binding_resources.cluster_light_index = Some(
+                        EBindingResource::Constants(*cluster_light.cluster_light_index_handle),
+                    );
+                }
             }
             EDrawObjectType::Custom(_) => {}
         }
@@ -766,7 +793,7 @@ impl PlayerViewport {
     fn load_group_binding_to_resource(
         pbrbinding_resources: PBRBindingResources,
         material_info: &rs_artifact::material::MaterialInfo,
-    ) -> Vec<(GroupBinding, EBindingResource)> {
+    ) -> Option<Vec<(GroupBinding, EBindingResource)>> {
         let mut group_binding_to_resource: Vec<(GroupBinding, EBindingResource)> = vec![];
         let PBRBindingResources {
             global_constants_resource,
@@ -782,6 +809,8 @@ impl PlayerViewport {
             point_lights_constants_resource,
             spot_lights_constants_resource,
             material_parameters_collection_resources,
+            cluster_light,
+            cluster_light_index,
         } = pbrbinding_resources;
         if let Some(group_binding) = &material_info.global_constants_binding {
             group_binding_to_resource.push((*group_binding, global_constants_resource.clone()));
@@ -825,7 +854,15 @@ impl PlayerViewport {
             group_binding_to_resource
                 .push((group_binding, material_parameters_collection_resource));
         }
-        group_binding_to_resource
+
+        group_binding_to_resource.push((*&material_info.cluster_light_binding?, cluster_light?));
+
+        group_binding_to_resource.push((
+            *&material_info.cluster_light_index_binding?,
+            cluster_light_index?,
+        ));
+
+        Some(group_binding_to_resource)
     }
 
     fn make_binding_resources(
@@ -911,7 +948,10 @@ impl PlayerViewport {
                 let mut group_binding_to_resource = Self::load_group_binding_to_resource(
                     skin_objcet.pbr_binding_resources.clone(),
                     material_info,
-                );
+                )
+                .ok_or(crate::error::Error::NullReference(Some(
+                    "Fail to load group binding to resource".to_string(),
+                )))?;
 
                 if let Some(group_binding) = &material_info.skin_constants_binding {
                     group_binding_to_resource
@@ -982,7 +1022,11 @@ impl PlayerViewport {
                 let group_binding_to_resource = Self::load_group_binding_to_resource(
                     static_mesh_draw_objcet.pbr_binding_resources.clone(),
                     material_info,
-                );
+                )
+                .ok_or(crate::error::Error::NullReference(Some(
+                    "Fail to load group binding to resource".to_string(),
+                )))?;
+
                 let mut binding_resources = Self::make_binding_resources(group_binding_to_resource);
                 binding_resources[0]
                     .append(&mut static_mesh_draw_objcet.user_textures_resources.clone());
@@ -1051,7 +1095,7 @@ impl PlayerViewport {
                 match Self::to_render_draw_object(x, self.shadow_depth_texture_handle.is_some()) {
                     Ok(ret) => Ok(ret),
                     Err(err) => {
-                        log::warn!("{}", err);
+                        // log::warn!("{}", err);
                         Err(err)
                     }
                 }
@@ -1107,7 +1151,7 @@ impl PlayerViewport {
             0,
             vec![*vertex_handle],
             2,
-            EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive(None)),
             None,
             None,
             vec![
@@ -1147,7 +1191,7 @@ impl PlayerViewport {
             0,
             vec![*vertex_handle],
             vertex_count as u32,
-            EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive(None)),
             None,
             None,
             vec![
@@ -1293,10 +1337,15 @@ impl PlayerViewport {
 
     pub fn update_point_lights(
         &mut self,
+        engine: &mut Engine,
         lights: Vec<
             SingleThreadMutType<crate::components::point_light_component::PointLightComponent>,
         >,
     ) {
+        rs_core_minimal::vec_ref!(lights_ref, lights);
+        self.cluster_light =
+            crate::cluster_light::ClusterLight::new(engine, &self.camera, lights_ref).ok();
+
         self.point_lights_constants.available = lights.len() as u32;
         let num = lights.len().min(self.point_lights_constants.lights.len());
         for i in 0..num {

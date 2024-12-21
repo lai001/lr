@@ -26,6 +26,27 @@ impl EDebugShadingType {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
+pub struct CameraFrustum {
+    pub near_0: glam::Vec3,
+    _pad_0: i32,
+    pub near_1: glam::Vec3,
+    _pad_1: i32,
+    pub near_2: glam::Vec3,
+    _pad_2: i32,
+    pub near_3: glam::Vec3,
+    _pad_3: i32,
+    pub far_0: glam::Vec3,
+    _pad_4: i32,
+    pub far_1: glam::Vec3,
+    _pad_5: i32,
+    pub far_2: glam::Vec3,
+    _pad_6: i32,
+    pub far_3: glam::Vec3,
+    _pad_7: i32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Constants {
     pub view: glam::Mat4,
     pub projection: glam::Mat4,
@@ -40,6 +61,7 @@ pub struct Constants {
     debug_shading: i32,
     pub time: f32,
     _pad_0: [i32; 2],
+    pub camera_frustum: CameraFrustum,
 }
 
 impl Constants {

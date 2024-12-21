@@ -1,7 +1,5 @@
 use super::{misc::update_window_with_input_mode, ui_window::UIWindow};
-use crate::{
-    editor_context::EWindowType, ui::misc::random_color3, windows_manager::WindowsManager,
-};
+use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
 use rs_core_minimal::primitive_data::PrimitiveData;
@@ -262,7 +260,7 @@ impl MultipleDrawUiWindow {
 
         let vertices = (0..REPEAT_SIZE)
             .flat_map(|id| {
-                let vertex_color = random_color3();
+                let vertex_color = rs_core_minimal::color::random_color3();
                 quad.into_iter()
                     .map(|(_, vertex_position, ..)| MeshVertex4 {
                         position: *vertex_position,

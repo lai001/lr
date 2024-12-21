@@ -3,10 +3,12 @@ pub mod camera;
 pub mod camera_component;
 #[cfg(not(target_os = "android"))]
 pub mod camera_input_event_handle;
+pub mod cluster_light;
 pub mod collision_componenet;
 pub mod components;
 pub mod console_cmd;
 pub mod content;
+pub mod debug_show_flag;
 pub mod default_textures;
 pub mod directional_light;
 pub mod drawable;

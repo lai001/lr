@@ -131,7 +131,7 @@ impl CollisionComponent {
                     0,
                     vec![*vertex_buffer_handle],
                     vertex_count as u32,
-                    EPipelineType::Builtin(EBuiltinPipelineType::Primitive),
+                    EPipelineType::Builtin(EBuiltinPipelineType::Primitive(None)),
                     Some(*index_buffer_handle),
                     Some(cube.indices.len() as u32),
                     vec![

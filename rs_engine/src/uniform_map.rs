@@ -238,25 +238,26 @@ impl UniformMap {
 #[cfg(test)]
 mod test {
     use super::{StructField, UniformMap};
+    use crate::uniform_map::BaseDataValueType;
 
     #[test]
     fn test() {
         let fields = vec![
             StructField {
                 name: String::from("v1"),
-                data_type: super::BaseDataValueType::F32,
+                data_type: BaseDataValueType::F32(0.0),
             },
             StructField {
                 name: String::from("v2"),
-                data_type: super::BaseDataValueType::F32,
+                data_type: BaseDataValueType::F32(0.0),
             },
             StructField {
                 name: String::from("v3"),
-                data_type: super::BaseDataValueType::VectorF32(4),
+                data_type: BaseDataValueType::Vec4(glam::Vec4::ONE),
             },
             StructField {
                 name: String::from("v4"),
-                data_type: super::BaseDataValueType::F32,
+                data_type: BaseDataValueType::F32(0.0),
             },
         ];
         let mut uniform_map = UniformMap::new(&fields);

@@ -13,6 +13,7 @@ pub enum Error {
     AudioError(rs_audio::error::Error),
     TryFromSliceError(std::array::TryFromSliceError),
     Other(Option<String>),
+    BufferTooSmall,
 }
 
 impl std::fmt::Display for Error {

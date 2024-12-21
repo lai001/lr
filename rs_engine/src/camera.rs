@@ -1,4 +1,5 @@
 use crate::{misc::FORWARD_VECTOR, rotator::Rotator};
+use rs_core_minimal::frustum::Frustum;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PerspectiveProperties {
@@ -240,5 +241,46 @@ impl Camera {
 
     pub fn get_world_transformation(&self) -> glam::Mat4 {
         glam::Mat4::from_translation(self.world_location) * self.rotator.to_matrix()
+    }
+
+    pub fn get_frustum_no_apply_tramsformation(&self) -> Frustum {
+        match self.camera_type {
+            ECameraType::Perspective(perspective_properties) => {
+                let frustum = rs_core_minimal::misc::frustum_from_perspective(
+                    perspective_properties.fov_y_radians,
+                    perspective_properties.aspect_ratio,
+                    self.z_near,
+                    self.z_far,
+                );
+                frustum
+            }
+            ECameraType::Orthographic(_) => unimplemented!(),
+        }
+    }
+
+    pub fn get_frustum_apply_custom_tramsformation(&self, transform: &glam::Mat4) -> Frustum {
+        let frustum = self.get_frustum_no_apply_tramsformation();
+        frustum.transform(transform)
+    }
+
+    pub fn get_frustum_apply_tramsformation(&self) -> Frustum {
+        let transform: &glam::Mat4 = &self.get_world_transformation();
+        self.get_frustum_apply_custom_tramsformation(transform)
+    }
+
+    pub fn get_render_frustum_apply_tramsformation(
+        &self,
+    ) -> rs_render::global_uniform::CameraFrustum {
+        let frustum = self.get_frustum_apply_tramsformation();
+        let mut render_frustum = rs_render::global_uniform::CameraFrustum::default();
+        render_frustum.near_0 = frustum.near_0;
+        render_frustum.near_1 = frustum.near_1;
+        render_frustum.near_2 = frustum.near_2;
+        render_frustum.near_3 = frustum.near_3;
+        render_frustum.far_0 = frustum.far_0;
+        render_frustum.far_1 = frustum.far_1;
+        render_frustum.far_2 = frustum.far_2;
+        render_frustum.far_3 = frustum.far_3;
+        render_frustum
     }
 }
