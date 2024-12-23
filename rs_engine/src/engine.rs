@@ -110,12 +110,13 @@ impl Engine {
             #[cfg(feature = "editor")]
             {
                 settings = Self::read_or_create_editor_settings().unwrap_or(Settings::default());
+                log::trace!("Use editor settings: {:?}", settings);
             }
             #[cfg(not(feature = "editor"))]
             {
                 settings = Settings::default();
+                log::trace!("Use default settings: {:?}", settings);
             }
-            log::trace!("Use default settings: {:?}", settings);
         }
         logger.config_log_to_file(settings.editor_settings.is_enable_log_to_file);
 
@@ -679,6 +680,7 @@ impl Engine {
                     .shadow_depth_texture_handle
                     .as_deref()
                     .copied(),
+                scene_light: player_viewport.get_scene_light().cloned(),
             }));
 
         let pending_destroy_textures = ResourceManager::default().get_pending_destroy_textures();

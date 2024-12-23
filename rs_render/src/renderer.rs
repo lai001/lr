@@ -2,6 +2,7 @@ use crate::acceleration_bake::AccelerationBaker;
 use crate::antialias_type::EAntialiasType;
 use crate::base_compute_pipeline_pool::BaseComputePipelinePool;
 use crate::base_render_pipeline_pool::BaseRenderPipelinePool;
+use crate::compute_pipeline::light_culling::LightCullingComputePipeline;
 use crate::cube_map::CubeMap;
 use crate::depth_texture::DepthTexture;
 use crate::error::Result;
@@ -80,6 +81,7 @@ pub struct Renderer {
     mesh_view_multiple_draw_pipeline: MeshViewMultipleDrawPipeline,
     particle_pipeline: ParticlePipeline,
     primitive_render_pipeline: PrimitiveRenderPipeline,
+    light_culling_compute_pipeline: LightCullingComputePipeline,
 
     depth_textures: HashMap<isize, DepthTexture>,
     // default_textures: DefaultTextures,
@@ -153,7 +155,9 @@ impl Renderer {
                         }
                         _ => {}
                     },
-                    _ => {}
+                    _ => {
+                        log::warn!("{shader_name}\n{}", err);
+                    }
                 },
             }
         }
@@ -232,6 +236,9 @@ impl Renderer {
             &mut base_render_pipeline_pool,
         )?;
 
+        let light_culling_compute_pipeline =
+            LightCullingComputePipeline::new(wgpu_context.get_device(), &shader_library)?;
+
         let is_enable_multiple_thread = settings.is_enable_multithread_rendering;
         let renderer = Renderer {
             wgpu_context,
@@ -271,6 +278,7 @@ impl Renderer {
             texture_views: HashMap::new(),
             surface_textures: HashMap::new(),
             bind_groups_collection: moka::sync::Cache::new(1000),
+            light_culling_compute_pipeline,
         };
         Ok(renderer)
     }
@@ -569,6 +577,9 @@ impl Renderer {
         //     self.clear_buffer(&output_view, &depth_texture_view, None);
         // }
         self.bind_groups_collection.run_pending_tasks();
+        if let Some(scene_light) = &present_info.scene_light {
+            self.light_culling_pass(scene_light);
+        }
         self.vt_pass(&present_info);
         self.shadow_for_draw_objects(
             present_info.draw_objects.as_slice(),
@@ -2530,5 +2541,61 @@ impl Renderer {
     ) -> Option<&TextureDescriptorCreateInfo> {
         let descriptor = self.texture_descriptors.get(&handle);
         descriptor
+    }
+
+    fn light_culling_pass(&mut self, scene_light: &SceneLight) {
+        if scene_light.point_light_shapes.is_empty() {
+            self.light_culling_no_lights_fallback_pass(scene_light);
+            return;
+        }
+        let device = self.wgpu_context.get_device();
+        let queue = self.wgpu_context.get_queue();
+        let cluster_lights: Vec<u32> = vec![0; 10 * 10 * 10 * scene_light.point_light_shapes.len()];
+        let cluster_light_indices =
+            vec![crate::constants::ClusterLightIndex::default(); 10 * 10 * 10];
+        let execute_result = self.light_culling_compute_pipeline.execute_out(
+            device,
+            queue,
+            &scene_light.point_light_shapes,
+            &scene_light.frustum,
+            &cluster_lights,
+            &cluster_light_indices,
+            glam::uvec3(10, 10, 10),
+        );
+
+        self.buffers.insert(
+            scene_light.cluster_lights_placeholder,
+            Arc::new(execute_result.cluster_lights),
+        );
+        self.buffers.insert(
+            scene_light.cluster_light_indices_placeholder,
+            Arc::new(execute_result.cluster_light_indices),
+        );
+    }
+
+    fn light_culling_no_lights_fallback_pass(&mut self, scene_light: &SceneLight) {
+        let device = self.wgpu_context.get_device();
+        let cluster_lights_placeholder = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (size_of::<u32>() * 1) as u64,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let cluster_light_indices_placeholder = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: size_of::<crate::constants::ClusterLightIndex>() as u64,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        self.buffers.insert(
+            scene_light.cluster_lights_placeholder,
+            Arc::new(cluster_lights_placeholder),
+        );
+        self.buffers.insert(
+            scene_light.cluster_light_indices_placeholder,
+            Arc::new(cluster_light_indices_placeholder),
+        );
     }
 }

@@ -48,6 +48,7 @@ pub struct RenderSettings {
     pub is_enable_multithread_rendering: bool,
     pub is_enable_debugging: bool,
     pub is_enable_dump_material_shader_code: bool,
+    pub is_enable_light_culling_acceleration: bool,
 }
 
 impl RenderSettings {
@@ -95,6 +96,7 @@ impl Default for Settings {
                 is_enable_multithread_rendering: false,
                 is_enable_debugging: true,
                 is_enable_dump_material_shader_code: true,
+                is_enable_light_culling_acceleration: false,
             },
             editor_settings: EditorSettings {
                 is_auto_open_last_project: true,

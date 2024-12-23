@@ -19,7 +19,6 @@ use rs_render::{
     },
     constants::MeshViewConstants,
     renderer::{EBuiltinPipelineType, EPipelineType},
-    scene_viewport::SceneViewport,
     vertex_data_type::mesh_vertex::MeshVertex4,
 };
 use std::collections::HashMap;
@@ -154,15 +153,10 @@ impl UIWindow for MultipleDrawUiWindow {
                 );
                 present_draw_objects.push(self.grid_draw_object.clone());
 
-                engine.send_render_command(RenderCommand::Present(PresentInfo {
-                    render_target_type: rs_render::command::ERenderTargetType::SurfaceTexture(
-                        window_id,
-                    ),
-                    draw_objects: present_draw_objects,
-                    virtual_texture_pass: None,
-                    scene_viewport: SceneViewport::new(),
-                    depth_texture_handle: None,
-                }));
+                engine.send_render_command(RenderCommand::Present(PresentInfo::new(
+                    rs_render::command::ERenderTargetType::SurfaceTexture(window_id),
+                    present_draw_objects,
+                )));
                 self.frame_sync.sync(60.0);
                 engine.window_redraw_requested_end(window_id);
                 window.request_redraw();

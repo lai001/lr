@@ -20,11 +20,8 @@ use rs_engine::{
     resource_manager::ResourceManager,
 };
 use rs_foundation::new::SingleThreadMutType;
-use rs_render::{
-    command::{
-        BufferCreateInfo, CreateBuffer, DrawObject, PresentInfo, RenderCommand, UpdateBuffer,
-    },
-    scene_viewport::SceneViewport,
+use rs_render::command::{
+    BufferCreateInfo, CreateBuffer, DrawObject, PresentInfo, RenderCommand, UpdateBuffer,
 };
 use std::collections::HashMap;
 use winit::{
@@ -273,15 +270,10 @@ impl UIWindow for ParticleSystemUIWindow {
                 draw_objects.append(&mut emiter_draw_objects);
                 draw_objects.push(self.base_ui_window.grid_draw_object.clone());
 
-                engine.send_render_command(RenderCommand::Present(PresentInfo {
-                    render_target_type: rs_render::command::ERenderTargetType::SurfaceTexture(
-                        window_id,
-                    ),
+                engine.send_render_command(RenderCommand::Present(PresentInfo::new(
+                    rs_render::command::ERenderTargetType::SurfaceTexture(window_id),
                     draw_objects,
-                    virtual_texture_pass: None,
-                    scene_viewport: SceneViewport::new(),
-                    depth_texture_handle: None,
-                }));
+                )));
 
                 engine.send_render_command(RenderCommand::UiOutput(gui_render_output));
 

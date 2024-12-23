@@ -8,6 +8,7 @@ pub mod grid;
 pub mod irradiance_cube_map;
 pub mod jfa;
 pub mod jfa_composition;
+pub mod light_culling;
 pub mod mesh_view;
 pub mod mesh_view_multiple_draw;
 pub mod panorama_to_cube;
@@ -43,6 +44,7 @@ use crate::global_shaders::{
     },
 };
 use fxaa::FXAAShader;
+use light_culling::LightCullingShader;
 use particle::ParticleShader;
 use primitive::PrimitiveShader;
 
@@ -70,5 +72,6 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(FXAAShader {}),
         Box::new(ParticleShader {}),
         Box::new(PrimitiveShader {}),
+        Box::new(LightCullingShader {}),
     ]
 }

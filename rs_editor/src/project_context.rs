@@ -636,7 +636,7 @@ impl ProjectContext {
                         let code = std::fs::read_to_string(path.clone());
                         let result = TaskResult {
                             name: name.clone(),
-                            code: code.map_err(|err| anyhow::Error::from(err)),
+                            code: code.map_err(|err| anyhow!("{:?}, {}", path, err)),
                         };
                         let _ = sender.send(result);
                     }

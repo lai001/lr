@@ -186,8 +186,21 @@ impl Default for SpotLights {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ClusterLightIndex {
     pub offset: u32,
     pub count: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct Sphere3D {
+    pub center: glam::Vec3,
+    pub radius: f32,
+}
+
+impl Sphere3D {
+    pub fn new(center: glam::Vec3, radius: f32) -> Sphere3D {
+        Sphere3D { center, radius }
+    }
 }

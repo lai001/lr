@@ -1,4 +1,5 @@
 use crate::frustum::{Frustum, FrustumPlanes};
+use std::sync::Arc;
 
 pub fn calculate_max_mips(length: u32) -> u32 {
     32 - length.leading_zeros()
@@ -160,7 +161,7 @@ pub fn subdivide_two_points(subdivide: usize, p0: &glam::Vec3, p1: &glam::Vec3) 
     points
 }
 
-fn subdivide_four_points(
+pub fn subdivide_four_points(
     subdivide_i: usize,
     subdivide_j: usize,
     p0: &glam::Vec3,
@@ -182,65 +183,165 @@ fn subdivide_four_points(
     plane_points
 }
 
+fn split_frustum_multiple_thread(
+    frustum: &Frustum,
+    subdivide_i: usize,
+    subdivide_j: usize,
+    subdivide_k: usize,
+) -> Vec<Frustum> {
+    let points0 = Arc::new(subdivide_two_points(
+        subdivide_k,
+        &frustum.near_0,
+        &frustum.far_0,
+    ));
+    let points2 = Arc::new(subdivide_two_points(
+        subdivide_k,
+        &frustum.near_2,
+        &frustum.far_2,
+    ));
+    let points3 = Arc::new(subdivide_two_points(
+        subdivide_k,
+        &frustum.near_3,
+        &frustum.far_3,
+    ));
+
+    #[derive(Clone)]
+    struct TaskResult {
+        index: usize,
+        frustum: Frustum,
+    }
+
+    let (sender, receiver) = std::sync::mpsc::channel::<TaskResult>();
+    for k in 0..subdivide_k + 1 {
+        for j in 0..subdivide_j + 1 {
+            for i in 0..subdivide_i + 1 {
+                crate::thread_pool::ThreadPool::global().spawn({
+                    let index =
+                        k * ((subdivide_i + 1) * (subdivide_j + 1)) + j * (subdivide_i + 1) + i;
+                    let sender = sender.clone();
+                    let points0 = points0.clone();
+                    let points2 = points2.clone();
+                    let points3 = points3.clone();
+                    move || {
+                        let step_horizontal_near =
+                            (points0[k] - points3[k]) / (subdivide_i + 1) as f32;
+                        let step_vertical_near =
+                            (points2[k] - points3[k]) / (subdivide_j + 1) as f32;
+
+                        let step_horizontal_far =
+                            (points0[k + 1] - points3[k + 1]) / (subdivide_i + 1) as f32;
+                        let step_vertical_far =
+                            (points2[k + 1] - points3[k + 1]) / (subdivide_j + 1) as f32;
+
+                        let near_3 = points3[k]
+                            + step_horizontal_near * (i as f32)
+                            + step_vertical_near * (j as f32);
+                        let near_0 = near_3 + step_horizontal_near;
+                        let near_2 = near_3 + step_vertical_near;
+                        let near_1 = near_0 + step_vertical_near;
+
+                        let far_3 = points3[k + 1]
+                            + step_horizontal_far * (i as f32)
+                            + step_vertical_far * (j as f32);
+                        let far_0 = far_3 + step_horizontal_far;
+                        let far_2 = far_3 + step_vertical_far;
+                        let far_1 = far_0 + step_vertical_far;
+
+                        let _ = sender.send(TaskResult {
+                            index,
+                            frustum: Frustum {
+                                near_0,
+                                near_1,
+                                near_2,
+                                near_3,
+                                far_0,
+                                far_1,
+                                far_2,
+                                far_3,
+                            },
+                        });
+                    }
+                });
+            }
+        }
+    }
+
+    let mut results: Vec<Frustum> =
+        vec![Frustum::default(); (subdivide_i + 1) * (subdivide_j + 1) * (subdivide_k + 1)];
+
+    let mut done_task: usize = 0;
+
+    while let Ok(task_result) = receiver.recv() {
+        let index = task_result.index;
+        results[index] = task_result.frustum;
+        done_task += 1;
+        if done_task == (subdivide_i + 1) * (subdivide_j + 1) * (subdivide_k + 1) {
+            break;
+        }
+    }
+    results
+}
+
 pub fn split_frustum(
     frustum: &Frustum,
     subdivide_i: usize,
     subdivide_j: usize,
     subdivide_k: usize,
 ) -> Vec<Frustum> {
-    let mut clusters =
-        Vec::with_capacity((subdivide_i + 1) * (subdivide_j + 1) * (subdivide_k + 1));
+    return split_frustum_multiple_thread(frustum, subdivide_i, subdivide_j, subdivide_k);
+    // let mut clusters =
+    //     Vec::with_capacity((subdivide_i + 1) * (subdivide_j + 1) * (subdivide_k + 1));
 
-    let points0 = subdivide_two_points(subdivide_k, &frustum.near_0, &frustum.far_0);
-    let points1 = subdivide_two_points(subdivide_k, &frustum.near_1, &frustum.far_1);
-    let points2 = subdivide_two_points(subdivide_k, &frustum.near_2, &frustum.far_2);
-    let points3 = subdivide_two_points(subdivide_k, &frustum.near_3, &frustum.far_3);
+    // let points0 = subdivide_two_points(subdivide_k, &frustum.near_0, &frustum.far_0);
+    // let points1 = subdivide_two_points(subdivide_k, &frustum.near_1, &frustum.far_1);
+    // let points2 = subdivide_two_points(subdivide_k, &frustum.near_2, &frustum.far_2);
+    // let points3 = subdivide_two_points(subdivide_k, &frustum.near_3, &frustum.far_3);
 
-    let zip = points0
-        .windows(2)
-        .zip(points1.windows(2))
-        .zip(points2.windows(2))
-        .zip(points3.windows(2));
+    // let zip = points0
+    //     .windows(2)
+    //     .zip(points1.windows(2))
+    //     .zip(points2.windows(2))
+    //     .zip(points3.windows(2));
 
-    for item in zip {
-        let points3 = item.1;
-        let points2 = item.0 .1;
-        let points1 = item.0 .0 .1;
-        let points0 = item.0 .0 .0;
-        let near_planes = subdivide_four_points(
-            subdivide_i,
-            subdivide_j,
-            &points0[0],
-            &points1[0],
-            &points2[0],
-            &points3[0],
-        );
+    // for item in zip {
+    //     let points3 = item.1;
+    //     let points2 = item.0 .1;
+    //     let points1 = item.0 .0 .1;
+    //     let points0 = item.0 .0 .0;
+    //     let near_planes = subdivide_four_points(
+    //         subdivide_i,
+    //         subdivide_j,
+    //         &points0[0],
+    //         &points1[0],
+    //         &points2[0],
+    //         &points3[0],
+    //     );
 
-        let far_planes = subdivide_four_points(
-            subdivide_i,
-            subdivide_j,
-            &points0[1],
-            &points1[1],
-            &points2[1],
-            &points3[1],
-        );
+    //     let far_planes = subdivide_four_points(
+    //         subdivide_i,
+    //         subdivide_j,
+    //         &points0[1],
+    //         &points1[1],
+    //         &points2[1],
+    //         &points3[1],
+    //     );
 
-        for (near_plane, far_plane) in near_planes.iter().zip(far_planes) {
-            let frustum = Frustum {
-                near_0: near_plane.0,
-                near_1: near_plane.1,
-                near_2: near_plane.2,
-                near_3: near_plane.3,
-                far_0: far_plane.0,
-                far_1: far_plane.1,
-                far_2: far_plane.2,
-                far_3: far_plane.3,
-            };
-            clusters.push(frustum);
-        }
-    }
+    //     for (near_plane, far_plane) in near_planes.iter().zip(far_planes) {
+    //         let frustum = Frustum {
+    //             near_0: near_plane.0,
+    //             near_1: near_plane.1,
+    //             near_2: near_plane.2,
+    //             near_3: near_plane.3,
+    //             far_0: far_plane.0,
+    //             far_1: far_plane.1,
+    //             far_2: far_plane.2,
+    //             far_3: far_plane.3,
+    //         };
+    //         clusters.push(frustum);
+    //     }
+    // }
 
-    clusters
+    // clusters
 }
 
 pub fn point_light_radius(

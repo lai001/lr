@@ -328,12 +328,37 @@ pub trait RenderTask {
 pub type TaskType = Arc<Mutex<Box<dyn FnMut(&mut crate::renderer::Renderer) + Send>>>;
 
 #[derive(Clone)]
+pub struct SceneLight {
+    pub point_light_shapes: Vec<crate::constants::Sphere3D>,
+    pub frustum: crate::global_uniform::CameraFrustum,
+    pub cluster_lights_placeholder: BufferHandle,
+    pub cluster_light_indices_placeholder: BufferHandle,
+}
+
+#[derive(Clone)]
 pub struct PresentInfo {
     pub render_target_type: ERenderTargetType,
     pub draw_objects: Vec<DrawObject>,
     pub virtual_texture_pass: Option<VirtualTexturePassKey>,
     pub scene_viewport: SceneViewport,
     pub depth_texture_handle: Option<TextureHandle>,
+    pub scene_light: Option<SceneLight>,
+}
+
+impl PresentInfo {
+    pub fn new(
+        render_target_type: ERenderTargetType,
+        draw_objects: Vec<DrawObject>,
+    ) -> PresentInfo {
+        PresentInfo {
+            render_target_type,
+            draw_objects,
+            virtual_texture_pass: None,
+            scene_viewport: SceneViewport::new(),
+            depth_texture_handle: None,
+            scene_light: None,
+        }
+    }
 }
 
 #[derive(Clone)]

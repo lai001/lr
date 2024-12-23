@@ -67,6 +67,7 @@ pub struct PlayerViewport {
     _camera_motion_speed: f32,
     pub is_use_default_input_process: bool,
     pub is_grid_visible: bool,
+    settings: rs_core_minimal::settings::Settings,
     cluster_light: Option<crate::cluster_light::ClusterLight>,
 }
 
@@ -168,7 +169,7 @@ impl PlayerViewport {
             .global_sampler_handle
             .clone();
         let virtual_texture_source_infos = engine.get_virtual_texture_source_infos();
-
+        let settings = engine.get_settings().clone();
         PlayerViewport {
             render_target_type,
             scene_viewport,
@@ -197,6 +198,7 @@ impl PlayerViewport {
             spot_lights_constants,
             spot_lights_constants_handle,
             cluster_light: None,
+            settings,
         }
     }
 
@@ -1343,8 +1345,15 @@ impl PlayerViewport {
         >,
     ) {
         rs_core_minimal::vec_ref!(lights_ref, lights);
-        self.cluster_light =
-            crate::cluster_light::ClusterLight::new(engine, &self.camera, lights_ref).ok();
+        self.cluster_light = crate::cluster_light::ClusterLight::new(
+            engine,
+            &self.camera,
+            lights_ref,
+            self.settings
+                .render_setting
+                .is_enable_light_culling_acceleration,
+        )
+        .ok();
 
         self.point_lights_constants.available = lights.len() as u32;
         let num = lights.len().min(self.point_lights_constants.lights.len());
@@ -1423,6 +1432,13 @@ impl PlayerViewport {
             self.grid_draw_object.as_ref()
         } else {
             None
+        }
+    }
+
+    pub fn get_scene_light(&self) -> Option<&rs_render::command::SceneLight> {
+        match &self.cluster_light {
+            Some(cluster_light) => cluster_light.scene_points_lights.as_ref(),
+            None => None,
         }
     }
 }

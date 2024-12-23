@@ -45,6 +45,38 @@ pub struct CameraFrustum {
     _pad_7: i32,
 }
 
+impl CameraFrustum {
+    pub fn new(
+        near_0: glam::Vec3,
+        near_1: glam::Vec3,
+        near_2: glam::Vec3,
+        near_3: glam::Vec3,
+        far_0: glam::Vec3,
+        far_1: glam::Vec3,
+        far_2: glam::Vec3,
+        far_3: glam::Vec3,
+    ) -> CameraFrustum {
+        CameraFrustum {
+            near_0,
+            _pad_0: 0,
+            near_1,
+            _pad_1: 0,
+            near_2,
+            _pad_2: 0,
+            near_3,
+            _pad_3: 0,
+            far_0,
+            _pad_4: 0,
+            far_1,
+            _pad_5: 0,
+            far_2,
+            _pad_6: 0,
+            far_3,
+            _pad_7: 0,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Constants {

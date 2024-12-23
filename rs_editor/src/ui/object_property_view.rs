@@ -279,7 +279,7 @@ impl ObjectPropertyView {
                                 new_name,
                             ));
                         }
-                        ui.checkbox(&mut component.is_show_preview, "Is show preview");
+                        ui.checkbox(&mut component.is_show_preview, "Is show frustum");
 
                         Self::transformation_detail_mut(component.get_transformation_mut(), ui);
                         Self::transformation_detail(&component.get_final_transformation(), ui);
