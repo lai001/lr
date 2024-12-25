@@ -7,6 +7,7 @@ use crate::cube_map::CubeMap;
 use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
+use crate::light_culling::LightCulling;
 use crate::prebake_ibl::PrebakeIBL;
 use crate::render_pipeline::attachment_pipeline::{AttachmentPipeline, ClearDepth, EClearType};
 use crate::render_pipeline::fxaa::FXAAPipeline;
@@ -114,6 +115,8 @@ pub struct Renderer {
     surface_textures: HashMap<isize, SurfaceTexture>,
 
     bind_groups_collection: moka::sync::Cache<u64, Arc<Vec<BindGroup>>>,
+
+    light_culling: crate::light_culling::LightCulling,
 }
 
 impl Renderer {
@@ -279,6 +282,7 @@ impl Renderer {
             surface_textures: HashMap::new(),
             bind_groups_collection: moka::sync::Cache::new(1000),
             light_culling_compute_pipeline,
+            light_culling: LightCulling::new(),
         };
         Ok(renderer)
     }
@@ -2550,26 +2554,28 @@ impl Renderer {
         }
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
-        let cluster_lights: Vec<u32> = vec![0; 10 * 10 * 10 * scene_light.point_light_shapes.len()];
-        let cluster_light_indices =
-            vec![crate::constants::ClusterLightIndex::default(); 10 * 10 * 10];
-        let execute_result = self.light_culling_compute_pipeline.execute_out(
+        let get_result = self.light_culling.get_or_add(
+            device,
+            10 * 10 * 10,
+            scene_light.point_light_shapes.len(),
+        );
+        self.light_culling_compute_pipeline.execute_out(
             device,
             queue,
             &scene_light.point_light_shapes,
             &scene_light.frustum,
-            &cluster_lights,
-            &cluster_light_indices,
+            &get_result.cluster_lights_buffer,
+            &get_result.cluster_light_indices_buffer,
             glam::uvec3(10, 10, 10),
         );
 
         self.buffers.insert(
             scene_light.cluster_lights_placeholder,
-            Arc::new(execute_result.cluster_lights),
+            get_result.cluster_lights_buffer,
         );
         self.buffers.insert(
             scene_light.cluster_light_indices_placeholder,
-            Arc::new(execute_result.cluster_light_indices),
+            get_result.cluster_light_indices_buffer,
         );
     }
 

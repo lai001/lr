@@ -1,18 +1,11 @@
 use crate::{
     base_compute_pipeline::BaseComputePipeline,
-    constants::{ClusterLightIndex, Sphere3D},
+    constants::Sphere3D,
     global_shaders::{global_shader::GlobalShader, light_culling::LightCullingShader},
     global_uniform::CameraFrustum,
     shader_library::ShaderLibrary,
 };
 use wgpu::{util::DeviceExt, BufferUsages};
-
-pub struct ExecuteResult {
-    pub point_light_shapes: wgpu::Buffer,
-    pub frustums: wgpu::Buffer,
-    pub cluster_lights: wgpu::Buffer,
-    pub cluster_light_indices: wgpu::Buffer,
-}
 
 pub struct LightCullingComputePipeline {
     base_compute_pipeline: BaseComputePipeline,
@@ -59,10 +52,10 @@ impl LightCullingComputePipeline {
         queue: &wgpu::Queue,
         point_light_shapes: &Vec<Sphere3D>,
         frustum: &CameraFrustum,
-        cluster_lights: &Vec<u32>,
-        cluster_light_indices: &Vec<ClusterLightIndex>,
+        cluster_lights: &wgpu::Buffer,
+        cluster_light_indices: &wgpu::Buffer,
         workgroups: glam::UVec3,
-    ) -> ExecuteResult {
+    ) {
         let point_light_shapes = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: rs_foundation::cast_to_raw_buffer(point_light_shapes),
@@ -72,16 +65,6 @@ impl LightCullingComputePipeline {
             label: None,
             contents: rs_foundation::cast_any_as_u8_slice(frustum),
             usage: BufferUsages::UNIFORM,
-        });
-        let cluster_lights = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: rs_foundation::cast_to_raw_buffer(cluster_lights),
-            usage: BufferUsages::STORAGE,
-        });
-        let cluster_light_indices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: rs_foundation::cast_to_raw_buffer(cluster_light_indices),
-            usage: BufferUsages::STORAGE,
         });
 
         self.execute(
@@ -93,12 +76,5 @@ impl LightCullingComputePipeline {
             &cluster_light_indices,
             workgroups,
         );
-
-        ExecuteResult {
-            point_light_shapes,
-            frustums,
-            cluster_lights,
-            cluster_light_indices,
-        }
     }
 }

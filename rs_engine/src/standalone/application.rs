@@ -51,7 +51,12 @@ impl Application {
 
         #[cfg(feature = "plugin_shared_crate")]
         for plugin in plugins.iter_mut() {
-            plugin.on_init(engine, &mut current_active_level, &contents);
+            plugin.on_init(
+                engine,
+                &mut current_active_level,
+                &mut player_view_port,
+                &contents,
+            );
         }
 
         Application {

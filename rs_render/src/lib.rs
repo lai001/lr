@@ -11,6 +11,7 @@ pub mod command;
 pub mod compute_pipeline;
 pub mod constants;
 pub mod cube_map;
+pub mod light_culling;
 pub mod default_textures;
 pub mod depth_texture;
 pub mod egui_render;
