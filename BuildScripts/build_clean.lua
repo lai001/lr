@@ -25,3 +25,25 @@ do
         }
     }
 end
+
+task("cargo_lock_clean")
+do
+    on_run(function()
+        local match_patterns = {
+            "./rs_*/Cargo.lock",
+            "./programs/rs_*/Cargo.lock",
+            "./crates/rs_*/Cargo.lock"
+        }
+        for _, match_pattern in ipairs(match_patterns) do
+            for _, file in ipairs(os.files(match_pattern)) do
+                os.tryrm(file)
+            end
+        end
+    end)
+    set_menu {
+        usage = "xmake cargo_lock_clean",
+        description = "Clean cargo lock file.",
+        options = {
+        }
+    }
+end

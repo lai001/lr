@@ -568,7 +568,7 @@ impl Reflection {
             StorageFormat::Rgba8Uint => TextureFormat::Rgba8Uint,
             StorageFormat::Rgba8Sint => TextureFormat::Rgba8Sint,
             StorageFormat::Rgb10a2Unorm => TextureFormat::Rgb10a2Unorm,
-            StorageFormat::Rg11b10Float => TextureFormat::Rg11b10Float,
+            StorageFormat::Rg11b10Ufloat => TextureFormat::Rg11b10Ufloat,
             StorageFormat::Rg32Uint => TextureFormat::Rg32Uint,
             StorageFormat::Rg32Sint => TextureFormat::Rg32Sint,
             StorageFormat::Rg32Float => TextureFormat::Rg32Float,

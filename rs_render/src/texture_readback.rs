@@ -46,7 +46,7 @@ pub fn get_bits_per_pixel(format: wgpu::TextureFormat) -> Option<u32> {
         Rgb9e5Ufloat => Some(32),
         Rgb10a2Uint => Some(32),
         Rgb10a2Unorm => Some(32),
-        Rg11b10Float => Some(32),
+        Rg11b10Ufloat => Some(32),
         Rg32Uint => Some(32 * 2),
         Rg32Sint => Some(32 * 2),
         Rg32Float => Some(32 * 2),

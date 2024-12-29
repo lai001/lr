@@ -151,13 +151,13 @@ impl BaseRenderPipeline {
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: &shader,
-                entry_point: &vs.name,
+                entry_point: Some(&vs.name),
                 buffers: &vertex_buffer_layouts,
                 compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(FragmentState {
                 module: &shader,
-                entry_point: &fs.name,
+                entry_point: Some(&fs.name),
                 targets: &targets,
                 compilation_options: PipelineCompilationOptions::default(),
             }),

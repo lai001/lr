@@ -44,7 +44,7 @@ impl BaseComputePipeline {
             label: Some(&format!("{} compute pipeline", tag)),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: &cs.name,
+            entry_point: Some(&cs.name),
             compilation_options: PipelineCompilationOptions::default(),
             cache: None,
         });

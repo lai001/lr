@@ -41,9 +41,10 @@ impl GizmoView {
         egui::Area::new("Gizmo Viewport".into())
             .fixed_pos((0.0, 0.0))
             .show(context, |ui| {
-                ui.with_layer_id(egui::LayerId::background(), |ui| {
-                    gizmo_response = self.interact(ui)
-                });
+                ui.scope_builder(
+                    egui::UiBuilder::new().layer_id(egui::LayerId::background()),
+                    |ui| gizmo_response = self.interact(ui),
+                );
             });
         gizmo_response
     }

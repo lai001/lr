@@ -12,7 +12,7 @@ pub trait Plugin {
         player_viewport: &mut PlayerViewport,
         files: &[EContentFileType],
     );
-    
+
     fn tick(
         &mut self,
         engine: &mut Engine,
@@ -24,6 +24,7 @@ pub trait Plugin {
 
     #[cfg(not(target_os = "android"))]
     fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent);
+
     #[cfg(not(target_os = "android"))]
     fn on_window_input(
         &mut self,

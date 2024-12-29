@@ -78,7 +78,9 @@ impl UIWindow for MediaUIWindow {
                         egui::Area::new("FrameBackground".into())
                             .interactable(false)
                             .show(state.egui_ctx(), |ui| {
-                                ui.with_layer_id(egui::LayerId::background(), |ui| {
+                                let ui_builder =
+                                    egui::UiBuilder::new().layer_id(egui::LayerId::background());
+                                ui.scope_builder(ui_builder, |ui| {
                                     MediaUIWindow::player_tick(
                                         engine,
                                         self.video_frame_player.as_mut(),

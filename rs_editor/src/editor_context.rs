@@ -190,7 +190,7 @@ impl EditorContext {
         font_definitions.font_data.clear();
         font_definitions.font_data.insert(
             "SourceHanSansHWSC-Regular".to_owned(),
-            egui::FontData::from_owned(font_data),
+            Arc::new(egui::FontData::from_owned(font_data)),
         );
 
         font_definitions.families.insert(

@@ -76,6 +76,9 @@ impl EmiterRender {
                 }
             }
         }
+        if position_colors.is_empty() {
+            return vec![];
+        }
         let instances: Vec<Instance0> = position_colors
             .iter()
             .map(|(position, color)| Instance0 {

@@ -12,22 +12,22 @@ profiler = ["tracy-client/default"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-serde = { version = "1.0.215", features = ["derive", "rc"] }
-wgpu = { version = "22.1.0", features = ["spirv", "naga-ir"] }
-naga = { version = "22.1.0" }
+serde = { version = "1.0.217", features = ["derive", "rc"] }
+wgpu = { version = "23.0.1", features = ["spirv", "naga-ir"] }
+naga = { version = "23.1.0" }
 log = "0.4.22"
 pollster = "0.4.0"
 raw-window-handle = "0.6.2"
 type-layout = "0.2.0"
 glam = { version = "0.29.2", features = ["mint", "serde"] }
-egui = { version = "0.29.1" }
-egui-wgpu = { version = "0.29.1" }
+egui = { version = "0.30.0" }
+egui-wgpu = { version = "0.30.0" }
 image = "0.25.5"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 image_dds = { version = "0.6.2" }
 ddsfile = "0.5.2"
-tracy-client = { version = "0.17.4", default-features = false }
+tracy-client = { version = "0.18.0", default-features = false }
 bitflags = "2.6.0"
 moka = { version = "0.12.8", default-features = false, features = ["sync"] }
 rs_foundation = { path = "../rs_foundation" }

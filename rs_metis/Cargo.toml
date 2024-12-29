@@ -11,4 +11,4 @@ log = "0.4.22"
 rs_foundation = { path = "../rs_foundation" }
 
 [build-dependencies]
-bindgen = "0.70.1"
+bindgen = "0.71.1"
