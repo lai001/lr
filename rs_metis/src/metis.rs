@@ -1,6 +1,6 @@
 use crate::{
     edge::Edge,
-    graph::{Graph, GraphVertexIndex},
+    graph::{Graph, GraphVertexIndex, MeshVertexIndex, TriangleGraph},
 };
 use std::{collections::HashSet, ops::Range, process::Command};
 
@@ -242,6 +242,52 @@ impl Metis {
                 .map_err(|err| crate::error::Error::IO(err, None))?;
         }
         std::fs::write(output_path, content).map_err(|err| crate::error::Error::IO(err, None))
+    }
+
+    pub fn partition2(
+        indices: &[u32],
+        // vertices: &[glam::Vec3],
+        num_parts: u32,
+        gpmetis_program_path: impl AsRef<std::path::Path>,
+    ) -> crate::error::Result<Vec<Vec<MeshVertexIndex>>> {
+        // let _ = vertices;
+        let output_path = std::path::Path::new("./t.graph").to_path_buf();
+        let output_path = rs_foundation::absolute_path(output_path)
+            .map_err(|err| crate::error::Error::IO(err, None))?;
+        let triangle_graph = TriangleGraph::new(indices /*, vertices*/);
+        triangle_graph.write_to_file(&output_path)?;
+
+        let partition = Self::internal_partition(gpmetis_program_path, &output_path, num_parts)?;
+
+        let mut partition_result: Vec<Vec<GraphVertexIndex>> = vec![vec![]; num_parts as usize];
+
+        for (graph_vertex_index, which_part) in partition.iter().enumerate() {
+            let value = partition_result
+                .get_mut(*which_part as usize)
+                .expect("Should not be null");
+            value.push(graph_vertex_index as GraphVertexIndex);
+        }
+
+        Ok(Self::build_mesh_clusters2(
+            &triangle_graph,
+            &partition_result,
+        ))
+    }
+
+    fn build_mesh_clusters2(
+        graph: &TriangleGraph,
+        partitions: &Vec<Vec<GraphVertexIndex>>,
+    ) -> Vec<Vec<MeshVertexIndex>> {
+        let mut cluster_indices: Vec<Vec<MeshVertexIndex>> = Vec::new();
+        for partition in partitions {
+            let mut triangles: Vec<MeshVertexIndex> = Vec::with_capacity(partition.len() * 3);
+            for triangle_index in partition {
+                let triangle = &graph.get_triangles()[*triangle_index as usize];
+                triangles.append(&mut triangle.get_indices().to_vec());
+            }
+            cluster_indices.push(triangles);
+        }
+        cluster_indices
     }
 }
 

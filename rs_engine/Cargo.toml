@@ -55,6 +55,7 @@ uniform-cubic-splines = { version = "0.1", default-features = false, features = 
 ] }
 dyn-clone = "1.0.17"
 downcast-rs = "1.2.1"
+meshopt = "0.4.1"
 rs_foundation = { path = "../rs_foundation" }
 rs_audio = { path = "../rs_audio" }
 rs_artifact = { path = "../rs_artifact" }

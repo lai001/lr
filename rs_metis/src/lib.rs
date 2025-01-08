@@ -1,4 +1,5 @@
 pub mod bindings;
+pub mod cluster;
 pub mod edge;
 pub mod error;
 pub mod graph;

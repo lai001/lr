@@ -11,8 +11,10 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     handle::BufferHandle,
     input_mode::EInputMode,
+    mesh_lod::optimization::MeshoptMesh,
     resource_manager::ResourceManager,
 };
+use rs_metis::cluster::ClusterCollection;
 use rs_render::{
     command::{
         BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, PresentInfo, RenderCommand,
@@ -22,7 +24,7 @@ use rs_render::{
     renderer::{EBuiltinPipelineType, EPipelineType},
     vertex_data_type::mesh_vertex::MeshVertex3,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, num::NonZeroUsize};
 use winit::event::{MouseButton, MouseScrollDelta, WindowEvent};
 
 struct MeshViewDrawObject {
@@ -193,8 +195,8 @@ impl MeshUIWindow {
         let mut camera = Camera::default(window_context.get_width(), window_context.get_height());
         camera.set_world_location(glam::Vec3 {
             x: 0.0,
-            y: 3.0,
-            z: 3.0,
+            y: 15.0,
+            z: -50.0,
         });
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
@@ -235,47 +237,63 @@ impl MeshUIWindow {
         })
     }
 
-    pub fn update(
-        &mut self,
+    fn _make_lods(
         engine: &mut Engine,
         skin_mesh_vertices: &[SkinMeshVertex],
         indices: &[u32],
-    ) {
-        let vertices = skin_mesh_vertices
-            .iter()
-            .map(|x| x.position)
-            .collect::<Vec<glam::Vec3>>();
-        let num_parts = 300;
-        let mesh_clusters = rs_metis::metis::Metis::partition(
-            &indices,
-            vertices.as_slice(),
-            num_parts as u32,
-            get_gpmetis_program_path(),
-        );
-        let mesh_clusters = match mesh_clusters {
-            Ok(mesh_clusters) => mesh_clusters,
-            Err(err) => {
-                log::warn!("{err}");
-                return;
-            }
+        global_constants_handle: BufferHandle,
+    ) -> Vec<MeshViewDrawObject> {
+        let mesh = MeshoptMesh {
+            vertices: skin_mesh_vertices
+                .iter()
+                .map(|item| {
+                    //
+                    meshopt::Vertex {
+                        p: item.position.into(),
+                        n: item.normal.into(),
+                        t: item.tex_coord.into(),
+                    }
+                })
+                .collect(),
+            indices: indices.to_vec(),
         };
+        let lods =
+            rs_engine::mesh_lod::optimization::simplify(&mesh, NonZeroUsize::new(8).unwrap());
+        let mut mesh_draw_objects = vec![];
+        for (i, lod_indices) in lods.iter().enumerate() {
+            let location = glam::vec3(i as f32 * 15.0, 0.0, 0.0);
+            let mesh_draw_object = Self::_make_mesh_draw_object(
+                engine,
+                skin_mesh_vertices,
+                lod_indices,
+                global_constants_handle.clone(),
+                location,
+            );
+            mesh_draw_objects.push(mesh_draw_object);
+        }
+        return mesh_draw_objects;
+    }
 
+    fn _make_mesh_draw_object(
+        engine: &mut Engine,
+        mesh_vertices: &[SkinMeshVertex],
+        indices: &[u32],
+        global_constants_handle: BufferHandle,
+        location: glam::Vec3,
+    ) -> MeshViewDrawObject {
         let resource_manager = ResourceManager::default();
-        self.draw_objects.clear();
 
-        let mut vertices: Vec<MeshVertex3> = vec![];
-        for mesh_cluster in mesh_clusters {
+        let mut vertices: Vec<MeshVertex3> = vec![MeshVertex3::default(); mesh_vertices.len()];
+
+        for (mesh_vertices, skin_mesh_vertices) in
+            vertices.chunks_mut(3).zip(mesh_vertices.chunks(3))
+        {
             let color = rs_core_minimal::color::random_color4();
-            for index in mesh_cluster {
-                for offset in 0..=2 {
-                    let vertex_index = indices[index + offset];
-                    let vertex = &skin_mesh_vertices[vertex_index as usize];
-                    let mesh_vertex3 = MeshVertex3 {
-                        position: vertex.position,
-                        vertex_color: color,
-                    };
-                    vertices.push(mesh_vertex3);
-                }
+            for item in mesh_vertices.iter_mut().zip(skin_mesh_vertices) {
+                *item.0 = MeshVertex3 {
+                    position: item.1.position,
+                    vertex_color: color,
+                };
             }
         }
 
@@ -289,7 +307,6 @@ impl MeshUIWindow {
             },
         }));
 
-        let indices: Vec<u32> = (0..vertices.len()).map(|x| x as u32).collect();
         let index_buffer_handle = resource_manager.next_buffer();
         engine.send_render_command(RenderCommand::CreateBuffer(CreateBuffer {
             handle: *index_buffer_handle,
@@ -301,7 +318,8 @@ impl MeshUIWindow {
         }));
 
         let constants_handle = resource_manager.next_buffer();
-        let mesh_view_constants = MeshViewConstants::default();
+        let mut mesh_view_constants = MeshViewConstants::default();
+        mesh_view_constants.model = glam::Mat4::from_translation(location);
 
         engine.send_render_command(RenderCommand::CreateBuffer(CreateBuffer {
             handle: *constants_handle,
@@ -320,14 +338,116 @@ impl MeshUIWindow {
             Some(*index_buffer_handle),
             Some(indices.len() as u32),
             vec![vec![
-                EBindingResource::Constants(*self.global_constants_handle),
+                EBindingResource::Constants(*global_constants_handle),
                 EBindingResource::Constants(*constants_handle),
             ]],
         );
-        self.draw_objects.push(MeshViewDrawObject {
+
+        MeshViewDrawObject {
             draw_object,
             constants_handle,
             mesh_view_constants,
-        });
+        }
+    }
+
+    fn make_cluster_lods(
+        engine: &mut Engine,
+        skin_mesh_vertices: &[SkinMeshVertex],
+        indices: &[u32],
+        global_constants_handle: BufferHandle,
+    ) -> Vec<MeshViewDrawObject> {
+        let mut mesh_draw_objects = vec![];
+
+        let cluster_collection = match ClusterCollection::new(indices, get_gpmetis_program_path()) {
+            Ok(cluster_collection) => cluster_collection,
+            Err(err) => {
+                log::warn!("{}", err);
+                return mesh_draw_objects;
+            }
+        };
+        let resource_manager = ResourceManager::default();
+        let cluster_collections = cluster_collection.plat();
+
+        for (i, cluster_collection) in cluster_collections.iter().enumerate() {
+            let location = glam::vec3(i as f32 * 15.0, 0.0, 0.0);
+
+            let mesh_vertices_num = cluster_collection.iter().map(|x| x.indices.len()).sum();
+            let mut vertices: Vec<MeshVertex3> = vec![MeshVertex3::default(); mesh_vertices_num];
+            for cluster in cluster_collection {
+                let vertex_color = rs_core_minimal::color::random_color4();
+                for vertex_index in &cluster.indices {
+                    let vertex = &skin_mesh_vertices[*vertex_index as usize];
+                    let vertex = MeshVertex3 {
+                        position: vertex.position,
+                        vertex_color,
+                    };
+                    vertices.push(vertex);
+                }
+            }
+
+            let vertex_buffer_handle = resource_manager.next_buffer();
+            engine.send_render_command(RenderCommand::CreateBuffer(CreateBuffer {
+                handle: *vertex_buffer_handle,
+                buffer_create_info: BufferCreateInfo {
+                    label: None,
+                    contents: rs_foundation::cast_to_raw_buffer(&vertices).to_vec(),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            }));
+
+            let constants_handle = resource_manager.next_buffer();
+            let mut mesh_view_constants = MeshViewConstants::default();
+            mesh_view_constants.model = glam::Mat4::from_translation(location);
+
+            engine.send_render_command(RenderCommand::CreateBuffer(CreateBuffer {
+                handle: *constants_handle,
+                buffer_create_info: BufferCreateInfo {
+                    label: None,
+                    contents: rs_foundation::cast_any_as_u8_slice(&mesh_view_constants).to_vec(),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::MAP_WRITE,
+                },
+            }));
+
+            let draw_object = DrawObject::new(
+                0,
+                vec![*vertex_buffer_handle],
+                vertices.len() as u32,
+                EPipelineType::Builtin(EBuiltinPipelineType::MeshView),
+                None,
+                None,
+                vec![vec![
+                    EBindingResource::Constants(*global_constants_handle),
+                    EBindingResource::Constants(*constants_handle),
+                ]],
+            );
+            mesh_draw_objects.push(MeshViewDrawObject {
+                draw_object,
+                constants_handle,
+                mesh_view_constants,
+            });
+        }
+
+        return mesh_draw_objects;
+    }
+
+    pub fn update(
+        &mut self,
+        engine: &mut Engine,
+        skin_mesh_vertices: &[SkinMeshVertex],
+        indices: &[u32],
+    ) {
+        // self.draw_objects = Self::make_lods(
+        //     engine,
+        //     skin_mesh_vertices,
+        //     indices,
+        //     self.global_constants_handle.clone(),
+        // );
+
+        self.draw_objects = Self::make_cluster_lods(
+            engine,
+            skin_mesh_vertices,
+            indices,
+            self.global_constants_handle.clone(),
+        );
     }
 }
