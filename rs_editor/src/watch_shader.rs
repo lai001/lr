@@ -46,7 +46,7 @@ impl WatchShader {
                 if description.shader_path != event.path {
                     continue;
                 }
-                let pre_process_code = rs_shader_compiler::pre_process::pre_process(
+                let pre_process_code = rs_shader_compiler_core::pre_process::pre_process(
                     &description.shader_path,
                     description.include_dirs.iter(),
                     description.definitions.iter(),

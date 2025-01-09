@@ -8,13 +8,13 @@ edition = "2021"
 default = ["standalone"]
 renderdoc = ["rs_render/renderdoc"]
 editor = [
-    "rs_shader_compiler/editor",
+    "rs_shader_compiler_core/editor",
     "rs_render/editor",
     "rs_core_minimal/editor",
     "dep:anyhow",
 ]
 standalone = [
-    "rs_shader_compiler/standalone",
+    "rs_shader_compiler_core/standalone",
     "rs_render/standalone",
     "rs_core_minimal/standalone",
 ]
@@ -61,7 +61,7 @@ rs_audio = { path = "../rs_audio" }
 rs_artifact = { path = "../rs_artifact" }
 rs_render = { path = "../rs_render" }
 rs_core_minimal = { path = "../rs_core_minimal" }
-rs_shader_compiler = { path = "../rs_shader_compiler" }
+rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
 rs_proc_macros = { path = "../rs_proc_macros" }
 rs_render_types = { path = "../rs_render_types" }
 

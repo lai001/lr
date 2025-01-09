@@ -196,7 +196,7 @@ impl<'a> ResolveContext<'a> {
                 rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE
             ));
         }
-        let shader_code = rs_shader_compiler::pre_process::pre_process(
+        let shader_code = rs_shader_compiler_core::pre_process::pre_process(
             &shader_path,
             include_dirs.iter(),
             definitions.iter(),

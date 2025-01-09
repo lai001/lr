@@ -17,7 +17,10 @@ do
         os.exec("cargo build --package rs_reflection_generator --bin rs_reflection_generator --release")
         os.cd(path.join(engine_root_dir, "programs/rs_v8_binding_api_generator"))
         os.exec("cargo build --package rs_v8_binding_api_generator --bin rs_v8_binding_api_generator")
-        os.exec("cargo build --package rs_v8_binding_api_generator --bin rs_v8_binding_api_generator --release")        
+        os.exec("cargo build --package rs_v8_binding_api_generator --bin rs_v8_binding_api_generator --release")
+        os.cd(path.join(engine_root_dir, "rs_shader_compiler"))
+        os.exec("cargo build --package rs_shader_compiler --bin rs_shader_compiler")
+        os.exec("cargo build --package rs_shader_compiler --bin rs_shader_compiler --release")
     end)
     set_menu {
         usage = "xmake compile_tool",

@@ -1,9 +1,9 @@
-use rs_shader_compiler::pre_process::ShaderDescription;
+use rs_shader_compiler_core::pre_process::ShaderDescription;
 #[cfg(feature = "editor")]
 mod editor_mod {
     pub use path_slash::PathBufExt;
     pub use rs_core_minimal::path_ext::CanonicalizeSlashExt;
-    pub use rs_shader_compiler::compile_command::CompileCommand;
+    pub use rs_shader_compiler_core::compile_command::CompileCommand;
 }
 #[cfg(feature = "editor")]
 use editor_mod::*;

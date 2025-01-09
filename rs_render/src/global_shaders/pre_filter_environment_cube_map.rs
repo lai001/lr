@@ -1,6 +1,6 @@
 use super::global_shader::GlobalShader;
 use crate::get_buildin_shader_dir;
-use rs_shader_compiler::pre_process::ShaderDescription;
+use rs_shader_compiler_core::pre_process::ShaderDescription;
 
 pub struct PreFilterEnvironmentCubeMapShader {}
 

@@ -24,7 +24,7 @@ do
         os.exec("cargo build --package rs_editor --bin editor --features editor --features renderdoc --features plugin_shared_crate --features plugin_dotnet --features plugin_v8")
         os.exec("cargo build --package rs_editor --bin editor --features editor --features renderdoc --features plugin_shared_crate --features plugin_dotnet --features plugin_v8 --release")
         os.cd(path.join(engine_root_dir, "build/target/release"))
-        os.exec("./editor.exe --cmd")
+        os.exec("./rs_shader_compiler.exe")
         os.cd(path.join(engine_root_dir, "rs_desktop_standalone"))
         os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --features plugin_shared_crate --features standalone --features plugin_v8")
         os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --features plugin_shared_crate --features standalone --features plugin_v8 --release")

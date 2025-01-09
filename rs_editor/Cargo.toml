@@ -8,13 +8,13 @@ edition = "2021"
 default = ["editor", "renderdoc"]
 renderdoc = ["rs_render/renderdoc", "rs_engine/renderdoc"]
 editor = [
-    "rs_shader_compiler/editor",
+    "rs_shader_compiler_core/editor",
     "rs_render/editor",
     "rs_core_minimal/editor",
     "rs_engine/editor",
 ]
 standalone = [
-    "rs_shader_compiler/standalone",
+    "rs_shader_compiler_core/standalone",
     "rs_render/standalone",
     "rs_core_minimal/standalone",
     "rs_engine/standalone",
@@ -24,7 +24,7 @@ plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 plugin_dotnet = ["dep:rs_dotnet", "dep:rs_dotnet_host"]
 plugin_v8 = ["dep:rs_v8_host", "dep:rs_v8_engine_binding_api", "dep:rs_v8_binding_api_manager"]
 exit_check = []
-detect_encoding = ["rs_shader_compiler/detect_encoding"]
+detect_encoding = ["rs_shader_compiler_core/detect_encoding"]
 reflection = ["dep:rs_reflection_core", "dep:rs_reflection_system"]
 
 [dependencies]
@@ -82,7 +82,7 @@ rs_foundation = { path = "../rs_foundation" }
 rs_artifact = { path = "../rs_artifact" }
 rs_engine = { path = "../rs_engine" }
 rs_hotreload_plugin = { path = "../rs_hotreload_plugin" }
-rs_shader_compiler = { path = "../rs_shader_compiler" }
+rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 rs_assimp = { path = "../rs_assimp" }
 rs_proc_macros = { path = "../rs_proc_macros" }

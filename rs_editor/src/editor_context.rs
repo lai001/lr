@@ -1760,7 +1760,7 @@ impl EditorContext {
         for buildin_shader in buildin_shaders {
             let description = buildin_shader.get_shader_description();
             let name = buildin_shader.get_name();
-            let processed_code = rs_shader_compiler::pre_process::pre_process(
+            let processed_code = rs_shader_compiler_core::pre_process::pre_process(
                 &description.shader_path,
                 description.include_dirs.iter(),
                 description.definitions.iter(),
