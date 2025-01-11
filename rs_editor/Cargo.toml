@@ -68,7 +68,7 @@ anyhow = { version = "1.0.95" }
 lazy_static = "1.5.0"
 image_dds = { version = "0.6.2" }
 clap = { version = "4.5.23", features = ["derive"] }
-naga = { version = "23.1.0" }
+naga = { version = "23.1.0", features = ["serialize", "deserialize"] }
 wgpu = "23.0.1"
 rand = { version = "0.8.5" }
 mp4 = { version = "0.14.0" }

@@ -122,21 +122,7 @@ impl WGPUContext {
         let surface_config =
             Self::surface_configure(&surface, surface_width, surface_height, &adapter, &device)?;
 
-        log::info!("adapter info: {:#?}", adapter.get_info());
-        log::info!("adapter limits: {:#?}", adapter.limits());
-        log::info!("adapter features: {:#?}", adapter.features());
-        log::info!(
-            "default SamplerDescriptor: {:?}",
-            wgpu::SamplerDescriptor::default()
-        );
-        log::info!(
-            "default TextureViewDescriptor: {:?}",
-            wgpu::TextureViewDescriptor::default()
-        );
-        log::info!(
-            "default PrimitiveState: {:?}",
-            wgpu::PrimitiveState::default()
-        );
+        Self::dump(&adapter);
 
         Ok(WGPUContext {
             instance,
@@ -152,6 +138,61 @@ impl WGPUContext {
                 },
             )]),
         })
+    }
+
+    pub fn windowless(
+        power_preference: Option<wgpu::PowerPreference>,
+        instance_desc: Option<wgpu::InstanceDescriptor>,
+    ) -> Result<WGPUContext> {
+        let _span = tracy_client::span!();
+
+        let instance = wgpu::Instance::new(instance_desc.unwrap_or_default());
+
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))
+        .ok_or(crate::error::Error::RequestAdapterFailed)?;
+
+        let (device, queue) = pollster::block_on(adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                required_features: adapter.features(),
+                required_limits: adapter.limits(),
+                label: Some("Engine"),
+                memory_hints: wgpu::MemoryHints::MemoryUsage,
+            },
+            None,
+        ))
+        .map_err(|err| crate::error::Error::RequestDeviceError(err))?;
+
+        Self::dump(&adapter);
+
+        Ok(WGPUContext {
+            instance,
+            adapter,
+            device,
+            queue,
+            surfaces: HashMap::new(),
+        })
+    }
+
+    fn dump(adapter: &wgpu::Adapter) {
+        log::info!("adapter info: {:#?}", adapter.get_info());
+        log::info!("adapter limits: {:#?}", adapter.limits());
+        log::info!("adapter features: {:#?}", adapter.features());
+        log::info!(
+            "default SamplerDescriptor: {:?}",
+            wgpu::SamplerDescriptor::default()
+        );
+        log::info!(
+            "default TextureViewDescriptor: {:?}",
+            wgpu::TextureViewDescriptor::default()
+        );
+        log::info!(
+            "default PrimitiveState: {:?}",
+            wgpu::PrimitiveState::default()
+        );
     }
 
     pub fn get_device(&self) -> &wgpu::Device {

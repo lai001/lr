@@ -252,7 +252,8 @@ impl EditorContext {
             scale_factor,
             logger,
             artifact_reader,
-            ProjectContext::pre_process_shaders(),
+            HashMap::new(),
+            ProjectContext::load_shader_naga_modules(),
         )?;
 
         Self::insert_cmds(&mut engine);

@@ -95,6 +95,7 @@ impl Engine {
         mut logger: Logger,
         mut artifact_reader: Option<ArtifactReader>,
         mut shaders: HashMap<String, String>,
+        shader_naga_modules: HashMap<String, wgpu::naga::Module>,
     ) -> Result<Engine>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -144,6 +145,7 @@ impl Engine {
             surface_height,
             scale_factor,
             shaders,
+            shader_naga_modules,
             settings.render_setting.clone(),
         )
         .map_err(|err| crate::error::Error::RendererError(err))?;

@@ -602,6 +602,42 @@ impl ProjectContext {
         Ok(output_folder_path.join(output_filename))
     }
 
+    pub fn load_shader_naga_modules() -> HashMap<String, naga::Module> {
+        let _span = tracy_client::span!();
+        let mut shaders = HashMap::new();
+        let buildin_shaders = rs_render::global_shaders::get_buildin_shaders();
+        let read_folder_path: PathBuf =
+            rs_core_minimal::file_manager::get_engine_output_target_dir().join("shaders");
+
+        for buildin_shader in buildin_shaders {
+            let name = buildin_shader.get_name();
+            let read_path = read_folder_path.join(format!("{}.nagamodule", &name));
+            let file = match std::fs::File::open(read_path) {
+                Ok(file) => file,
+                Err(err) => {
+                    log::warn!("{}", err);
+                    continue;
+                }
+            };
+
+            let buf_reader = std::io::BufReader::new(file);
+
+            let module =
+                match bincode::deserialize_from::<std::io::BufReader<std::fs::File>, naga::Module>(
+                    buf_reader,
+                ) {
+                    Ok(module) => module,
+                    Err(err) => {
+                        log::warn!("{}", err);
+                        continue;
+                    }
+                };
+            shaders.insert(name, module);
+        }
+
+        shaders
+    }
+
     pub fn pre_process_shaders() -> HashMap<String, String> {
         let _span = tracy_client::span!();
         let mut shaders = HashMap::new();

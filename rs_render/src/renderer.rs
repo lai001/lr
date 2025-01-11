@@ -126,6 +126,7 @@ impl Renderer {
         surface_height: u32,
         scale_factor: f32,
         shaders: HashMap<String, String>,
+        shader_naga_modules: HashMap<String, naga::Module>,
         settings: RenderSettings,
     ) -> Result<Renderer> {
         let _span = tracy_client::span!();
@@ -148,22 +149,11 @@ impl Renderer {
         let mut shader_library = ShaderLibrary::new();
         let load_shader_results =
             shader_library.load_shaders_from(shaders, wgpu_context.get_device());
-        for (shader_name, result) in load_shader_results {
-            match result {
-                Ok(_) => {}
-                Err(err) => match err {
-                    crate::error::Error::Wgpu(err) => match err.lock().unwrap().deref() {
-                        Error::Validation { description, .. } => {
-                            log::warn!("{shader_name}\n{}", description);
-                        }
-                        _ => {}
-                    },
-                    _ => {
-                        log::warn!("{shader_name}\n{}", err);
-                    }
-                },
-            }
-        }
+        Self::dump_load_shader_results(load_shader_results);
+        let load_shader_results = shader_library
+            .load_shaders_from_naga_module(wgpu_context.get_device(), shader_naga_modules);
+        Self::dump_load_shader_results(load_shader_results);
+
         let mut base_render_pipeline_pool = BaseRenderPipelinePool::default();
         let base_compute_pipeline_pool = BaseComputePipelinePool::default();
         let shading_pipeline = ShadingPipeline::new(
@@ -294,6 +284,7 @@ impl Renderer {
         surface_height: u32,
         scale_factor: f32,
         shaders: HashMap<String, String>,
+        shader_naga_modules: HashMap<String, wgpu::naga::Module>,
         settings: RenderSettings,
     ) -> Result<Renderer>
     where
@@ -332,6 +323,7 @@ impl Renderer {
             surface_height,
             scale_factor,
             shaders,
+            shader_naga_modules,
             settings,
         )
     }
@@ -2603,5 +2595,24 @@ impl Renderer {
             scene_light.cluster_light_indices_placeholder,
             Arc::new(cluster_light_indices_placeholder),
         );
+    }
+
+    fn dump_load_shader_results(load_shader_results: HashMap<String, Result<()>>) {
+        for (shader_name, result) in load_shader_results {
+            match result {
+                Ok(_) => {}
+                Err(err) => match err {
+                    crate::error::Error::Wgpu(err) => match err.lock().unwrap().deref() {
+                        Error::Validation { description, .. } => {
+                            log::warn!("{shader_name}\n{}", description);
+                        }
+                        _ => {}
+                    },
+                    _ => {
+                        log::warn!("{shader_name}\n{}", err);
+                    }
+                },
+            }
+        }
     }
 }

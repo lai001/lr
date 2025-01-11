@@ -106,7 +106,43 @@ impl ShaderLibrary {
     where
         K: AsRef<str>,
     {
-        let shader_module = self.create_shader_module(name.as_ref(), device, shader_source)?;
+        let shader_module = Self::create_shader_module(name.as_ref(), device, shader_source)?;
+        self.shader_dic
+            .insert(name.as_ref().to_string(), Arc::new(shader_module));
+        self.reflection_dic
+            .insert(name.as_ref().to_string(), Arc::new(reflection));
+        Ok(())
+    }
+
+    pub fn load_shaders_from_naga_module(
+        &mut self,
+        device: &wgpu::Device,
+        modules: HashMap<String, naga::Module>,
+    ) -> HashMap<String, crate::error::Result<()>> {
+        let _ = tracy_client::span!();
+        let mut results: HashMap<String, crate::error::Result<()>> = HashMap::new();
+        for (name, module) in modules {
+            let result = self.load_shader_from_naga_module(&name, device, module);
+            results.insert(name, result);
+        }
+        results
+    }
+
+    pub fn load_shader_from_naga_module<K>(
+        &mut self,
+        name: K,
+        device: &wgpu::Device,
+        module: naga::Module,
+    ) -> crate::error::Result<()>
+    where
+        K: AsRef<str>,
+    {
+        let reflection = Reflection::from_naga_module(module.clone(), false)?;
+        let shader_module = Self::create_shader_module(
+            name.as_ref(),
+            device,
+            wgpu::ShaderSource::Naga(std::borrow::Cow::Owned(module)),
+        )?;
         self.shader_dic
             .insert(name.as_ref().to_string(), Arc::new(shader_module));
         self.reflection_dic
@@ -124,7 +160,7 @@ impl ShaderLibrary {
         K: AsRef<str>,
     {
         let (shader_source, reflection) = Self::shader_source_wgsl(code.as_ref())?;
-        let shader_module = self.create_shader_module(name.as_ref(), device, shader_source)?;
+        let shader_module = Self::create_shader_module(name.as_ref(), device, shader_source)?;
         self.shader_dic
             .insert(name.as_ref().to_string(), Arc::new(shader_module));
         self.reflection_dic
@@ -133,7 +169,6 @@ impl ShaderLibrary {
     }
 
     fn create_shader_module<K>(
-        &mut self,
         name: K,
         device: &wgpu::Device,
         shader_source: wgpu::ShaderSource<'static>,

@@ -55,6 +55,7 @@ impl Application {
             logger,
             Some(artifact_reader),
             std::collections::HashMap::new(),
+            std::collections::HashMap::new(),
         )
         .map_err(|err| crate::error::Error::Engine(err))?;
         engine.init_resources();

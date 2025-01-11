@@ -64,6 +64,7 @@ impl ApplicationContext {
             logger,
             artifact_reader,
             HashMap::new(),
+            HashMap::new(),
         )
         .unwrap();
 
