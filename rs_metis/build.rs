@@ -36,16 +36,19 @@ fn main() {
     }
 
     println!("cargo:rustc-link-lib=metis");
+    println!("cargo:rustc-link-lib=GKlib");
     let bindings = bindgen::Builder::default()
         .header("../.xmake/deps/METIS/include/metis.h")
         .header("../.xmake/deps/METIS/libmetis/metislib.h")
-        .allowlist_function("METIS_.*")
-        .allowlist_type("idx_t")
-        .allowlist_type("real_t")
-        .allowlist_type("graph_t")
-        .allowlist_type("rstatus_et")
-        .allowlist_type("m.*_et")
-        .allowlist_var("METIS_.*")
+        .header("../.xmake/deps/METIS/libmetis/rename.h")
+        .header("../.xmake/deps/METIS/programs/struct.h")
+        // .allowlist_function("METIS_.*")
+        // .allowlist_type("idx_t")
+        // .allowlist_type("real_t")
+        // .allowlist_type("graph_t")
+        // .allowlist_type("rstatus_et")
+        // .allowlist_type("m.*_et")
+        // .allowlist_var("METIS_.*")
         .clang_args(defines.iter().map(|x| format!("-D {}", x)).collect::<Vec<String>>())
         .clang_args(include_dirs.iter().map(|x| format!("-I{}", x)).collect::<Vec<String>>())
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))

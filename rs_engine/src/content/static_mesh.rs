@@ -26,6 +26,7 @@ pub struct StaticMesh {
     pub url: url::Url,
     // pub asset_reference_relative_path: String,
     pub asset_info: AssetInfo,
+    pub is_enable_multiresolution: bool,
 }
 
 impl StaticMesh {

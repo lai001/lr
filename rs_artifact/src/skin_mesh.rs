@@ -1,4 +1,5 @@
 use crate::asset::Asset;
+use crate::mesh_vertex::MeshVertex;
 use crate::resource_type::EResourceType;
 use serde::Deserialize;
 use serde::Serialize;
@@ -14,6 +15,19 @@ pub struct SkinMeshVertex {
     pub tex_coord: glam::Vec2,
     pub bones: [i32; 4],
     pub weights: [f32; 4],
+}
+
+impl SkinMeshVertex {
+    pub fn to_mesh_vertex(&self) -> MeshVertex {
+        MeshVertex {
+            vertex_color: self.vertex_color,
+            position: self.position,
+            normal: self.normal,
+            tangent: self.tangent,
+            bitangent: self.bitangent,
+            tex_coord: self.tex_coord,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

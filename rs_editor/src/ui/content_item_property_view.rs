@@ -19,6 +19,11 @@ pub enum EEventType {
             MaterialParamentersCollection,
         ),
     ),
+    UpdateStaticMeshEnableMultiresolution(
+        Rc<RefCell<rs_engine::content::static_mesh::StaticMesh>>,
+        bool,
+        bool,
+    ),
 }
 
 pub struct ContentItemPropertyView {
@@ -54,7 +59,18 @@ impl ContentItemPropertyView {
         ui.label(format!("url: {}", content.get_url().to_string()));
 
         match content {
-            EContentFileType::StaticMesh(_) => {}
+            EContentFileType::StaticMesh(static_mesh) => {
+                let value = static_mesh.clone();
+                let static_mesh = static_mesh.borrow();
+                let old = static_mesh.is_enable_multiresolution;
+                let mut new = static_mesh.is_enable_multiresolution;
+                ui.checkbox(&mut new, "Is enable multiresolution");
+                if old != new {
+                    self.click = Some(EEventType::UpdateStaticMeshEnableMultiresolution(
+                        value, old, new,
+                    ));
+                }
+            }
             EContentFileType::SkeletonMesh(_) => {}
             EContentFileType::SkeletonAnimation(_) => {}
             EContentFileType::Skeleton(_) => {}

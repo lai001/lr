@@ -4,4 +4,5 @@ pub mod edge;
 pub mod error;
 pub mod graph;
 pub mod metis;
-pub mod vec3_hash_wrapper;
+pub mod vertex_position;
+// pub mod vec3_hash_wrapper;

@@ -158,102 +158,109 @@ impl ModelLoader {
         vertex
     }
 
-    fn make_vertex2(
-        index: u32,
+    fn make_vertex3(
         imported_mesh: &rs_assimp::mesh::Mesh,
         uv_map: &Option<Vec<glam::Vec3>>,
-        default_normal: &glam::Vec3,
-        default_tangent: &glam::Vec3,
-        default_bitangent: &glam::Vec3,
-        default_vertex_color: &glam::Vec4,
-    ) -> MeshVertex {
-        let mut texture_coord: glam::Vec2 = glam::vec2(0.0, 0.0);
-        if let Some(uv_map) = uv_map {
-            if let Some(uv) = uv_map.get(index as usize) {
-                texture_coord = uv.xy();
-            }
-        }
-        let vertex = imported_mesh
-            .vertices
-            .get(index as usize)
-            .expect("Should not be null");
-        let mut vertex_color: &glam::Vec4 = default_vertex_color;
-        if let Some(color) = imported_mesh.colors.get(index as usize) {
-            if let Some(color) = color.get(0) {
-                vertex_color = color;
-            }
-        }
-        let normal = imported_mesh
-            .normals
-            .get(index as usize)
-            .unwrap_or(default_normal);
-        let tangent = imported_mesh
-            .tangents
-            .get(index as usize)
-            .unwrap_or(default_tangent);
-        let bitangent = imported_mesh
-            .bitangents
-            .get(index as usize)
-            .unwrap_or(default_bitangent);
-
-        let vertex = MeshVertex {
-            vertex_color: vertex_color.clone(),
-            position: vertex.clone(),
-            normal: normal.clone(),
-            tangent: tangent.clone(),
-            bitangent: bitangent.clone(),
-            tex_coord: texture_coord.clone(),
+    ) -> Vec<MeshVertex> {
+        let default_normal = glam::Vec3 {
+            x: 0.5,
+            y: 0.5,
+            z: 1.0,
         };
-        vertex
+        let default_tangent = glam::Vec3::X;
+        let default_bitangent = glam::Vec3::Y;
+        let default_vertex_color = glam::Vec4::ZERO;
+        let default_texture_coord: glam::Vec2 = glam::vec2(0.0, 0.0);
+
+        let mut results = Vec::with_capacity(imported_mesh.vertices.len());
+
+        for i in 0..imported_mesh.vertices.len() {
+            let normal = *imported_mesh.normals.get(i).unwrap_or(&default_normal);
+            let tangent = *imported_mesh.tangents.get(i).unwrap_or(&default_tangent);
+            let bitangent = *imported_mesh
+                .bitangents
+                .get(i)
+                .unwrap_or(&default_bitangent);
+            let vertex_color = *imported_mesh
+                .colors
+                .get(0)
+                .map(|x| x.get(i))
+                .flatten()
+                .unwrap_or(&default_vertex_color);
+
+            let tex_coord = uv_map
+                .as_ref()
+                .map(|x| x.get(i))
+                .flatten()
+                .map(|x| x.xy())
+                .unwrap_or(default_texture_coord);
+            let position = *imported_mesh.vertices.get(i).expect("Should not be null");
+
+            results.push(MeshVertex {
+                vertex_color,
+                position,
+                normal,
+                tangent,
+                bitangent,
+                tex_coord,
+            });
+        }
+        results
     }
 
-    fn make_skin_vertex(
-        index: u32,
+    fn make_skin_vertex2(
         imported_mesh: &rs_assimp::mesh::Mesh,
         uv_map: &Option<Vec<glam::Vec3>>,
-        default_normal: &glam::Vec3,
-        default_tangent: &glam::Vec3,
-        default_bitangent: &glam::Vec3,
-        default_vertex_color: &glam::Vec4,
-    ) -> SkinMeshVertex {
-        let mut texture_coord: glam::Vec2 = glam::vec2(0.0, 0.0);
-        if let Some(uv_map) = uv_map {
-            let uv = uv_map.get(index as usize).unwrap();
-            texture_coord = uv.xy();
-        }
-        let vertex = imported_mesh.vertices.get(index as usize).unwrap();
-        let mut vertex_color: &glam::Vec4 = default_vertex_color;
-        if let Some(color) = imported_mesh.colors.get(index as usize) {
-            if let Some(color) = color.get(0) {
-                vertex_color = color;
-            }
-        }
-        let normal = imported_mesh
-            .normals
-            .get(index as usize)
-            .unwrap_or(default_normal);
-        let tangent = imported_mesh
-            .tangents
-            .get(index as usize)
-            .unwrap_or(default_tangent);
-        let bitangent = imported_mesh
-            .bitangents
-            .get(index as usize)
-            .unwrap_or(default_bitangent);
-        let vertex_bones: [i32; 4] = [INVALID_BONE, INVALID_BONE, INVALID_BONE, INVALID_BONE];
-        let weights: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
+    ) -> Vec<SkinMeshVertex> {
+        let mut results = Vec::with_capacity(imported_mesh.vertices.len());
 
-        let vertex = SkinMeshVertex {
-            vertex_color: vertex_color.clone(),
-            position: vertex.clone(),
-            normal: normal.clone(),
-            tangent: tangent.clone(),
-            bitangent: bitangent.clone(),
-            tex_coord: texture_coord.clone(),
-            bones: vertex_bones,
-            weights,
+        let default_normal = glam::Vec3 {
+            x: 0.5,
+            y: 0.5,
+            z: 1.0,
         };
-        vertex
+        let default_tangent = glam::Vec3::X;
+        let default_bitangent = glam::Vec3::Y;
+        let default_vertex_color = glam::Vec4::ZERO;
+        let default_texture_coord: glam::Vec2 = glam::vec2(0.0, 0.0);
+
+        for i in 0..imported_mesh.vertices.len() {
+            let normal = *imported_mesh.normals.get(i).unwrap_or(&default_normal);
+            let tangent = *imported_mesh.tangents.get(i).unwrap_or(&default_tangent);
+            let bitangent = *imported_mesh
+                .bitangents
+                .get(i)
+                .unwrap_or(&default_bitangent);
+            let vertex_color = *imported_mesh
+                .colors
+                .get(0)
+                .map(|x| x.get(i))
+                .flatten()
+                .unwrap_or(&default_vertex_color);
+
+            let tex_coord = uv_map
+                .as_ref()
+                .map(|x| x.get(i))
+                .flatten()
+                .map(|x| x.xy())
+                .unwrap_or(default_texture_coord);
+            let position = *imported_mesh.vertices.get(i).expect("Should not be null");
+            let bones: [i32; 4] = [INVALID_BONE, INVALID_BONE, INVALID_BONE, INVALID_BONE];
+            let weights: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
+
+            results.push(SkinMeshVertex {
+                vertex_color,
+                position,
+                normal,
+                tangent,
+                bitangent,
+                tex_coord,
+                bones,
+                weights,
+            });
+        }
+
+        results
     }
 
     pub fn load_from_file(
@@ -330,6 +337,7 @@ impl ModelLoader {
                 Rc::new(rs_assimp::scene::Scene::from_file_with_properties(
                     file_path,
                     rs_assimp::post_process_steps::PostProcessSteps::Triangulate
+                        | rs_assimp::post_process_steps::PostProcessSteps::JoinIdenticalVertices
                         | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
                     props,
                 )?),
@@ -375,48 +383,18 @@ impl ModelLoader {
                     triangle_count += 1;
                 }
 
-                let mut vertex_buffer: Vec<MeshVertex> = vec![];
                 let mut index_buffer: Vec<u32> = Vec::with_capacity(triangle_count * 3);
                 let mut uv_map: Option<Vec<glam::Vec3>> = None;
                 if let Some(map) = imported_mesh.borrow().texture_coords.get(0) {
                     uv_map = Some(map.to_vec());
                 }
-
-                let default_normal = glam::Vec3 {
-                    x: 0.5,
-                    y: 0.5,
-                    z: 1.0,
-                };
-                let default_tangent = glam::Vec3::X;
-                let default_bitangent = glam::Vec3::Y;
-                let default_vertex_color = glam::Vec4::ZERO;
-                let mut vertex_helper: HashMap<usize, bool> = HashMap::new();
-                for face in &imported_mesh.borrow().faces {
-                    for index in &face.indices {
-                        vertex_helper.insert(*index as usize, false);
-                    }
-                }
-                vertex_buffer.resize(vertex_helper.len(), Default::default());
+                let vertex_buffer: Vec<MeshVertex> =
+                    Self::make_vertex3(&imported_mesh.borrow(), &uv_map);
 
                 for face in &imported_mesh.borrow().faces {
                     let indices = &face.indices;
                     for index in indices {
                         index_buffer.push(*index);
-                        let is_create = vertex_helper.get_mut(&((*index) as usize)).unwrap();
-                        if *is_create {
-                            continue;
-                        }
-                        *is_create = true;
-                        let vertex = Self::make_vertex2(
-                            *index,
-                            &imported_mesh.borrow(),
-                            &uv_map,
-                            &default_normal,
-                            &default_tangent,
-                            &default_bitangent,
-                            &default_vertex_color,
-                        );
-                        vertex_buffer[(*index) as usize] = vertex;
                     }
                 }
 
@@ -464,48 +442,18 @@ impl ModelLoader {
                     triangle_count += 1;
                 }
 
-                let mut vertex_buffer: Vec<SkinMeshVertex> = vec![];
                 let mut index_buffer: Vec<u32> = Vec::with_capacity(triangle_count * 3);
                 let mut uv_map: Option<Vec<glam::Vec3>> = None;
                 if let Some(map) = imported_mesh.borrow().texture_coords.get(0) {
                     uv_map = Some(map.to_vec());
                 }
-
-                let default_normal = glam::Vec3 {
-                    x: 0.5,
-                    y: 0.5,
-                    z: 1.0,
-                };
-                let default_tangent = glam::Vec3::X;
-                let default_bitangent = glam::Vec3::Y;
-                let default_vertex_color = glam::Vec4::ZERO;
-                let mut vertex_helper: HashMap<usize, bool> = HashMap::new();
-                for face in &imported_mesh.borrow().faces {
-                    for index in &face.indices {
-                        vertex_helper.insert(*index as usize, false);
-                    }
-                }
-                vertex_buffer.resize(vertex_helper.len(), Default::default());
+                let mut vertex_buffer: Vec<SkinMeshVertex> =
+                    Self::make_skin_vertex2(&imported_mesh.borrow(), &uv_map);
 
                 for face in &imported_mesh.borrow().faces {
                     let indices = &face.indices;
                     for index in indices {
                         index_buffer.push(*index);
-                        let is_create = vertex_helper.get_mut(&((*index) as usize)).unwrap();
-                        if *is_create {
-                            continue;
-                        }
-                        *is_create = true;
-                        let vertex = Self::make_skin_vertex(
-                            *index,
-                            &imported_mesh.borrow(),
-                            &uv_map,
-                            &default_normal,
-                            &default_tangent,
-                            &default_bitangent,
-                            &default_vertex_color,
-                        );
-                        vertex_buffer[(*index) as usize] = vertex;
                     }
                 }
 
@@ -804,6 +752,7 @@ impl ModelLoader {
                 Rc::new(rs_assimp::scene::Scene::from_file_with_properties(
                     file_path,
                     rs_assimp::post_process_steps::PostProcessSteps::Triangulate
+                        | rs_assimp::post_process_steps::PostProcessSteps::JoinIdenticalVertices
                         | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
                     props,
                 )?),
@@ -877,6 +826,7 @@ impl ModelLoader {
                         relative_path: Path::new(&asset_reference).to_path_buf(),
                         path: imported_mesh.name.clone(),
                     },
+                    is_enable_multiresolution: false,
                 };
                 static_meshes.push(Rc::new(RefCell::new(static_mesh)));
             } else {

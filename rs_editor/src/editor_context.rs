@@ -31,7 +31,9 @@ use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use rs_artifact::{material::MaterialInfo, sound::ESoundFileType};
 use rs_core_minimal::{
-    file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
+    file_manager::{self, get_gpmetis_program_path},
+    name_generator::make_unique_name,
+    path_ext::CanonicalizeSlashExt,
 };
 #[cfg(any(feature = "plugin_shared_crate"))]
 use rs_engine::plugin::plugin_crate::Plugin;
@@ -62,6 +64,7 @@ use rs_engine::{
     static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
+use rs_metis::{cluster::ClusterCollection, vertex_position::VertexPosition};
 use rs_render::{
     command::{RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
     get_buildin_shader_dir,
@@ -1865,7 +1868,7 @@ impl EditorContext {
         self.material_ui_window = Some(ui_window);
     }
 
-    fn open_mesh_window(
+    fn open_skin_mesh_window(
         &mut self,
         skeleton_mesh: &mut rs_engine::content::skeleton_mesh::SkeletonMesh,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
@@ -1889,6 +1892,39 @@ impl EditorContext {
             ResourceManager::default(),
         );
         ui_window.update(&mut self.engine, &skin_mesh.vertexes, &skin_mesh.indexes);
+        self.mesh_ui_window = Some(ui_window);
+    }
+
+    fn open_static_mesh_window(
+        &mut self,
+        static_mesh: &mut rs_engine::content::static_mesh::StaticMesh,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
+    ) {
+        let Some(project_context) = &self.project_context else {
+            return;
+        };
+        let asset_folder_path = project_context.get_asset_folder_path();
+        let mut ui_window = MeshUIWindow::new(
+            self.editor_ui.egui_context.clone(),
+            &mut *self.window_manager.borrow_mut(),
+            event_loop_window_target,
+            &mut self.engine,
+        )
+        .expect("Should be opened");
+        let file_path = asset_folder_path.join(&static_mesh.asset_info.relative_path);
+        self.model_loader.load(&file_path).unwrap();
+        let Ok(static_mesh) = self.model_loader.to_runtime_static_mesh(
+            static_mesh,
+            &asset_folder_path,
+            ResourceManager::default(),
+        ) else {
+            return;
+        };
+        ui_window.update2(
+            &mut self.engine,
+            &static_mesh.vertexes,
+            &static_mesh.indexes,
+        );
         self.mesh_ui_window = Some(ui_window);
     }
 
@@ -2568,10 +2604,15 @@ impl EditorContext {
                 self.editor_ui.content_item_property_view.content = Some(file.clone());
                 self.data_source.is_content_item_property_view_open = true;
                 match file {
-                    EContentFileType::StaticMesh(_) => {}
+                    EContentFileType::StaticMesh(static_mesh) => {
+                        self.open_static_mesh_window(
+                            &mut static_mesh.borrow_mut(),
+                            event_loop_window_target,
+                        );
+                    }
                     EContentFileType::SkeletonMesh(skeleton_mesh) => {
-                        self.open_mesh_window(
-                            &mut *skeleton_mesh.borrow_mut(),
+                        self.open_skin_mesh_window(
+                            &mut skeleton_mesh.borrow_mut(),
                             event_loop_window_target,
                         );
                     }
@@ -2985,6 +3026,49 @@ impl EditorContext {
                 let mut material_paramenters_collection = update_info.0.borrow_mut();
                 material_paramenters_collection.fields = update_info.1.fields.clone();
                 material_paramenters_collection.initialize(&mut self.engine);
+            }
+            content_item_property_view::EEventType::UpdateStaticMeshEnableMultiresolution(
+                static_mesh,
+                _,
+                new_value,
+            ) => {
+                let mut static_mesh = static_mesh.borrow_mut();
+                static_mesh.is_enable_multiresolution = *new_value;
+                if static_mesh.is_enable_multiresolution {
+                    let project_context = self.project_context.as_ref().expect("Not null");
+                    let closure: anyhow::Result<()> = (|| {
+                        let folder = project_context.try_create_mesh_cluster_dir()?;
+                        let rm = ResourceManager::default();
+                        let static_mesh_result =
+                            rm.get_static_mesh(&static_mesh.asset_info.get_url())?;
+                        let indices = &static_mesh_result.indexes;
+
+                        let mut vertices: Vec<VertexPosition> =
+                            Vec::with_capacity(static_mesh_result.vertexes.len());
+                        for item in static_mesh_result.vertexes.iter() {
+                            vertices.push(VertexPosition::new(item.position));
+                        }
+                        let vertices = Arc::new(vertices);
+
+                        let cluster_collection = ClusterCollection::parallel_from_indexed_vertices(
+                            indices,
+                            vertices,
+                            get_gpmetis_program_path(),
+                        )?;
+
+                        let filename = static_mesh_result.name.clone();
+                        let output_path = folder.join(filename);
+                        let data = bincode::serialize(&cluster_collection)?;
+                        let _ = std::fs::write(output_path, data)?;
+                        Ok(())
+                    })();
+                    match closure {
+                        Ok(_) => {}
+                        Err(err) => {
+                            log::warn!("{}", err);
+                        }
+                    }
+                }
             }
         }
     }

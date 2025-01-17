@@ -14,7 +14,7 @@ use rs_engine::{
     mesh_lod::optimization::MeshoptMesh,
     resource_manager::ResourceManager,
 };
-use rs_metis::cluster::ClusterCollection;
+use rs_metis::{cluster::ClusterCollection, vertex_position::VertexPosition};
 use rs_render::{
     command::{
         BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, PresentInfo, RenderCommand,
@@ -24,7 +24,7 @@ use rs_render::{
     renderer::{EBuiltinPipelineType, EPipelineType},
     vertex_data_type::mesh_vertex::MeshVertex3,
 };
-use std::{collections::HashMap, num::NonZeroUsize};
+use std::{collections::HashMap, num::NonZeroUsize, sync::Arc};
 use winit::event::{MouseButton, MouseScrollDelta, WindowEvent};
 
 struct MeshViewDrawObject {
@@ -352,13 +352,22 @@ impl MeshUIWindow {
 
     fn make_cluster_lods(
         engine: &mut Engine,
-        skin_mesh_vertices: &[SkinMeshVertex],
+        mesh_vertices: &[rs_artifact::mesh_vertex::MeshVertex],
         indices: &[u32],
         global_constants_handle: BufferHandle,
     ) -> Vec<MeshViewDrawObject> {
         let mut mesh_draw_objects = vec![];
+        let mut vertices: Vec<VertexPosition> = Vec::with_capacity(mesh_vertices.len());
+        for item in mesh_vertices {
+            vertices.push(VertexPosition::new(item.position));
+        }
+        let vertices = Arc::new(vertices);
 
-        let cluster_collection = match ClusterCollection::new(indices, get_gpmetis_program_path()) {
+        let cluster_collection = match ClusterCollection::parallel_from_indexed_vertices(
+            indices,
+            vertices,
+            get_gpmetis_program_path(),
+        ) {
             Ok(cluster_collection) => cluster_collection,
             Err(err) => {
                 log::warn!("{}", err);
@@ -376,7 +385,7 @@ impl MeshUIWindow {
             for cluster in cluster_collection {
                 let vertex_color = rs_core_minimal::color::random_color4();
                 for vertex_index in &cluster.indices {
-                    let vertex = &skin_mesh_vertices[*vertex_index as usize];
+                    let vertex = &mesh_vertices[*vertex_index as usize];
                     let vertex = MeshVertex3 {
                         position: vertex.position,
                         vertex_color,
@@ -445,7 +454,31 @@ impl MeshUIWindow {
 
         self.draw_objects = Self::make_cluster_lods(
             engine,
-            skin_mesh_vertices,
+            &skin_mesh_vertices
+                .iter()
+                .map(|x| x.to_mesh_vertex())
+                .collect::<Vec<rs_artifact::mesh_vertex::MeshVertex>>(),
+            indices,
+            self.global_constants_handle.clone(),
+        );
+    }
+
+    pub fn update2(
+        &mut self,
+        engine: &mut Engine,
+        mesh_vertices: &[rs_artifact::mesh_vertex::MeshVertex],
+        indices: &[u32],
+    ) {
+        // self.draw_objects = Self::make_lods(
+        //     engine,
+        //     skin_mesh_vertices,
+        //     indices,
+        //     self.global_constants_handle.clone(),
+        // );
+
+        self.draw_objects = Self::make_cluster_lods(
+            engine,
+            mesh_vertices,
             indices,
             self.global_constants_handle.clone(),
         );

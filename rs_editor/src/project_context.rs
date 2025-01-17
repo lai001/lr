@@ -236,7 +236,13 @@ impl ProjectContext {
 
     pub fn try_create_build_dir(&self) -> anyhow::Result<PathBuf> {
         let path = self.get_build_dir();
-        let _ = std::fs::create_dir_all(path.clone())?;
+        let _ = std::fs::create_dir_all(&path)?;
+        Ok(path)
+    }
+
+    pub fn try_create_mesh_cluster_dir(&self) -> anyhow::Result<PathBuf> {
+        let path = self.get_build_dir().join("cache/mesh_cluster");
+        let _ = std::fs::create_dir_all(&path)?;
         Ok(path)
     }
 
