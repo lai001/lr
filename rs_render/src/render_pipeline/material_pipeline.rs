@@ -4,7 +4,7 @@ use crate::{
     command::{MaterialRenderPipelineHandle, Viewport},
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2},
+    vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2, MeshVertex5},
     view_mode::EViewModeType,
     VertexBufferType,
 };
@@ -68,12 +68,14 @@ impl MaterialRenderPipeline {
         });
         if is_skin {
             builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
+                MeshVertex5::type_layout(),
                 MeshVertex0::type_layout(),
                 MeshVertex1::type_layout(),
                 MeshVertex2::type_layout(),
             ]));
         } else {
             builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
+                MeshVertex5::type_layout(),
                 MeshVertex0::type_layout(),
                 MeshVertex1::type_layout(),
             ]));

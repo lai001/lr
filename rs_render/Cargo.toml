@@ -30,10 +30,13 @@ ddsfile = "0.5.2"
 tracy-client = { version = "0.18.0", default-features = false }
 bitflags = "2.6.0"
 moka = { version = "0.12.8", default-features = false, features = ["sync"] }
+rapier3d = { version = "0.22.0", features = ["simd-stable", "serde-serialize"] }
 rs_foundation = { path = "../rs_foundation" }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 rs_render_types = { path = "../rs_render_types" }
+rs_metis = { path = "../rs_metis" }
+rs_artifact = { path = "../rs_artifact" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14.1"

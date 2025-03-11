@@ -142,9 +142,19 @@ pub struct StaticMeshMaterialDrawObject {
     pub(crate) material: Rc<RefCell<crate::content::material::Material>>,
     pub(crate) constants_buffer_handle: BufferHandle,
     pub(crate) virtual_texture_constants_buffer_handle: BufferHandle,
+
+    pub(crate) multiple_resolution_mesh_pass_resource_handle: Option<BufferHandle>,
+
     pub window_id: isize,
     pub constants: rs_render::constants::Constants,
     pub virtual_texture_constants: rs_render::constants::VirtualTextureConstants,
 
     pub debug_group_label: Option<String>,
 }
+
+// #[derive(Clone, Debug)]
+// pub struct MultipleResolutionMeshPassResource {
+//     pub mesh_resource_handle: BufferHandle,
+//     pub global_constants_resource: EBindingResource,
+//     pub constants_resource: EBindingResource,
+// }

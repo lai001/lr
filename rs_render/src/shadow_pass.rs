@@ -6,30 +6,30 @@ use crate::{
     },
     render_pipeline::generic_pipeline::GenericPipeline,
     shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex2},
+    vertex_data_type::mesh_vertex::{MeshVertex2, MeshVertex5},
     VertexBufferType,
 };
 use type_layout::TypeLayout;
 use wgpu::*;
 
-pub struct ShadowPipilines {
+pub struct ShadowPipelines {
     pub depth_pipeline: GenericPipeline,
     pub depth_skin_pipeline: GenericPipeline,
 }
 
-impl ShadowPipilines {
+impl ShadowPipelines {
     pub fn new(
         device: &Device,
         shader_library: &ShaderLibrary,
         pool: &mut BaseRenderPipelinePool,
-    ) -> ShadowPipilines {
+    ) -> ShadowPipelines {
         let depth_pipeline = GenericPipeline::standard_depth_only(
             DepthShader {}.get_name(),
             device,
             shader_library,
             pool,
             Some(VertexBufferType::Interleaved(vec![
-                MeshVertex0::type_layout(),
+                MeshVertex5::type_layout(),
             ])),
         );
         let depth_skin_pipeline = GenericPipeline::standard_depth_only(
@@ -38,11 +38,11 @@ impl ShadowPipilines {
             shader_library,
             pool,
             Some(VertexBufferType::Interleaved(vec![
-                MeshVertex0::type_layout(),
+                MeshVertex5::type_layout(),
                 MeshVertex2::type_layout(),
             ])),
         );
-        ShadowPipilines {
+        ShadowPipelines {
             depth_pipeline,
             depth_skin_pipeline,
         }

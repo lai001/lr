@@ -4,7 +4,7 @@ use crate::{
     global_shaders::{global_shader::GlobalShader, grid::GridShader},
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::MeshVertex0,
+    vertex_data_type::mesh_vertex::MeshVertex5,
     VertexBufferType,
 };
 use std::sync::Arc;
@@ -44,7 +44,7 @@ impl GridPipeline {
             bias: DepthBiasState::default(),
         });
         builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
-            MeshVertex0::type_layout(),
+            MeshVertex5::type_layout(),
         ]));
         builder.primitive = Some(PrimitiveState {
             topology: PrimitiveTopology::TriangleList,

@@ -10,12 +10,13 @@ pub struct Cluster {
     pub lod: u32,
     pub depth: u32,
     pub indices: Vec<u32>,
+    pub occluder_indices: Vec<u32>,
     pub parent: Option<i32>,
     pub childs: Vec<i32>,
     pub aabb: rapier3d::prelude::Aabb,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ClusterCollection {
     pub clusters: HashMap<i32, Cluster>,
     pub root_id: i32,
@@ -23,6 +24,26 @@ pub struct ClusterCollection {
 }
 
 impl ClusterCollection {
+    pub fn get_leaf_cluster_ids(&self) -> Vec<i32> {
+        let mut clusters: Vec<i32> = Vec::new();
+        for (id, cluster) in self.clusters.iter() {
+            if cluster.childs.is_empty() {
+                clusters.push(*id);
+            }
+        }
+        clusters
+    }
+
+    pub fn get_leaf_clusters(&self) -> Vec<&Cluster> {
+        let mut clusters: Vec<&Cluster> = Vec::new();
+        for cluster in self.clusters.values() {
+            if cluster.childs.is_empty() {
+                clusters.push(cluster);
+            }
+        }
+        clusters
+    }
+
     pub fn from_indexed_vertices(
         indices: &[u32],
         vertices: &[VertexPosition],
@@ -53,6 +74,7 @@ impl ClusterCollection {
             childs,
             depth: 0,
             aabb: root_aabb,
+            occluder_indices: simplify_mesh(indices, vertices),
         };
         collection.insert(0, root_cluster);
         Self::resolve_lod(&mut collection, max_depth);
@@ -67,7 +89,7 @@ impl ClusterCollection {
     pub fn parallel_from_indexed_vertices(
         indices: &[u32],
         vertices: Arc<Vec<VertexPosition>>,
-        gpmetis_program_path: impl AsRef<std::path::Path>,
+        gpmetis_program_path: Option<std::path::PathBuf>,
     ) -> crate::error::Result<ClusterCollection> {
         let mut collection = HashMap::new();
         let mut inc_id: i32 = 0;
@@ -94,6 +116,7 @@ impl ClusterCollection {
             childs,
             depth: 0,
             aabb: root_aabb,
+            occluder_indices: simplify_mesh(indices, &vertices),
         };
         collection.insert(0, root_cluster);
         Self::resolve_lod(&mut collection, max_depth);
@@ -182,6 +205,7 @@ impl ClusterCollection {
                 &partition,
                 &vertices.iter().map(|x| x.p).collect::<Vec<glam::Vec3>>(),
             );
+            let optimized_indices = simplify_mesh(&partition, &vertices);
             let cluster = Cluster {
                 id,
                 lod: 0,
@@ -190,6 +214,7 @@ impl ClusterCollection {
                 childs,
                 depth: current_depth,
                 aabb,
+                occluder_indices: optimized_indices,
             };
             collection.insert(id, cluster);
             clusters.push(id);
@@ -201,7 +226,7 @@ impl ClusterCollection {
     pub fn parallel_partition_from_indexed_vertices(
         indices: &[u32],
         vertices: Arc<Vec<VertexPosition>>,
-        gpmetis_program_path: impl AsRef<std::path::Path>,
+        gpmetis_program_path: Option<std::path::PathBuf>,
         parent: Option<i32>,
         inc_id: &mut i32,
         collection: &mut HashMap<i32, Cluster>,
@@ -235,7 +260,7 @@ impl ClusterCollection {
                 childs = Self::parallel_partition_from_indexed_vertices(
                     &partition,
                     vertices.clone(),
-                    gpmetis_program_path.as_ref(),
+                    gpmetis_program_path.clone(),
                     Some(id),
                     inc_id,
                     collection,
@@ -247,6 +272,7 @@ impl ClusterCollection {
                 &partition,
                 &vertices.iter().map(|x| x.p).collect::<Vec<glam::Vec3>>(),
             );
+            let optimized_indices = simplify_mesh(&partition, &vertices);
             let cluster = Cluster {
                 id,
                 lod: 0,
@@ -255,6 +281,7 @@ impl ClusterCollection {
                 childs,
                 depth: current_depth,
                 aabb,
+                occluder_indices: optimized_indices,
             };
             collection.insert(id, cluster);
             clusters.push(id);
@@ -278,6 +305,13 @@ impl ClusterCollection {
         }
         return clusters;
     }
+
+    pub fn get_root_aabb(&self) -> Option<&rapier3d::prelude::Aabb> {
+        if let Some(root) = self.clusters.get(&self.root_id) {
+            return Some(&root.aabb);
+        }
+        return None;
+    }
 }
 
 fn indexed_vertices_to_aabb(indices: &[u32], vertices: &[glam::Vec3]) -> rapier3d::prelude::Aabb {
@@ -290,4 +324,28 @@ fn indexed_vertices_to_aabb(indices: &[u32], vertices: &[glam::Vec3]) -> rapier3
 
     let aabb = rapier3d::prelude::Aabb::from_points(&points);
     aabb
+}
+
+fn get_vertex_adapter(vertices: &[VertexPosition]) -> meshopt::VertexDataAdapter {
+    let position_offset = std::mem::offset_of!(VertexPosition, p);
+    let vertex_stride = std::mem::size_of::<VertexPosition>();
+    let vertex_data = meshopt::typed_to_bytes(&vertices);
+    meshopt::VertexDataAdapter::new(vertex_data, vertex_stride, position_offset)
+        .expect("Create a valid vertex data reader")
+}
+
+fn simplify_mesh(indices: &[u32], vertices: &[VertexPosition]) -> Vec<u32> {
+    let vertex_adapter = get_vertex_adapter(vertices);
+    let threshold = 0.7f32.powf(1.0);
+    let target_index_count = (indices.len() as f32 * threshold) as usize / 3 * 3;
+    let target_error = 1e-3f32;
+    let lod = meshopt::simplify(
+        indices,
+        &vertex_adapter,
+        std::cmp::min(indices.len(), target_index_count),
+        target_error,
+        meshopt::SimplifyOptions::LockBorder,
+        None,
+    );
+    lod
 }

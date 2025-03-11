@@ -8,6 +8,8 @@ use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::light_culling::LightCulling;
+use crate::multi_res_mesh::MultipleResolutionMesh;
+use crate::multiple_resolution_meshs_pass::MultipleResolutionMeshsPass;
 use crate::prebake_ibl::PrebakeIBL;
 use crate::render_pipeline::attachment_pipeline::{AttachmentPipeline, ClearDepth, EClearType};
 use crate::render_pipeline::fxaa::FXAAPipeline;
@@ -20,7 +22,7 @@ use crate::render_pipeline::primitive::PrimitiveRenderPipeline;
 use crate::render_pipeline::shading::ShadingPipeline;
 use crate::render_pipeline::skin_mesh_shading::SkinMeshShadingPipeline;
 use crate::shader_library::ShaderLibrary;
-use crate::shadow_pass::ShadowPipilines;
+use crate::shadow_pass::ShadowPipelines;
 use crate::virtual_texture_pass::VirtualTexturePass;
 use crate::virtual_texture_source::VirtualTextureSource;
 use crate::{command::*, ibl_readback, shadow_pass};
@@ -106,7 +108,7 @@ pub struct Renderer {
 
     prebake_ibls: HashMap<IBLTexturesKey, PrebakeIBL>,
 
-    shadow_pipilines: Option<shadow_pass::ShadowPipilines>,
+    shadow_pipelines: Option<shadow_pass::ShadowPipelines>,
 
     fxaa_pipeline: Option<FXAAPipeline>,
 
@@ -117,6 +119,9 @@ pub struct Renderer {
     bind_groups_collection: moka::sync::Cache<u64, Arc<Vec<BindGroup>>>,
 
     light_culling: crate::light_culling::LightCulling,
+
+    multiple_resolution_meshs: HashMap<u64, MultipleResolutionMesh>,
+    multiple_resolution_meshs_pass: MultipleResolutionMeshsPass,
 }
 
 impl Renderer {
@@ -202,7 +207,7 @@ impl Renderer {
             &mut base_render_pipeline_pool,
         );
 
-        let shadow_pipilines = ShadowPipilines::new(
+        let shadow_pipilines = ShadowPipelines::new(
             wgpu_context.get_device(),
             &shader_library,
             &mut base_render_pipeline_pool,
@@ -233,6 +238,11 @@ impl Renderer {
             LightCullingComputePipeline::new(wgpu_context.get_device(), &shader_library)?;
 
         let is_enable_multiple_thread = settings.is_enable_multithread_rendering;
+        let multiple_resolution_meshs_pass = MultipleResolutionMeshsPass::new(
+            wgpu_context.get_device(),
+            &shader_library,
+            &mut base_render_pipeline_pool,
+        );
         let renderer = Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
@@ -262,7 +272,7 @@ impl Renderer {
             prebake_ibls: HashMap::new(),
             mesh_view_pipeline,
             mesh_view_multiple_draw_pipeline,
-            shadow_pipilines: Some(shadow_pipilines),
+            shadow_pipelines: Some(shadow_pipilines),
             base_compute_pipeline_pool,
             fxaa_pipeline: Some(fxaa_pipeline),
             particle_pipeline,
@@ -273,6 +283,8 @@ impl Renderer {
             bind_groups_collection: moka::sync::Cache::new(1000),
             light_culling_compute_pipeline,
             light_culling: LightCulling::new(),
+            multiple_resolution_meshs: HashMap::new(),
+            multiple_resolution_meshs_pass,
         };
         Ok(renderer)
     }
@@ -627,6 +639,73 @@ impl Renderer {
                 &present_info.draw_objects,
             );
         } else {
+            let mut multiple_resolution_mesh_draw_objects: Vec<&DrawObject> = vec![];
+            let mut non_multiple_resolution_mesh_draw_objects: Vec<&DrawObject> = vec![];
+            for draw_object_command in &present_info.draw_objects {
+                if draw_object_command.multiple_resolution_mesh_pass.is_none() {
+                    non_multiple_resolution_mesh_draw_objects.push(draw_object_command);
+                } else {
+                    multiple_resolution_mesh_draw_objects.push(draw_object_command);
+                }
+            }
+
+            if let Some(depth_texture) = present_info
+                .h_z_texture_handle
+                .map(|x| self.textures.get(&x))
+                .flatten()
+            {
+                if !multiple_resolution_mesh_draw_objects.is_empty() {
+                    let depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
+                    let mut texture_views: HashMap<u64, &TextureView> = HashMap::new();
+                    for (k, v) in self.texture_views.iter() {
+                        texture_views.insert(*k, v);
+                    }
+                    let _ = self.multiple_resolution_meshs_pass.render(
+                        self.wgpu_context.get_device(),
+                        self.wgpu_context.get_queue(),
+                        &self.multiple_resolution_meshs,
+                        texture_views,
+                        &self.buffers,
+                        &self.samplers,
+                        multiple_resolution_mesh_draw_objects.clone(),
+                        &depth_view,
+                        &mut self.bind_groups_collection,
+                    );
+
+                    let visible_object_indices = self
+                        .multiple_resolution_meshs_pass
+                        .instance_culling(
+                            self.wgpu_context.get_device(),
+                            self.wgpu_context.get_queue(),
+                            &self.buffers,
+                            multiple_resolution_mesh_draw_objects.clone(),
+                            &depth_view,
+                            &self.multiple_resolution_meshs,
+                            present_info.global_constant_resources.clone().unwrap(),
+                        )
+                        .unwrap_or_default();
+                    let mut visible_objects: Vec<&DrawObject> = vec![];
+                    for visible_object_index in visible_object_indices {
+                        visible_objects.push(
+                            multiple_resolution_mesh_draw_objects[visible_object_index as usize],
+                        );
+                    }
+
+                    let _ = self
+                        .multiple_resolution_meshs_pass
+                        .cluster_culling(
+                            self.wgpu_context.get_device(),
+                            self.wgpu_context.get_queue(),
+                            &self.buffers,
+                            visible_objects,
+                            &depth_view,
+                            &self.multiple_resolution_meshs,
+                            present_info.global_constant_resources.unwrap(),
+                        )
+                        .unwrap_or_default();
+                }
+            }
+
             let mut mesh_buffers: Vec<GpuVertexBufferImp> =
                 Vec::with_capacity(present_info.draw_objects.len());
             let mut g_vertex_buffers: Vec<Vec<&Buffer>> =
@@ -1233,6 +1312,28 @@ impl Renderer {
                     let _span = tracy_client::span!("present");
                     surface_texture.present();
                 }
+            }
+            RenderCommand::CreateMultiResMesh(create_multiple_resolution_mesh) => {
+                let mesh_vertices = create_multiple_resolution_mesh.vertexes;
+                let indices = create_multiple_resolution_mesh.indices;
+                let cluster_collection = create_multiple_resolution_mesh.cluster_collection;
+                if let Some(debug_label) = &create_multiple_resolution_mesh.debug_label {
+                    log::trace!("Create multiple resolution mesh, {}", debug_label);
+                }
+                let multiple_resolution_mesh = MultipleResolutionMesh {
+                    vertexes: mesh_vertices,
+                    indices,
+                    cluster_collection,
+                };
+                self.multiple_resolution_meshs_pass.create_resource(
+                    self.wgpu_context.get_device(),
+                    create_multiple_resolution_mesh.handle,
+                    &multiple_resolution_mesh,
+                );
+                self.multiple_resolution_meshs.insert(
+                    create_multiple_resolution_mesh.handle,
+                    multiple_resolution_mesh,
+                );
             }
         }
         return None;
@@ -2347,7 +2448,7 @@ impl Renderer {
         draw_objects: &[DrawObject],
         depth_texture_handle: Option<TextureHandle>,
     ) {
-        let Some(shadow_pipilines) = self.shadow_pipilines.as_mut() else {
+        let Some(shadow_pipilines) = self.shadow_pipelines.as_mut() else {
             return;
         };
         let Some(depth_texture_handle) = depth_texture_handle else {

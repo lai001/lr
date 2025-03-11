@@ -4,12 +4,12 @@ use rs_core_minimal::primitive_data::PrimitiveData;
 use rs_render::{
     command::{BufferCreateInfo, CreateBuffer, Draw, DrawObject, EBindingResource, EDrawCallType},
     renderer::{EBuiltinPipelineType, EPipelineType},
-    vertex_data_type::mesh_vertex::{Instance0, MeshVertex0},
+    vertex_data_type::mesh_vertex::{Instance0, MeshVertex0, MeshVertex5},
 };
 use wgpu::*;
 
 pub struct EmiterRender {
-    vertex_buffer_handle: BufferHandle,
+    vertex_buffer_handles: Vec<BufferHandle>,
     index_buffer_handle: BufferHandle,
     global_constants_handle: BufferHandle,
 }
@@ -17,22 +17,43 @@ pub struct EmiterRender {
 impl EmiterRender {
     pub fn new(engine: &mut Engine, global_constants_handle: BufferHandle) -> EmiterRender {
         let rm = ResourceManager::default();
-        let vertex_buffer_handle = rm.next_buffer();
+        let vertex_buffer_handles: Vec<BufferHandle> = vec![rm.next_buffer(), rm.next_buffer()];
+        // let vertex_buffer_handle = rm.next_buffer();
         let index_buffer_handle = rm.next_buffer();
 
         let quad = PrimitiveData::quad();
 
         let command = rs_render::command::RenderCommand::CreateBuffer(CreateBuffer {
-            handle: *vertex_buffer_handle,
+            handle: *vertex_buffer_handles[0],
             buffer_create_info: BufferCreateInfo {
-                label: Some(format!("VertexBuffer")),
+                label: Some(format!("VertexBuffer0")),
+                contents: rs_foundation::cast_to_raw_buffer(
+                    &quad
+                        .into_iter()
+                        .map(|x| MeshVertex5 {
+                            position: (glam::Mat4::from_rotation_x(90_f32.to_radians())
+                                * glam::vec4(x.1.x, x.1.y, x.1.z, 1.0))
+                            .xyz(),
+                            // tex_coord: *x.5,
+                        })
+                        .collect::<Vec<MeshVertex5>>(),
+                )
+                .to_vec(),
+                usage: BufferUsages::COPY_DST | BufferUsages::VERTEX,
+            },
+        });
+        engine.send_render_command(command);
+        let command = rs_render::command::RenderCommand::CreateBuffer(CreateBuffer {
+            handle: *vertex_buffer_handles[1],
+            buffer_create_info: BufferCreateInfo {
+                label: Some(format!("VertexBuffer1")),
                 contents: rs_foundation::cast_to_raw_buffer(
                     &quad
                         .into_iter()
                         .map(|x| MeshVertex0 {
-                            position: (glam::Mat4::from_rotation_x(90_f32.to_radians())
-                                * glam::vec4(x.1.x, x.1.y, x.1.z, 1.0))
-                            .xyz(),
+                            // position: (glam::Mat4::from_rotation_x(90_f32.to_radians())
+                            //     * glam::vec4(x.1.x, x.1.y, x.1.z, 1.0))
+                            // .xyz(),
                             tex_coord: *x.5,
                         })
                         .collect::<Vec<MeshVertex0>>(),
@@ -54,7 +75,7 @@ impl EmiterRender {
         engine.send_render_command(command);
 
         EmiterRender {
-            vertex_buffer_handle,
+            vertex_buffer_handles,
             index_buffer_handle,
             global_constants_handle,
         }
@@ -98,7 +119,11 @@ impl EmiterRender {
         engine.send_render_command(command);
         let mut draw_object = DrawObject::new(
             0,
-            vec![*self.vertex_buffer_handle, *instance_buffer_handle],
+            vec![
+                *self.vertex_buffer_handles[0],
+                *self.vertex_buffer_handles[1],
+                *instance_buffer_handle,
+            ],
             quad.vertex_positions.len() as u32,
             EPipelineType::Builtin(EBuiltinPipelineType::Particle),
             Some(*self.index_buffer_handle),

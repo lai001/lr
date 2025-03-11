@@ -43,7 +43,12 @@ target-dir = "./build/target"
 FFMPEG_DIR = "@ffmpeg_dir@"
         ]]
         ffmpeg_block = ffmpeg_block:gsub("@ffmpeg_dir@", ffmpeg_dir)
+        local fix_conflict_library = [[
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/FORCE:MULTIPLE"]
+        ]]
         content = content .. "\n" .. ffmpeg_block
+        content = content .. "\n" .. fix_conflict_library
         content = content:gsub("\\", "/")
         io.writefile(".cargo/config.toml", content)
     end)

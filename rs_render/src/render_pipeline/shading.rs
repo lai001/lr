@@ -56,6 +56,7 @@ impl ShadingPipeline {
             Some(VertexBufferType::Noninterleaved)
         } else {
             Some(VertexBufferType::Interleaved(vec![
+                MeshVertex5::type_layout(),
                 MeshVertex0::type_layout(),
                 MeshVertex1::type_layout(),
             ]))

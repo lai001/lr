@@ -10,6 +10,8 @@ fn is_debug() -> bool {
 }
 
 fn main() {
+    let target = env::var("TARGET").expect("TARGET environment variable is not set");
+
     let mut include_dirs: Vec<String> = Vec::new();
     include_dirs.push("../.xmake/deps/METIS/include".to_owned());
     include_dirs.push("../.xmake/deps/GKlib".to_owned());
@@ -19,12 +21,15 @@ fn main() {
     defines.push("IDXTYPEWIDTH=32".to_owned());
     defines.push("REALTYPEWIDTH=32".to_owned());
 
-    #[cfg(target_os = "windows")]
-    {
+    if target.contains("windows") {
         defines.push("__thread=__declspec(thread)".to_owned());
         defines.push("MSC".to_owned());
         defines.push("WIN32".to_owned());
         defines.push("_CRT_SECURE_NO_DEPRECATE".to_owned());
+    }
+
+    if target.contains("android") {
+        defines.push("__thread=".to_owned());
     }
 
     if is_debug() {
@@ -42,15 +47,36 @@ fn main() {
         .header("../.xmake/deps/METIS/libmetis/metislib.h")
         .header("../.xmake/deps/METIS/libmetis/rename.h")
         .header("../.xmake/deps/METIS/programs/struct.h")
-        // .allowlist_function("METIS_.*")
-        // .allowlist_type("idx_t")
-        // .allowlist_type("real_t")
-        // .allowlist_type("graph_t")
-        // .allowlist_type("rstatus_et")
-        // .allowlist_type("m.*_et")
-        // .allowlist_var("METIS_.*")
-        .clang_args(defines.iter().map(|x| format!("-D {}", x)).collect::<Vec<String>>())
-        .clang_args(include_dirs.iter().map(|x| format!("-I{}", x)).collect::<Vec<String>>())
+        .allowlist_function("METIS_.*")
+        .allowlist_function("libmetis__CreateGraph")
+        .allowlist_function("libmetis__FreeGraph")
+        .allowlist_function("libmetis__InitGraph")
+        .allowlist_function("libmetis__imalloc")
+        .allowlist_function("libmetis__ismalloc")
+        .allowlist_function("gk_free")
+        .allowlist_function("libmetis__rsmalloc")
+        .allowlist_type("idx_t")
+        .allowlist_type("real_t")
+        .allowlist_type("graph_t")
+        .allowlist_type("params_t")
+        .allowlist_type("rstatus_et")
+        .allowlist_type("m.*_et")
+        .allowlist_var("METIS_.*")
+        .allowlist_var("KMETIS_DEFAULT_UFACTOR")
+        .allowlist_var("MCPMETIS_DEFAULT_UFACTOR")
+        .allowlist_var("PMETIS_DEFAULT_UFACTOR")
+        .clang_args(
+            defines
+                .iter()
+                .map(|x| format!("-D {}", x))
+                .collect::<Vec<String>>(),
+        )
+        .clang_args(
+            include_dirs
+                .iter()
+                .map(|x| format!("-I{}", x))
+                .collect::<Vec<String>>(),
+        )
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");

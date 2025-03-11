@@ -4,6 +4,7 @@ use crate::{
     virtual_texture_source::TVirtualTextureSource,
 };
 use rs_core_minimal::settings::{RenderSettings, VirtualTextureSetting};
+use rs_metis::cluster::ClusterCollection;
 use rs_render_types::MaterialOptions;
 use std::{
     collections::{HashMap, HashSet},
@@ -119,6 +120,15 @@ pub struct CreateBuffer {
 }
 
 #[derive(Clone)]
+pub struct CreateMultipleResolutionMesh {
+    pub handle: BufferHandle,
+    pub vertexes: Vec<rs_artifact::mesh_vertex::MeshVertex>,
+    pub indices: Vec<u32>,
+    pub cluster_collection: ClusterCollection,
+    pub debug_label: Option<String>,
+}
+
+#[derive(Clone)]
 pub struct CreateSampler {
     pub handle: SamplerHandle,
     pub sampler_descriptor: SamplerDescriptor<'static>,
@@ -195,14 +205,21 @@ pub struct Viewport {
 }
 
 #[derive(Clone)]
+pub struct MultipleResolutionMeshPass {
+    pub resource_handle: BufferHandle,
+    pub binding_resources: Vec<Vec<EBindingResource>>,
+    pub transformation: glam::Mat4,
+}
+
+#[derive(Clone)]
 pub struct DrawObject {
     pub id: u32,
     pub vertex_buffers: Vec<BufferHandle>,
     pub vertex_count: u32,
-
-    pub pipeline: EPipelineType,
     pub index_buffer: Option<BufferHandle>,
     pub index_count: Option<u32>,
+    pub multiple_resolution_mesh_pass: Option<MultipleResolutionMeshPass>,
+    pub pipeline: EPipelineType,
     pub binding_resources: Vec<Vec<EBindingResource>>,
     pub virtual_pass_set: Option<VirtualPassSet>,
     pub draw_call_type: EDrawCallType,
@@ -226,15 +243,40 @@ impl DrawObject {
             id,
             vertex_buffers,
             vertex_count,
-            pipeline,
             index_buffer,
             index_count,
+            pipeline,
             binding_resources,
             virtual_pass_set: None,
+            draw_call_type: EDrawCallType::Draw(Draw { instances: 0..1 }),
             shadow_mapping: None,
             scissor_rect: None,
             viewport: None,
+            debug_group_label: None,
+            multiple_resolution_mesh_pass: None,
+        }
+    }
+
+    pub fn from_multiple_resolution_mesh(
+        id: u32,
+        multiple_resolution_mesh_pass: MultipleResolutionMeshPass,
+        pipeline: EPipelineType,
+        binding_resources: Vec<Vec<EBindingResource>>,
+    ) -> DrawObject {
+        DrawObject {
+            id,
+            vertex_buffers: vec![],
+            vertex_count: 0,
+            index_buffer: None,
+            index_count: None,
+            multiple_resolution_mesh_pass: Some(multiple_resolution_mesh_pass),
+            pipeline,
+            binding_resources,
+            virtual_pass_set: None,
             draw_call_type: EDrawCallType::Draw(Draw { instances: 0..1 }),
+            shadow_mapping: None,
+            scissor_rect: None,
+            viewport: None,
             debug_group_label: None,
         }
     }
@@ -342,7 +384,10 @@ pub struct PresentInfo {
     pub virtual_texture_pass: Option<VirtualTexturePassKey>,
     pub scene_viewport: SceneViewport,
     pub depth_texture_handle: Option<TextureHandle>,
+    pub h_z_texture_handle: Option<TextureHandle>,
     pub scene_light: Option<SceneLight>,
+    pub debug_label: Option<String>,
+    pub global_constant_resources: Option<EBindingResource>,
 }
 
 impl PresentInfo {
@@ -356,7 +401,10 @@ impl PresentInfo {
             virtual_texture_pass: None,
             scene_viewport: SceneViewport::new(),
             depth_texture_handle: None,
+            h_z_texture_handle: None,
             scene_light: None,
+            debug_label: None,
+            global_constant_resources: None,
         }
     }
 }
@@ -403,6 +451,7 @@ pub enum RenderCommand {
     CaptureFrame,
     WindowRedrawRequestedBegin(isize),
     WindowRedrawRequestedEnd(isize),
+    CreateMultiResMesh(CreateMultipleResolutionMesh),
 }
 
 impl RenderCommand {

@@ -31,9 +31,7 @@ use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
 use rs_artifact::{material::MaterialInfo, sound::ESoundFileType};
 use rs_core_minimal::{
-    file_manager::{self, get_gpmetis_program_path},
-    name_generator::make_unique_name,
-    path_ext::CanonicalizeSlashExt,
+    file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
 };
 #[cfg(any(feature = "plugin_shared_crate"))]
 use rs_engine::plugin::plugin_crate::Plugin;
@@ -66,7 +64,9 @@ use rs_engine::{
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_metis::{cluster::ClusterCollection, vertex_position::VertexPosition};
 use rs_render::{
-    command::{RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
+    command::{
+        CreateMultipleResolutionMesh, RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo,
+    },
     get_buildin_shader_dir,
 };
 use rs_render_types::MaterialOptions;
@@ -272,7 +272,7 @@ impl EditorContext {
         #[cfg(feature = "plugin_dotnet")]
         let donet_host = rs_dotnet_host::dotnet_runtime::DotnetRuntime::default().ok();
 
-        let player_viewport = PlayerViewport::from_window_surface(
+        let mut player_viewport = PlayerViewport::from_window_surface(
             window_id,
             window_width,
             window_height,
@@ -280,6 +280,7 @@ impl EditorContext {
             EInputMode::UI,
             true,
         );
+        player_viewport.set_name("EditorPlayerViewport".to_string());
 
         let last_project_path = if engine
             .get_settings()
@@ -1152,6 +1153,88 @@ impl EditorContext {
         Ok(())
     }
 
+    fn create_multi_res_mesh_cache_non_blocking(
+        project_context: &ProjectContext,
+        static_mesh: &rs_engine::content::static_mesh::StaticMesh,
+    ) -> anyhow::Result<()> {
+        if !static_mesh.is_enable_multiresolution {
+            return Ok(());
+        }
+        rs_core_minimal::thread_pool::ThreadPool::global().spawn({
+            let mesh_cluster_dir = project_context.try_create_mesh_cluster_dir()?;
+            let static_mesh_artiface_url = static_mesh.asset_info.get_url();
+            move || match Self::create_multi_res_mesh_cache(
+                &mesh_cluster_dir,
+                static_mesh_artiface_url,
+            ) {
+                Ok(_) => {}
+                Err(err) => {
+                    log::warn!("{}", err);
+                }
+            }
+        });
+        Ok(())
+    }
+
+    fn create_multi_res_mesh_cache(
+        mesh_cluster_dir: &Path,
+        static_mesh_artiface_url: url::Url,
+    ) -> anyhow::Result<ClusterCollection> {
+        let rm = ResourceManager::default();
+        let static_mesh_result = rm.get_static_mesh(&static_mesh_artiface_url)?;
+        let indices = &static_mesh_result.indexes;
+
+        let mut vertices: Vec<VertexPosition> =
+            Vec::with_capacity(static_mesh_result.vertexes.len());
+        for item in static_mesh_result.vertexes.iter() {
+            vertices.push(VertexPosition::new(item.position));
+        }
+        let vertices = Arc::new(vertices);
+        let gpmetis_program_path: Option<std::path::PathBuf> = None;
+
+        let cluster_collection = ClusterCollection::parallel_from_indexed_vertices(
+            indices,
+            vertices,
+            gpmetis_program_path,
+        )?;
+
+        let filename = static_mesh_result.name.clone();
+        let output_path = mesh_cluster_dir.join(filename);
+        let data = bincode::serialize(&cluster_collection)?;
+        let _ = std::fs::write(output_path, data)?;
+        Ok(cluster_collection)
+    }
+
+    fn read_create_multiple_resolution_mesh(
+        engine: &mut rs_engine::engine::Engine,
+        mesh_cluster_dir: &Path,
+        static_mesh_content: &rs_engine::content::static_mesh::StaticMesh,
+        static_mesh_artifact: &rs_artifact::static_mesh::StaticMesh,
+    ) -> anyhow::Result<()> {
+        if !static_mesh_content.is_enable_multiresolution {
+            return Ok(());
+        }
+        let cache_filename = static_mesh_content.get_name();
+        let debug_label = static_mesh_content.get_name();
+        // let url = static_mesh_content.url.clone();
+        let url = static_mesh_artifact.url.clone();
+        let rm = ResourceManager::default();
+        let handle = rm.next_multiple_resolution_mesh_handle(url);
+        let cache_path = mesh_cluster_dir.join(cache_filename);
+        let read_bytes = std::fs::read(&cache_path)?;
+        let cluster_collection = bincode::deserialize::<ClusterCollection>(&read_bytes)?;
+        engine.send_render_command(RenderCommand::CreateMultiResMesh(
+            CreateMultipleResolutionMesh {
+                handle: *handle,
+                vertexes: static_mesh_artifact.vertexes.clone(),
+                indices: static_mesh_artifact.indexes.clone(),
+                debug_label: Some(debug_label),
+                cluster_collection,
+            },
+        ));
+        Ok(())
+    }
+
     fn content_load_resources(
         engine: &mut rs_engine::engine::Engine,
         model_loader: &mut ModelLoader,
@@ -1162,18 +1245,39 @@ impl EditorContext {
 
         let project_folder_path = project_context.get_project_folder_path();
         let asset_folder_path = project_context.get_asset_folder_path();
+        let mesh_cluster_dir = project_context.get_mesh_cluster_dir();
+
         for file in files {
             match file {
                 EContentFileType::StaticMesh(static_mesh) => {
+                    let static_mesh_content = static_mesh.borrow();
+                    let is_enable_multiresolution = static_mesh_content.is_enable_multiresolution;
                     let file_path = asset_folder_path
                         // .join(&static_mesh.borrow().asset_reference_relative_path);
-                        .join(&static_mesh.borrow().asset_info.relative_path);
+                        .join(&static_mesh_content.asset_info.relative_path);
                     model_loader.load(&file_path).unwrap();
-                    let _ = model_loader.to_runtime_static_mesh(
-                        &static_mesh.borrow(),
+                    let static_mesh = model_loader.to_runtime_static_mesh(
+                        &static_mesh_content,
                         &asset_folder_path,
                         ResourceManager::default(),
                     );
+                    match static_mesh {
+                        Ok(static_mesh) => {
+                            if is_enable_multiresolution {
+                                if let Err(err) = Self::read_create_multiple_resolution_mesh(
+                                    engine,
+                                    &mesh_cluster_dir,
+                                    &static_mesh_content,
+                                    &static_mesh,
+                                ) {
+                                    log::warn!("{}", err);
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("{}", err);
+                        }
+                    }
                 }
                 EContentFileType::SkeletonMesh(skeleton_mesh) => {
                     let file_path =
@@ -2822,6 +2926,10 @@ impl EditorContext {
                     ),
                 );
             }
+            content_browser::EClickEventType::Detail(file) => {
+                self.editor_ui.content_item_property_view.content = Some(file.clone());
+                self.data_source.is_content_item_property_view_open = true;
+            }
         }
     }
 
@@ -3034,40 +3142,12 @@ impl EditorContext {
             ) => {
                 let mut static_mesh = static_mesh.borrow_mut();
                 static_mesh.is_enable_multiresolution = *new_value;
-                if static_mesh.is_enable_multiresolution {
-                    let project_context = self.project_context.as_ref().expect("Not null");
-                    let closure: anyhow::Result<()> = (|| {
-                        let folder = project_context.try_create_mesh_cluster_dir()?;
-                        let rm = ResourceManager::default();
-                        let static_mesh_result =
-                            rm.get_static_mesh(&static_mesh.asset_info.get_url())?;
-                        let indices = &static_mesh_result.indexes;
+                let project_context = self.project_context.as_ref().unwrap();
 
-                        let mut vertices: Vec<VertexPosition> =
-                            Vec::with_capacity(static_mesh_result.vertexes.len());
-                        for item in static_mesh_result.vertexes.iter() {
-                            vertices.push(VertexPosition::new(item.position));
-                        }
-                        let vertices = Arc::new(vertices);
-
-                        let cluster_collection = ClusterCollection::parallel_from_indexed_vertices(
-                            indices,
-                            vertices,
-                            get_gpmetis_program_path(),
-                        )?;
-
-                        let filename = static_mesh_result.name.clone();
-                        let output_path = folder.join(filename);
-                        let data = bincode::serialize(&cluster_collection)?;
-                        let _ = std::fs::write(output_path, data)?;
-                        Ok(())
-                    })();
-                    match closure {
-                        Ok(_) => {}
-                        Err(err) => {
-                            log::warn!("{}", err);
-                        }
-                    }
+                if let Err(err) =
+                    Self::create_multi_res_mesh_cache_non_blocking(project_context, &static_mesh)
+                {
+                    log::warn!("{}", err);
                 }
             }
         }
@@ -3253,6 +3333,28 @@ impl EditorContext {
                     _ => {
                         unimplemented!()
                     }
+                }
+            }
+            object_property_view::EEventType::UpdateIsEnableMultiresolution(
+                selected_object_type,
+                old,
+                new,
+            ) => {
+                let _ = old;
+                match selected_object_type {
+                    ESelectedObjectType::SceneNode(scene_node) => {
+                        let mut scene_node = scene_node.borrow_mut();
+                        match &mut scene_node.component {
+                            rs_engine::scene_node::EComponentType::StaticMeshComponent(
+                                static_mesh_component,
+                            ) => {
+                                let mut static_mesh_component = static_mesh_component.borrow_mut();
+                                static_mesh_component.is_enable_multiresolution = new;
+                            }
+                            _ => unimplemented!(),
+                        }
+                    }
+                    _ => unimplemented!(),
                 }
             }
         }

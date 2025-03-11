@@ -64,6 +64,10 @@ impl ContentItemPropertyView {
                 let static_mesh = static_mesh.borrow();
                 let old = static_mesh.is_enable_multiresolution;
                 let mut new = static_mesh.is_enable_multiresolution;
+                ui.label(format!(
+                    "Asset url: {}",
+                    static_mesh.asset_info.get_url().to_string()
+                ));
                 ui.checkbox(&mut new, "Is enable multiresolution");
                 if old != new {
                     self.click = Some(EEventType::UpdateStaticMeshEnableMultiresolution(

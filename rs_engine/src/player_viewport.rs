@@ -16,8 +16,9 @@ use rs_artifact::material::GroupBinding;
 use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
 use rs_render::antialias_type::{FXAAInfo, MSAAInfo};
 use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, ERenderTargetType, RenderCommand,
-    ShadowMapping, TextureDescriptorCreateInfo, UpdateBuffer, VirtualPassSet,
+    BufferCreateInfo, CreateBuffer, DrawObject, EBindingResource, ERenderTargetType,
+    MultipleResolutionMeshPass, RenderCommand, ShadowMapping, TextureDescriptorCreateInfo,
+    UpdateBuffer, VirtualPassSet,
 };
 use rs_render::constants::Constants;
 use rs_render::global_uniform;
@@ -69,6 +70,9 @@ pub struct PlayerViewport {
     pub is_grid_visible: bool,
     settings: rs_core_minimal::settings::Settings,
     cluster_light: Option<crate::cluster_light::ClusterLight>,
+    pub h_z_texture_handle: Option<TextureHandle>,
+    name: String,
+    _unique_id: uuid::Uuid,
 }
 
 impl PlayerViewport {
@@ -170,6 +174,37 @@ impl PlayerViewport {
             .clone();
         let virtual_texture_source_infos = engine.get_virtual_texture_source_infos();
         let settings = engine.get_settings().clone();
+        let unique_id = uuid::Uuid::new_v4();
+        let h_z_texture_handle = if settings.render_setting.is_enable_multiple_resolution_mesh {
+            Some(
+                engine.create_texture(
+                    &build_built_in_resouce_url(format!(
+                        "PlayerViewport.MultipleResolutionMeshTexture.{}",
+                        unique_id.simple()
+                    ))
+                    .unwrap(),
+                    TextureDescriptorCreateInfo {
+                        label: Some(format!("PlayerViewport.MultipleResolutionMeshTexture")),
+                        size: wgpu::Extent3d {
+                            width: 2560,
+                            height: 1440,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Depth32Float,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::COPY_SRC
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                        view_formats: None,
+                    },
+                ),
+            )
+        } else {
+            None
+        };
+
         PlayerViewport {
             render_target_type,
             scene_viewport,
@@ -199,6 +234,9 @@ impl PlayerViewport {
             spot_lights_constants_handle,
             cluster_light: None,
             settings,
+            h_z_texture_handle,
+            name: "PlayerViewport".to_string(),
+            _unique_id: unique_id,
         }
     }
 
@@ -1073,6 +1111,18 @@ impl PlayerViewport {
                         is_skin: false,
                     });
                 }
+                if let Some(handle) =
+                    static_mesh_draw_objcet.multiple_resolution_mesh_pass_resource_handle
+                {
+                    draw_object.multiple_resolution_mesh_pass = Some(MultipleResolutionMeshPass {
+                        resource_handle: *handle,
+                        binding_resources: vec![vec![
+                            global_constants_resource.clone(),
+                            constants_resource.clone(),
+                        ]],
+                        transformation: static_mesh_draw_objcet.constants.model,
+                    });
+                }
                 Ok(draw_object)
             }
             EDrawObjectType::Custom(custom_objcet) => Ok(custom_objcet.draw_object.clone()),
@@ -1440,5 +1490,13 @@ impl PlayerViewport {
             Some(cluster_light) => cluster_light.scene_points_lights.as_ref(),
             None => None,
         }
+    }
+
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    pub fn get_name(&self) -> &str {
+        &self.name
     }
 }

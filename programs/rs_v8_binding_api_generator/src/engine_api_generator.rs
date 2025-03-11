@@ -36,8 +36,8 @@ impl EngineApiGenerator {
         //     std::io::ErrorKind::AlreadyExists
         // ));
         // }
-        let _ = std::fs::create_dir(&self.output_dir);
-        let _ = std::fs::create_dir(&self.output_dir.join("src"));
+        let _ = std::fs::create_dir_all(&self.output_dir);
+        let _ = std::fs::create_dir_all(&self.output_dir.join("src"));
         std::fs::write(
             &self.output_dir.join("Cargo.toml"),
             Self::manifest_content(),
@@ -147,7 +147,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-v8 = "130.0.0"
+v8 = "134.4.0"
 log = "0.4.22"
 anyhow = { version = "1.0.92" }
 rs_engine = { path = "@engine_dir@/rs_engine" }

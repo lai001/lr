@@ -7,7 +7,7 @@ use crate::{
     },
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex2},
+    vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex2, MeshVertex5},
     VertexBufferType,
 };
 use type_layout::TypeLayout;
@@ -38,6 +38,7 @@ impl SkinMeshVirtualTextureFeedBackPipeline {
             Some(VertexBufferType::Noninterleaved)
         } else {
             Some(VertexBufferType::Interleaved(vec![
+                MeshVertex5::type_layout(),
                 MeshVertex0::type_layout(),
                 MeshVertex2::type_layout(),
             ]))

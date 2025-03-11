@@ -3,7 +3,6 @@ use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
 use rs_artifact::skin_mesh::SkinMeshVertex;
-use rs_core_minimal::file_manager::get_gpmetis_program_path;
 use rs_engine::{
     camera::Camera,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
@@ -11,9 +10,9 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     handle::BufferHandle,
     input_mode::EInputMode,
-    mesh_lod::optimization::MeshoptMesh,
     resource_manager::ResourceManager,
 };
+use rs_mesh_optimization::optimization::MeshoptMesh;
 use rs_metis::{cluster::ClusterCollection, vertex_position::VertexPosition};
 use rs_render::{
     command::{
@@ -258,7 +257,7 @@ impl MeshUIWindow {
             indices: indices.to_vec(),
         };
         let lods =
-            rs_engine::mesh_lod::optimization::simplify(&mesh, NonZeroUsize::new(8).unwrap());
+            rs_mesh_optimization::optimization::simplify(&mesh, NonZeroUsize::new(8).unwrap());
         let mut mesh_draw_objects = vec![];
         for (i, lod_indices) in lods.iter().enumerate() {
             let location = glam::vec3(i as f32 * 15.0, 0.0, 0.0);
@@ -362,11 +361,11 @@ impl MeshUIWindow {
             vertices.push(VertexPosition::new(item.position));
         }
         let vertices = Arc::new(vertices);
-
+        let gpmetis_program_path: Option<std::path::PathBuf> = None;
         let cluster_collection = match ClusterCollection::parallel_from_indexed_vertices(
             indices,
             vertices,
-            get_gpmetis_program_path(),
+            gpmetis_program_path,
         ) {
             Ok(cluster_collection) => cluster_collection,
             Err(err) => {

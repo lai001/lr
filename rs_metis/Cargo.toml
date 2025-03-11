@@ -9,9 +9,11 @@ edition = "2021"
 glam = { version = "0.29.2", features = ["mint"] }
 serde = { version = "1.0.217", features = ["derive", "rc"] }
 rapier3d = { version = "0.22.0", features = ["simd-stable", "serde-serialize"] }
+meshopt = "0.4.1"
 log = "0.4.22"
 rs_foundation = { path = "../rs_foundation" }
 rs_core_minimal = { path = "../rs_core_minimal" }
+rs_mesh_optimization = { path = "../crates/rs_mesh_optimization" }
 
 [build-dependencies]
 bindgen = "0.71.1"

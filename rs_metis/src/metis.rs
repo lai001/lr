@@ -302,7 +302,7 @@ impl Metis {
         indices: &[u32],
         vertices: Arc<Vec<VertexPosition>>,
         num_parts: u32,
-        gpmetis_program_path: impl AsRef<std::path::Path>,
+        gpmetis_program_path: Option<impl AsRef<std::path::Path>>,
     ) -> crate::error::Result<Vec<Vec<MeshVertexIndex>>> {
         let _ = gpmetis_program_path;
         // let _ = vertices;
@@ -357,9 +357,9 @@ impl Metis {
             METIS_SetDefaultOptions(options.as_mut_ptr());
 
             let mut params = params_t {
-                ptype: mptype_et_METIS_PTYPE_KWAY,
-                objtype: mobjtype_et_METIS_OBJTYPE_CUT,
-                ctype: mctype_et_METIS_CTYPE_SHEM,
+                ptype: mptype_et_METIS_PTYPE_KWAY as crate::bindings::idx_t,
+                objtype: mobjtype_et_METIS_OBJTYPE_CUT as crate::bindings::idx_t,
+                ctype: mctype_et_METIS_CTYPE_SHEM as crate::bindings::idx_t,
                 iptype: -1,
                 rtype: -1,
                 no2hop: 0,
@@ -397,32 +397,35 @@ impl Metis {
                 maxmemory: 0,
             };
 
-            params.tpwgts = libmetis__rsmalloc(
-                (params.nparts * graph.ncon) as usize,
-                -1.0,
-                "ReadTPwgts: tpwgts".as_ptr() as *mut i8,
-            );
-            params.nparts = num_parts as i32;
-            params.iptype = miptype_et_METIS_IPTYPE_METISRB;
+            let msg = "ReadTPwgts: tpwgts";
+            #[cfg(target_os = "windows")]
+            let msg_raw = msg.as_ptr() as *mut i8;
+            #[cfg(not(target_os = "windows"))]
+            let msg_raw = msg.as_ptr() as *mut u8;
 
-            if params.ptype == mptype_et_METIS_PTYPE_RB {
-                params.rtype = mrtype_et_METIS_RTYPE_FM;
-            } else if params.ptype == mptype_et_METIS_PTYPE_KWAY {
+            params.tpwgts =
+                libmetis__rsmalloc((params.nparts * graph.ncon) as usize, -1.0, msg_raw);
+            params.nparts = num_parts as i32;
+            params.iptype = miptype_et_METIS_IPTYPE_METISRB as crate::bindings::idx_t;
+
+            if params.ptype == mptype_et_METIS_PTYPE_RB as crate::bindings::idx_t {
+                params.rtype = mrtype_et_METIS_RTYPE_FM as crate::bindings::idx_t;
+            } else if params.ptype == mptype_et_METIS_PTYPE_KWAY as crate::bindings::idx_t {
                 params.iptype = if params.iptype != -1 {
                     params.iptype
                 } else {
-                    miptype_et_METIS_IPTYPE_METISRB
+                    miptype_et_METIS_IPTYPE_METISRB as crate::bindings::idx_t
                 };
-                params.rtype = mrtype_et_METIS_RTYPE_GREEDY;
+                params.rtype = mrtype_et_METIS_RTYPE_GREEDY as crate::bindings::idx_t;
             }
 
             if params.ufactor == -1 {
-                if params.ptype == mptype_et_METIS_PTYPE_KWAY {
-                    params.ufactor = KMETIS_DEFAULT_UFACTOR as i32;
+                if params.ptype == mptype_et_METIS_PTYPE_KWAY as crate::bindings::idx_t {
+                    params.ufactor = KMETIS_DEFAULT_UFACTOR as crate::bindings::idx_t;
                 } else if graph.ncon == 1 {
-                    params.ufactor = PMETIS_DEFAULT_UFACTOR as i32;
+                    params.ufactor = PMETIS_DEFAULT_UFACTOR as crate::bindings::idx_t;
                 } else {
-                    params.ufactor = MCPMETIS_DEFAULT_UFACTOR as i32;
+                    params.ufactor = MCPMETIS_DEFAULT_UFACTOR as crate::bindings::idx_t;
                 }
             }
 
@@ -454,7 +457,7 @@ impl Metis {
             let mut objval: i32 = 0;
             let mut part: Vec<i32> = vec![0; graph.nvtxs as usize];
 
-            if params.ptype == mptype_et_METIS_PTYPE_RB {
+            if params.ptype == mptype_et_METIS_PTYPE_RB as crate::bindings::idx_t {
                 let status = METIS_PartGraphRecursive(
                     &mut graph.nvtxs,
                     &mut graph.ncon,
@@ -475,7 +478,7 @@ impl Metis {
                         "Metis returned with an error."
                     ))));
                 }
-            } else if params.ptype == mptype_et_METIS_PTYPE_KWAY {
+            } else if params.ptype == mptype_et_METIS_PTYPE_KWAY as crate::bindings::idx_t {
                 let status = METIS_PartGraphKway(
                     &mut graph.nvtxs,
                     &mut graph.ncon,

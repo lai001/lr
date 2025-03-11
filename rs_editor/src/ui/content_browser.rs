@@ -41,6 +41,7 @@ pub enum EClickEventType {
     Back,
     Rename(EContentFileType, String),
     CreateMaterialParametersCollection,
+    Detail(EContentFileType),
 }
 
 enum EItemType {
@@ -222,6 +223,10 @@ fn draw_content(
                                 click = Some(EClickEventType::OpenFile(file.clone()));
                             }
                             response.context_menu(|ui| {
+                                if ui.button("Detail").clicked() {
+                                    click = Some(EClickEventType::Detail(file.clone()));
+                                    ui.close_menu();
+                                }
                                 if ui.button("Copy Reference").clicked() {
                                     ui.output_mut(|p| p.copied_text = url.to_string());
                                     ui.close_menu();

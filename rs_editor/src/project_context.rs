@@ -241,9 +241,13 @@ impl ProjectContext {
     }
 
     pub fn try_create_mesh_cluster_dir(&self) -> anyhow::Result<PathBuf> {
-        let path = self.get_build_dir().join("cache/mesh_cluster");
+        let path = self.get_mesh_cluster_dir();
         let _ = std::fs::create_dir_all(&path)?;
         Ok(path)
+    }
+
+    pub fn get_mesh_cluster_dir(&self) -> PathBuf {
+        self.get_build_dir().join("cache/mesh_cluster")
     }
 
     pub fn get_virtual_texture_cache_dir(&self) -> PathBuf {

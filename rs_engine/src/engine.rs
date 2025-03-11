@@ -683,6 +683,11 @@ impl Engine {
                     .as_deref()
                     .copied(),
                 scene_light: player_viewport.get_scene_light().cloned(),
+                h_z_texture_handle: player_viewport.h_z_texture_handle.clone().map(|x| *x),
+                debug_label: Some(player_viewport.get_name().to_string()),
+                global_constant_resources: Some(EBindingResource::Constants(
+                    *player_viewport.global_constants_handle,
+                )),
             }));
 
         let pending_destroy_textures = ResourceManager::default().get_pending_destroy_textures();
@@ -737,6 +742,7 @@ impl Engine {
     fn convert_vertex(
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
     ) -> (
+        Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex5>,
         Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0>,
         Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex1>,
     ) {
@@ -744,11 +750,16 @@ impl Engine {
             Vec::with_capacity(vertexes.len());
         let mut vertexes1: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex1> =
             Vec::with_capacity(vertexes.len());
-
+        let mut vertexes5: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex5> =
+            Vec::with_capacity(vertexes.len());
         for vertex in vertexes {
             vertexes0.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex0 {
-                position: vertex.position,
+                // position: vertex.position,
                 tex_coord: vertex.tex_coord,
+            });
+            vertexes5.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex5 {
+                position: vertex.position,
+                // tex_coord: vertex.tex_coord,
             });
             vertexes1.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex1 {
                 vertex_color: vertex.vertex_color,
@@ -757,12 +768,13 @@ impl Engine {
                 bitangent: vertex.bitangent,
             });
         }
-        (vertexes0, vertexes1)
+        (vertexes5, vertexes0, vertexes1)
     }
 
     fn convert_vertex2(
         vertexes: &[rs_artifact::skin_mesh::SkinMeshVertex],
     ) -> (
+        Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex5>,
         Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0>,
         Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex1>,
         Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex2>,
@@ -773,11 +785,16 @@ impl Engine {
             Vec::with_capacity(vertexes.len());
         let mut vertexes2: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex2> =
             Vec::with_capacity(vertexes.len());
-
+        let mut vertexes5: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex5> =
+            Vec::with_capacity(vertexes.len());
         for vertex in vertexes {
             vertexes0.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex0 {
-                position: vertex.position,
+                // position: vertex.position,
                 tex_coord: vertex.tex_coord,
+            });
+            vertexes5.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex5 {
+                position: vertex.position,
+                // tex_coord: vertex.tex_coord,
             });
             vertexes1.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex1 {
                 vertex_color: vertex.vertex_color,
@@ -790,7 +807,7 @@ impl Engine {
                 bone_weights: vertex.weights.into(),
             });
         }
-        (vertexes0, vertexes1, vertexes2)
+        (vertexes5, vertexes0, vertexes1, vertexes2)
     }
 
     pub fn create_draw_object_from_static_mesh(
@@ -801,7 +818,7 @@ impl Engine {
         global_constants_handle: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
-        let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
+        let (vertexes5, vertexes0, vertexes1) = Self::convert_vertex(vertexes);
         let id = self.next_draw_object_id();
         let index_buffer_handle = self.resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -816,6 +833,10 @@ impl Engine {
         let message = RenderCommand::CreateBuffer(create_buffer);
         self.render_thread_mode.send_command(message);
         let vertex_buffers = vec![
+            (
+                format!("rs.{name}.MeshVertex5"),
+                rs_foundation::cast_to_raw_buffer(&vertexes5),
+            ),
             (
                 format!("rs.{name}.MeshVertex0"),
                 rs_foundation::cast_to_raw_buffer(&vertexes0),
@@ -908,7 +929,7 @@ impl Engine {
         global_constants_handle: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
-        let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
+        let (vertexes5, vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
         let id = self.next_draw_object_id();
         let index_buffer_handle = self.resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -923,6 +944,10 @@ impl Engine {
         let message = RenderCommand::CreateBuffer(create_buffer);
         self.render_thread_mode.send_command(message);
         let vertex_buffers = vec![
+            (
+                format!("rs.{name}.MeshVertex5"),
+                rs_foundation::cast_to_raw_buffer(&vertexes5),
+            ),
             (
                 format!("rs.{name}.MeshVertex0"),
                 rs_foundation::cast_to_raw_buffer(&vertexes0),
@@ -1023,7 +1048,7 @@ impl Engine {
         spot_lights_constants_resource: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
-        let (vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
+        let (vertexes5, vertexes0, vertexes1, vertexes2) = Self::convert_vertex2(vertexes);
         let id = self.next_draw_object_id();
         let index_buffer_handle = self.resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -1038,6 +1063,10 @@ impl Engine {
         let message = RenderCommand::CreateBuffer(create_buffer);
         self.render_thread_mode.send_command(message);
         let vertex_buffers = vec![
+            (
+                format!("rs.{name}.MeshVertex5"),
+                rs_foundation::cast_to_raw_buffer(&vertexes5),
+            ),
             (
                 format!("rs.{name}.MeshVertex0"),
                 rs_foundation::cast_to_raw_buffer(&vertexes0),
@@ -1266,7 +1295,7 @@ impl Engine {
         spot_lights_constants_resource: crate::handle::BufferHandle,
     ) -> EDrawObjectType {
         let name = name.unwrap_or("".to_string());
-        let (vertexes0, vertexes1) = Self::convert_vertex(vertexes);
+        let (vertexes5, vertexes0, vertexes1) = Self::convert_vertex(vertexes);
         let id = self.next_draw_object_id();
         let index_buffer_handle = self.resource_manager.next_buffer();
         let buffer_create_info = BufferCreateInfo {
@@ -1281,6 +1310,10 @@ impl Engine {
         let message = RenderCommand::CreateBuffer(create_buffer);
         self.render_thread_mode.send_command(message);
         let vertex_buffers = vec![
+            (
+                format!("rs.{name}.MeshVertex5"),
+                rs_foundation::cast_to_raw_buffer(&vertexes5),
+            ),
             (
                 format!("rs.{name}.MeshVertex0"),
                 rs_foundation::cast_to_raw_buffer(&vertexes0),
@@ -1360,6 +1393,7 @@ impl Engine {
             material,
             constants_buffer_handle,
             virtual_texture_constants_buffer_handle,
+            multiple_resolution_mesh_pass_resource_handle: None,
             window_id: self.main_window_id,
             constants: Default::default(),
             virtual_texture_constants: Default::default(),
@@ -1614,19 +1648,22 @@ impl Engine {
         let message = RenderCommand::CreateBuffer(create_buffer);
         render_thread_mode.send_command(message);
 
-        let mut vertexes0: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0> = vec![];
-
-        for (position, tex_coord) in
-            std::iter::zip(&grid_data.vertex_positions, &grid_data.vertex_tex_coords)
-        {
-            vertexes0.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex0 {
+        // let mut vertexes0: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex0> = vec![];
+        let mut vertexes5: Vec<rs_render::vertex_data_type::mesh_vertex::MeshVertex5> = vec![];
+        for position in &grid_data.vertex_positions {
+            vertexes5.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex5 {
                 position: *position,
-                tex_coord: *tex_coord,
             });
         }
+
+        // for tex_coord in &grid_data.vertex_tex_coords {
+        //     vertexes0.push(rs_render::vertex_data_type::mesh_vertex::MeshVertex0 {
+        //         tex_coord: *tex_coord,
+        //     });
+        // }
         let vertex_buffers = vec![(
-            format!("rs.{name}.MeshVertex0"),
-            rs_foundation::cast_to_raw_buffer(&vertexes0),
+            format!("rs.{name}.MeshVertex5"),
+            rs_foundation::cast_to_raw_buffer(&vertexes5),
         )];
         let mut vertex_buffer_handles: Vec<crate::handle::BufferHandle> =
             Vec::with_capacity(vertex_buffers.len());
@@ -1648,7 +1685,7 @@ impl Engine {
         let mut draw_object = rs_render::command::DrawObject::new(
             id,
             vertex_buffer_handles.iter().map(|x| **x).collect(),
-            vertexes0.len() as u32,
+            vertexes5.len() as u32,
             rs_render::renderer::EPipelineType::Builtin(
                 rs_render::renderer::EBuiltinPipelineType::Grid,
             ),

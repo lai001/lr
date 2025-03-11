@@ -24,7 +24,6 @@ pub mod input_type;
 pub mod kinematic_component;
 pub mod logger;
 pub mod mesh_buffer;
-pub mod mesh_lod;
 pub mod mipmap_generator;
 pub mod misc;
 pub mod particle;

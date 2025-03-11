@@ -89,6 +89,7 @@ rs_proc_macros = { path = "../rs_proc_macros" }
 rs_metis = { path = "../rs_metis" }
 rs_media = { path = "../rs_media" }
 rs_audio = { path = "../rs_audio" }
+rs_mesh_optimization = { path = "../crates/rs_mesh_optimization" }
 rs_v8_host = { path = "../rs_v8_host", optional = true }
 rs_v8_engine_binding_api = { path = "../build/target/generated/rs_v8_engine_binding_api", optional = true }
 rs_v8_binding_api_manager = { path = "../crates/rs_v8_binding_api_manager", optional = true }

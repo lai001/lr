@@ -35,7 +35,7 @@ pub enum EMultipleThreadingDrawCallType {
 }
 
 impl EMultipleThreadingDrawCallType {
-    pub fn to_local<'a>(&'a self) -> EDrawCallType {
+    pub fn to_local<'a>(&'a self) -> EDrawCallType<'a> {
         match self {
             EMultipleThreadingDrawCallType::MultiDrawIndirect(x) => {
                 EDrawCallType::MultiDrawIndirect(MultiDrawIndirect {

@@ -1,4 +1,5 @@
 pub mod attachment;
+pub mod box_culling;
 pub mod brdf_lut;
 pub mod depth;
 pub mod format_conversion;
@@ -18,6 +19,7 @@ pub mod primitive;
 pub mod sdf2d_preprocess;
 pub mod shading;
 pub mod skeleton_shading;
+pub mod view_depth;
 pub mod virtual_texture_clean;
 pub mod virtual_texture_feed_back;
 
@@ -43,10 +45,12 @@ use crate::global_shaders::{
         SkinMeshVirtualTextureFeedBackShader, StaticMeshVirtualTextureFeedBackShader,
     },
 };
+use box_culling::BoxCullingShader;
 use fxaa::FXAAShader;
 use light_culling::LightCullingShader;
 use particle::ParticleShader;
 use primitive::PrimitiveShader;
+use view_depth::ViewDepthShader;
 
 pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
     vec![
@@ -73,5 +77,7 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(ParticleShader {}),
         Box::new(PrimitiveShader {}),
         Box::new(LightCullingShader {}),
+        Box::new(ViewDepthShader {}),
+        Box::new(BoxCullingShader {}),
     ]
 }

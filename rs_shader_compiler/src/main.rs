@@ -121,6 +121,7 @@ fn verify_shaders() -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
+    let _ = rs_foundation::change_working_directory();
     let mut builder = env_logger::Builder::new();
     builder.write_style(env_logger::WriteStyle::Auto);
     builder.filter_level(log::LevelFilter::Trace);

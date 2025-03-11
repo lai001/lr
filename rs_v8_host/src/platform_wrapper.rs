@@ -10,7 +10,7 @@ impl PlatformWrapper {
         v8::V8::set_flags_from_string("--no_freeze_flags_after_init --expose-gc");
         v8::V8::initialize_platform(platform.clone());
         v8::V8::initialize();
-        v8::cppgc::initalize_process(platform.clone());
+        v8::cppgc::initialize_process(platform.clone());
         PlatformWrapper { platform }
     }
 }

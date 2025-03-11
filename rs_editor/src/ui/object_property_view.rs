@@ -38,6 +38,7 @@ pub enum EEventType {
         f32,
     ),
     ChangeName(ESelectedObjectType, String),
+    UpdateIsEnableMultiresolution(ESelectedObjectType, bool, bool),
 }
 
 #[derive(Clone)]
@@ -170,6 +171,20 @@ impl ObjectPropertyView {
                             &mut component.rigid_body_type,
                             body_types,
                         );
+
+                        if ui
+                            .checkbox(
+                                &mut component.is_enable_multiresolution,
+                                "Is enable multiresolution",
+                            )
+                            .changed()
+                        {
+                            event = Some(EEventType::UpdateIsEnableMultiresolution(
+                                selected_object_clone.clone(),
+                                !component.is_enable_multiresolution,
+                                component.is_enable_multiresolution,
+                            ));
+                        }
                     }
                     EComponentType::SkeletonMeshComponent(skeleton_mesh_component) => {
                         ui.label(format!("Type: SkeletonMeshComponent"));

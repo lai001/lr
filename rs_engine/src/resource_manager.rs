@@ -65,6 +65,7 @@ struct STResourceManager {
     sounds: HashMap<url::Url, Arc<Sound>>,
 
     builtin_resources: Option<Arc<BuiltinResources>>,
+    multiple_resolution_meshs: HashMap<url::Url, crate::handle::BufferHandle>,
 }
 
 impl STResourceManager {
@@ -85,6 +86,7 @@ impl STResourceManager {
             buffer_handles: VecDeque::new(),
             sounds: HashMap::new(),
             builtin_resources: None,
+            multiple_resolution_meshs: HashMap::new(),
             // mesh_buffers: HashMap::new(),
             // material_render_pipelines: HashMap::new(),
         }
@@ -218,6 +220,22 @@ impl STResourceManager {
 
     fn add_static_mesh(&mut self, url: url::Url, mesh: Arc<StaticMesh>) -> Option<Arc<StaticMesh>> {
         self.static_meshs.insert(url, mesh)
+    }
+
+    fn next_multiple_resolution_mesh_handle(
+        &mut self,
+        url: url::Url,
+    ) -> crate::handle::BufferHandle {
+        let handle = self.handle_manager.next_buffer();
+        self.multiple_resolution_meshs.insert(url, handle.clone());
+        handle
+    }
+
+    fn get_multiple_resolution_mesh_handle(
+        &mut self,
+        url: &url::Url,
+    ) -> Option<crate::handle::BufferHandle> {
+        self.multiple_resolution_meshs.get(url).cloned()
     }
 
     fn get_static_mesh(&mut self, url: &url::Url) -> Result<Arc<StaticMesh>> {

@@ -4,7 +4,7 @@ use crate::{
     global_shaders::{global_shader::GlobalShader, particle::ParticleShader},
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
-    vertex_data_type::mesh_vertex::{Instance0, MeshVertex0},
+    vertex_data_type::mesh_vertex::{Instance0, MeshVertex0, MeshVertex5},
     VertexBufferType,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -43,6 +43,7 @@ impl ParticlePipeline {
             bias: DepthBiasState::default(),
         });
         builder.vertex_buffer_type = Some(VertexBufferType::Interleaved(vec![
+            MeshVertex5::type_layout(),
             MeshVertex0::type_layout(),
             Instance0::type_layout(),
         ]));
@@ -52,7 +53,7 @@ impl ParticlePipeline {
             polygon_mode: PolygonMode::Fill,
             ..Default::default()
         });
-        builder.vertex_layout_hooks = Some(HashMap::from([(1, VertexStepMode::Instance)]));
+        builder.vertex_layout_hooks = Some(HashMap::from([(2, VertexStepMode::Instance)]));
 
         let base_render_pipeline = pool.get(device, shader_library, &builder);
 

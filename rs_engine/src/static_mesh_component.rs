@@ -45,6 +45,7 @@ pub struct StaticMeshComponent {
     pub material_url: Option<url::Url>,
     pub is_visible: bool,
     pub rigid_body_type: RigidBodyType,
+    pub is_enable_multiresolution: bool,
 
     #[serde(skip)]
     pub run_time: Option<StaticMeshComponentRuntime>,
@@ -101,6 +102,7 @@ impl StaticMeshComponent {
             static_mesh: static_mesh_url,
             is_visible: true,
             rigid_body_type: RigidBodyType::Dynamic,
+            is_enable_multiresolution: false,
         }
     }
 
@@ -175,7 +177,8 @@ impl StaticMeshComponent {
                 final_transformation: glam::Mat4::IDENTITY,
                 parent_final_transformation: glam::Mat4::IDENTITY,
                 aabb: Some(aabb),
-            })
+            });
+            self.on_is_enable_multiresolution_changed();
         }
     }
 
@@ -586,5 +589,29 @@ impl StaticMeshComponent {
         run_time.aabb = Some(aabb);
         run_time.draw_objects = Some(draw_object);
         run_time._mesh = Some(find_static_mesh);
+    }
+
+    fn on_is_enable_multiresolution_changed(&mut self) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        let Some(draw_objects) = &mut run_time.draw_objects else {
+            return;
+        };
+        let Some(mesh) = &mut run_time._mesh else {
+            return;
+        };
+        match draw_objects {
+            EDrawObjectType::StaticMeshMaterial(draw_objects) => {
+                let rm = ResourceManager::default();
+                if self.is_enable_multiresolution {
+                    draw_objects.multiple_resolution_mesh_pass_resource_handle =
+                        rm.get_multiple_resolution_mesh_handle(&mesh.url);
+                } else {
+                    draw_objects.multiple_resolution_mesh_pass_resource_handle = None;
+                }
+            }
+            _ => {}
+        }
     }
 }

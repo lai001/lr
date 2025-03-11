@@ -3,10 +3,9 @@
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
-    @location(1) tex_coord0: vec2<f32>,
 #ifdef SKELETON_MAX_BONES
-    @location(2) bone_ids: vec4<i32>,
-    @location(3) bone_weights: vec4<f32>,
+    @location(1) bone_ids: vec4<i32>,
+    @location(2) bone_weights: vec4<f32>,
 #endif    
 };
 
@@ -44,7 +43,11 @@ struct FragmentOutput {
     bone_transform += skin_constants.bones[vertex_in.bone_ids[2]] * vertex_in.bone_weights[2];
     bone_transform += skin_constants.bones[vertex_in.bone_ids[3]] * vertex_in.bone_weights[3];
 #endif
+#ifdef PLAYER_VIEW
+    let mvp = global_constants.view_projection * constants.model;
+#else
     let mvp = global_constants.light_space_matrix * constants.model;
+#endif
     var vertex_output: VertexOutput;
 #ifdef SKELETON_MAX_BONES
     vertex_output.position = mvp * bone_transform * vec4<f32>(vertex_in.position, 1.0);
