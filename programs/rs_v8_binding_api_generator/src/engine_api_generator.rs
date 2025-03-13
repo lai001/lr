@@ -70,7 +70,8 @@ impl EngineApiGenerator {
             let source_file_id = analyzer
                 .vfs
                 .file_id(&vfs_path)
-                .ok_or(anyhow!("No source file found"))?;
+                .ok_or(anyhow!("No source file found"))?
+                .0;
             let editioned_file_id: EditionedFileId =
                 EditionedFileId::current_edition(source_file_id);
 
@@ -147,7 +148,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-v8 = "134.4.0"
+v8 = "135.0.0"
 log = "0.4.22"
 anyhow = { version = "1.0.92" }
 rs_engine = { path = "@engine_dir@/rs_engine" }

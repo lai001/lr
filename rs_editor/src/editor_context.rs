@@ -513,6 +513,7 @@ impl EditorContext {
                         }
                     }
                 }
+                #[cfg(feature = "plugin_shared_crate")]
                 if let Some(project_context) = &mut self.project_context {
                     if project_context.is_need_reload_plugin() {
                         match self.try_create_plugin() {
@@ -771,8 +772,8 @@ impl EditorContext {
     //     Ok(())
     // }
 
+    #[cfg(feature = "plugin_shared_crate")]
     fn try_create_plugin(&mut self) -> anyhow::Result<Box<dyn Plugin>> {
-        #[cfg(feature = "plugin_shared_crate")]
         if let Some(project_context) = self.project_context.as_mut() {
             project_context.reload()?;
             let lib = project_context.hot_reload.get_library_reload();
@@ -1200,7 +1201,7 @@ impl EditorContext {
 
         let filename = static_mesh_result.name.clone();
         let output_path = mesh_cluster_dir.join(filename);
-        let data = bincode::serialize(&cluster_collection)?;
+        let data = rs_artifact::bincode_legacy::serialize(&cluster_collection, None)?;
         let _ = std::fs::write(output_path, data)?;
         Ok(cluster_collection)
     }
@@ -1222,7 +1223,8 @@ impl EditorContext {
         let handle = rm.next_multiple_resolution_mesh_handle(url);
         let cache_path = mesh_cluster_dir.join(cache_filename);
         let read_bytes = std::fs::read(&cache_path)?;
-        let cluster_collection = bincode::deserialize::<ClusterCollection>(&read_bytes)?;
+        let cluster_collection =
+            rs_artifact::bincode_legacy::deserialize::<ClusterCollection>(&read_bytes, None)?;
         engine.send_render_command(RenderCommand::CreateMultiResMesh(
             CreateMultipleResolutionMesh {
                 handle: *handle,
@@ -1902,6 +1904,7 @@ impl EditorContext {
             return;
         };
         let active_level = &level.borrow();
+        #[cfg(feature = "plugin_shared_crate")]
         let plugins = self.try_create_plugin().map_or(vec![], |x| vec![x]);
         let contents = self.get_all_contents();
         let ui_window = StandaloneUiWindow::new(
@@ -1909,6 +1912,7 @@ impl EditorContext {
             &mut *self.window_manager.borrow_mut(),
             event_loop_window_target,
             &mut self.engine,
+            #[cfg(feature = "plugin_shared_crate")]
             plugins,
             active_level,
             contents,

@@ -4,7 +4,10 @@ use crate::{
     render_thread_mode::ERenderThreadMode,
     resource_manager::{IBLTextures, ResourceManager},
 };
-use rs_render::command::{CreateTexture, RenderCommand, TextureDescriptorCreateInfo};
+use rs_render::{
+    command::{CreateTexture, RenderCommand, TextureDescriptorCreateInfo},
+    misc::find_most_compatible_texture_usages,
+};
 use wgpu::*;
 
 pub struct DefaultTextures {
@@ -40,7 +43,7 @@ impl DefaultTextures {
                 sample_count: 1,
                 dimension: TextureDimension::D2,
                 format: TextureFormat::Rgba8Unorm,
-                usage: TextureUsages::all(),
+                usage: find_most_compatible_texture_usages(TextureFormat::Rgba8Unorm),
                 view_formats: None,
             },
             init_data: None,
@@ -59,7 +62,7 @@ impl DefaultTextures {
                 sample_count: 1,
                 dimension: TextureDimension::D2,
                 format: TextureFormat::Rgba8Unorm,
-                usage: TextureUsages::all(),
+                usage: find_most_compatible_texture_usages(TextureFormat::Rgba8Unorm),
                 view_formats: None,
             },
             init_data: None,

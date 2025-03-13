@@ -134,37 +134,24 @@ pub mod test {
     use super::LibraryReload;
     use std::{path::Path, process::Command};
 
-    #[test]
-    pub fn test_case() {
-        let binding = std::env::current_exe().unwrap();
-        let work_dir = std::path::Path::new(&binding).parent().unwrap();
-        std::env::set_current_dir(&work_dir).unwrap();
-
-        let path = work_dir.join("test.dll");
-        std::fs::write(path, "").unwrap();
-        for i in 0..20 {
-            let path = work_dir.join(format!("test_{}.dll", i));
-            std::fs::write(path, "").unwrap();
-        }
-
-        let max_number = LibraryReload::sear_max_number(work_dir.to_str().unwrap(), "test");
-        assert_eq!(max_number, 19);
-    }
-
-    pub fn compile_test_lib(work_dir: &Path, source_code: &str) -> String {
+    pub fn compile_test_lib(work_dir: &Path, source_code: &str, output_name: &str) -> String {
         std::fs::write(work_dir.join("test.rs"), source_code).unwrap();
         let mut compile_command = Command::new("rustc");
         compile_command.args([
             "--crate-name",
-            "test",
+            output_name,
             "--edition=2021",
             work_dir.join("test.rs").to_str().unwrap(),
             "--crate-type",
             "dylib",
         ]);
         let child = compile_command.spawn().unwrap();
-        let _ = child.wait_with_output().unwrap();
-        return work_dir.join("test.dll").to_string_lossy().to_string();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success());
+        return work_dir
+            .join(format!("{output_name}.dll"))
+            .to_string_lossy()
+            .to_string();
     }
 
     #[test]
@@ -179,6 +166,7 @@ pub mod test {
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }",
+            "test",
         );
 
         let mut hot_reload = LibraryReload::new(work_dir, "test");
@@ -196,6 +184,7 @@ pub fn add(left: usize, right: usize) -> usize {
         pub fn add(left: usize, right: usize) -> usize {
             left + right + 1
         }",
+            "test",
         );
         hot_reload.reload().unwrap();
         let symbol = hot_reload

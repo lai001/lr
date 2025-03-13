@@ -51,8 +51,8 @@ mod test {
         vertex.bitangent = glam::vec3(40.0, 0.0, 0.0);
         vertex.tangent = glam::vec3(50.0, 0.0, 0.0);
         vertex.tex_coord = glam::vec2(60.0, 0.0);
-        let encoded: Vec<u8> = bincode::serialize(&vertex).unwrap();
-        let decoded: MeshVertex = bincode::deserialize(&encoded[..]).unwrap();
+        let encoded: Vec<u8> = crate::bincode_legacy::serialize(&vertex, None).unwrap();
+        let decoded: MeshVertex = crate::bincode_legacy::deserialize(&encoded[..], None).unwrap();
         assert_eq!(decoded.vertex_color, glam::vec4(10.0, 0.0, 0.0, 0.0));
         assert_eq!(decoded.position, glam::vec3(20.0, 0.0, 0.0));
         assert_eq!(decoded.normal, glam::vec3(30.0, 0.0, 0.0));

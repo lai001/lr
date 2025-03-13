@@ -29,7 +29,7 @@ use rs_render::{
     texture_readback::get_bytes_per_pixel,
 };
 use std::{collections::HashMap, iter::zip, path::Path};
-use wgpu::{Extent3d, ImageDataLayout};
+use wgpu::Extent3d;
 use winit::event::WindowEvent;
 
 struct MediaViewDrawObject {
@@ -293,7 +293,7 @@ impl MediaUIWindow {
             handle: *media_obejct.texture_handle,
             texture_data: InitTextureData {
                 data: image_data.to_vec(),
-                data_layout: ImageDataLayout {
+                data_layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
                     rows_per_image: None,

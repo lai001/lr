@@ -141,21 +141,21 @@ impl ParticleSpawnEmiter {
     }
 
     fn random_duration() -> f32 {
-        let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..10.0);
+        let x: f32 = rand::Rng::random_range(&mut rand::rng(), 0.0..10.0);
         x
     }
 
     fn random_color() -> glam::Vec4 {
-        let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
-        let y: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
-        let z: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..1.0);
+        let x: f32 = rand::Rng::random_range(&mut rand::rng(), 0.0..1.0);
+        let y: f32 = rand::Rng::random_range(&mut rand::rng(), 0.0..1.0);
+        let z: f32 = rand::Rng::random_range(&mut rand::rng(), 0.0..1.0);
         glam::vec4(x, y, z, 1.0)
     }
 
     fn random_velocity() -> glam::Vec3 {
-        let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -5.0..5.0);
-        let y: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -5.0..5.0);
-        let z: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -5.0..5.0);
+        let x: f32 = rand::Rng::random_range(&mut rand::rng(), -5.0..5.0);
+        let y: f32 = rand::Rng::random_range(&mut rand::rng(), -5.0..5.0);
+        let z: f32 = rand::Rng::random_range(&mut rand::rng(), -5.0..5.0);
         glam::vec3(x, y, z)
     }
 

@@ -1,6 +1,6 @@
 use crate::buffer_dimensions::BufferDimensions;
 use crate::error::Result;
-use wgpu::{ImageCopyTexture, Origin3d, TextureAspect, TextureFormat::*};
+use wgpu::{Origin3d, TexelCopyTextureInfo, TextureAspect, TextureFormat::*};
 
 pub type TextureArrayData = Vec<Vec<u8>>;
 pub type MipmapTextureArrayData = Vec<TextureArrayData>;
@@ -123,15 +123,15 @@ pub fn map_texture_options2(
         height: buffer_dimensions.height as u32,
         depth_or_array_layers,
     };
-    let source_image_copy_texture = ImageCopyTexture {
+    let source_image_copy_texture = TexelCopyTextureInfo {
         texture,
         mip_level,
         origin: Origin3d::ZERO,
         aspect: TextureAspect::All,
     };
-    let destination_image_copy_buffer = wgpu::ImageCopyBuffer {
-        buffer: &output_buffer,
-        layout: wgpu::ImageDataLayout {
+    let destination_image_copy_buffer = wgpu::TexelCopyBufferInfo {
+        buffer: output_buffer,
+        layout: wgpu::TexelCopyBufferLayout {
             offset: 0,
             bytes_per_row: Some(buffer_dimensions.padded_bytes_per_row as u32),
             rows_per_image: Some(buffer_dimensions.height as u32),

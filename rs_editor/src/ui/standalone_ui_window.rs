@@ -2,13 +2,14 @@ use super::{misc::update_window_with_input_mode, ui_window::UIWindow};
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
+#[cfg(feature = "plugin_shared_crate")]
+use rs_engine::plugin::plugin_crate::Plugin;
 use rs_engine::{
     content::{content_file_type::EContentFileType, level::Level},
     engine::Engine,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
     input_type::EInputType,
-    plugin::plugin_crate::Plugin,
     standalone::application::Application,
 };
 use rs_render::command::RenderCommand;
@@ -118,7 +119,7 @@ impl StandaloneUiWindow {
         window_manager: &mut WindowsManager,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
-        plugins: Vec<Box<dyn Plugin>>,
+        #[cfg(feature = "plugin_shared_crate")] plugins: Vec<Box<dyn Plugin>>,
         active_level: &Level,
         contents: Vec<EContentFileType>,
     ) -> anyhow::Result<StandaloneUiWindow> {
@@ -166,6 +167,7 @@ impl StandaloneUiWindow {
             active_level,
             contents,
             input_mode,
+            #[cfg(feature = "plugin_shared_crate")]
             plugins,
         );
         Ok(StandaloneUiWindow {
@@ -177,6 +179,7 @@ impl StandaloneUiWindow {
         })
     }
 
+    #[cfg(feature = "plugin_shared_crate")]
     pub fn reload_plugins(&mut self, plugins: Vec<Box<dyn Plugin>>) {
         self.application.reload_plugins(plugins);
     }

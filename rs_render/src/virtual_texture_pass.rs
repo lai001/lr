@@ -440,13 +440,13 @@ impl VirtualTexturePass {
                         to: glam::uvec2(x, y),
                     });
                     encoder.copy_texture_to_texture(
-                        ImageCopyTexture {
+                        TexelCopyTextureInfo {
                             texture: &texture,
                             mip_level: 0,
                             origin: Origin3d::ZERO,
                             aspect: TextureAspect::All,
                         },
-                        ImageCopyTexture {
+                        TexelCopyTextureInfo {
                             texture: &self.physical_texture,
                             mip_level: 0,
                             origin: Origin3d {
@@ -518,14 +518,14 @@ impl VirtualTexturePass {
             );
 
             queue.write_texture(
-                ImageCopyTexture {
+                TexelCopyTextureInfo {
                     texture: &self.indirect_table,
                     mip_level: level,
                     origin: Origin3d { x: 0, y: 0, z: 0 },
                     aspect: TextureAspect::All,
                 },
                 &rs_foundation::cast_to_raw_buffer(&indirect_table_data),
-                ImageDataLayout {
+                TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(buffer_dimensions.unpadded_bytes_per_row as u32),
                     rows_per_image: Some(mip_level_size.height),
@@ -563,6 +563,7 @@ impl VirtualTexturePass {
             mip_level_count: Some(physical_texture.mip_level_count()),
             base_array_layer: 0,
             array_layer_count: Some(physical_texture.depth_or_array_layers()),
+            usage: None,
         })
     }
 
@@ -590,6 +591,7 @@ impl VirtualTexturePass {
             mip_level_count: Some(indirect_table.mip_level_count()),
             base_array_layer: 0,
             array_layer_count: Some(indirect_table.depth_or_array_layers()),
+            usage: None,
         })
     }
 

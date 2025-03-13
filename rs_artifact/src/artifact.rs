@@ -21,7 +21,7 @@ use std::{
     path::Path,
 };
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct ArtifactFileHeader {
     pub settings: Settings,
     pub resource_map: std::collections::HashMap<url::Url, ResourceInfo>,
@@ -352,7 +352,8 @@ mod test {
     #[test]
     fn test_case_artifact() {
         let artifact = ArtifactFileHeader::default();
-        let encoded: Vec<u8> = bincode::serialize(&artifact).unwrap();
-        let decoded: ArtifactFileHeader = bincode::deserialize(&encoded[..]).unwrap();
+        let encoded: Vec<u8> = crate::bincode_legacy::serialize(&artifact, None).unwrap();
+        let _decoded: ArtifactFileHeader =
+            crate::bincode_legacy::deserialize(&encoded[..], None).unwrap();
     }
 }

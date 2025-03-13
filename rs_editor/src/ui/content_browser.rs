@@ -228,7 +228,8 @@ fn draw_content(
                                     ui.close_menu();
                                 }
                                 if ui.button("Copy Reference").clicked() {
-                                    ui.output_mut(|p| p.copied_text = url.to_string());
+                                    ui.ctx().copy_text(url.to_string());
+                                    // ui.output_mut(|p| p.copied_text = url.to_string());
                                     ui.close_menu();
                                 }
                                 if ui.button("Delete").clicked() {

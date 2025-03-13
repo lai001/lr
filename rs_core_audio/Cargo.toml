@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bitflags = "2.6.0"
-log = "0.4.22"
+bitflags = "2.9.0"
+log = "0.4.26"
 dasp = { version = "0.11.0", features = ["all"] }
 
 [dev-dependencies]
-log = "0.4.22"
-env_logger = "0.11.6"
+log = "0.4.26"
+env_logger = "0.11.7"

@@ -2,6 +2,8 @@ use image::{imageops, ImageError};
 use std::path::Path;
 use wgpu::{util::DeviceExt, *};
 
+use crate::misc::find_most_compatible_texture_usages;
+
 pub struct TextureLoader {}
 
 impl TextureLoader {
@@ -16,7 +18,8 @@ impl TextureLoader {
         usage: Option<TextureUsages>,
     ) -> Result<Texture, ImageError> {
         let format = format.unwrap_or(TextureFormat::Rgba8Unorm);
-        let usage = usage.unwrap_or(TextureUsages::all());
+        let usage = usage.unwrap_or(find_most_compatible_texture_usages(format));
+        assert!(crate::misc::is_compatible(format, usage));
         let mipmap = mipmap.unwrap_or(1);
         let sample_count = sample_count.unwrap_or(1);
 

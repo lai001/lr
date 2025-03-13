@@ -403,6 +403,9 @@ impl SkeletonMeshComponent {
                 SharedShape::convex_decomposition(&vertices, &indices)
             } else {
                 SharedShape::trimesh_with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)
+                    .map_err(|err| {
+                        crate::error::Error::Other(Some(format!("Fail to build mesh, {}", err)))
+                    })?
             };
 
             let collider = ColliderBuilder::new(decomposed_shape)

@@ -52,6 +52,7 @@ impl BrdfLutPipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
 
         let constants = IBLConstants { sample_count };

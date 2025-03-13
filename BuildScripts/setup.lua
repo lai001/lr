@@ -1,5 +1,5 @@
 local rs_target_dir = rs_target_dir
-task("setup")
+task("copy_shared_libs")
 do
     local ffmpeg_dir = ffmpeg_dir
     local engine_root_dir = engine_root_dir
@@ -29,8 +29,26 @@ do
         os.cp(path.join(ffmpeg_dir, "lib/*.so"), path.join(engine_root_dir, "Android/Template/rs_android/src/main/jniLibs/arm64-v8a"))
     end)
     set_menu {
+        usage = "xmake copy_shared_libs",
+        description = "Copy the required dynamic libraries",
+        options = {
+            { nil, "copy_shared_libs", nil, nil, nil },
+        }
+    }
+end
+
+task("setup")
+do
+    on_run(function()
+        os.exec("xmake download_deps")
+        os.exec("xmake build_3rdparty")
+        os.exec("xmake compile_tool")
+        os.exec("xmake copy_shared_libs")
+        os.exec("xmake gen_config")
+    end)
+    set_menu {
         usage = "xmake setup",
-        description = "Initialize Project",
+        description = "Initialize project",
         options = {
             { nil, "setup", nil, nil, nil },
         }

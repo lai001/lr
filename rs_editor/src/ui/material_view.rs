@@ -137,7 +137,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         ui: &mut Ui,
         _: f32,
         snarl: &mut Snarl<MaterialNode>,
-    ) -> PinInfo {
+    ) -> impl egui_snarl::ui::SnarlPin + 'static {
         let node = &mut snarl[pin.id.node];
         match &mut node.node_type {
             EMaterialNodeType::Add(v1, v2) => {
@@ -404,7 +404,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         ui: &mut Ui,
         _: f32,
         snarl: &mut Snarl<MaterialNode>,
-    ) -> PinInfo {
+    ) -> impl egui_snarl::ui::SnarlPin + 'static {
         let node = &mut snarl[pin.id.node];
         match &mut node.node_type {
             EMaterialNodeType::Add(..) => PinInfo::square().with_fill(NODE_IO_COLOR),

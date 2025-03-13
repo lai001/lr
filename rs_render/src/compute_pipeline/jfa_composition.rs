@@ -41,6 +41,7 @@ impl JFACompositionComputePipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
         let original_texture_view = original_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some(&format!(
@@ -53,6 +54,7 @@ impl JFACompositionComputePipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
         let output_texture = device.create_texture(&TextureDescriptor {
             label: Some(&format!("JFACompositionComputePipeline.output_texture")),
@@ -79,6 +81,7 @@ impl JFACompositionComputePipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
 
         let constants = SDF2DConstants { channel, threshold };

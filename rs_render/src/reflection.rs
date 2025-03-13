@@ -586,6 +586,7 @@ impl Reflection {
             StorageFormat::Rgba16Snorm => TextureFormat::Rgba16Snorm,
             StorageFormat::Bgra8Unorm => TextureFormat::Bgra8Unorm,
             StorageFormat::Rgb10a2Uint => TextureFormat::Rgb10a2Uint,
+            StorageFormat::R64Uint => TextureFormat::R64Uint,
         }
     }
 

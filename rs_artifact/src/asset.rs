@@ -39,8 +39,8 @@ where
     let asset_header = AssetHeader { resource_type };
     let header_data =
         FileHeader::write_header(ASSET_FILE_MAGIC_NUMBERS, &asset_header, endian_type)?;
-    let payload = bincode::serialize(asset)
-        .map_err(|err| crate::error::Error::Bincode(err, Some(format!("Fail to serialize."))))?;
+    // let endian_type = endian_type.unwrap_or(EEndianType::Native);
+    let payload = crate::bincode_legacy::serialize(asset, endian_type)?;
     let mut data = vec![0; header_data.len() + payload.len()];
     data[0..header_data.len()].copy_from_slice(&header_data);
     data[header_data.len()..].copy_from_slice(&payload);
@@ -75,8 +75,7 @@ where
     let _ = reader
         .read_to_end(&mut payload)
         .map_err(|err| crate::error::Error::IO(err, Some(format!("Failed to read all bytes."))))?;
-    let asset = bincode::deserialize::<T>(&payload).map_err(|err| {
-        crate::error::Error::Bincode(err, Some(String::from("Fail to deserialize.")))
-    })?;
+    // let endian_type = endian_type.unwrap_or(EEndianType::Native);
+    let asset = crate::bincode_legacy::deserialize::<T>(&payload, endian_type)?;
     Ok(asset)
 }

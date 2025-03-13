@@ -44,9 +44,9 @@ mod test {
 
     #[test]
     fn test() {
-        env_logger::builder()
+        let _ = env_logger::builder()
             .filter_level(log::LevelFilter::Trace)
-            .init();
+            .try_init();
         let mut audio_device = AudioDevice::new().unwrap();
         audio_device.play().unwrap();
 
@@ -62,9 +62,9 @@ mod test {
 
     #[test]
     fn test1() {
-        env_logger::builder()
+        let _ = env_logger::builder()
             .filter_level(log::LevelFilter::Trace)
-            .init();
+            .try_init();
         let mut audio_device = AudioDevice::new().unwrap();
         audio_device.play().unwrap();
 
@@ -87,9 +87,9 @@ mod test {
 
     #[test]
     fn test2() {
-        env_logger::builder()
+        let _ = env_logger::builder()
             .filter_level(log::LevelFilter::Trace)
-            .init();
+            .try_init();
         let mut audio_device = AudioDevice::new().unwrap();
         audio_device.play().unwrap();
 

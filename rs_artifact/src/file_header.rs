@@ -23,11 +23,8 @@ impl FileHeader {
     where
         T: serde::ser::Serialize,
     {
-        let endian_type = endian_type.unwrap_or(EEndianType::Native);
-        let mut serialize_data = bincode::serialize(header).map_err(|err| {
-            let msg = format!("Fail to serialize.");
-            crate::error::Error::Bincode(err, Some(msg))
-        })?;
+        let endian_type = endian_type.unwrap_or_default();
+        let mut serialize_data = crate::bincode_legacy::serialize(header, Some(endian_type))?;
         let header_length = serialize_data.len() as HeaderLengthDataType;
         let mut header_length_data: Vec<u8> = vec![0; HEADER_LENGTH_SIZE];
         match endian_type {
@@ -48,16 +45,18 @@ impl FileHeader {
         Ok(data)
     }
 
-    pub fn get_header<R, T>(reader: &mut R, header_length: HeaderLengthDataType) -> Result<T>
+    pub fn get_header<R, T>(
+        reader: &mut R,
+        header_length: HeaderLengthDataType,
+        endian_type: Option<EEndianType>,
+    ) -> Result<T>
     where
         R: std::io::Seek + std::io::Read,
         T: serde::de::DeserializeOwned,
     {
+        // let endian_type = endian_type.unwrap_or(EEndianType::Native);
         let data = Self::get_header_encoded_data(reader, header_length)?;
-        let file_header = bincode::deserialize(&data).map_err(|err| {
-            let msg = format!("Fail to deserialize.");
-            crate::error::Error::Bincode(err, Some(msg))
-        })?;
+        let file_header = crate::bincode_legacy::deserialize(&data, endian_type)?;
         Ok(file_header)
     }
 
@@ -67,11 +66,9 @@ impl FileHeader {
         T: serde::de::DeserializeOwned,
     {
         let header_length = Self::get_header_encoded_data_length(reader, endian_type)?;
+        // let endian_type = endian_type.unwrap_or(EEndianType::Native);
         let data = Self::get_header_encoded_data(reader, header_length)?;
-        let file_header = bincode::deserialize(&data).map_err(|err| {
-            let msg = format!("Fail to deserialize.");
-            crate::error::Error::Bincode(err, Some(msg))
-        })?;
+        let file_header = crate::bincode_legacy::deserialize(&data, endian_type)?;
         Ok(file_header)
     }
 
@@ -102,7 +99,7 @@ impl FileHeader {
     where
         R: std::io::Seek + std::io::Read,
     {
-        let endian_type = endian_type.unwrap_or(EEndianType::Native);
+        let endian_type = endian_type.unwrap_or_default();
         let _ = reader
             .seek(std::io::SeekFrom::Start(HEADER_LENGTH_OFFSET as u64))
             .map_err(|err| {
@@ -179,6 +176,7 @@ mod test {
         let dir = std::path::Path::new(&std::env::current_dir().unwrap())
             .join("target")
             .join("debug");
+        std::fs::create_dir_all(&dir).unwrap();
         let filename = "test.rs";
         let file_path = dir.join(filename);
 
@@ -207,6 +205,7 @@ mod test {
         let dir = std::path::Path::new(&std::env::current_dir().unwrap())
             .join("target")
             .join("debug");
+        std::fs::create_dir_all(&dir).unwrap();
         let filename = "test.rs";
         let file_path = dir.join(filename);
         let f = std::fs::File::open(file_path).unwrap();

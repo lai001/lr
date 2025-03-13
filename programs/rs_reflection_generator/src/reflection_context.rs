@@ -12,7 +12,7 @@ use ra_ap_hir::HirDisplay;
 use ra_ap_ide::*;
 use ra_ap_ide_db::*;
 use ra_ap_load_cargo::*;
-use ra_ap_proc_macro_api::ProcMacroServer;
+use ra_ap_proc_macro_api::ProcMacroClient;
 use ra_ap_project_model::*;
 use ra_ap_syntax::*;
 use ra_ap_vfs::*;
@@ -407,7 +407,7 @@ pub struct ReflectionContext {
     _project_workspace: ProjectWorkspace,
     db: Rc<RootDatabase>,
     vfs: Rc<RefCell<Vfs>>,
-    _proc_macro: Option<ProcMacroServer>,
+    _proc_macro: Option<ProcMacroClient>,
 }
 
 impl ReflectionContext {
@@ -448,7 +448,8 @@ impl ReflectionContext {
             .vfs
             .borrow()
             .file_id(&path)
-            .ok_or(anyhow!("No source file found"))?;
+            .ok_or(anyhow!("No source file found"))?
+            .0;
         let editioned_file_id: EditionedFileId = EditionedFileId::current_edition(source_file_id);
         // let file_item_tree = self.db.file_item_tree(editioned_file_id.into());
         // for top_level_item in file_item_tree.top_level_items() {

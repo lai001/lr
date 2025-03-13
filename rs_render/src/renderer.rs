@@ -314,17 +314,23 @@ impl Renderer {
                 settings::PowerPreference::HighPerformance => PowerPreference::HighPerformance,
             }),
             Some(wgpu::InstanceDescriptor {
-                dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
                 flags: match settings.is_enable_debugging {
                     true => wgpu::InstanceFlags::debugging(),
                     false => wgpu::InstanceFlags::default(),
                 },
-                gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
                 backends: match settings.get_backends_platform() {
                     settings::Backends::Primary => Backends::PRIMARY,
                     settings::Backends::Vulkan => Backends::VULKAN,
                     settings::Backends::GL => Backends::GL,
                     settings::Backends::DX12 => Backends::DX12,
+                },
+                backend_options: BackendOptions {
+                    gl: GlBackendOptions {
+                        gles_minor_version: Gles3MinorVersion::Automatic,
+                    },
+                    dx12: Dx12BackendOptions {
+                        shader_compiler: Dx12Compiler::Fxc,
+                    },
                 },
             }),
         )?;

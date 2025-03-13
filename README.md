@@ -12,11 +12,7 @@ clang（optional）
 
 ## Build
 ```
-xmake download_deps
-xmake build_3rdparty
-xmake compile_tool
 xmake setup
-xmake gen_config
 xmake ci
 ```
 

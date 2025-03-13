@@ -139,6 +139,7 @@ pub fn import_path_config() -> ra_ap_hir::ImportPathConfig {
         prefer_no_std: true,
         prefer_prelude: false,
         prefer_absolute: true,
+        allow_unstable: false,
     }
 }
 

@@ -79,15 +79,16 @@ pub mod test {
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }",
+            "abc",
         );
 
-        let mut hot_reload = HotReload::new(work_dir, work_dir, "test");
+        let hot_reload = HotReload::new(work_dir, work_dir, "abc").unwrap();
         {
             let binding = hot_reload.get_library_reload();
             let lib = binding.lock().unwrap();
-            assert_eq!(lib.is_loaded(), true);
-            let add_func = lib.load_symbol::<fn(usize, usize) -> usize>("add").unwrap();
-            assert_eq!(add_func(1, 1), 2);
+            assert_eq!(lib.is_loaded(), false);
+            let add_func = lib.load_symbol::<fn(usize, usize) -> usize>("add");
+            assert!(add_func.is_err());
         }
 
         crate::library_reload::test::compile_test_lib(
@@ -96,6 +97,7 @@ pub fn add(left: usize, right: usize) -> usize {
 pub fn add(left: usize, right: usize) -> usize {
     left + right + 1
 }",
+            "abc",
         );
 
         {

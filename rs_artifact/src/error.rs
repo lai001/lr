@@ -4,7 +4,8 @@ pub enum Error {
     IO(std::io::Error, Option<String>),
     CheckIdentificationFail(Option<String>),
     DataConvertFail,
-    Bincode(bincode::Error, Option<String>),
+    Bincode(bincode::error::DecodeError, Option<String>),
+    EncodeError(bincode::error::EncodeError, Option<String>),
     ResourceTypeNotMatch(Option<String>),
     ValueTypeNotMatch,
     #[cfg(target_os = "android")]

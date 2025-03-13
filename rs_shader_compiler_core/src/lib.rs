@@ -35,10 +35,10 @@ mod test {
             .join("rs_render")
             .canonicalize_slash()
             .unwrap();
-        let self_crate_dir = rs_core_minimal::file_manager::get_engine_root_dir()
-            .join("rs_shader_compiler")
-            .canonicalize_slash()
-            .unwrap();
+        // let self_crate_dir = rs_core_minimal::file_manager::get_engine_root_dir()
+        //     .join("rs_shader_compiler")
+        //     .canonicalize_slash()
+        //     .unwrap();
         let shader_path = render_crate_dir
             .join("shaders/pbr_shading.wgsl")
             .canonicalize_slash()
@@ -55,6 +55,8 @@ mod test {
             "VIRTUAL_TEXTURE_CONSTANTS_BINDING=3",
             "STANDARD_MATERIAL_CLEARCOAT",
             "SKELETON_MAX_BONES",
+            "MAX_POINT_LIGHTS_NUM=1",
+            "MAX_SPOT_LIGHTS_NUM=1",
         ];
         macro_rules! group_binding {
             ($name:literal, $g:expr, $b:expr) => {
@@ -77,6 +79,8 @@ mod test {
         group_binding!("LIGHTS", 0, 10);
         group_binding!("SKIN_CONSTANTS", 0, 11);
         group_binding!("VIRTUAL_TEXTURE_CONSTANTS", 0, 12);
+        group_binding!("SPOT_LIGHTS", 0, 13);
+        group_binding!("POINT_LIGHTS", 0, 14);
 
         let shader_code = pre_process(
             &shader_path,
@@ -86,9 +90,9 @@ mod test {
         .unwrap();
         let module = naga::front::wgsl::parse_str(&shader_code).unwrap();
         validate_shader_module(&module);
-        std::fs::write(self_crate_dir.join("target/pbr_shading.wgsl"), &shader_code).unwrap();
+        // std::fs::write(self_crate_dir.join("target/pbr_shading.wgsl"), &shader_code).unwrap();
         let gpu_context = TestGPUContext::new();
-        gpu_context
+        let _ = gpu_context
             .device
             .create_shader_module(ShaderModuleDescriptor {
                 label: None,

@@ -42,6 +42,7 @@ impl Sdf2dPreprocessComputePipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
         let output_texture_view = output_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some(&format!(
@@ -54,6 +55,7 @@ impl Sdf2dPreprocessComputePipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
 
         let constants = SDF2DConstants { channel, threshold };

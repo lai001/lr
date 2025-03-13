@@ -54,7 +54,7 @@ fn prepreocess_builtin_shader() -> anyhow::Result<()> {
             .context(anyhow!("Can not write to file {:?}", &wgsl_filepath))?;
 
         let module = naga::front::wgsl::parse_str(&processed_code)?;
-        let bin_data = bincode::serialize(&module)?;
+        let bin_data = rs_artifact::bincode_legacy::serialize(&module, None)?;
         let bin_filepath = output_path.join(format!("{}.nagamodule", &name));
         match bin_filepath.to_slash() {
             Some(filepath) => log::trace!("Writing: {:?}", &filepath),

@@ -21,8 +21,13 @@ do
         os.exec("xmake f -a arm64-v8a -m release -p android -k static")
         os.exec("xmake build gpmetis")
         os.exec("xmake build tracy")
+        os.exec("xmake f -a x64 -m debug -p windows -k static --enable_quickjs=y")
+        os.exec("xmake build quickjs")
+        os.exec("xmake f -a x64 -m release -p windows -k static --enable_quickjs=y")
+        os.exec("xmake build quickjs")        
     end)
     set_menu {
-        usage = "xmake ci",
+        usage = "xmake build_3rdparty",
+        description = "Build 3rdparty libraries",
     }
 end

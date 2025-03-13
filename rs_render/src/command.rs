@@ -1,6 +1,6 @@
 use crate::{
-    bake_info::BakeInfo, egui_render::EGUIRenderOutput, renderer::EPipelineType,
-    scene_viewport::SceneViewport, view_mode::EViewModeType,
+    bake_info::BakeInfo, egui_render::EGUIRenderOutput, misc::find_most_compatible_texture_usages,
+    renderer::EPipelineType, scene_viewport::SceneViewport, view_mode::EViewModeType,
     virtual_texture_source::TVirtualTextureSource,
 };
 use rs_core_minimal::settings::{RenderSettings, VirtualTextureSetting};
@@ -61,7 +61,7 @@ impl TextureDescriptorCreateInfo {
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: format.unwrap_or(TextureFormat::Rgba8Unorm),
-            usage: TextureUsages::all(),
+            usage: find_most_compatible_texture_usages(format.unwrap_or(TextureFormat::Rgba8Unorm)),
             view_formats: None,
         }
     }
@@ -85,7 +85,9 @@ impl TextureDescriptorCreateInfo {
             dimension: TextureDimension::D3,
             format: format.unwrap_or(TextureFormat::Rgba8Unorm),
             usage: {
-                let mut usage = TextureUsages::all();
+                let mut usage = find_most_compatible_texture_usages(
+                    format.unwrap_or(TextureFormat::Rgba8Unorm),
+                );
                 usage.remove(TextureUsages::RENDER_ATTACHMENT);
                 usage
             },
@@ -157,7 +159,7 @@ pub struct UpdateBuffer {
 pub struct InitTextureData {
     // TODO: Optimization of object with large memory usage
     pub data: Vec<u8>,
-    pub data_layout: wgpu::ImageDataLayout,
+    pub data_layout: wgpu::TexelCopyBufferLayout,
 }
 
 #[derive(Clone, Debug)]

@@ -90,6 +90,7 @@ impl WgslAlignment for naga::TypeInner {
             naga::TypeInner::Array { size, stride, .. } => match size {
                 naga::ArraySize::Constant(len) => len.get() as usize * *stride as usize,
                 naga::ArraySize::Dynamic => todo!(),
+                naga::ArraySize::Pending(_pending_array_size) => todo!(),
             },
             naga::TypeInner::Struct { members, .. } => {
                 if members.is_empty() {

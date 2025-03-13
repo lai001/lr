@@ -1,5 +1,6 @@
 pub mod artifact;
 pub mod asset;
+pub mod bincode_legacy;
 pub mod content_type;
 pub mod endian;
 pub mod error;

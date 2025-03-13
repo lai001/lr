@@ -244,8 +244,8 @@ standalone = [
 profiler = ["rs_engine/profiler", "rs_render/profiler"]
 
 [dependencies]
-egui = { version = "0.29.1" }
-log = "0.4.22"
+egui = { version = "0.31.1" }
+log = "0.4.26"
 rs_engine = { path = "@engine_path@/rs_engine" }
 rs_render = { path = "@engine_path@/rs_render" }
 rs_audio = { path = "@engine_path@/rs_audio" }

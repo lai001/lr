@@ -105,6 +105,7 @@ impl JFAComputePipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
         let output_texture_view = output_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some(&format!("JFAComputePipeline.output_texture_view")),
@@ -115,6 +116,7 @@ impl JFAComputePipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
 
         let constants = JFAConstants { step };

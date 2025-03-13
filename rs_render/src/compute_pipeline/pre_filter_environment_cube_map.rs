@@ -48,6 +48,7 @@ impl PreFilterEnvironmentCubeMapComputePipeline {
                 mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
+                usage: None,
             });
 
         let prefilter_cube_map_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -80,6 +81,7 @@ impl PreFilterEnvironmentCubeMapComputePipeline {
                 mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
+                usage: None,
             });
 
         let constants = PreFilterConstants {

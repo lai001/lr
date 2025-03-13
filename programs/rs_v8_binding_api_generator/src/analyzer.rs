@@ -2,14 +2,14 @@ use ra_ap_hir::db::DefDatabase;
 use ra_ap_ide::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase;
 use ra_ap_load_cargo::{load_workspace, LoadCargoConfig, ProcMacroServerChoice};
-use ra_ap_proc_macro_api::ProcMacroServer;
+use ra_ap_proc_macro_api::ProcMacroClient;
 use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace, RustLibSource};
 use ra_ap_vfs::{AbsPathBuf, Vfs};
 
 pub struct Analyzer {
     pub root_database: RootDatabase,
     pub vfs: Vfs,
-    pub proc_macro_server: Option<ProcMacroServer>,
+    pub proc_macro_server: Option<ProcMacroClient>,
 }
 
 impl Analyzer {

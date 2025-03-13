@@ -109,7 +109,7 @@ impl PrebakeIBL {
         queue.write_texture(
             brdflut_texture.as_image_copy(),
             rs_foundation::cast_to_raw_buffer(brdf_data),
-            ImageDataLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * 4 * brdf_surface.width),
                 rows_per_image: None,
@@ -138,7 +138,7 @@ impl PrebakeIBL {
         queue.write_texture(
             irradiance_texture.as_image_copy(),
             rs_foundation::cast_to_raw_buffer(irradiance_data),
-            ImageDataLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * 4 * irradiance_surface.width),
                 rows_per_image: Some(irradiance_surface.height),
@@ -180,14 +180,14 @@ impl PrebakeIBL {
             });
 
             queue.write_texture(
-                ImageCopyTexture {
+                TexelCopyTextureInfo {
                     texture: &pre_filter_texture,
                     mip_level: mipmap,
                     origin: Origin3d::ZERO,
                     aspect: TextureAspect::All,
                 },
                 rs_foundation::cast_to_raw_buffer(&pre_filter_data[offset..]),
-                ImageDataLayout {
+                TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(4 * 4 * size),
                     rows_per_image: Some(size),
@@ -272,6 +272,7 @@ impl PrebakeIBL {
             mip_level_count: Some(mip_level_count),
             base_array_layer: 0,
             array_layer_count: Some(array_layer_count),
+            usage: None,
         });
     }
 
@@ -290,6 +291,7 @@ impl PrebakeIBL {
             mip_level_count: Some(mip_level_count),
             base_array_layer: 0,
             array_layer_count: Some(array_layer_count),
+            usage: None,
         });
     }
 }

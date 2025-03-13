@@ -72,3 +72,17 @@ pub(crate) fn find_or_insert_bind_groups(
 
     Ok(bind_groups_collection.get(&cache_key).unwrap())
 }
+
+pub fn find_most_compatible_texture_usages(format: wgpu::TextureFormat) -> wgpu::TextureUsages {
+    let _ = format;
+    return wgpu::TextureUsages::all() - wgpu::TextureUsages::STORAGE_ATOMIC;
+}
+
+pub fn is_compatible(format: wgpu::TextureFormat, usages: wgpu::TextureUsages) -> bool {
+    if format == wgpu::TextureFormat::Rgba8Unorm {
+        if usages.contains(wgpu::TextureUsages::STORAGE_ATOMIC) {
+            return false;
+        }
+    }
+    return true;
+}

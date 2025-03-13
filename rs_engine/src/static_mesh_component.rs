@@ -352,6 +352,9 @@ impl StaticMeshComponent {
             SharedShape::convex_decomposition(&vertices, &indices)
         } else {
             SharedShape::trimesh_with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)
+                .map_err(|err| {
+                    crate::error::Error::Other(Some(format!("Fail to build mesh, {}", err)))
+                })?
         };
         let (_, rotation, translation) = transformation.to_scale_rotation_translation();
         let translation = vector![translation.x, translation.y, translation.z];

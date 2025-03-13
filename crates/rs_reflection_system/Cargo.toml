@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-dyn-clone = "1.0.17"
-downcast-rs = "1.2.1"
+dyn-clone = "1.0.19"
+downcast-rs = "2.0.1"
 rs_reflection_core = { path = "../rs_reflection_core" }
 

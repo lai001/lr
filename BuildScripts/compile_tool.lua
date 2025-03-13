@@ -24,5 +24,6 @@ do
     end)
     set_menu {
         usage = "xmake compile_tool",
+        description = "Compile tool",
     }
 end

@@ -1,3 +1,4 @@
+#[cfg(feature = "plugin_shared_crate")]
 fn copy_std_lib() {
     let Ok(rustc_toolchain) = std::env::var("RUSTC_TOOLCHAIN") else {
         return;

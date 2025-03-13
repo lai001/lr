@@ -139,13 +139,13 @@ impl AccelerationBaker {
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         for (level, cube_map_texture) in cube_map_textures.iter().enumerate() {
-            let source_image_copy_texture = wgpu::ImageCopyTexture {
+            let source_image_copy_texture = wgpu::TexelCopyTextureInfo {
                 texture: cube_map_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             };
-            let destination_image_copy_texture = wgpu::ImageCopyTexture {
+            let destination_image_copy_texture = wgpu::TexelCopyTextureInfo {
                 texture: &pre_filter_cube_map_lod_texture,
                 mip_level: level as u32,
                 origin: wgpu::Origin3d::ZERO,

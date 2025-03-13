@@ -34,6 +34,7 @@ impl PanoramaToCubePipeline {
                 mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
+                usage: None,
             });
 
         let cube_map_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -62,6 +63,7 @@ impl PanoramaToCubePipeline {
             mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
+            usage: None,
         });
         self.base_compute_pipeline.execute_resources(
             device,

@@ -26,6 +26,7 @@ includes("BuildScripts/setup.lua")
 includes("BuildScripts/build_3rdparty.lua")
 includes("BuildScripts/compile_tool.lua")
 includes("BuildScripts/cargo.lua")
+includes("BuildScripts/unit_test.lua")
 
 option("enable_dotnet")
     set_default(false)

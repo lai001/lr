@@ -1438,7 +1438,7 @@ impl Engine {
             ),
             init_data: Some(InitTextureData {
                 data: image.to_vec(),
-                data_layout: wgpu::ImageDataLayout {
+                data_layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(image.width() * 4),
                     rows_per_image: None,

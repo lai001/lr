@@ -21,8 +21,14 @@ fn main() -> anyhow::Result<()> {
         workspace_dir.join("rs_engine/src/engine.rs"),
     ))?;
 
+    let output_dir =
+        rs_core_minimal::file_manager::get_engine_generated_dir().join("rs_engine_reflection");
+    if !output_dir.exists() {
+        std::fs::create_dir_all(&output_dir)?;
+    }
+    let output_path = output_dir.join("engine_reflection.rs");
     std::fs::write(
-        workspace_dir.join("rs_reflection_generator/target/engine_reflection.rs"),
+        output_path,
         parse_file_result
             .generate_reflection_token_stream()?
             .to_pretty_string()?,

@@ -94,7 +94,7 @@ impl DefaultTextures {
         queue.write_texture(
             texture.as_image_copy(),
             rs_foundation::cast_to_raw_buffer(image.as_flat_samples().samples),
-            ImageDataLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * 4 * image.width()),
                 rows_per_image: None,
@@ -132,7 +132,7 @@ impl DefaultTextures {
         queue.write_texture(
             texture.as_image_copy(),
             image,
-            ImageDataLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * image.width()),
                 rows_per_image: None,

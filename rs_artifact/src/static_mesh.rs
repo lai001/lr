@@ -43,8 +43,8 @@ mod test {
         mesh.name = String::from("mesh");
         mesh.vertexes.push(MeshVertex::default());
         mesh.vertexes[0].position.x = 10.0;
-        let encoded: Vec<u8> = bincode::serialize(&mesh).unwrap();
-        let decoded: StaticMesh = bincode::deserialize(&encoded[..]).unwrap();
+        let encoded: Vec<u8> = crate::bincode_legacy::serialize(&mesh, None).unwrap();
+        let decoded: StaticMesh = crate::bincode_legacy::deserialize(&encoded[..], None).unwrap();
         assert_eq!(decoded.name, "mesh");
         assert_eq!(decoded.vertexes.len(), 1);
         assert_eq!(decoded.vertexes[0].position.x, 10.0);

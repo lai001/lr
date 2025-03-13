@@ -18,6 +18,11 @@ pub fn get_engine_output_target_dir() -> PathBuf {
 }
 
 #[cfg(feature = "editor")]
+pub fn get_engine_generated_dir() -> PathBuf {
+    get_engine_root_dir().join("build/target/generated")
+}
+
+#[cfg(feature = "editor")]
 pub fn get_engine_resource_dir() -> PathBuf {
     get_engine_root_dir().join("Resource")
 }

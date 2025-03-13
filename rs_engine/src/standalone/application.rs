@@ -84,6 +84,7 @@ impl Application {
         window: &mut winit::window::Window,
         ty: crate::input_type::EInputType,
     ) -> Vec<winit::keyboard::KeyCode> {
+        let _ = window;
         self.player_view_port.on_window_input(ty.clone());
         #[cfg(feature = "plugin_shared_crate")]
         let mut consume = vec![];

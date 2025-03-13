@@ -128,7 +128,7 @@ impl UIWindow for MultipleDrawUiWindow {
                     for (_, mesh_view_constants) in
                         draw_object.mesh_view_constants_array.iter_mut().enumerate()
                     {
-                        let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), 0.0..0.1);
+                        let x: f32 = rand::Rng::random_range(&mut rand::rng(), 0.0..0.1);
                         let r = x * engine.get_game_time().sin();
                         mesh_view_constants.model = glam::Mat4::from_rotation_x(r)
                             * glam::Mat4::from_rotation_y(r)
@@ -281,10 +281,10 @@ impl MultipleDrawUiWindow {
             vec![MeshViewConstants::default(); REPEAT_SIZE];
 
         for (_, mesh_view_constants) in mesh_view_constants_array.iter_mut().enumerate() {
-            let offset: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -500.0..500.0);
-            let x: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -1.0..1.0) * offset;
-            let y: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -1.0..1.0) * offset;
-            let z: f32 = rand::Rng::gen_range(&mut rand::thread_rng(), -1.0..1.0) * offset;
+            let offset: f32 = rand::Rng::random_range(&mut rand::rng(), -500.0..500.0);
+            let x: f32 = rand::Rng::random_range(&mut rand::rng(), -1.0..1.0) * offset;
+            let y: f32 = rand::Rng::random_range(&mut rand::rng(), -1.0..1.0) * offset;
+            let z: f32 = rand::Rng::random_range(&mut rand::rng(), -1.0..1.0) * offset;
             let translation = glam::Mat4::from_translation(glam::vec3(x, y, z));
             mesh_view_constants.model = translation;
         }

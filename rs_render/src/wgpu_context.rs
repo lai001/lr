@@ -98,7 +98,7 @@ impl WGPUContext {
     {
         let _span = tracy_client::span!();
 
-        let instance = wgpu::Instance::new(instance_desc.unwrap_or_default());
+        let instance = wgpu::Instance::new(&instance_desc.unwrap_or_default());
         let surface = Self::new_surface(&instance, window)?;
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -146,7 +146,7 @@ impl WGPUContext {
     ) -> Result<WGPUContext> {
         let _span = tracy_client::span!();
 
-        let instance = wgpu::Instance::new(instance_desc.unwrap_or_default());
+        let instance = wgpu::Instance::new(&instance_desc.unwrap_or_default());
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: power_preference.unwrap_or(wgpu::PowerPreference::default()),

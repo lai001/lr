@@ -630,18 +630,18 @@ impl ProjectContext {
                 }
             };
 
-            let buf_reader = std::io::BufReader::new(file);
-
-            let module =
-                match bincode::deserialize_from::<std::io::BufReader<std::fs::File>, naga::Module>(
-                    buf_reader,
-                ) {
-                    Ok(module) => module,
-                    Err(err) => {
-                        log::warn!("{}", err);
-                        continue;
-                    }
-                };
+            let mut buf_reader = std::io::BufReader::new(file);
+            let module = match rs_artifact::bincode_legacy::deserialize_from::<
+                std::io::BufReader<std::fs::File>,
+                naga::Module,
+            >(&mut buf_reader, None)
+            {
+                Ok(module) => module,
+                Err(err) => {
+                    log::warn!("{}", err);
+                    continue;
+                }
+            };
             shaders.insert(name, module);
         }
 
