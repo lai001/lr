@@ -4,21 +4,21 @@ use std::sync::{Arc, Mutex};
 lazy_static! {
     static ref GLOBAL_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
-            .thread_name(|_| { "Global".to_string() })
+            .thread_name(|i| { format!("Global{}", i) })
             .num_threads(std::thread::available_parallelism().unwrap().get())
             .build()
             .unwrap(),
     ));
     static ref GLOBAL_IO_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
-            .thread_name(|_| { "IO".to_string() })
+            .thread_name(|i| { format!("IO{}", i) })
             .num_threads(1)
             .build()
             .unwrap(),
     ));
     static ref GLOBAL_AUDIO_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
-            .thread_name(|_| { "Audio".to_string() })
+            .thread_name(|i| { format!("Audio{}", i) })
             .num_threads(1)
             .build()
             .unwrap(),
@@ -26,20 +26,21 @@ lazy_static! {
     static ref VIRTUAL_TEXTURE_CACHE_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> =
         Mutex::new(Arc::new(
             rayon::ThreadPoolBuilder::new()
+                .thread_name(|i| { format!("VirtualTextureCache{}", i) })
                 .num_threads(1)
                 .build()
                 .unwrap(),
         ));
     static ref RENDER_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
-            .thread_name(|_| { "Render".to_string() })
+            .thread_name(|i| { format!("Render{}", i) })
             .num_threads(1)
             .build()
             .unwrap(),
     ));
     static ref VIDEO_DECODE_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> = Mutex::new(Arc::new(
         rayon::ThreadPoolBuilder::new()
-            .thread_name(|_| { "Video Decode".to_string() })
+            .thread_name(|i| { format!("VideoDecode{}", i) })
             .num_threads(1)
             .build()
             .unwrap(),
@@ -47,7 +48,7 @@ lazy_static! {
     static ref MULTITHREADED_RENDERING_THREAD_POOL: Mutex<Arc<rayon::ThreadPool>> =
         Mutex::new(Arc::new(
             rayon::ThreadPoolBuilder::new()
-                .thread_name(|_| { "Multithreaded Rendering".to_string() })
+                .thread_name(|i| { format!("MultithreadedRendering{}", i) })
                 .num_threads(2)
                 .build()
                 .unwrap(),

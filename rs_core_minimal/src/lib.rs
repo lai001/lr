@@ -5,6 +5,7 @@ pub mod frustum;
 pub mod line_3d;
 pub mod misc;
 pub mod name_generator;
+pub mod parallel;
 pub mod path_ext;
 pub mod plane_3d;
 pub mod primitive_data;

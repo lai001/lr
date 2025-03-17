@@ -21,6 +21,7 @@ do
         for k, v in ipairs(folders) do
             os.cd(path.join(engine_root_dir, v))
             os.exec("cargo test")
+            os.exec("cargo test --release")
         end
     end)
     set_menu {

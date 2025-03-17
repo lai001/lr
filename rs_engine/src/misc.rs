@@ -1,5 +1,7 @@
 use rapier3d::na::Point3;
-use rs_core_minimal::sphere_3d::Sphere3D;
+use rs_core_minimal::{
+    misc::distance_from_point_to_segment, parallel::ComputeDispatcher, sphere_3d::Sphere3D,
+};
 pub const FORWARD_VECTOR: glam::Vec3 = glam::Vec3::Z;
 pub const UP_VECTOR: glam::Vec3 = glam::Vec3::Y;
 pub const RIGHT_VECTOR: glam::Vec3 = glam::Vec3::X;
@@ -96,6 +98,59 @@ pub fn compute_appropriate_offset_look_and_projection_matrix(
     }
 }
 
+pub fn sdf_from_polygon(
+    polygon: Vec<glam::Vec2>,
+    image_size: glam::UVec2,
+    is_reverse: bool,
+) -> image::Rgb32FImage {
+    struct UnsafeWrapperType(*mut image::Rgb32FImage);
+    unsafe impl Send for UnsafeWrapperType {}
+    unsafe impl Sync for UnsafeWrapperType {}
+
+    let size = image_size.extend(1);
+    let mut image = image::Rgb32FImage::new(size.x, size.y);
+    let raw_image = (&mut image) as *mut image::Rgb32FImage;
+    let wrapper_type = std::sync::Arc::new(UnsafeWrapperType(raw_image));
+    let workgroup_size = glam::UVec2::splat(32).extend(1);
+    let num_work_groups = ComputeDispatcher::estimate_num_work_groups(&size, &workgroup_size);
+    rs_core_minimal::parallel::ComputeDispatcher::new(workgroup_size).dispatch_workgroups(
+        num_work_groups,
+        {
+            move |_, _, dispatch_thread_id, _| {
+                let image = unsafe { wrapper_type.0.as_mut().unwrap() };
+                if let Some(pixel) =
+                    image.get_pixel_mut_checked(dispatch_thread_id.x, dispatch_thread_id.y)
+                {
+                    let p = glam::vec2(dispatch_thread_id.x as f32, dispatch_thread_id.y as f32);
+                    let is_inside = rs_core_minimal::misc::is_point_in_polygon(p, &polygon, true);
+                    let mut min_distance = std::f32::MAX;
+                    for i in 0..polygon.len() {
+                        let current = polygon[i];
+                        let next = polygon[(i + 1) % polygon.len()];
+                        let distance = distance_from_point_to_segment(current, next, p);
+                        min_distance = min_distance.min(distance);
+                    }
+
+                    let mut color = glam::vec3(min_distance, min_distance, min_distance);
+                    if is_reverse {
+                        if !is_inside {
+                            color *= -1.0;
+                        }
+                    } else {
+                        if is_inside {
+                            color *= -1.0;
+                        }
+                    }
+
+                    *pixel = image::Rgb::<f32>(color.to_array());
+                }
+            }
+        },
+    );
+
+    image
+}
+
 pub trait Mat4Extension {
     fn get_forward_vector(&self) -> glam::Vec3;
     fn remove_translation(&self) -> glam::Mat4;
@@ -131,5 +186,21 @@ impl Mat4Extension for glam::Mat4 {
             lhs.1.lerp(rhs.1, s),
             lhs.2.lerp(rhs.2, s),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::sdf_from_polygon;
+
+    #[test]
+    fn sdf_from_polygon_test() {
+        let polygon =
+            rs_core_minimal::misc::generate_circle_points(glam::vec2(2048.0, 2048.0), 1024.0, 256);
+        let image = sdf_from_polygon(polygon, glam::uvec2(4096, 4096), false);
+        assert_eq!(
+            *image.get_pixel(0, 2048),
+            image::Rgb::<f32>(glam::Vec3::splat(1024.0).to_array())
+        );
     }
 }

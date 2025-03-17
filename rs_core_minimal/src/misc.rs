@@ -381,13 +381,86 @@ pub fn is_sphere_visible_to_frustum(
         && back_plane.is_inside(sphere3d)
 }
 
+pub fn generate_circle_points(
+    center: glam::Vec2,
+    radius: f32,
+    num_points: usize,
+) -> Vec<glam::Vec2> {
+    (0..num_points)
+        .map(|i| {
+            let theta = 2.0 * std::f32::consts::PI * (i as f32) / num_points as f32;
+            glam::Vec2::new(
+                center.x + radius * theta.cos(),
+                center.y + radius * theta.sin(),
+            )
+        })
+        .collect()
+}
+
+pub fn is_point_in_polygon(
+    point: glam::Vec2,
+    polygon: &[glam::Vec2],
+    is_include_edge: bool,
+) -> bool {
+    let mut crossings = 0;
+    for i in 0..polygon.len() {
+        let current = polygon[i];
+        let next = polygon[(i + 1) % polygon.len()];
+        if is_include_edge {
+            let is_on_edge = (point.y - current.y) * (next.x - current.x)
+                == (next.y - current.y) * (point.x - current.x)
+                && point.x >= current.x.min(next.x)
+                && point.x <= current.x.max(next.x)
+                && point.y >= current.y.min(next.y)
+                && point.y <= current.y.max(next.y);
+            if is_on_edge {
+                return true;
+            }
+        }
+        if (current.y > point.y) != (next.y > point.y) {
+            let delta_x = next.x - current.x;
+            let delta_y = next.y - current.y;
+            let a = point.x - current.x;
+            let c = point.y - current.y;
+            let value = (a * delta_y - delta_x * c) * delta_y;
+            if value < 0.0 {
+                crossings += 1;
+            }
+        }
+    }
+    crossings % 2 == 1
+}
+
+pub fn distance_from_point_to_segment(a: glam::Vec2, b: glam::Vec2, p: glam::Vec2) -> f32 {
+    if a == b {
+        return p.distance(a);
+    }
+    let ab = b - a;
+    let ap = p - a;
+    let dot_ap_ab = ap.dot(ab);
+    let dot_ab_ab = ab.dot(ab);
+    if dot_ap_ab <= 0.0 {
+        p.distance(a)
+    } else if dot_ap_ab >= dot_ab_ab {
+        p.distance(b)
+    } else {
+        let t = dot_ap_ab / dot_ab_ab;
+        let projection = a + ab * t;
+        p.distance(projection)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{
-        frustum_from_perspective, is_sphere_visible_to_frustum, point_light_radius, split_frustum,
-        subdivide_four_points, subdivide_two_points,
+        distance_from_point_to_segment, frustum_from_perspective, generate_circle_points,
+        is_sphere_visible_to_frustum, point_light_radius, split_frustum, subdivide_four_points,
+        subdivide_two_points,
     };
-    use crate::{misc::is_valid_name, sphere_3d::Sphere3D};
+    use crate::{
+        misc::{is_point_in_polygon, is_valid_name},
+        sphere_3d::Sphere3D,
+    };
 
     #[test]
     fn is_valid_name_test() {
@@ -495,5 +568,107 @@ mod test {
         assert!(points[0].1.abs_diff_eq(glam::vec3(1.0, 0.0, -1.0), 0.001));
         assert!(points[0].2.abs_diff_eq(glam::vec3(0.0, 0.0, -1.0), 0.001));
         assert!(points[0].3.abs_diff_eq(glam::vec3(0.0, 0.0, 0.0), 0.001));
+    }
+
+    #[test]
+    fn generate_circle_points_test() {
+        let points = generate_circle_points(glam::vec2(100.0, 100.0), 50.0, 8);
+        assert_eq!(points[0], glam::vec2(150.0, 100.0));
+    }
+
+    #[test]
+    fn is_point_in_polygon_test() {
+        let polygon = vec![
+            glam::Vec2::new(0.0, 0.0),
+            glam::Vec2::new(0.0, 5.0),
+            glam::Vec2::new(5.0, 5.0),
+            glam::Vec2::new(5.0, 0.0),
+        ];
+        let test_points = vec![
+            (glam::Vec2::new(2.0, 2.0), true),
+            (glam::Vec2::new(6.0, 3.0), false),
+            (glam::Vec2::new(0.0, 2.0), true),
+            (glam::Vec2::new(3.0, 5.0), true),
+            (glam::Vec2::new(2.5, 0.0), true),
+            (glam::Vec2::new(5.0, 2.5), true),
+        ];
+        for (point, expected) in test_points {
+            let result = is_point_in_polygon(point, &polygon, true);
+            assert_eq!(result, expected);
+        }
+    }
+
+    #[test]
+    fn is_point_in_polygon_test1() {
+        let polygon = vec![
+            glam::Vec2::new(0.0, 0.0),
+            glam::Vec2::new(0.0, 5.0),
+            glam::Vec2::new(5.0, 5.0),
+            glam::Vec2::new(5.0, 0.0),
+        ];
+        let test_points = vec![
+            (glam::Vec2::new(2.0, 2.0), true),
+            (glam::Vec2::new(6.0, 3.0), false),
+            (glam::Vec2::new(0.0, 2.0), true),
+            (glam::Vec2::new(3.0, 5.0), false),
+            (glam::Vec2::new(2.5, 0.0), true),
+            (glam::Vec2::new(5.0, 2.5), false),
+        ];
+        for (point, expected) in test_points {
+            let result = is_point_in_polygon(point, &polygon, false);
+            assert_eq!(result, expected);
+        }
+    }
+
+    #[test]
+    fn distance_from_point_to_segment_test() {
+        assert_eq!(
+            distance_from_point_to_segment(
+                glam::vec2(0.0, 0.0),
+                glam::vec2(5.0, 0.0),
+                glam::vec2(1.0, 0.0)
+            ),
+            0.0
+        );
+        assert_eq!(
+            distance_from_point_to_segment(
+                glam::vec2(0.0, 0.0),
+                glam::vec2(5.0, 0.0),
+                glam::vec2(-1.0, 0.0)
+            ),
+            1.0
+        );
+        assert_eq!(
+            distance_from_point_to_segment(
+                glam::vec2(0.0, 0.0),
+                glam::vec2(5.0, 0.0),
+                glam::vec2(6.0, 0.0)
+            ),
+            1.0
+        );
+        assert_eq!(
+            distance_from_point_to_segment(
+                glam::vec2(0.0, 0.0),
+                glam::vec2(5.0, 0.0),
+                glam::vec2(6.0, 1.0)
+            ),
+            glam::vec2(5.0, 0.0).distance(glam::vec2(6.0, 1.0))
+        );
+        assert_eq!(
+            distance_from_point_to_segment(
+                glam::vec2(0.0, 0.0),
+                glam::vec2(5.0, 0.0),
+                glam::vec2(3.0, 1.0)
+            ),
+            1.0
+        );
+        assert_eq!(
+            distance_from_point_to_segment(
+                glam::vec2(0.0, 0.0),
+                glam::vec2(5.0, 0.0),
+                glam::vec2(-1.0, 1.0)
+            ),
+            glam::vec2(0.0, 0.0).distance(glam::vec2(-1.0, 1.0))
+        );
     }
 }
