@@ -380,6 +380,9 @@ fn main() -> anyhow::Result<()> {
                 clean(&project_args)?;
             }
         }
+        Cli::CreateDefaultLoadPluginsFile => {
+            rs_build_tool::load_plugins::create_load_plugins_file("rs_desktop_standalone", None, false)?;
+        },
     }
 
     Ok(())

@@ -37,6 +37,17 @@ do
     }
 end
 
+task("create_default_load_plugins_file")
+do
+    on_run(function()
+        os.exec(path.join(rs_target_dir, "release/rs_build_tool") .. " create-default-load-plugins-file")
+    end)
+    set_menu {
+        usage = "xmake create_default_load_plugins_file",
+        description = "Create default load plugins file",
+    }
+end
+
 task("setup")
 do
     on_run(function()
@@ -45,6 +56,7 @@ do
         os.exec("xmake compile_tool")
         os.exec("xmake copy_shared_libs")
         os.exec("xmake gen_config")
+        os.exec("xmake create_default_load_plugins_file")
     end)
     set_menu {
         usage = "xmake setup",

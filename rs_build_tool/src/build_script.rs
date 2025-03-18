@@ -116,7 +116,11 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
             std::env::set_current_dir(old_dir)?;
         }
         crate::cli::ModeType::Standalone => {
-            create_load_plugins_file("rs_desktop_standalone", Some(project_name.to_string()))?;
+            create_load_plugins_file(
+                "rs_desktop_standalone",
+                Some(project_name.to_string()),
+                true,
+            )?;
             add_plugin_dependencies_file(
                 &engine_root_dir.join("rs_desktop_standalone/Cargo.toml"),
                 project_name,
@@ -157,7 +161,7 @@ pub fn clean(project_args: &ProjectArgs) -> anyhow::Result<()> {
     remove_plugin_dependencies_file(&manifest_file, project_name)?;
     let manifest_file = engine_root_dir.join("rs_desktop_standalone/Cargo.toml");
     remove_plugin_dependencies_file(&manifest_file, project_name)?;
-    create_load_plugins_file("rs_desktop_standalone", None)?;
+    create_load_plugins_file("rs_desktop_standalone", None, true)?;
     let project_manifest_file = projcet_folder.join("Cargo.toml");
     disable_dylib_file(&project_manifest_file)?;
     Ok(())

@@ -38,4 +38,5 @@ pub struct ProjectArgs {
 pub enum Cli {
     ProjectFiles(ProjectFilesArgs),
     Project(ProjectArgs),
+    CreateDefaultLoadPluginsFile,
 }
