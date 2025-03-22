@@ -14,6 +14,49 @@ tracy_root_dir = path.absolute(deps_dir .. "tracy")
 dotnet_sdk_dir = path.absolute(deps_dir .. "dotnetSDK")
 rs_target_dir = path.join(engine_root_dir, "build/target")
 
+function trim_quotes_and_newlines(str)
+    str = str:gsub("^[\r\n\"%s]+", "")
+    str = str:gsub("[\r\n\"%s]+$", "")
+    return str
+end
+
+function remove_ansi_escape(str)
+    return str:gsub("[\27\155][][()#;?%d]*[A-PRZcf-ntqry=><~]", "")
+end
+
+function hash_files(os_module, io_module, is_trace, folder_or_file_path)
+    local os = os_module
+    local io = io_module
+    if os.isfile(folder_or_file_path) then
+        local outdata, errdata = os.iorun("xmake l hash.sha256 " .. folder_or_file_path)
+        return trim_quotes_and_newlines(remove_ansi_escape(outdata))
+    else
+        local content = ""
+        for k, v in ipairs(os.files(folder_or_file_path)) do
+            if is_trace then
+                print(k, v)
+            end
+            local outdata, errdata = os.iorun("xmake l hash.sha256 " .. v)
+            content = content .. remove_ansi_escape(outdata)
+        end
+        local file = path.join(os.tmpdir(), "file.txt")
+        if is_trace then
+            print(file)
+        end
+        io.writefile(file, content)
+        local outdata, errdata = os.iorun("xmake l hash.sha256 " .. file)
+        return trim_quotes_and_newlines(remove_ansi_escape(outdata))
+    end
+end
+
+function check_hash_files(os_module, io_module, folder_or_file_path, expected)
+    local value = hash_files(os_module, io_module, false, folder_or_file_path)
+    if value == nil then
+        return false
+    end
+    return value == expected
+end
+
 includes("BuildScripts/gen_config.lua")
 includes("BuildScripts/build_android_target.lua")
 includes("BuildScripts/code_workspace.lua")
