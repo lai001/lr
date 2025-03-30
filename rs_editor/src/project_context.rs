@@ -1,6 +1,5 @@
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
-    model_loader::ModelLoader,
     project::{Project, ASSET_FOLDER_NAME},
 };
 use anyhow::{anyhow, Context};
@@ -15,6 +14,7 @@ use rs_engine::{
     thread_pool::ThreadPool, ASSET_SCHEME,
 };
 use rs_hotreload_plugin::hot_reload::HotReload;
+use rs_model_loader::model_loader::ModelLoader;
 use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::{

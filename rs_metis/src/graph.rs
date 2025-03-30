@@ -1,12 +1,13 @@
-use rs_core_minimal::thread_pool::ThreadPool;
-
+#[cfg(feature = "required_detail_edges")]
+use crate::edge::TriangleEdge;
 use crate::{
-    edge::{Edge, TriangleEdge, VertexEdge},
+    edge::{Edge, VertexEdge},
     vertex_position::VertexPosition,
 };
+use rs_core_minimal::thread_pool::ThreadPool;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
-    iter::zip,
     sync::Arc,
 };
 
@@ -14,7 +15,7 @@ pub type GraphVertexIndex = u32;
 pub type MeshVertexIndex = u32;
 pub type TriangleIndex = u32;
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Graph {
     pub adjoin_indices: Vec<HashSet<GraphVertexIndex>>,
     pub edges: HashSet<Edge>,
@@ -31,27 +32,35 @@ impl Graph {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub struct Triangle {
     indices: [MeshVertexIndex; 3],
+    edges: [Edge; 3],
 }
 
 impl Triangle {
-    fn get_edges(&self) -> [Edge; 3] {
-        [
-            Edge {
-                v0: self.indices[0],
-                v1: self.indices[1],
-            },
-            Edge {
-                v0: self.indices[1],
-                v1: self.indices[2],
-            },
-            Edge {
-                v0: self.indices[2],
-                v1: self.indices[0],
-            },
-        ]
+    pub fn new(indices: [MeshVertexIndex; 3]) -> Self {
+        Self {
+            indices,
+            edges: [
+                Edge {
+                    v0: indices[0],
+                    v1: indices[1],
+                },
+                Edge {
+                    v0: indices[1],
+                    v1: indices[2],
+                },
+                Edge {
+                    v0: indices[2],
+                    v1: indices[0],
+                },
+            ],
+        }
+    }
+
+    fn get_edges(&self) -> &[Edge; 3] {
+        &self.edges
     }
 
     pub fn get_indices(&self) -> &[MeshVertexIndex; 3] {
@@ -59,11 +68,14 @@ impl Triangle {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TriangleGraph {
     triangles: Vec<Triangle>,
     adjoin_triangles: Vec<HashSet<TriangleIndex>>,
+    #[cfg(feature = "required_detail_edges")]
     edges: HashSet<TriangleEdge>,
+    #[cfg(not(feature = "required_detail_edges"))]
+    edges_len: usize,
 }
 
 impl TriangleGraph {
@@ -77,9 +89,7 @@ impl TriangleGraph {
 
         let mut triangles: Vec<Triangle> = Vec::with_capacity(indices.len() / 3);
         for triangle_indices in indices.chunks_exact(3) {
-            let triangle = Triangle {
-                indices: unsafe { triangle_indices.try_into().unwrap_unchecked() },
-            };
+            let triangle = Triangle::new(unsafe { triangle_indices.try_into().unwrap_unchecked() });
             triangles.push(triangle);
         }
         let triangles = Arc::new(triangles);
@@ -94,7 +104,19 @@ impl TriangleGraph {
         );
         let adjoin_triangles = Arc::new(adjoin_triangles);
 
+        #[cfg(feature = "required_detail_edges")]
         let edges = parallel_make_edges(adjoin_triangles.to_vec());
+        #[cfg(not(feature = "required_detail_edges"))]
+        let edges_num = {
+            let mut edges_num = 0;
+            for item in adjoin_triangles.iter() {
+                edges_num += item.len();
+            }
+            edges_num
+        };
+
+        // while Arc::strong_count(&triangles) != 1 {}
+        // while Arc::strong_count(&adjoin_triangles) != 1 {}
 
         let triangles = Arc::try_unwrap(triangles);
         let adjoin_triangles = Arc::try_unwrap(adjoin_triangles);
@@ -102,67 +124,182 @@ impl TriangleGraph {
             (Ok(triangles), Ok(adjoin_triangles)) => TriangleGraph {
                 triangles,
                 adjoin_triangles,
+                #[cfg(feature = "required_detail_edges")]
                 edges,
+                #[cfg(not(feature = "required_detail_edges"))]
+                edges_len: edges_num / 2,
             },
-            _ => todo!(),
+            _ => panic!(),
+        }
+    }
+
+    pub fn from_cache(
+        triangles: &[Triangle],
+        adjoin_triangles: &[HashSet<TriangleIndex>],
+        selection: &[usize],
+    ) -> TriangleGraph {
+        let selection = HashSet::<usize>::from_iter(selection.to_vec());
+
+        let mut sub_triangles: Vec<Triangle> = Vec::with_capacity(selection.len());
+        let mut sub_adjoin_triangles: Vec<HashSet<TriangleIndex>> =
+            Vec::with_capacity(selection.len());
+
+        let mut map: HashMap<u32, u32> = HashMap::new();
+        for (i, index) in selection.iter().enumerate() {
+            sub_triangles.push(triangles[*index]);
+            map.insert(*index as u32, i as u32);
+        }
+
+        for (_, index) in selection.iter().enumerate() {
+            let mut values = Vec::from_iter(adjoin_triangles[*index].clone());
+            values.retain(|x| {
+                return selection.contains(&(*x as usize));
+            });
+            for value in values.iter_mut() {
+                *value = map[value];
+            }
+            sub_adjoin_triangles.push(HashSet::from_iter(values));
+        }
+
+        let mut edges_num = 0;
+        for item in sub_adjoin_triangles.iter() {
+            edges_num += item.len();
+        }
+
+        #[cfg(feature = "required_detail_edges")]
+        let edges: Vec<TriangleEdge> = {
+            let mut edges: Vec<TriangleEdge> = Vec::with_capacity(edges_num);
+            {
+                let _ = tracy_client::span!("Build edges");
+                for (v0, adjoin_triangle) in sub_adjoin_triangles.iter().enumerate() {
+                    for v1 in adjoin_triangle {
+                        let edge = TriangleEdge {
+                            v0: v0 as u32,
+                            v1: *v1,
+                        };
+                        edges.push(edge);
+                    }
+                }
+            }
+            // let mut map: HashMap<u64, TriangleEdge> = HashMap::new();
+            // for edge in edges {
+            //     let compact = (edge.v0 as u64) << 32 | edge.v1 as u64;
+            //     map.insert(compact, edge);
+            // }
+            edges.iter_mut().for_each(|edge| {
+                if edge.v0 > edge.v1 {
+                    std::mem::swap(&mut edge.v0, &mut edge.v1);
+                }
+            });
+            edges.sort_unstable();
+            edges.dedup();
+            edges
+        };
+
+        TriangleGraph {
+            triangles: sub_triangles,
+            adjoin_triangles: sub_adjoin_triangles,
+            #[cfg(feature = "required_detail_edges")]
+            edges: HashSet::from_iter(edges),
+            #[cfg(not(feature = "required_detail_edges"))]
+            edges_len: edges_num / 2,
         }
     }
 
     pub fn from_indexed_vertices(indices: &[u32], vertices: &[VertexPosition]) -> TriangleGraph {
+        let _ = tracy_client::span!();
+
         assert!(vertices.len() > 0);
         assert!(indices.len() > 0);
         assert_eq!(indices.len() % 3, 0);
 
         let mut triangles: Vec<Triangle> = Vec::with_capacity(indices.len() / 3);
-        for triangle_indices in indices.chunks_exact(3) {
-            let triangle = Triangle {
-                indices: unsafe { triangle_indices.try_into().unwrap_unchecked() },
-            };
-            triangles.push(triangle);
+        {
+            let _ = tracy_client::span!("Build triangles");
+            for triangle_indices in indices.chunks_exact(3) {
+                let triangle =
+                    Triangle::new(unsafe { triangle_indices.try_into().unwrap_unchecked() });
+                triangles.push(triangle);
+            }
         }
 
         let mut vertex_edges: HashMap<VertexEdge, HashSet<usize>> = HashMap::new();
-        for (i, triangle) in triangles.iter().enumerate() {
-            let edges = triangle.get_edges();
-            for edge in edges {
-                let vertex_edge =
-                    VertexEdge::new(vertices[edge.v0 as usize], vertices[edge.v1 as usize]);
-                vertex_edges.entry(vertex_edge).or_default().insert(i);
+        {
+            let _ = tracy_client::span!("Build vertex edges");
+            for (i, triangle) in triangles.iter().enumerate() {
+                let edges = triangle.get_edges();
+                for edge in edges {
+                    let vertex_edge =
+                        VertexEdge::new(vertices[edge.v0 as usize], vertices[edge.v1 as usize]);
+                    vertex_edges.entry(vertex_edge).or_default().insert(i);
+                }
             }
         }
 
         let mut adjoin_triangles: Vec<HashSet<TriangleIndex>> =
             vec![HashSet::new(); triangles.len()];
-        for (i, triangle) in triangles.iter().enumerate() {
-            let edges = triangle.get_edges();
-            for edge in edges {
-                let vertex_edge =
-                    VertexEdge::new(vertices[edge.v0 as usize], vertices[edge.v1 as usize]);
-
-                let mut triangle_indices = vertex_edges
-                    .get(&vertex_edge)
-                    .expect(&format!("Not null, {:?}", edge))
-                    .clone();
-                assert!(triangle_indices.contains(&i));
-                triangle_indices.remove(&i);
-                for value in triangle_indices {
-                    adjoin_triangles[i].insert(value as u32);
+        {
+            let _ = tracy_client::span!("Build adjoin triangles");
+            for (i, triangle) in triangles.iter().enumerate() {
+                let edges = triangle.get_edges();
+                for edge in edges {
+                    let vertex_edge =
+                        VertexEdge::new(vertices[edge.v0 as usize], vertices[edge.v1 as usize]);
+                    let triangle_indices = vertex_edges
+                        .get(&vertex_edge)
+                        .expect(&format!("Not null, {:?}", edge));
+                    debug_assert!(triangle_indices.contains(&i));
+                    for value in triangle_indices {
+                        if value != &i {
+                            adjoin_triangles[i].insert(*value as u32);
+                        }
+                    }
                 }
             }
         }
 
-        let mut edges: HashSet<TriangleEdge> = HashSet::new();
-        for (v0, adjoin_triangle) in adjoin_triangles.iter().enumerate() {
-            for v1 in adjoin_triangle.clone() {
-                let edge = TriangleEdge { v0: v0 as u32, v1 };
-                edges.insert(edge);
-            }
+        let mut edges_num = 0;
+        for item in adjoin_triangles.iter() {
+            edges_num += item.len();
         }
+
+        #[cfg(feature = "required_detail_edges")]
+        let edges: Vec<TriangleEdge> = {
+            let mut edges: Vec<TriangleEdge> = Vec::with_capacity(edges_num);
+            {
+                let _ = tracy_client::span!("Build edges");
+                for (v0, adjoin_triangle) in adjoin_triangles.iter().enumerate() {
+                    for v1 in adjoin_triangle {
+                        let edge = TriangleEdge {
+                            v0: v0 as u32,
+                            v1: *v1,
+                        };
+                        edges.push(edge);
+                    }
+                }
+            }
+            // let mut map: HashMap<u64, TriangleEdge> = HashMap::new();
+            // for edge in edges {
+            //     let compact = (edge.v0 as u64) << 32 | edge.v1 as u64;
+            //     map.insert(compact, edge);
+            // }
+            edges.iter_mut().for_each(|edge| {
+                if edge.v0 > edge.v1 {
+                    std::mem::swap(&mut edge.v0, &mut edge.v1);
+                }
+            });
+            edges.sort_unstable();
+            edges.dedup();
+            edges
+        };
 
         TriangleGraph {
             triangles,
             adjoin_triangles,
-            edges,
+            #[cfg(feature = "required_detail_edges")]
+            edges: HashSet::from_iter(edges),
+            #[cfg(not(feature = "required_detail_edges"))]
+            edges_len: edges_num / 2,
         }
     }
 
@@ -171,7 +308,10 @@ impl TriangleGraph {
     }
 
     pub fn get_graph_edges_len(&self) -> u32 {
-        self.edges.len() as u32
+        #[cfg(feature = "required_detail_edges")]
+        return self.edges.len() as u32;
+        #[cfg(not(feature = "required_detail_edges"))]
+        return self.edges_len as u32;
     }
 
     pub fn get_triangles(&self) -> &[Triangle] {
@@ -196,18 +336,23 @@ impl TriangleGraph {
                 .join(" ");
             content.push_str(&format!("{}\n", line));
         }
+        let error_path = Some(format!(
+            "{:?}",
+            output_path.as_ref().to_str().unwrap_or_default()
+        ));
         std::fs::create_dir_all(
             output_path
                 .as_ref()
                 .parent()
                 .ok_or(crate::error::Error::Other(Some(format!("No parent"))))?,
         )
-        .map_err(|err| crate::error::Error::IO(err, None))?;
+        .map_err(|err| crate::error::Error::IO(err, error_path.clone()))?;
         if output_path.as_ref().exists() {
             std::fs::remove_file(output_path.as_ref())
-                .map_err(|err| crate::error::Error::IO(err, None))?;
+                .map_err(|err| crate::error::Error::IO(err, error_path.clone()))?;
         }
-        std::fs::write(output_path, content).map_err(|err| crate::error::Error::IO(err, None))
+        std::fs::write(output_path.as_ref(), content)
+            .map_err(|err| crate::error::Error::IO(err, error_path.clone()))
     }
 
     pub fn write_debug_info_to_file(
@@ -221,9 +366,12 @@ impl TriangleGraph {
             contents.push_str(&format!("{} {:?}\n", i, triangle.indices));
         }
 
-        contents.push_str("--Edges\n");
-        for edge in self.edges.iter() {
-            contents.push_str(&format!("{} {}\n", edge.v0, edge.v1));
+        #[cfg(feature = "required_detail_edges")]
+        {
+            contents.push_str("--Edges\n");
+            for edge in self.edges.iter() {
+                contents.push_str(&format!("{} {}\n", edge.v0, edge.v1));
+            }
         }
 
         contents.push_str("--Adjoin triangles\n");
@@ -260,7 +408,7 @@ fn parallel_make_vertex_edges(
     let batchs = binding.chunks(triangles.len() / count);
     let batchs_len = batchs.len();
 
-    let mut vertex_edges: HashMap<VertexEdge, HashSet<usize>> = HashMap::new();
+    let mut vertex_edges: HashMap<VertexEdge, HashSet<usize>> = HashMap::with_capacity(batchs_len);
 
     let (sender, receiver) = std::sync::mpsc::channel();
 
@@ -271,7 +419,8 @@ fn parallel_make_vertex_edges(
             let vertices = vertices.clone();
             let sender = sender.clone();
             move || {
-                let mut vertex_edges: HashMap<VertexEdge, HashSet<usize>> = HashMap::new();
+                let mut vertex_edges: HashMap<VertexEdge, HashSet<usize>> =
+                    HashMap::with_capacity(batch.len());
                 for i in batch {
                     let triangle = &triangles[i];
                     let edges = triangle.get_edges();
@@ -343,7 +492,7 @@ fn parallel_make_adjoin_triangles(
                             .get(&vertex_edge)
                             .expect(&format!("Not null, {:?}", edge))
                             .clone();
-                        assert!(triangle_indices.contains(&bi));
+                        debug_assert!(triangle_indices.contains(&bi));
                         triangle_indices.remove(&bi);
                         for value in triangle_indices {
                             adjoin_triangles[i].insert(value as u32);
@@ -381,6 +530,7 @@ fn parallel_make_adjoin_triangles(
     adjoin_triangles
 }
 
+#[cfg(feature = "required_detail_edges")]
 fn parallel_make_edges(adjoin_triangles: Vec<HashSet<u32>>) -> HashSet<TriangleEdge> {
     let mut edges: HashSet<TriangleEdge> = HashSet::new();
 
@@ -400,7 +550,7 @@ fn parallel_make_edges(adjoin_triangles: Vec<HashSet<u32>>) -> HashSet<TriangleE
             move || {
                 let mut edges: HashSet<TriangleEdge> = HashSet::new();
                 assert_eq!(batch.len(), adjoin_triangles.len());
-                for (triangle_index, triangles) in zip(batch, adjoin_triangles) {
+                for (triangle_index, triangles) in std::iter::zip(batch, adjoin_triangles) {
                     for v1 in triangles {
                         let edge = TriangleEdge {
                             v0: triangle_index as u32,
@@ -431,7 +581,8 @@ fn parallel_make_edges(adjoin_triangles: Vec<HashSet<u32>>) -> HashSet<TriangleE
 #[cfg(test)]
 mod tests {
     use super::{MeshVertexIndex, TriangleGraph};
-    use crate::vertex_position::VertexPosition;
+    use crate::{edge::TriangleEdge, vertex_position::VertexPosition};
+    use std::collections::{HashMap, HashSet};
 
     #[test]
     fn test_case() {
@@ -448,5 +599,34 @@ mod tests {
         for item in triangle_graph.get_adjoin_triangles() {
             assert_eq!(item.len(), 1);
         }
+    }
+
+    #[test]
+    fn dedup_test() {
+        let mut edges: Vec<TriangleEdge> = vec![
+            TriangleEdge { v0: 100, v1: 1 },
+            TriangleEdge { v0: 1, v1: 890 },
+            TriangleEdge { v0: 2, v1: 1230 },
+            TriangleEdge { v0: 660, v1: 24 },
+            TriangleEdge { v0: 24, v1: 660 },
+            TriangleEdge { v0: 300, v1: 60 },
+        ];
+        edges.iter_mut().for_each(|edge| {
+            if edge.v0 > edge.v1 {
+                std::mem::swap(&mut edge.v0, &mut edge.v1);
+            }
+        });
+        edges.dedup();
+
+        let mut map: HashMap<u32, TriangleEdge> = HashMap::new();
+        for edge in edges.iter() {
+            let k = edge.v0 ^ edge.v1;
+            map.insert(k, edge.clone());
+        }
+
+        let len = edges.len();
+        let edges_set: HashSet<TriangleEdge> = HashSet::from_iter(edges);
+        assert_eq!(len, edges_set.len());
+        assert_eq!(map.len(), edges_set.len());
     }
 }

@@ -12,17 +12,28 @@ editor = [
     "rs_render/editor",
     "rs_core_minimal/editor",
     "rs_engine/editor",
+    "rs_model_loader/editor",
 ]
 standalone = [
     "rs_shader_compiler_core/standalone",
     "rs_render/standalone",
     "rs_core_minimal/standalone",
     "rs_engine/standalone",
+    "rs_model_loader/standalone",
 ]
-profiler = ["tracy-client/default", "rs_render/profiler", "rs_engine/profiler"]
+profiler = [
+    "tracy-client/enable",
+    "rs_render/profiler",
+    "rs_engine/profiler",
+    "rs_metis/profiler",
+]
 plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 plugin_dotnet = ["dep:rs_dotnet", "dep:rs_dotnet_host"]
-plugin_v8 = ["dep:rs_v8_host", "dep:rs_v8_engine_binding_api", "dep:rs_v8_binding_api_manager"]
+plugin_v8 = [
+    "dep:rs_v8_host",
+    "dep:rs_v8_engine_binding_api",
+    "dep:rs_v8_binding_api_manager",
+]
 exit_check = []
 detect_encoding = ["rs_shader_compiler_core/detect_encoding"]
 reflection = ["dep:rs_reflection_core", "dep:rs_reflection_system"]
@@ -95,6 +106,7 @@ rs_v8_engine_binding_api = { path = "../build/target/generated/rs_v8_engine_bind
 rs_v8_binding_api_manager = { path = "../crates/rs_v8_binding_api_manager", optional = true }
 rs_reflection_system = { path = "../crates/rs_reflection_system", optional = true }
 rs_reflection_core = { path = "../crates/rs_reflection_core", optional = true }
+rs_model_loader = { path = "../crates/rs_model_loader" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rs_dotnet = { path = "../rs_dotnet", optional = true }

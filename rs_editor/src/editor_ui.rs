@@ -1,6 +1,5 @@
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
-use crate::model_loader::ModelLoader;
 use crate::thumbnail_cache::ThumbnailCache;
 use crate::ui::content_item_property_view::ContentItemPropertyView;
 use crate::ui::debug_textures_view::{self, DebugTexturesView};
@@ -14,6 +13,7 @@ use crate::ui::{
 use egui::*;
 use rs_engine::components::component::Component;
 use rs_engine::input_mode::EInputMode;
+use rs_model_loader::model_loader::ModelLoader;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
 use transform_gizmo_egui::math::Transform;
@@ -249,7 +249,7 @@ impl EditorUI {
         let mut is_open = data_source.model_scene_view_data.model_scene.is_some();
         let mut scene = None;
         if let Some(path) = data_source.model_scene_view_data.model_scene.clone() {
-            scene = model_loader.get(&path).ok();
+            scene = model_loader.get(&path);
         }
         Self::new_window("Model Scene", data_source.input_mode)
             .open(&mut is_open)

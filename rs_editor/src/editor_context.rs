@@ -5,7 +5,6 @@ use crate::{
     data_source::{AssetFile, AssetFolder, DataSource},
     editor_ui::{EditorUI, GizmoEvent},
     material_resolve,
-    model_loader::ModelLoader,
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
     ui::{
@@ -63,6 +62,7 @@ use rs_engine::{
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_metis::{cluster::ClusterCollection, vertex_position::VertexPosition};
+use rs_model_loader::model_loader::ModelLoader;
 use rs_render::{
     command::{
         CreateMultipleResolutionMesh, RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo,

@@ -2,9 +2,10 @@ use crate::{
     graph::{GraphVertexIndex, TriangleIndex},
     vertex_position::VertexPosition,
 };
+use serde::{Deserialize, Serialize};
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-#[derive(Debug, Clone, Copy, Eq)]
+#[derive(Debug, Clone, Copy, Eq, Default, Deserialize, Serialize)]
 pub struct Edge {
     pub v0: GraphVertexIndex,
     pub v1: GraphVertexIndex,
@@ -33,7 +34,7 @@ impl Hash for Edge {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq)]
+#[derive(Debug, Eq, Ord, PartialOrd, Clone, Serialize, Deserialize)]
 pub struct TriangleEdge {
     pub v0: TriangleIndex,
     pub v1: TriangleIndex,

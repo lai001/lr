@@ -23,6 +23,20 @@ do
             os.exec("cargo test")
             os.exec("cargo test --release")
         end
+
+        local with_additional_args = {
+            ["rs_metis"] = { features = { "required_detail_edges" } }
+        }
+        for k, v in pairs(with_additional_args) do
+            os.cd(path.join(engine_root_dir, k))
+            local features = v["features"]
+            local features_args = ""
+            for k, v in ipairs(features) do
+                features_args = format("%s --features %s", features_args, v)
+            end
+            os.exec("cargo test " .. features_args)
+            os.exec("cargo test --release " .. features_args)
+        end
     end)
     set_menu {
         usage = "xmake unit_test",

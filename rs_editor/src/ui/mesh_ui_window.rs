@@ -361,11 +361,9 @@ impl MeshUIWindow {
             vertices.push(VertexPosition::new(item.position));
         }
         let vertices = Arc::new(vertices);
-        let gpmetis_program_path: Option<std::path::PathBuf> = None;
-        let cluster_collection = match ClusterCollection::parallel_from_indexed_vertices(
-            indices,
+        let cluster_collection = match ClusterCollection::parallel_from_indexed_vertices2(
+            Arc::new(indices.to_vec()),
             vertices,
-            gpmetis_program_path,
         ) {
             Ok(cluster_collection) => cluster_collection,
             Err(err) => {

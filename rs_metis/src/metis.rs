@@ -21,6 +21,7 @@ use crate::{
 };
 use std::{
     collections::HashSet,
+    num::NonZero,
     ops::{Deref, DerefMut, Range},
     process::Command,
     sync::Arc,
@@ -266,19 +267,40 @@ impl Metis {
         std::fs::write(output_path, content).map_err(|err| crate::error::Error::IO(err, None))
     }
 
+    pub fn partition_from_graph(
+        triangle_graph: &TriangleGraph,
+        num_parts: NonZero<u32>,
+    ) -> crate::error::Result<Vec<TriangleGraph>> {
+        let _ = tracy_client::span!();
+        let partition = Self::internal_partition_memory(&triangle_graph, num_parts.get())?;
+        let mut partition_result: Vec<Vec<usize>> =
+            vec![Vec::with_capacity(partition.len()); num_parts.get() as usize];
+        for (graph_vertex_index, which_part) in partition.iter().enumerate() {
+            (&mut partition_result[*which_part as usize]).push(graph_vertex_index);
+        }
+        if partition_result.len() != num_parts.get() as usize {
+            return Err(crate::error::Error::Other(None));
+        }
+        let mut reuslts = Vec::with_capacity(partition_result.len());
+        for selection in &mut partition_result {
+            selection.shrink_to_fit();
+            let sub_graph = TriangleGraph::from_cache(
+                triangle_graph.get_triangles(),
+                triangle_graph.get_adjoin_triangles(),
+                selection,
+            );
+            reuslts.push(sub_graph);
+        }
+        Ok(reuslts)
+    }
+
     pub fn partition_from_indexed_vertices(
         indices: &[u32],
         vertices: &[VertexPosition],
         num_parts: u32,
-        gpmetis_program_path: impl AsRef<std::path::Path>,
     ) -> crate::error::Result<Vec<Vec<MeshVertexIndex>>> {
-        let _ = gpmetis_program_path;
-        // let _ = vertices;
-        let output_path = std::path::Path::new("./t.graph").to_path_buf();
-        let output_path = rs_foundation::absolute_path(output_path)
-            .map_err(|err| crate::error::Error::IO(err, None))?;
+        let _ = tracy_client::span!();
         let triangle_graph = TriangleGraph::from_indexed_vertices(indices, vertices);
-        triangle_graph.write_to_file(&output_path)?;
 
         // let partition = Self::internal_partition(gpmetis_program_path, &output_path, num_parts)?;
         let partition = Self::internal_partition_memory(&triangle_graph, num_parts)?;
@@ -291,7 +313,6 @@ impl Metis {
                 .expect("Should not be null");
             value.push(graph_vertex_index as GraphVertexIndex);
         }
-
         Ok(Self::build_mesh_clusters2(
             &triangle_graph,
             &partition_result,
@@ -302,16 +323,12 @@ impl Metis {
         indices: &[u32],
         vertices: Arc<Vec<VertexPosition>>,
         num_parts: u32,
-        gpmetis_program_path: Option<impl AsRef<std::path::Path>>,
     ) -> crate::error::Result<Vec<Vec<MeshVertexIndex>>> {
-        let _ = gpmetis_program_path;
-        // let _ = vertices;
-        let output_path = std::path::Path::new("./t.graph").to_path_buf();
-        let output_path = rs_foundation::absolute_path(output_path)
-            .map_err(|err| crate::error::Error::IO(err, None))?;
-        let triangle_graph = TriangleGraph::parallel_from_indexed_vertices(indices, vertices);
+        let _ = tracy_client::span!();
+
+        let triangle_graph =
+            TriangleGraph::parallel_from_indexed_vertices(indices, vertices.clone());
         unsafe { Self::metis_graph_from_triangle_graph(&triangle_graph).unwrap() };
-        triangle_graph.write_to_file(&output_path)?;
 
         // let partition = Self::internal_partition(gpmetis_program_path, &output_path, num_parts)?;
         let partition = Self::internal_partition_memory(&triangle_graph, num_parts)?;
@@ -324,7 +341,6 @@ impl Metis {
                 .expect("Should not be null");
             value.push(graph_vertex_index as GraphVertexIndex);
         }
-
         Ok(Self::build_mesh_clusters2(
             &triangle_graph,
             &partition_result,
@@ -351,6 +367,7 @@ impl Metis {
         triangle_graph: &TriangleGraph,
         num_parts: u32,
     ) -> crate::error::Result<Vec<u32>> {
+        let _ = tracy_client::span!();
         unsafe {
             let mut graph = Self::metis_graph_from_triangle_graph(triangle_graph)?;
             let mut options: Vec<i32> = vec![0; METIS_NOPTIONS as usize];

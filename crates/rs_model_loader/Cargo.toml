@@ -1,0 +1,25 @@
+[package]
+name = "rs_model_loader"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["editor"]
+editor = ["rs_render/editor", "rs_core_minimal/editor", "rs_engine/editor"]
+standalone = [
+    "rs_render/standalone",
+    "rs_core_minimal/standalone",
+    "rs_engine/standalone",
+]
+
+[dependencies]
+log = "0.4.26"
+glam = { version = "0.30.0", features = ["mint"] }
+russimp = { version = "3.2.0", features = ["prebuilt", "static-link"] }
+url = { version = "2.5.4", features = ["serde"] }
+rs_core_minimal = { path = "../../rs_core_minimal" }
+rs_assimp = { path = "../../rs_assimp" }
+rs_foundation = { path = "../../rs_foundation" }
+rs_render = { path = "../../rs_render" }
+rs_artifact = { path = "../../rs_artifact" }
+rs_engine = { path = "../../rs_engine" }
