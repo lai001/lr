@@ -28,7 +28,6 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
-use rs_artifact::{material::MaterialInfo, sound::ESoundFileType};
 use rs_core_minimal::{
     file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
 };
@@ -58,15 +57,12 @@ use rs_engine::{
     file_type::EFileType,
     logger::{Logger, LoggerConfiguration},
     resource_manager::ResourceManager,
-    static_virtual_texture_source::StaticVirtualTextureSource,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_metis::{cluster::ClusterCollection, vertex_position::VertexPosition};
 use rs_model_loader::model_loader::ModelLoader;
 use rs_render::{
-    command::{
-        CreateMultipleResolutionMesh, RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo,
-    },
+    command::{RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
     get_buildin_shader_dir,
 };
 use rs_render_types::MaterialOptions;
@@ -74,6 +70,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     fmt::Debug,
+    hash::Hash,
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
@@ -1117,7 +1114,7 @@ impl EditorContext {
         Ok(())
     }
 
-    fn write_debug_shader(
+    pub fn write_debug_shader(
         material_editor: &crate::material::Material,
         resolve_result: &HashMap<MaterialOptions, material_resolve::ResolveResult>,
     ) -> anyhow::Result<()> {
@@ -1206,223 +1203,20 @@ impl EditorContext {
         Ok(cluster_collection)
     }
 
-    fn read_create_multiple_resolution_mesh(
-        engine: &mut rs_engine::engine::Engine,
-        mesh_cluster_dir: &Path,
-        static_mesh_content: &rs_engine::content::static_mesh::StaticMesh,
-        static_mesh_artifact: &rs_artifact::static_mesh::StaticMesh,
-    ) -> anyhow::Result<()> {
-        if !static_mesh_content.is_enable_multiresolution {
-            return Ok(());
-        }
-        let cache_filename = static_mesh_content.get_name();
-        let debug_label = static_mesh_content.get_name();
-        // let url = static_mesh_content.url.clone();
-        let url = static_mesh_artifact.url.clone();
-        let rm = ResourceManager::default();
-        let handle = rm.next_multiple_resolution_mesh_handle(url);
-        let cache_path = mesh_cluster_dir.join(cache_filename);
-        let read_bytes = std::fs::read(&cache_path)?;
-        let cluster_collection =
-            rs_artifact::bincode_legacy::deserialize::<ClusterCollection>(&read_bytes, None)?;
-        engine.send_render_command(RenderCommand::CreateMultiResMesh(
-            CreateMultipleResolutionMesh {
-                handle: *handle,
-                vertexes: static_mesh_artifact.vertexes.clone(),
-                indices: static_mesh_artifact.indexes.clone(),
-                debug_label: Some(debug_label),
-                cluster_collection,
-            },
-        ));
-        Ok(())
-    }
-
     fn content_load_resources(
         engine: &mut rs_engine::engine::Engine,
         model_loader: &mut ModelLoader,
         project_context: &ProjectContext,
         files: Vec<EContentFileType>,
     ) {
-        let _span = tracy_client::span!();
-
-        let project_folder_path = project_context.get_project_folder_path();
-        let asset_folder_path = project_context.get_asset_folder_path();
-        let mesh_cluster_dir = project_context.get_mesh_cluster_dir();
-
-        for file in files {
-            match file {
-                EContentFileType::StaticMesh(static_mesh) => {
-                    let static_mesh_content = static_mesh.borrow();
-                    let is_enable_multiresolution = static_mesh_content.is_enable_multiresolution;
-                    let file_path = asset_folder_path
-                        // .join(&static_mesh.borrow().asset_reference_relative_path);
-                        .join(&static_mesh_content.asset_info.relative_path);
-                    model_loader.load(&file_path).unwrap();
-                    let static_mesh = model_loader.to_runtime_static_mesh(
-                        &static_mesh_content,
-                        &asset_folder_path,
-                        ResourceManager::default(),
-                    );
-                    match static_mesh {
-                        Ok(static_mesh) => {
-                            if is_enable_multiresolution {
-                                if let Err(err) = Self::read_create_multiple_resolution_mesh(
-                                    engine,
-                                    &mesh_cluster_dir,
-                                    &static_mesh_content,
-                                    &static_mesh,
-                                ) {
-                                    log::warn!("{}", err);
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!("{}", err);
-                        }
-                    }
-                }
-                EContentFileType::SkeletonMesh(skeleton_mesh) => {
-                    let file_path =
-                        project_folder_path.join(&skeleton_mesh.borrow().get_relative_path());
-                    model_loader.load(&file_path).unwrap();
-                    model_loader.to_runtime_skin_mesh(
-                        &skeleton_mesh.borrow(),
-                        &project_folder_path,
-                        ResourceManager::default(),
-                    );
-                }
-                EContentFileType::SkeletonAnimation(node_animation) => {
-                    let file_path =
-                        project_folder_path.join(&node_animation.borrow().get_relative_path());
-                    model_loader.load(&file_path).unwrap();
-                    model_loader.to_runtime_skeleton_animation(
-                        node_animation.clone(),
-                        &project_folder_path,
-                        ResourceManager::default(),
-                    );
-                }
-                EContentFileType::Skeleton(skeleton) => {
-                    let file_path =
-                        project_folder_path.join(&skeleton.borrow().get_relative_path());
-                    model_loader.load(&file_path).unwrap();
-                    model_loader.to_runtime_skeleton(
-                        skeleton.clone(),
-                        &project_folder_path,
-                        ResourceManager::default(),
-                    );
-                }
-                EContentFileType::Texture(texture_file) => {
-                    let texture_file = texture_file.borrow_mut();
-                    let Some(image_reference) = &texture_file.get_image_reference_path() else {
-                        continue;
-                    };
-                    let abs_path = project_folder_path.join(image_reference);
-                    let _ = engine.create_texture_from_path(&abs_path, &texture_file.url);
-
-                    {
-                        let url = texture_file.url.clone();
-                        let Some(virtual_image_reference) = &texture_file.virtual_image_reference
-                        else {
-                            continue;
-                        };
-                        let path = project_context
-                            .get_virtual_texture_cache_dir()
-                            .join(virtual_image_reference);
-                        let Ok(source) = StaticVirtualTextureSource::from_file(path, None) else {
-                            continue;
-                        };
-                        engine.create_virtual_texture_source(url.clone(), Box::new(source));
-                        log::trace!(
-                            "Create virtual texture source, url: {}, {}",
-                            url.as_str(),
-                            virtual_image_reference
-                        );
-                    }
-                }
-                EContentFileType::Level(_) => {
-                    // let mut level = level.borrow_mut();
-                    // level.initialize(engine);
-                }
-                EContentFileType::Material(material_content) => {
-                    let find = project_context
-                        .project
-                        .materials
-                        .iter()
-                        .find(|x| x.borrow().url == material_content.borrow().asset_url)
-                        .cloned();
-                    if let Some(material_editor) = find {
-                        let mut shader_code: HashMap<MaterialOptions, String> = HashMap::new();
-                        let mut material_info: HashMap<MaterialOptions, MaterialInfo> =
-                            HashMap::new();
-                        let mut material_editor = material_editor.borrow_mut();
-                        match material_resolve::resolve(
-                            &material_editor.snarl,
-                            MaterialOptions::all(),
-                        ) {
-                            Ok(resolve_result) => {
-                                if engine
-                                    .get_settings()
-                                    .render_setting
-                                    .is_enable_dump_material_shader_code
-                                {
-                                    if let Err(err) =
-                                        Self::write_debug_shader(&material_editor, &resolve_result)
-                                    {
-                                        log::warn!("{}", err);
-                                    }
-                                }
-                                for (option, result) in resolve_result {
-                                    shader_code.insert(option.clone(), result.shader_code);
-                                    material_info.insert(option, result.material_info);
-                                }
-                                {
-                                    let pipeline_handle = engine.create_material(shader_code);
-                                    let mut material_content = material_content.borrow_mut();
-                                    material_content.set_pipeline_handle(pipeline_handle);
-                                    material_content.set_material_info(material_info);
-                                }
-                                material_editor.set_associated_material(material_content.clone());
-                            }
-                            Err(err) => {
-                                log::warn!("{}", err);
-                            }
-                        }
-                    }
-                }
-                EContentFileType::IBL(ibl) => {
-                    let result = Self::load_ibl_content_resource(engine, project_context, ibl);
-                    log::trace!("{:?}", result);
-                }
-                EContentFileType::ParticleSystem(_) => {
-                    // todo!()
-                }
-                EContentFileType::Sound(sound) => {
-                    let sound = sound.borrow_mut();
-                    let url = sound.asset_info.get_url();
-                    let path = project_context
-                        .get_asset_folder_path()
-                        .join(&sound.asset_info.relative_path);
-                    let Ok(data) = std::fs::read(path) else {
-                        return;
-                    };
-                    let sound_resouce = rs_artifact::sound::Sound {
-                        url: url.clone(),
-                        sound_file_type: ESoundFileType::Unknow,
-                        data,
-                    };
-                    let rm = ResourceManager::default();
-                    rm.add_sound(url, Arc::new(sound_resouce));
-                }
-                EContentFileType::Curve(_) => {}
-                EContentFileType::BlendAnimations(_) => {}
-                EContentFileType::MaterialParamentersCollection(
-                    material_paramenters_collection,
-                ) => {
-                    let mut material_paramenters_collection =
-                        material_paramenters_collection.borrow_mut();
-                    material_paramenters_collection.initialize(engine);
-                }
-            }
+        let result = crate::load_content::load_contents::LoadContents::load(
+            engine,
+            project_context,
+            model_loader,
+            &files,
+        );
+        if let Err(err) = result {
+            log::warn!("{}", err);
         }
     }
 
@@ -1993,8 +1787,10 @@ impl EditorContext {
         )
         .expect("Should be opened");
         let file_path = project_folder_path.join(&skeleton_mesh.get_relative_path());
-        self.model_loader.load(&file_path).unwrap();
-        let skin_mesh = self.model_loader.to_runtime_skin_mesh(
+        self.model_loader
+            .load_scene_from_file_and_cache(&file_path)
+            .unwrap();
+        let skin_mesh = self.model_loader.to_runtime_cache_skin_mesh(
             skeleton_mesh,
             &project_folder_path,
             ResourceManager::default(),
@@ -2020,8 +1816,10 @@ impl EditorContext {
         )
         .expect("Should be opened");
         let file_path = asset_folder_path.join(&static_mesh.asset_info.relative_path);
-        self.model_loader.load(&file_path).unwrap();
-        let Ok(static_mesh) = self.model_loader.to_runtime_static_mesh(
+        self.model_loader
+            .load_scene_from_file_and_cache(&file_path)
+            .unwrap();
+        let Ok(static_mesh) = self.model_loader.to_runtime_cache_static_mesh(
             static_mesh,
             &asset_folder_path,
             ResourceManager::default(),
@@ -2954,7 +2752,9 @@ impl EditorContext {
                 if asset_file.get_file_type() == EFileType::Mp4 {
                     self.open_media_window(asset_file.path, event_loop_window_target);
                 } else if asset_file.get_file_type().is_model() {
-                    let _ = self.model_loader.load(&asset_file.path);
+                    let _ = self
+                        .model_loader
+                        .load_scene_from_file_and_cache(&asset_file.path);
                     self.data_source.model_scene_view_data = Default::default();
                     self.data_source.model_scene_view_data.model_scene = Some(asset_file.path);
                 }

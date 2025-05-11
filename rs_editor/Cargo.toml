@@ -39,6 +39,8 @@ detect_encoding = ["rs_shader_compiler_core/detect_encoding"]
 reflection = ["dep:rs_reflection_core", "dep:rs_reflection_system"]
 
 [dependencies]
+futures = "0.3.31"
+tokio = { version = "1.44.2", features = ["full"] }
 egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "55f0af0", version = "0.7.1", features = [
     "serde",
 ] }

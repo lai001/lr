@@ -13,7 +13,8 @@ use crate::{
 };
 use russimp_sys::*;
 use std::{
-    cell::RefCell, collections::HashMap, ffi::CString, marker::PhantomData, path::Path, rc::Rc,
+    cell::RefCell, collections::HashMap, ffi::CString, fmt::Debug, marker::PhantomData, path::Path,
+    rc::Rc,
 };
 
 fn walk_ai_node<'a, F>(node: &'a mut aiNode, f: &mut F)
@@ -107,6 +108,12 @@ pub struct Scene<'a> {
     pub animations: Vec<Animation<'a>>,
     pub metadata: Option<Metadata<'a>>,
     marker: PhantomData<&'a ()>,
+}
+
+impl<'a> Debug for Scene<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Scene").field("name", &self.name).finish()
+    }
 }
 
 impl<'a> Scene<'a> {

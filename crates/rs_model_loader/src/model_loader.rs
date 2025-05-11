@@ -1,4 +1,3 @@
-// use anyhow::{anyhow, Context};
 use glam::Vec3Swizzles;
 use rs_artifact::{
     mesh_vertex::MeshVertex,
@@ -326,26 +325,33 @@ impl ModelLoader {
         Ok(mesh_clusters)
     }
 
-    pub fn load(&mut self, file_path: &Path) -> crate::error::Result<()> {
+    pub fn load_scene_from_file(
+        file_path: &Path,
+    ) -> crate::error::Result<rs_assimp::scene::Scene<'static>> {
+        let mut props = rs_assimp::property_store::PropertyStore::new();
+        props.set_property_integer(
+            &rs_assimp::config::AI_CONFIG_FBX_USE_SKELETON_BONE_CONTAINER,
+            1,
+        );
+        rs_assimp::scene::Scene::from_file_with_properties(
+            file_path,
+            rs_assimp::post_process_steps::PostProcessSteps::Triangulate
+                | rs_assimp::post_process_steps::PostProcessSteps::JoinIdenticalVertices
+                | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
+            props,
+        )
+        .map_err(|err| crate::error::Error::Other(format!("{}", err)))
+    }
+
+    pub fn cache_scene(&mut self, file_path: &Path, scene: rs_assimp::scene::Scene<'static>) {
+        self.scene_cache
+            .insert(file_path.to_path_buf(), Rc::new(scene));
+    }
+
+    pub fn load_scene_from_file_and_cache(&mut self, file_path: &Path) -> crate::error::Result<()> {
         if !self.scene_cache.contains_key(file_path) {
-            let mut props = rs_assimp::property_store::PropertyStore::new();
-            props.set_property_integer(
-                &rs_assimp::config::AI_CONFIG_FBX_USE_SKELETON_BONE_CONTAINER,
-                1,
-            );
-            self.scene_cache.insert(
-                file_path.to_path_buf(),
-                Rc::new(
-                    rs_assimp::scene::Scene::from_file_with_properties(
-                        file_path,
-                        rs_assimp::post_process_steps::PostProcessSteps::Triangulate
-                            | rs_assimp::post_process_steps::PostProcessSteps::JoinIdenticalVertices
-                            | rs_assimp::post_process_steps::PostProcessSteps::PopulateArmatureData,
-                        props,
-                    )
-                    .map_err(|err| crate::error::Error::Other(format!("{}", err)))?,
-                ),
-            );
+            let scene = Self::load_scene_from_file(file_path)?;
+            self.cache_scene(file_path, scene);
         }
         Ok(())
     }
@@ -394,7 +400,7 @@ impl ModelLoader {
         static_meshes
     }
 
-    pub fn to_runtime_static_mesh(
+    pub fn to_runtime_cache_static_mesh(
         &self,
         static_mesh: &rs_engine::content::static_mesh::StaticMesh,
         asset_folder: &Path,
@@ -407,56 +413,72 @@ impl ModelLoader {
             Err(_) => {
                 let relative_path = &static_mesh.asset_info.relative_path;
                 let path = asset_folder.join(relative_path);
-
                 let scene_cache = self
                     .scene_cache
                     .get(&path)
-                    .expect(&format!("{:?} Scene has been loaded.", path));
-                let imported_mesh = scene_cache
+                    .expect(&format!("{:?} Scene has been loaded.", &path));
+                let mesh = scene_cache
                     .meshes
                     .iter()
                     .find(|x| x.borrow().name == static_mesh.asset_info.path)
-                    .expect("Find matching mesh.");
-                let mut triangle_count: usize = 0;
-                for face in &imported_mesh.borrow().faces {
-                    debug_assert_eq!(face.indices.len(), 3);
-                    triangle_count += 1;
-                }
-
-                let mut index_buffer: Vec<u32> = Vec::with_capacity(triangle_count * 3);
-                let mut uv_map: Option<Vec<glam::Vec3>> = None;
-                if let Some(map) = imported_mesh.borrow().texture_coords.get(0) {
-                    uv_map = Some(map.to_vec());
-                }
-                let vertex_buffer: Vec<MeshVertex> =
-                    Self::make_vertex3(&imported_mesh.borrow(), &uv_map);
-
-                for face in &imported_mesh.borrow().faces {
-                    let indices = &face.indices;
-                    for index in indices {
-                        index_buffer.push(*index);
-                    }
-                }
-
-                let static_mesh = rs_artifact::static_mesh::StaticMesh {
-                    vertexes: vertex_buffer,
-                    indexes: index_buffer,
-                    name: static_mesh.asset_info.path.clone(),
-                    url: static_mesh.asset_info.get_url(),
-                };
+                    .ok_or(crate::error::Error::Other(format!(
+                        "Can't find matching mesh."
+                    )))?;
+                let static_mesh =
+                    Self::to_artifact_static_mesh_with_content(&mesh.borrow(), static_mesh);
                 let static_mesh = Arc::new(static_mesh);
                 resource_manager.add_static_mesh(static_mesh.url.clone(), static_mesh.clone());
                 log::trace!(
                     r#"Load static mesh "{}" from scene {:?}."#,
                     static_mesh.clone().name,
-                    path
+                    &path
                 );
                 Ok(static_mesh)
             }
         }
     }
 
-    pub fn to_runtime_skin_mesh(
+    pub fn to_artifact_static_mesh(
+        mesh: &rs_assimp::mesh::Mesh,
+        name: String,
+        url: url::Url,
+    ) -> rs_artifact::static_mesh::StaticMesh {
+        let mut triangle_count: usize = 0;
+        for face in &mesh.faces {
+            debug_assert_eq!(face.indices.len(), 3);
+            triangle_count += 1;
+        }
+        let mut index_buffer: Vec<u32> = Vec::with_capacity(triangle_count * 3);
+        let mut uv_map: Option<Vec<glam::Vec3>> = None;
+        if let Some(map) = mesh.texture_coords.get(0) {
+            uv_map = Some(map.to_vec());
+        }
+        let vertex_buffer: Vec<MeshVertex> = Self::make_vertex3(&mesh, &uv_map);
+        for face in &mesh.faces {
+            let indices = &face.indices;
+            for index in indices {
+                index_buffer.push(*index);
+            }
+        }
+        let static_mesh = rs_artifact::static_mesh::StaticMesh {
+            name,
+            url,
+            vertexes: vertex_buffer,
+            indexes: index_buffer,
+        };
+        static_mesh
+    }
+
+    pub fn to_artifact_static_mesh_with_content(
+        mesh: &rs_assimp::mesh::Mesh,
+        static_mesh: &rs_engine::content::static_mesh::StaticMesh,
+    ) -> rs_artifact::static_mesh::StaticMesh {
+        let name = static_mesh.asset_info.path.clone();
+        let url = static_mesh.asset_info.get_url();
+        Self::to_artifact_static_mesh(mesh, name, url)
+    }
+
+    pub fn to_runtime_cache_skin_mesh(
         &self,
         skeleton_mesh: &rs_engine::content::skeleton_mesh::SkeletonMesh,
         asset_folder: &Path,
@@ -476,60 +498,14 @@ impl ModelLoader {
                     .iter()
                     .find(|x| x.borrow().name == skeleton_mesh.get_skeleton_mesh_name())
                     .expect("Find matching mesh.");
-                let mut triangle_count: usize = 0;
-                for face in &imported_mesh.borrow().faces {
-                    debug_assert_eq!(face.indices.len(), 3);
-                    triangle_count += 1;
-                }
-
-                let mut index_buffer: Vec<u32> = Vec::with_capacity(triangle_count * 3);
-                let mut uv_map: Option<Vec<glam::Vec3>> = None;
-                if let Some(map) = imported_mesh.borrow().texture_coords.get(0) {
-                    uv_map = Some(map.to_vec());
-                }
-                let mut vertex_buffer: Vec<SkinMeshVertex> =
-                    Self::make_skin_vertex2(&imported_mesh.borrow(), &uv_map);
-
-                for face in &imported_mesh.borrow().faces {
-                    let indices = &face.indices;
-                    for index in indices {
-                        index_buffer.push(*index);
-                    }
-                }
-
-                for (bone_index, bone) in imported_mesh.borrow().bones.iter().enumerate() {
-                    let bone = bone.borrow();
-                    for weight in &bone.weights {
-                        let vertex = vertex_buffer.get_mut(weight.vertex_id as usize).unwrap();
-                        for (vertex_bone, vertex_weight) in
-                            zip(vertex.bones.iter_mut(), vertex.weights.iter_mut())
-                        {
-                            if *vertex_bone == INVALID_BONE {
-                                *vertex_bone = bone_index as _;
-                                *vertex_weight = weight.weight;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                let bone_paths = imported_mesh
-                    .borrow()
-                    .bones
-                    .iter()
-                    .map(|x| x.borrow().node.clone().unwrap().borrow().path.clone())
-                    .collect();
-                let skin_mesh = SkinMesh {
-                    name: skeleton_mesh.get_skeleton_mesh_name().clone(),
-                    url: skeleton_mesh.asset_url.clone(),
-                    vertexes: vertex_buffer,
-                    indexes: index_buffer,
-                    bone_paths,
-                };
+                let skin_mesh = Self::to_artifact_skin_mesh_with_content(
+                    &imported_mesh.borrow(),
+                    skeleton_mesh,
+                );
                 let skin_mesh = Arc::new(skin_mesh);
                 resource_manager.add_skin_mesh(skeleton_mesh.asset_url.clone(), skin_mesh.clone());
                 log::trace!(
-                    r#"Load skin mesh "{}" from scene {:?}."#,
+                    "Load skin mesh \"{}\" from scene {:?}.",
                     skin_mesh.clone().name,
                     path
                 );
@@ -538,7 +514,72 @@ impl ModelLoader {
         }
     }
 
-    pub fn to_runtime_skeleton_animation<'a>(
+    pub fn to_artifact_skin_mesh_with_content(
+        mesh: &rs_assimp::mesh::Mesh,
+        skeleton_mesh: &rs_engine::content::skeleton_mesh::SkeletonMesh,
+    ) -> rs_artifact::skin_mesh::SkinMesh {
+        let name = skeleton_mesh.get_skeleton_mesh_name().clone();
+        let url = skeleton_mesh.asset_url.clone();
+        Self::to_artifact_skin_mesh(mesh, name, url)
+    }
+
+    pub fn to_artifact_skin_mesh(
+        mesh: &rs_assimp::mesh::Mesh,
+        name: String,
+        url: url::Url,
+    ) -> rs_artifact::skin_mesh::SkinMesh {
+        let mut triangle_count: usize = 0;
+        for face in &mesh.faces {
+            debug_assert_eq!(face.indices.len(), 3);
+            triangle_count += 1;
+        }
+
+        let mut index_buffer: Vec<u32> = Vec::with_capacity(triangle_count * 3);
+        let mut uv_map: Option<Vec<glam::Vec3>> = None;
+        if let Some(map) = mesh.texture_coords.get(0) {
+            uv_map = Some(map.to_vec());
+        }
+        let mut vertex_buffer: Vec<SkinMeshVertex> = Self::make_skin_vertex2(&mesh, &uv_map);
+
+        for face in &mesh.faces {
+            let indices = &face.indices;
+            for index in indices {
+                index_buffer.push(*index);
+            }
+        }
+
+        for (bone_index, bone) in mesh.bones.iter().enumerate() {
+            let bone = bone.borrow();
+            for weight in &bone.weights {
+                let vertex = vertex_buffer.get_mut(weight.vertex_id as usize).unwrap();
+                for (vertex_bone, vertex_weight) in
+                    zip(vertex.bones.iter_mut(), vertex.weights.iter_mut())
+                {
+                    if *vertex_bone == INVALID_BONE {
+                        *vertex_bone = bone_index as _;
+                        *vertex_weight = weight.weight;
+                        break;
+                    }
+                }
+            }
+        }
+
+        let bone_paths = mesh
+            .bones
+            .iter()
+            .map(|x| x.borrow().node.clone().unwrap().borrow().path.clone())
+            .collect();
+        let skin_mesh = SkinMesh {
+            name,
+            url,
+            vertexes: vertex_buffer,
+            indexes: index_buffer,
+            bone_paths,
+        };
+        skin_mesh
+    }
+
+    pub fn to_runtime_cache_skeleton_animation<'a>(
         &self,
         skeleton_animation: Rc<RefCell<rs_engine::content::skeleton_animation::SkeletonAnimation>>,
         asset_folder: &Path,
@@ -558,57 +599,78 @@ impl ModelLoader {
                     .iter()
                     .find(|x| x.name == skeleton_animation.borrow().get_animation_name())
                     .expect("Find matching animation.");
-                let mut channels: Vec<rs_artifact::node_anim::NodeAnim> = vec![];
-                for channel in &animation.channels {
-                    let node_anim = rs_artifact::node_anim::NodeAnim {
-                        node: channel.node.as_ref().unwrap().borrow().path.clone(),
-                        position_keys: channel
-                            .position_keys
-                            .iter()
-                            .map(|x| rs_artifact::node_anim::VectorKey {
-                                time: x.time,
-                                value: x.value,
-                            })
-                            .collect(),
-                        scaling_keys: channel
-                            .scaling_keys
-                            .iter()
-                            .map(|x| rs_artifact::node_anim::VectorKey {
-                                time: x.time,
-                                value: x.value,
-                            })
-                            .collect(),
-                        rotation_keys: channel
-                            .rotation_keys
-                            .iter()
-                            .map(|x| rs_artifact::node_anim::QuatKey {
-                                time: x.time,
-                                value: x.value,
-                            })
-                            .collect(),
-                    };
-                    channels.push(node_anim);
-                }
-                let skeleton_animation = rs_artifact::skeleton_animation::SkeletonAnimation {
-                    name: skeleton_animation.borrow().get_animation_name().clone(),
-                    url: skeleton_animation.borrow().asset_url.clone(),
-                    duration: animation.duration,
-                    ticks_per_second: animation.ticks_per_second,
-                    channels,
-                };
+                let skeleton_animation = Self::to_artifact_skeleton_animation_with_content(
+                    &skeleton_animation.borrow(),
+                    animation,
+                );
                 let skeleton_animation = Arc::new(skeleton_animation);
                 resource_manager.add_skeleton_animation(
                     skeleton_animation.url.clone(),
                     skeleton_animation.clone(),
                 );
                 log::trace!(
-                    r#"Load skeleton animation "{}" from scene {:?}."#,
+                    "Load skeleton animation \"{}\" from scene {:?}.",
                     skeleton_animation.clone().name,
                     path
                 );
                 skeleton_animation
             }
         }
+    }
+
+    pub fn to_artifact_skeleton_animation_with_content(
+        skeleton_animation: &rs_engine::content::skeleton_animation::SkeletonAnimation,
+        animation: &rs_assimp::animation::Animation<'_>,
+    ) -> rs_artifact::skeleton_animation::SkeletonAnimation {
+        let name = skeleton_animation.get_animation_name().clone();
+        let url = skeleton_animation.asset_url.clone();
+        Self::to_artifact_skeleton_animation(animation, name, url)
+    }
+
+    pub fn to_artifact_skeleton_animation(
+        animation: &rs_assimp::animation::Animation<'_>,
+        name: String,
+        url: url::Url,
+    ) -> rs_artifact::skeleton_animation::SkeletonAnimation {
+        let mut channels: Vec<rs_artifact::node_anim::NodeAnim> = vec![];
+        for channel in &animation.channels {
+            let node_anim = rs_artifact::node_anim::NodeAnim {
+                node: channel.node.as_ref().unwrap().borrow().path.clone(),
+                position_keys: channel
+                    .position_keys
+                    .iter()
+                    .map(|x| rs_artifact::node_anim::VectorKey {
+                        time: x.time,
+                        value: x.value,
+                    })
+                    .collect(),
+                scaling_keys: channel
+                    .scaling_keys
+                    .iter()
+                    .map(|x| rs_artifact::node_anim::VectorKey {
+                        time: x.time,
+                        value: x.value,
+                    })
+                    .collect(),
+                rotation_keys: channel
+                    .rotation_keys
+                    .iter()
+                    .map(|x| rs_artifact::node_anim::QuatKey {
+                        time: x.time,
+                        value: x.value,
+                    })
+                    .collect(),
+            };
+            channels.push(node_anim);
+        }
+        let skeleton_animation = rs_artifact::skeleton_animation::SkeletonAnimation {
+            name,
+            url,
+            duration: animation.duration,
+            ticks_per_second: animation.ticks_per_second,
+            channels,
+        };
+        skeleton_animation
     }
 
     fn make_bones<'a>(
@@ -666,7 +728,7 @@ impl ModelLoader {
         skeleton_mesh_hierarchy.insert(node.path.clone(), skeleton_mesh_hierarchy_node);
     }
 
-    pub fn to_runtime_skeleton<'a>(
+    pub fn to_runtime_cache_skeleton<'a>(
         &self,
         skeleton: Rc<RefCell<rs_engine::content::skeleton::Skeleton>>,
         asset_folder: &Path,
@@ -681,38 +743,57 @@ impl ModelLoader {
                     .scene_cache
                     .get(&path)
                     .expect(&format!("{:?} Scene has been loaded.", path));
-                let armature = scene.armatures.values().next().unwrap();
+                let armature = scene.armatures.values().next().unwrap().clone();
                 let root_node = scene.root_node.clone().unwrap();
-                let mut bones: HashMap<String, rs_artifact::skeleton::SkeletonBone> =
-                    Default::default();
-                let mut skeleton_mesh_hierarchy: HashMap<
-                    String,
-                    rs_artifact::skeleton::SkeletonMeshHierarchyNode,
-                > = Default::default();
-                Self::make_skeleton_mesh_hierarchy(
-                    root_node.clone(),
-                    None,
-                    &mut skeleton_mesh_hierarchy,
+                let skeleton = Self::to_artifact_skeleton_with_content(
+                    &skeleton.borrow(),
+                    armature,
+                    root_node,
                 );
-                Self::make_bones(armature.clone(), None, &mut bones);
-                let skeleton = rs_artifact::skeleton::Skeleton {
-                    name: armature.borrow().name.clone(),
-                    url: skeleton.borrow().asset_url.clone(),
-                    root_bone: armature.borrow().path.clone(),
-                    root_node: root_node.borrow().path.clone(),
-                    bones,
-                    skeleton_mesh_hierarchy,
-                };
                 let skeleton = Arc::new(skeleton);
                 resource_manager.add_skeleton(skeleton.url.clone(), skeleton.clone());
                 log::trace!(
-                    r#"Load skeleton "{}" from scene {:?}."#,
+                    "Load skeleton \"{}\" from scene {:?}.",
                     skeleton.clone().name,
                     path
                 );
                 skeleton
             }
         }
+    }
+
+    pub fn to_artifact_skeleton_with_content(
+        skeleton: &rs_engine::content::skeleton::Skeleton,
+        armature: Rc<RefCell<rs_assimp::node::Node>>,
+        root_node: Rc<RefCell<rs_assimp::node::Node>>,
+    ) -> rs_artifact::skeleton::Skeleton {
+        let name = armature.borrow().name.clone();
+        let url = skeleton.asset_url.clone();
+        Self::to_artifact_skeleton(armature, root_node, name, url)
+    }
+
+    pub fn to_artifact_skeleton(
+        armature: Rc<RefCell<rs_assimp::node::Node>>,
+        root_node: Rc<RefCell<rs_assimp::node::Node>>,
+        name: String,
+        url: url::Url,
+    ) -> rs_artifact::skeleton::Skeleton {
+        let mut bones: HashMap<String, rs_artifact::skeleton::SkeletonBone> = Default::default();
+        let mut skeleton_mesh_hierarchy: HashMap<
+            String,
+            rs_artifact::skeleton::SkeletonMeshHierarchyNode,
+        > = Default::default();
+        Self::make_skeleton_mesh_hierarchy(root_node.clone(), None, &mut skeleton_mesh_hierarchy);
+        Self::make_bones(armature.clone(), None, &mut bones);
+        let skeleton = rs_artifact::skeleton::Skeleton {
+            name,
+            url,
+            root_bone: armature.borrow().path.clone(),
+            root_node: root_node.borrow().path.clone(),
+            bones,
+            skeleton_mesh_hierarchy,
+        };
+        skeleton
     }
 
     fn node_to_component_type(

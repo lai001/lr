@@ -255,9 +255,11 @@ impl ProjectContext {
     }
 
     pub fn get_ibl_bake_cache_dir(&self, sub_folder: &Path) -> PathBuf {
-        self.project_folder_path
-            .join("build/cache/ibl")
-            .join(sub_folder)
+        Self::make_ibl_bake_cache_dir(&self.project_folder_path, sub_folder)
+    }
+
+    pub fn make_ibl_bake_cache_dir(project_folder_path: &Path, sub_folder: &Path) -> PathBuf {
+        project_folder_path.join("build/cache/ibl").join(sub_folder)
     }
 
     pub fn try_create_virtual_texture_cache_dir(&self) -> anyhow::Result<PathBuf> {
@@ -353,9 +355,11 @@ impl ProjectContext {
                         let file_path = self
                             .get_asset_folder_path()
                             .join(&asset.asset_info.relative_path);
-                        model_loader.load(&file_path).unwrap();
+                        model_loader
+                            .load_scene_from_file_and_cache(&file_path)
+                            .unwrap();
                         let loaded_static_mesh = model_loader
-                            .to_runtime_static_mesh(
+                            .to_runtime_cache_static_mesh(
                                 &asset,
                                 &self.get_asset_folder_path(),
                                 ResourceManager::default(),
@@ -370,8 +374,10 @@ impl ProjectContext {
                 }
                 EContentFileType::SkeletonMesh(asset) => {
                     let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
-                    model_loader.load(&file_path).unwrap();
-                    let loaded_skin_mesh = model_loader.to_runtime_skin_mesh(
+                    model_loader
+                        .load_scene_from_file_and_cache(&file_path)
+                        .unwrap();
+                    let loaded_skin_mesh = model_loader.to_runtime_cache_skin_mesh(
                         &asset.borrow(),
                         &project_folder_path,
                         ResourceManager::default(),
@@ -385,12 +391,15 @@ impl ProjectContext {
                 }
                 EContentFileType::SkeletonAnimation(asset) => {
                     let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
-                    model_loader.load(&file_path).unwrap();
-                    let loaded_skeleton_animation = model_loader.to_runtime_skeleton_animation(
-                        asset.clone(),
-                        &project_folder_path,
-                        ResourceManager::default(),
-                    );
+                    model_loader
+                        .load_scene_from_file_and_cache(&file_path)
+                        .unwrap();
+                    let loaded_skeleton_animation = model_loader
+                        .to_runtime_cache_skeleton_animation(
+                            asset.clone(),
+                            &project_folder_path,
+                            ResourceManager::default(),
+                        );
                     skeleton_animations.insert(
                         loaded_skeleton_animation.url.clone(),
                         loaded_skeleton_animation.deref().clone(),
@@ -400,8 +409,10 @@ impl ProjectContext {
                 }
                 EContentFileType::Skeleton(asset) => {
                     let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
-                    model_loader.load(&file_path).unwrap();
-                    let loaded_skeleton = model_loader.to_runtime_skeleton(
+                    model_loader
+                        .load_scene_from_file_and_cache(&file_path)
+                        .unwrap();
+                    let loaded_skeleton = model_loader.to_runtime_cache_skeleton(
                         asset.clone(),
                         &project_folder_path,
                         ResourceManager::default(),
