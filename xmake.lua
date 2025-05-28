@@ -1,4 +1,4 @@
-set_xmakever("2.7.8")
+set_xmakever("2.9.8")
 
 deps_dir = ".xmake/deps/"
 rs_project_name = "rs_computer_graphics"
@@ -13,6 +13,7 @@ engine_root_dir = path.absolute("./")
 tracy_root_dir = path.absolute(deps_dir .. "tracy")
 dotnet_sdk_dir = path.absolute(deps_dir .. "dotnetSDK")
 rs_target_dir = path.join(engine_root_dir, "build/target")
+kcp_root_dir = path.absolute(deps_dir .. "kcp")
 
 function trim_quotes_and_newlines(str)
     str = str:gsub("^[\r\n\"%s]+", "")
@@ -422,3 +423,11 @@ target("tracy")
     add_rules("mode.debug", "mode.release")
     add_defines("TRACY_ENABLE")
     add_files(tracy_root_dir .. "/public/TracyClient.cpp")
+
+target("kcp")
+    set_languages("c11")
+    set_kind("$(kind)")
+    add_rules("mode.debug", "mode.release")
+    add_files(kcp_root_dir .. "/ikcp.c")
+    add_includedirs(kcp_root_dir)
+    add_headerfiles(kcp_root_dir .. "/ikcp.h")

@@ -9,6 +9,7 @@ local tracy_root_dir = tracy_root_dir
 local dotnet_sdk_dir = dotnet_sdk_dir
 local check_hash_files = check_hash_files
 local hash_files = hash_files
+local kcp_root_dir = kcp_root_dir
 
 task("hash_files")
 do
@@ -139,6 +140,11 @@ do
             git.clone("https://github.com/wolfpld/tracy.git", { outputdir = tracy_root_dir })
             git.checkout("v0.10", { repodir = tracy_root_dir })
         end
+
+        if os.exists(kcp_root_dir) == false then
+            git.clone("https://github.com/skywind3000/kcp.git", { outputdir = kcp_root_dir })
+            git.checkout("f4f3a89cc632647dabdcb146932d2afd5591e62e", { repodir = kcp_root_dir })
+        end        
     end)
     set_menu {
         usage = "xmake download_deps",

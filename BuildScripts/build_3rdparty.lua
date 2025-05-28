@@ -11,20 +11,24 @@ do
         import("core.project.task")
         config.load()
 
-        os.exec("xmake f -a x64 -m debug -p windows -k static")
-        os.exec("xmake build gpmetis")
-        os.exec("xmake f -a x64 -m release -p windows -k static")
-        os.exec("xmake build gpmetis")
-        os.exec("xmake f -a arm64-v8a -m debug -p android -k static")
-        os.exec("xmake build gpmetis")
-        os.exec("xmake build tracy")
-        os.exec("xmake f -a arm64-v8a -m release -p android -k static")
-        os.exec("xmake build gpmetis")
-        os.exec("xmake build tracy")
-        os.exec("xmake f -a x64 -m debug -p windows -k static --enable_quickjs=y")
-        os.exec("xmake build quickjs")
-        os.exec("xmake f -a x64 -m release -p windows -k static --enable_quickjs=y")
-        os.exec("xmake build quickjs")        
+        local function build(target_name, platforms, additional)
+            if platforms["windows"] then
+                os.exec("xmake f -a x64 -m debug -p windows -k static " .. additional)
+                os.exec("xmake build " .. target_name)
+                os.exec("xmake f -a x64 -m release -p windows -k static " .. additional)
+                os.exec("xmake build " .. target_name)
+            end
+            if platforms["android"] then
+                os.exec("xmake f -a arm64-v8a -m debug -p android -k static " .. additional)
+                os.exec("xmake build " .. target_name)
+                os.exec("xmake f -a arm64-v8a -m release -p android -k static " .. additional)
+                os.exec("xmake build " .. target_name)
+            end
+        end
+        build("gpmetis", {windows=true, android=true}, "")
+        build("tracy", {windows=false, android=true}, "")
+        build("quickjs", {windows=true, android=false}, "--enable_quickjs=y")
+        build("kcp", {windows=true, android=true}, "")
     end)
     set_menu {
         usage = "xmake build_3rdparty",

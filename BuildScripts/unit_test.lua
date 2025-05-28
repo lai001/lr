@@ -17,6 +17,7 @@ do
             "rs_proc_macros_test",
             "rs_quickjs",
             "rs_shader_compiler_core",
+            "crates/rs_network",
         }
         for k, v in ipairs(folders) do
             os.cd(path.join(engine_root_dir, v))

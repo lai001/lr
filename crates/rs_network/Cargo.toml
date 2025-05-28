@@ -1,0 +1,19 @@
+[package]
+name = "rs_network"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = "0.4.26"
+uuid = { version = "1.15.1", features = [
+    "v4",
+    "fast-rng",
+    "macro-diagnostics",
+    "serde",
+] }
+serde = { version = "1.0.219", features = ["derive"] }
+rs_artifact = { path = "../../rs_artifact" }
+rs_core_minimal = { path = "../../rs_core_minimal" }
+
+[build-dependencies]
+bindgen = "0.71.1"
