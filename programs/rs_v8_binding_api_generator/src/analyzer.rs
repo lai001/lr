@@ -1,6 +1,5 @@
-use ra_ap_hir::db::DefDatabase;
 use ra_ap_ide::RootDatabase;
-use ra_ap_ide_db::base_db::SourceDatabase;
+use ra_ap_ide_db::base_db::RootQueryDb;
 use ra_ap_load_cargo::{load_workspace, LoadCargoConfig, ProcMacroServerChoice};
 use ra_ap_proc_macro_api::ProcMacroClient;
 use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace, RustLibSource};
@@ -51,31 +50,34 @@ impl Analyzer {
         let db = &mut self.root_database;
         let vfs = &mut self.vfs;
         // let crate_workspace_data = db.crate_workspace_data();
-        let crate_graph = db.crate_graph();
-        let crates = crate_graph.crates_in_topological_order();
-
-        for krate in crates {
-            let krate_data = crate_graph[krate].clone();
-            let display_name = krate_data
-                .display_name
-                .map(|x| x.to_string())
-                .unwrap_or_default();
-            if display_name.starts_with("rs_") {
-                // let crate_workspace_data = crate_workspace_data[&krate].clone();
-                let def_map = db.crate_def_map(krate);
-                for (_, module_data) in def_map.modules.iter() {
-                    // let declaration_source = module_data.declaration_source(db);
-                    // if let Some(declaration_source) = declaration_source {
-                    // let module_def = sema.to_module_def(&declaration_source.value);
-                    // if let Some(module_def) = module_def {}
-                    // }
-                    let definition_source_file_id = module_data.definition_source_file_id();
-                    let file_id = definition_source_file_id.file_id();
-                    if let Some(editioned_file_id) = file_id {
-                        let file_path = vfs.file_path(editioned_file_id.into());
-                        log::trace!("{}, Crate {}", file_path, display_name);
+        // let crate_graph = db.crate_graph();
+        // let crates = crate_graph.crates_in_topological_order();
+        let crates = db.all_crates();
+        for krate in crates.iter() {
+            let krate_data = krate.data(db);
+            match &krate_data.origin {
+                ra_ap_ide_db::base_db::CrateOrigin::Rustc { .. } => {}
+                ra_ap_ide_db::base_db::CrateOrigin::Local { name, .. } => {
+                    if let Some(display_name) = name {
+                        let display_name = display_name.as_str();
+                        if display_name.starts_with("rs_") {
+                            let krate: ra_ap_hir::Crate = (*krate).into();
+                            let modules = krate.modules(db);
+                            log::trace!("{}", display_name);
+                            for module_data in modules {
+                                let definition_source_file_id =
+                                    module_data.definition_source_file_id(db);
+                                let file_id = definition_source_file_id.file_id();
+                                if let Some(editioned_file_id) = file_id {
+                                    let file_path = vfs.file_path(editioned_file_id.file_id(db));
+                                    log::trace!("{}", file_path);
+                                }
+                            }
+                        }
                     }
                 }
+                ra_ap_ide_db::base_db::CrateOrigin::Library { .. } => {}
+                ra_ap_ide_db::base_db::CrateOrigin::Lang(..) => {}
             }
         }
         Ok(())

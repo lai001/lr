@@ -10,12 +10,14 @@ use ra_ap_hir::GenericDef;
 use ra_ap_hir::HasVisibility;
 use ra_ap_hir::HirDisplay;
 use ra_ap_ide::*;
+use ra_ap_ide_db::base_db::RootQueryDb;
 use ra_ap_ide_db::*;
 use ra_ap_load_cargo::*;
 use ra_ap_proc_macro_api::ProcMacroClient;
 use ra_ap_project_model::*;
 use ra_ap_syntax::*;
 use ra_ap_vfs::*;
+use std::fmt::Debug;
 use std::{cell::RefCell, rc::Rc};
 
 pub struct ParseResult {
@@ -23,6 +25,32 @@ pub struct ParseResult {
     pub impl_defs: Vec<ra_ap_hir::Impl>,
     pub db: Rc<RootDatabase>,
     pub vfs: Rc<RefCell<Vfs>>,
+    pub file_path: AbsPathBuf,
+}
+
+impl Debug for ParseResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names_group = self
+            .impl_defs
+            .iter()
+            .map(|x| {
+                let mut names: Vec<String> = vec![];
+                let items = x.items(self.db.as_ref());
+                for item in items {
+                    let name = item
+                        .name(self.db.as_ref())
+                        .map(|x| x.as_str().to_string())
+                        .unwrap_or_default();
+                    names.push(name);
+                }
+                return names;
+            })
+            .collect::<Vec<Vec<String>>>();
+        f.debug_struct("ParseResult")
+            .field("rs_struct", &self.rs_struct.name(self.db.as_ref()))
+            .field("impl_defs", &names_group)
+            .finish()
+    }
 }
 
 impl ParseResult {
@@ -259,8 +287,9 @@ impl ParseResult {
         Ok(token_stream.into())
     }
 
-    fn is_supported_type(db: &RootDatabase, ty: ra_ap_hir::Type) -> bool {
-        (ty.type_and_const_arguments(db, Edition::CURRENT).count() > 0
+    fn is_supported_type(db: &RootDatabase, ty: ra_ap_hir::Type, krate: &ra_ap_hir::Crate) -> bool {
+        let display_target = krate.to_display_target(db);
+        (ty.type_and_const_arguments(db, display_target).count() > 0
             || ty.is_closure()
             || ty.is_fn()
             || ty.as_callable(db).is_some()
@@ -285,12 +314,15 @@ impl ParseResult {
             }
         }
 
-        if !Self::is_supported_type(db, function.ty(db)) {
+        let krate = function.module(db).krate();
+
+        if !Self::is_supported_type(db, function.ty(db), &krate) {
             return false;
         }
         let fn_name = function.name(db).as_str().to_string();
         let return_type = function.ret_type(db);
-        if !Self::is_supported_type(db, return_type) {
+
+        if !Self::is_supported_type(db, return_type, &krate) {
             return false;
         }
         if fn_name == "Drop" {
@@ -306,7 +338,7 @@ impl ParseResult {
         };
         for param in params {
             let ty = param.ty();
-            if !Self::is_supported_type(db, ty.clone()) {
+            if !Self::is_supported_type(db, ty.clone(), &krate) {
                 return false;
             }
         }
@@ -442,6 +474,100 @@ impl ReflectionContext {
         })
     }
 
+    fn get_crate_root_dir(&self) -> AbsPathBuf {
+        self._manifest_file_path
+            .to_path_buf()
+            .parent()
+            .expect("A valid path")
+            .normalize()
+    }
+
+    pub fn parse_crate(&self) -> Vec<ParseResult> {
+        let crate_root_dir = self.get_crate_root_dir();
+        let mut parse_results: Vec<ParseResult> = vec![];
+        let db = self.db.as_ref();
+
+        let crates = db.all_crates().clone();
+
+        for krate in crates.iter() {
+            let sema: Semantics<'_, ra_ap_ide::RootDatabase> = Semantics::new(db);
+            let krate_data = krate.data(db);
+            match &krate_data.origin {
+                base_db::CrateOrigin::Local { name, .. } => {
+                    let Some(display_name) = name else {
+                        continue;
+                    };
+                    let display_name = display_name.as_str();
+                    if !display_name.starts_with("rs_") {
+                        continue;
+                    }
+                    let krate: ra_ap_hir::Crate = (*krate).into();
+                    let modules = krate.modules(db);
+                    for module_data in modules {
+                        let definition_source_file_id = module_data.definition_source_file_id(db);
+                        let Some(editioned_file_id) = definition_source_file_id.file_id() else {
+                            continue;
+                        };
+
+                        let file_path = self
+                            .vfs
+                            .borrow()
+                            .file_path(editioned_file_id.file_id(db))
+                            .as_path()
+                            .expect("Not null")
+                            .to_path_buf()
+                            .normalize();
+
+                        if file_path.strip_prefix(&crate_root_dir).is_none() {
+                            continue;
+                        }
+
+                        let source_file: SourceFile = sema.parse(editioned_file_id);
+                        let mut find_rs_struct: Option<ra_ap_hir::Struct> = None;
+                        let mut find_rs_struct_impls: Vec<ra_ap_hir::Impl> = vec![];
+
+                        for item in source_file.items() {
+                            match item {
+                                ast::Item::Impl(impl_item) => {
+                                    if let Some(impl_def) = sema.to_impl_def(&impl_item) {
+                                        find_rs_struct_impls.push(impl_def);
+                                    }
+                                }
+                                ast::Item::Struct(rs_struct) => {
+                                    if let Some(rs_struct) = sema.to_struct_def(&rs_struct) {
+                                        find_rs_struct = Some(rs_struct);
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        if let Some(rs_struct) = find_rs_struct {
+                            let find_rs_struct_impls = find_rs_struct_impls
+                                .iter()
+                                .filter(|x| rs_struct.ty(db) == x.self_ty(db))
+                                .cloned()
+                                .collect();
+                            let result = ParseResult {
+                                rs_struct,
+                                impl_defs: find_rs_struct_impls,
+                                db: self.db.clone(),
+                                vfs: self.vfs.clone(),
+                                file_path,
+                            };
+                            parse_results.push(result);
+                        }
+                    }
+                }
+                _ => {
+                    continue;
+                }
+            }
+        }
+
+        parse_results
+    }
+
     pub fn parse_file(&mut self, file_path: AbsPathBuf) -> anyhow::Result<ParseResult> {
         let path = VfsPath::new_real_path(file_path.as_str().to_string());
         let source_file_id = self
@@ -450,7 +576,8 @@ impl ReflectionContext {
             .file_id(&path)
             .ok_or(anyhow!("No source file found"))?
             .0;
-        let editioned_file_id: EditionedFileId = EditionedFileId::current_edition(source_file_id);
+        let editioned_file_id: EditionedFileId =
+            EditionedFileId::current_edition(self.db.as_ref(), source_file_id);
         // let file_item_tree = self.db.file_item_tree(editioned_file_id.into());
         // for top_level_item in file_item_tree.top_level_items() {
         //     log::trace!("top_level_item: {:?}", top_level_item);
@@ -518,6 +645,7 @@ impl ReflectionContext {
                 impl_defs: find_rs_struct_impls,
                 db: self.db.clone(),
                 vfs: self.vfs.clone(),
+                file_path,
             });
         }
 

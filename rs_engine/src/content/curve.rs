@@ -59,7 +59,7 @@ impl Curve {
             knots.push(item.position.y);
         }
         knots.push(control_points.last().unwrap().position.y);
-        let v = spline_inverse::<CatmullRom, _>(x, &knot_spacing, None, None).unwrap();
+        let v = spline_inverse::<CatmullRom, _>(x, &knot_spacing).unwrap();
         let y = spline::<CatmullRom, _, _>(v, &knots);
         Some(y)
     }

@@ -25,16 +25,16 @@ plugin_shared_crate = []
 network = ["dep:rs_network"]
 
 [dependencies]
-bitflags = "2.9.0"
+bitflags = "2.9.1"
 md-5 = { version = "0.10.6" }
-anyhow = { version = "1.0.97", optional = true }
+anyhow = { version = "1.0.98", optional = true }
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.140"
-chrono = "0.4.40"
-log = "0.4.26"
-env_logger = "0.11.7"
+chrono = "0.4.41"
+log = "0.4.27"
+env_logger = "0.11.8"
 moka = { version = "0.12.10", default-features = false, features = ["sync"] }
-image = "0.25.5"
+image = "0.25.6"
 lazy_static = "1.5.0"
 walkdir = "2.5.0"
 rayon = "1.10.0"
@@ -43,19 +43,17 @@ raw-window-handle = "0.6.2"
 url = { version = "2.5.4", features = ["serde"] }
 percent-encoding = "2.3.1"
 wgpu = "24.0.1"
-glam = { version = "0.30.0", features = ["mint", "serde"] }
-uuid = { version = "1.15.1", features = [
+glam = { version = "0.30.3", features = ["mint", "serde"] }
+uuid = { version = "1.17.0", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
     "serde",
 ] }
-rand = { version = "0.9.0" }
+rand = { version = "0.9.1" }
 tracy-client = { version = "0.18.0", default-features = false }
-rapier3d = { version = "0.23.1", features = ["simd-stable", "serde-serialize"] }
-uniform-cubic-splines = { version = "0.1", default-features = false, features = [
-    "std",
-] }
+rapier3d = { version = "0.26.1", features = ["simd-stable", "serde-serialize"] }
+uniform-cubic-splines = { version = "0.3" }
 dyn-clone = "1.0.19"
 downcast-rs = "2.0.1"
 meshopt = "0.4.1"
@@ -70,7 +68,7 @@ rs_render_types = { path = "../rs_render_types" }
 rs_network = { path = "../crates/rs_network", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-winit = { version = "0.30.9" }
+winit = { version = "0.30.11" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15.0"

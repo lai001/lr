@@ -209,6 +209,7 @@ impl PhysicsDebugRender {
             TypedShape::RoundCone(_) => todo!(),
             TypedShape::RoundConvexPolyhedron(_) => todo!(),
             TypedShape::Custom(_) => todo!(),
+            TypedShape::Voxels(_) => todo!(),
         }
         bundle
     }

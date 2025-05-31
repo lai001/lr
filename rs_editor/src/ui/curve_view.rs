@@ -112,11 +112,14 @@ fn control_points_ui(control_points: &[ControlPoint], radius: f32, color: Color3
     let mut points = Vec::with_capacity(control_points.len());
     for control_point in control_points {
         points.push(
-            Points::new(vec![[control_point.position.x, control_point.position.y]])
-                .shape(MarkerShape::Circle)
-                .radius(radius)
-                .color(color)
-                .id(control_point.id.clone().into()),
+            Points::new(
+                "",
+                vec![[control_point.position.x, control_point.position.y]],
+            )
+            .shape(MarkerShape::Circle)
+            .radius(radius)
+            .color(color)
+            .id(control_point.id.clone()),
         );
     }
     points
@@ -140,15 +143,18 @@ fn lines(control_points: &[ControlPoint], color: Color32, points: usize) -> Vec<
 
         let mut lines = Vec::with_capacity(1);
         lines.push(
-            Line::new(PlotPoints::from_explicit_callback(
-                move |x| {
-                    let v = spline_inverse::<CatmullRom, _>(x, &knot_spacing, None, None).unwrap();
-                    let y = spline::<CatmullRom, _, _>(v, &knots);
-                    y
-                },
-                ..,
-                points,
-            ))
+            Line::new(
+                "",
+                PlotPoints::from_explicit_callback(
+                    move |x| {
+                        let v = spline_inverse::<CatmullRom, _>(x, &knot_spacing).unwrap();
+                        let y = spline::<CatmullRom, _, _>(v, &knots);
+                        y
+                    },
+                    ..,
+                    points,
+                ),
+            )
             .allow_hover(false)
             .color(color),
         );

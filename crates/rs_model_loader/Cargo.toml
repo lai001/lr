@@ -13,9 +13,9 @@ standalone = [
 ]
 
 [dependencies]
-log = "0.4.26"
-glam = { version = "0.30.0", features = ["mint"] }
-russimp = { version = "3.2.0", features = ["prebuilt", "static-link"] }
+log = "0.4.27"
+glam = { version = "0.30.3", features = ["mint"] }
+russimp = { version = "3.2.1", features = ["prebuilt", "static-link"] }
 url = { version = "2.5.4", features = ["serde"] }
 rs_core_minimal = { path = "../../rs_core_minimal" }
 rs_assimp = { path = "../../rs_assimp" }

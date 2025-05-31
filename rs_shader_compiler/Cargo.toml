@@ -11,11 +11,11 @@ standalone = ["rs_render/standalone", "rs_core_minimal/standalone"]
 detect_encoding = ["dep:encoding_rs", "dep:chardetng"]
 
 [dependencies]
-anyhow = { version = "1.0.97" }
+anyhow = { version = "1.0.98" }
 bincode = { version = "2.0.1", features = ["serde"] }
-log = "0.4.26"
-env_logger = "0.11.7"
-clap = { version = "4.5.32", features = ["derive"] }
+log = "0.4.27"
+env_logger = "0.11.8"
+clap = { version = "4.5.39", features = ["derive"] }
 wgpu = "24.0.1"
 naga = { version = "24.0.0", features = ["serialize", "deserialize"] }
 pollster = "0.4.0"

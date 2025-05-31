@@ -6,16 +6,14 @@ use crate::{
         EWrappedStructType,
     },
 };
-use anyhow::anyhow;
 use convert_case::Casing;
 use proc_macro2::TokenStream;
 use ra_ap_hir::{HasVisibility, Semantics, Visibility};
-use ra_ap_ide_db::EditionedFileId;
+use ra_ap_ide_db::base_db::RootQueryDb;
 use ra_ap_syntax::{
     ast::{self, HasModuleItem},
     SourceFile,
 };
-use ra_ap_vfs::*;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use std::{collections::HashMap, path::PathBuf};
 
@@ -28,7 +26,7 @@ impl EngineApiGenerator {
         Self { output_dir }
     }
 
-    pub fn run(&mut self, analyzer: &mut analyzer::Analyzer) -> anyhow::Result<()> {
+    pub fn run(&mut self, analyzer: &analyzer::Analyzer) -> anyhow::Result<()> {
         // if self.output_dir.is_dir() {
         // return Err(anyhow!(
         //     "{:?} {}",
@@ -47,90 +45,106 @@ impl EngineApiGenerator {
             Self::lib_file_content(),
         )?;
 
-        for (_, vfs_path) in analyzer
-            .vfs
-            .iter()
-            .map(|x| (x.0.clone(), x.1.clone()))
-            .collect::<Vec<(FileId, VfsPath)>>()
-        {
+        let crates = analyzer.root_database.all_crates().clone();
+        for krate in crates.iter() {
             let db = &analyzer.root_database;
-            let Some(path) = vfs_path.as_path() else {
-                continue;
-            };
-            if path.extension() != Some("rs") {
-                continue;
-            }
-            let components: Vec<String> = path.components().map(|x| x.to_string()).collect();
-            if !components.contains(&"rs_engine".to_string())
-                || components.contains(&"ffi".to_string())
-            {
-                continue;
-            }
-
-            let source_file_id = analyzer
-                .vfs
-                .file_id(&vfs_path)
-                .ok_or(anyhow!("No source file found"))?
-                .0;
-            let editioned_file_id: EditionedFileId =
-                EditionedFileId::current_edition(source_file_id);
-
             let sema: Semantics<'_, ra_ap_ide::RootDatabase> = Semantics::new(db);
-            let source_file: SourceFile = sema.parse(editioned_file_id);
+            let krate_data = krate.data(db);
+            match &krate_data.origin {
+                ra_ap_ide_db::base_db::CrateOrigin::Local { name, .. } => {
+                    let Some(display_name) = name else {
+                        continue;
+                    };
+                    let display_name = display_name.as_str();
+                    if !display_name.starts_with("rs_") {
+                        continue;
+                    }
+                    let krate: ra_ap_hir::Crate = (*krate).into();
+                    let modules = krate.modules(db);
+                    for module_data in modules {
+                        let definition_source_file_id = module_data.definition_source_file_id(db);
+                        let Some(editioned_file_id) = definition_source_file_id.file_id() else {
+                            continue;
+                        };
+                        let source_file: SourceFile = sema.parse(editioned_file_id);
+                        let vfs = &analyzer.vfs;
+                        let file_path = vfs
+                            .file_path(editioned_file_id.file_id(db))
+                            .as_path()
+                            .expect("Not null");
+                        let components: Vec<String> =
+                            file_path.components().map(|x| x.to_string()).collect();
+                        if components.contains(&"ffi".to_string()) {
+                            continue;
+                        }
+                        let mut find_rs_structs = vec![];
+                        let mut find_rs_struct_impls = vec![];
+                        let mut struct_map: HashMap<ra_ap_hir::Struct, Vec<ra_ap_hir::Impl>> =
+                            HashMap::new();
+                        for item in source_file.items() {
+                            match item {
+                                ast::Item::Impl(rs_impl) => {
+                                    if let Some(rs_impl) = sema.to_impl_def(&rs_impl) {
+                                        find_rs_struct_impls.push(rs_impl);
+                                    }
+                                }
+                                ast::Item::Struct(rs_struct) => {
+                                    if let Some(rs_struct) = sema.to_struct_def(&rs_struct) {
+                                        find_rs_structs.push(rs_struct);
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
 
-            let mut find_rs_structs = vec![];
-            let mut find_rs_struct_impls = vec![];
-            let mut struct_map: HashMap<ra_ap_hir::Struct, Vec<ra_ap_hir::Impl>> = HashMap::new();
-            for item in source_file.items() {
-                match item {
-                    ast::Item::Impl(rs_impl) => {
-                        if let Some(rs_impl) = sema.to_impl_def(&rs_impl) {
-                            find_rs_struct_impls.push(rs_impl);
+                        for find_rs_struct in find_rs_structs {
+                            for find_rs_struct_impl in find_rs_struct_impls.clone() {
+                                if find_rs_struct_impl.self_ty(db) == find_rs_struct.ty(db) {
+                                    struct_map
+                                        .entry(find_rs_struct)
+                                        .or_default()
+                                        .push(find_rs_struct_impl);
+                                }
+                            }
+                        }
+
+                        let mut content = quote::quote! {
+                            #![allow(warnings)]
+                            use std::{cell::RefCell, rc::Rc};
+                            use anyhow::anyhow;
+                            use rs_engine::input_mode::EInputMode;
+                            use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
+                            use rs_v8_host::{util::return_exception, v8_runtime::CPPGC_TAG};
+                        };
+                        let mut is_write = false;
+                        for (rs_struct, rs_struct_impls) in struct_map {
+                            for wrap_type in EWrappedStructType::all() {
+                                if let Ok(token_stream) = Self::code_gen(
+                                    rs_struct,
+                                    rs_struct_impls.clone(),
+                                    analyzer,
+                                    wrap_type,
+                                ) {
+                                    content.extend(token_stream);
+                                    is_write = true;
+                                }
+                            }
+                        }
+                        if is_write {
+                            let output_file_name = format!(
+                                "src/native_{}.rs",
+                                file_path.file_stem().expect("Not null")
+                            );
+                            std::fs::write(
+                                &self.output_dir.join(output_file_name),
+                                content.to_string(),
+                            )?;
                         }
                     }
-                    ast::Item::Struct(rs_struct) => {
-                        if let Some(rs_struct) = sema.to_struct_def(&rs_struct) {
-                            find_rs_structs.push(rs_struct);
-                        }
-                    }
-                    _ => {}
                 }
-            }
-
-            for find_rs_struct in find_rs_structs {
-                for find_rs_struct_impl in find_rs_struct_impls.clone() {
-                    if find_rs_struct_impl.self_ty(db) == find_rs_struct.ty(db) {
-                        struct_map
-                            .entry(find_rs_struct)
-                            .or_default()
-                            .push(find_rs_struct_impl);
-                    }
+                _ => {
+                    continue;
                 }
-            }
-
-            let mut content = quote::quote! {
-                #![allow(warnings)]
-                use std::{cell::RefCell, rc::Rc};
-                use anyhow::anyhow;
-                use rs_engine::input_mode::EInputMode;
-                use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
-                use rs_v8_host::{util::return_exception, v8_runtime::CPPGC_TAG};
-            };
-            let mut is_write = false;
-            for (rs_struct, rs_struct_impls) in struct_map {
-                for wrap_type in EWrappedStructType::all() {
-                    if let Ok(token_stream) =
-                        Self::code_gen(rs_struct, rs_struct_impls.clone(), analyzer, wrap_type)
-                    {
-                        content.extend(token_stream);
-                        is_write = true;
-                    }
-                }
-            }
-            if is_write {
-                let output_file_name =
-                    format!("src/native_{}.rs", path.file_stem().expect("Not null"));
-                std::fs::write(&self.output_dir.join(output_file_name), content.to_string())?;
             }
         }
 
@@ -148,9 +162,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-v8 = "135.0.0"
-log = "0.4.22"
-anyhow = { version = "1.0.92" }
+v8 = "137.1.0"
+log = "0.4.27"
+anyhow = { version = "1.0.98" }
 rs_engine = { path = "@engine_dir@/rs_engine" }
 rs_render = { path = "@engine_dir@/rs_render" }
 rs_v8_host = { path = "@engine_dir@/rs_v8_host" }        
@@ -173,7 +187,7 @@ pub mod native_player_viewport;
     fn code_gen(
         rs_struct: ra_ap_hir::Struct,
         rs_struct_impls: Vec<ra_ap_hir::Impl>,
-        analyzer: &mut analyzer::Analyzer,
+        analyzer: &analyzer::Analyzer,
         wrap_type: EWrappedStructType,
     ) -> anyhow::Result<TokenStream> {
         let db = &analyzer.root_database;

@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use convert_case::Casing;
 use proc_macro2::TokenStream;
-use ra_ap_hir::{db::DefDatabase, HasCrate, HirDisplay};
+use ra_ap_hir::{DisplayTarget, HasCrate, HirDisplay};
 use ra_ap_hir_def::builtin_type;
 use ra_ap_ide::RootDatabase;
 
@@ -253,16 +253,15 @@ pub fn make_param(
 
                     let variants = rs_enum.variants(db);
                     let mut list_token_stream = TokenStream::default();
-                    for (index, variant) in variants.iter().enumerate() {
-                        let enum_variant_data = db.enum_variant_data(variant.clone().into());
-                        let variant_data = enum_variant_data.variant_data.clone();
-                        match variant_data.as_ref() {
-                            ra_ap_hir_def::data::adt::VariantData::Unit => {}
+                    for variant in variants.iter() {
+                        match variant.kind(db) {
+                            ra_ap_hir::StructKind::Unit => {}
                             _ => {
                                 return Err(anyhow!("Not support"));
                             }
                         }
-
+                    }
+                    for (index, variant) in variants.iter().enumerate() {
                         let index = index as i32;
                         let variant_name_token =
                             variant.name(db).as_str().parse::<TokenStream>().unwrap();
@@ -315,6 +314,9 @@ pub fn make_wrapped_struct(
     let wrap_struct_name = format!("{}{}", prefix, wrap_struct_name)
         .parse::<TokenStream>()
         .unwrap();
+    let name = format!("c\"{}\"", wrap_struct_name)
+        .parse::<TokenStream>()
+        .unwrap();
     match wrap_type {
         EWrappedStructType::RcRefCell => {
             quote::quote! {
@@ -324,6 +326,10 @@ pub fn make_wrapped_struct(
                 }
                 impl v8::cppgc::GarbageCollected for #wrap_struct_name {
                     fn trace(&self, _visitor: &v8::cppgc::Visitor) {}
+
+                    fn get_name(&self) -> &'static std::ffi::CStr {
+                        #name
+                    }
                 }
             }
         }
@@ -336,6 +342,10 @@ pub fn make_wrapped_struct(
 
                 impl v8::cppgc::GarbageCollected for #wrap_struct_name {
                     fn trace(&self, _visitor: &v8::cppgc::Visitor) {}
+
+                    fn get_name(&self) -> &'static std::ffi::CStr {
+                        #name
+                    }
                 }
             }
         }
@@ -626,13 +636,16 @@ pub fn make_return_value_expr(
     return Err(anyhow!("Not support"));
 }
 
-pub fn is_clone(ty: &ra_ap_hir::Type, db: &dyn ra_ap_hir::db::HirDatabase) -> bool {
+pub fn is_impl_clone(ty: &ra_ap_hir::Type, db: &dyn ra_ap_hir::db::HirDatabase) -> bool {
     let krate = ty.krate(db);
-    let lang_item = db.lang_item(krate.into(), ra_ap_hir::LangItem::Clone);
-    let clone_trait = match lang_item {
-        Some(ra_ap_hir_def::lang_item::LangItemTarget::Trait(it)) => it,
-        _ => return false,
-    };
+    let clone_trait = ra_ap_hir::LangItem::Clone
+        .resolve_trait(db, krate.into())
+        .expect("A valid TraitId");
+    // let lang_item = db.lang_item(krate.into(), ra_ap_hir::LangItem::Clone);
+    // let clone_trait = match lang_item {
+    //     Some(ra_ap_hir_def::lang_item::LangItemTarget::Trait(it)) => it,
+    //     _ => return false,
+    // };
     return ty.impls_trait(db, clone_trait.into(), &[]);
 }
 
@@ -640,6 +653,7 @@ pub fn readable_type_description(
     ty: &ra_ap_hir::Type,
     db: &dyn ra_ap_hir::db::HirDatabase,
 ) -> String {
-    let display = ty.display(db, ra_ap_ide::Edition::Edition2021);
+    let krate = ty.krate(db);
+    let display = ty.display(db, DisplayTarget::from_crate(db, krate.into()));
     ra_ap_syntax::ToSmolStr::to_smolstr(&display).to_string()
 }
