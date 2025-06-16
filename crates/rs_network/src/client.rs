@@ -3,57 +3,160 @@ use crate::{
     length_prefix_decoder::LengthPrefixDecoder,
 };
 use std::{
-    io::Read,
+    io::{Read, Write},
     net::{SocketAddr, TcpStream},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
 pub struct Client {
-    stream: TcpStream,
+    recciver: std::sync::mpsc::Receiver<Vec<u8>>,
+    sender: std::sync::mpsc::Sender<Vec<u8>>,
     decoder: LengthPrefixDecoder,
-    buffer: Vec<u8>,
+    shutdown: Arc<AtomicBool>,
 }
 
 impl Drop for Client {
     fn drop(&mut self) {
-        let _ = self.stream.shutdown(std::net::Shutdown::Both);
+        self.shutdown.store(true, Ordering::Relaxed);
     }
 }
 
 impl Client {
-    pub fn bind(addr: SocketAddr) -> crate::error::Result<Client> {
+    pub fn bind(addr: SocketAddr, debug_label: Option<String>) -> crate::error::Result<Client> {
         let timeout = Duration::from_secs_f32(30.0);
-        let tcp_stream = TcpStream::connect_timeout(&addr, timeout)
-            .map_err(|err| crate::error::Error::IO(err, None))?;
-        match tcp_stream.set_read_timeout(Some(Duration::from_millis(5000))) {
+        let tcp_stream = TcpStream::connect_timeout(&addr, timeout).map_err(|err| {
+            crate::error::Error::IO(
+                err,
+                Some(format!("Failed to connect to remote address: {}", addr)),
+            )
+        })?;
+
+        match tcp_stream.set_read_timeout(Some(Duration::from_millis(1))) {
             Ok(_) => {}
             Err(err) => {
                 log::warn!("{err}")
             }
         }
+
+        Self::from_stream(tcp_stream, debug_label)
+    }
+
+    pub fn from_stream(
+        mut tcp_stream: TcpStream,
+        debug_label: Option<String>,
+    ) -> crate::error::Result<Client> {
+        let local_addr = tcp_stream
+            .local_addr()
+            .map_err(|err| crate::error::Error::IO(err, None))?;
+        let peer_addr = tcp_stream
+            .peer_addr()
+            .map_err(|err| crate::error::Error::IO(err, None))?;
+        log::trace!("local_addr: {}, peer_addr: {}", local_addr, peer_addr);
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let (sender, recciver) = std::sync::mpsc::channel::<Vec<u8>>();
+        let (sender1, recciver1) = std::sync::mpsc::channel::<Vec<u8>>();
+        let _ = std::thread::Builder::new()
+            .name(format!("Network"))
+            .spawn({
+                let sender = sender.clone();
+                let shutdown = shutdown.clone();
+                let debug_label = debug_label.clone();
+                move || {
+                    let mut buffer: Vec<u8> = vec![0; 512 * 10];
+                    let mut write_buffer: Vec<u8> = vec![];
+                    loop {
+                        if shutdown.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        match tcp_stream.read(&mut buffer) {
+                            Ok(size) => {
+                                if size != 0 {
+                                    if buffer.len() < size {
+                                        buffer.resize(size, 0);
+                                    }
+                                    match &debug_label {
+                                        Some(debug_label) => {
+                                            log::trace!("[{debug_label}] Receive data. {size}");
+                                        }
+                                        None => {
+                                            log::trace!("Receive data. {size}");
+                                        }
+                                    }
+                                    let _ = sender.send(buffer[0..size].to_vec());
+                                }
+                            }
+                            Err(err) => {
+                                if !matches!(err.kind(), std::io::ErrorKind::TimedOut) {
+                                    log::warn!("Failed to read from: {peer_addr}, {err}");
+                                }
+                            }
+                        }
+                        match recciver1.try_recv() {
+                            Ok(mut data) => {
+                                write_buffer.append(&mut data);
+                                match tcp_stream.write(write_buffer.as_slice()) {
+                                    Ok(bytes) => {
+                                        // let _ = tcp_stream.flush();
+                                        if bytes != 0 {
+                                            match &debug_label {
+                                                Some(debug_label) => {
+                                                    log::trace!(
+                                                        "[{debug_label}] Write to: {peer_addr}, {bytes}"
+                                                    );
+                                                }
+                                                None => {
+                                                    log::trace!("Write to: {peer_addr}, {bytes}");
+                                                }
+                                            }
+                                            write_buffer.drain(0..bytes);
+                                        }
+                                    }
+                                    Err(err) => {
+                                        if !matches!(err.kind(), std::io::ErrorKind::TimedOut) {
+                                            log::warn!("Failed to write to: {peer_addr}, {err}");
+                                        }
+                                    }
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    }
+                    let _ = tcp_stream.shutdown(std::net::Shutdown::Both);
+                    log::trace!(
+                        "Shutdown stream:, local_addr: {local_addr}, peer_addr: {peer_addr}"
+                    );
+                }
+            })
+            .map_err(|err| crate::error::Error::IO(err, None))?;
+
         let decoder = LengthPrefixDecoder::new();
         Ok(Client {
-            stream: tcp_stream,
+            recciver,
             decoder,
-            buffer: vec![0; 512 * 10],
+            shutdown,
+            sender: sender1,
         })
     }
 
-    pub fn try_read(&mut self) -> crate::error::Result<()> {
-        match self.stream.read(&mut self.buffer) {
-            Ok(size) => {
-                if self.buffer.len() < size {
-                    self.buffer.resize(size, 0);
-                }
-                let _ = self.decoder.decode((&self.buffer[0..size]).to_vec());
-                Ok(())
-            }
-            Err(err) => Err(crate::error::Error::IO(err, None)),
+    pub fn take_messages(&mut self) -> Vec<Message> {
+        while let Ok(data) = self.recciver.try_recv() {
+            let _ = self.decoder.decode(data);
         }
+        self.decoder.take_messages()
     }
 
-    pub fn take_messages(&mut self) -> Vec<Message> {
-        self.decoder.take_messages()
+    pub fn write(&mut self, buf: Vec<u8>) {
+        match self.sender.send(buf) {
+            Ok(_) => {}
+            Err(err) => {
+                log::warn!("Write, {err}");
+            }
+        }
     }
 }
 
@@ -68,18 +171,18 @@ mod test {
     #[test]
     fn test_case() {
         let addr = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8888);
-        match Client::bind(std::net::SocketAddr::V4(addr)) {
-            Ok(mut client) => loop {
-                std::thread::sleep(Duration::from_millis(500));
-                if let Err(err) = client.try_read() {
-                    eprintln!("{}", err);
-                    break;
+        match Client::bind(std::net::SocketAddr::V4(addr), None) {
+            Ok(mut client) => {
+                let mut count = 0;
+                while count < 10 {
+                    std::thread::sleep(Duration::from_millis(500));
+                    let messages = client.take_messages();
+                    for message in messages {
+                        assert_eq!(message.data.len(), 1024);
+                    }
+                    count += 1;
                 }
-                let messages = client.take_messages();
-                for message in messages {
-                    println!("message data len: {:?}", message.data.len());
-                }
-            },
+            }
             Err(err) => {
                 eprintln!("{}", err);
             }

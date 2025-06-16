@@ -15,4 +15,6 @@ pub trait UIWindow {
         window_manager: &mut WindowsManager,
         is_request_close: &mut bool,
     );
+
+    fn get_window_id(&self) -> isize;
 }

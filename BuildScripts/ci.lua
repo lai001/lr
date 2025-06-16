@@ -19,15 +19,28 @@ do
             ["TRACY_CLIENT_LIB"] = "tracy-client",
             ["TRACY_CLIENT_STATIC"] = 1
         }
+        local function build_feature_args(features)
+            local args = ""
+            for k, v in ipairs(features) do
+                args = args .. " --features " .. v
+            end
+            return args
+        end
+        local editor_feature_args = build_feature_args({
+            "editor", "renderdoc", "plugin_shared_crate", "plugin_dotnet", "plugin_v8", "network"
+        })
+        local standalone_feature_args = build_feature_args({
+            "standalone", "plugin_shared_crate", "plugin_v8"
+        })
         os.addenvs(extra_envs)
         os.cd(path.join(engine_root_dir, "rs_editor"))
-        os.exec("cargo build --package rs_editor --bin editor --features editor --features renderdoc --features plugin_shared_crate --features plugin_dotnet --features plugin_v8")
-        os.exec("cargo build --package rs_editor --bin editor --features editor --features renderdoc --features plugin_shared_crate --features plugin_dotnet --features plugin_v8 --release")
+        os.exec("cargo build --package rs_editor --bin editor" .. editor_feature_args)
+        os.exec("cargo build --package rs_editor --bin editor --release" .. editor_feature_args)
         os.cd(path.join(engine_root_dir, "build/target/release"))
         os.exec("./rs_shader_compiler.exe")
         os.cd(path.join(engine_root_dir, "rs_desktop_standalone"))
-        os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --features plugin_shared_crate --features standalone --features plugin_v8")
-        os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --features plugin_shared_crate --features standalone --features plugin_v8 --release")
+        os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone" .. standalone_feature_args)
+        os.exec("cargo build --package rs_desktop_standalone --bin rs_desktop_standalone --release" .. standalone_feature_args)
         os.cd(engine_root_dir)
         os.addenvs(tracy_android_libs_envs)
         os.exec("xmake build_android_target --mode=debug --target=aarch64-linux-android")

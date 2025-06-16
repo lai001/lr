@@ -44,6 +44,7 @@ pub struct MeshUIWindow {
     camera_movement_speed: f32,
     camera_motion_speed: f32,
     input_mode: EInputMode,
+    window_id: isize,
 }
 
 impl UIWindow for MeshUIWindow {
@@ -154,6 +155,10 @@ impl UIWindow for MeshUIWindow {
             _ => {}
         }
     }
+
+    fn get_window_id(&self) -> isize {
+        self.window_id
+    }
 }
 
 impl MeshUIWindow {
@@ -164,8 +169,9 @@ impl MeshUIWindow {
         engine: &mut Engine,
     ) -> anyhow::Result<MeshUIWindow> {
         let window_context =
-            window_manager.spwan_new_window(EWindowType::Mesh, event_loop_window_target)?;
+            window_manager.spwan_new_window(EWindowType::Mesh, event_loop_window_target, None)?;
         let window = &*window_context.window.borrow();
+        let window_id = window_context.get_id();
 
         engine
             .set_new_window(
@@ -233,6 +239,7 @@ impl MeshUIWindow {
             camera_movement_speed: 0.01,
             camera_motion_speed: 0.1,
             input_mode,
+            window_id,
         })
     }
 

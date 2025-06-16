@@ -1,3 +1,7 @@
+#[cfg(feature = "network")]
+use crate::network;
+#[cfg(feature = "network")]
+use crate::network::NetworkReplicated;
 use crate::{
     content::{content_file_type::EContentFileType, material::Material},
     drawable::EDrawObjectType,
@@ -10,6 +14,8 @@ use rapier3d::prelude::*;
 use rs_artifact::static_mesh::StaticMesh;
 use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "network")]
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -37,6 +43,49 @@ pub struct StaticMeshComponentRuntime {
     aabb: Option<Aabb>,
 }
 
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+pub enum ReplicatedFieldType {
+    IsVisible,
+    Transformation,
+}
+
+#[cfg(feature = "network")]
+type TransmissionType = HashMap<ReplicatedFieldType, Vec<u8>>;
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct NetworkFields {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    net_id: Option<uuid::Uuid>,
+    #[serde(default = "bool::default")]
+    pub is_replicated: bool,
+    #[serde(skip)]
+    replicated_datas: TransmissionType,
+}
+
+#[cfg(feature = "network")]
+impl NetworkFields {
+    pub fn new() -> NetworkFields {
+        NetworkFields {
+            net_id: Some(network::default_uuid()),
+            is_replicated: false,
+            replicated_datas: TransmissionType::new(),
+        }
+    }
+
+    pub fn set_is_visible(&mut self, is_visible: bool) -> rs_artifact::error::Result<()> {
+        let data = rs_artifact::bincode_legacy::serialize(&is_visible, None)?;
+        self.replicated_datas
+            .insert(ReplicatedFieldType::IsVisible, data);
+        Ok(())
+    }
+
+    pub fn reset(&mut self) {
+        self.replicated_datas.drain();
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StaticMeshComponent {
     pub name: String,
@@ -46,9 +95,74 @@ pub struct StaticMeshComponent {
     pub is_visible: bool,
     pub rigid_body_type: RigidBodyType,
     pub is_enable_multiresolution: bool,
-
+    #[cfg(feature = "network")]
+    #[serde(default)]
+    pub network_fields: NetworkFields,
     #[serde(skip)]
     pub run_time: Option<StaticMeshComponentRuntime>,
+}
+
+#[cfg(feature = "network")]
+impl crate::network::NetworkReplicated for StaticMeshComponent {
+    fn get_network_id(&self) -> &uuid::Uuid {
+        self.network_fields.net_id.as_ref().expect("A valid id")
+    }
+
+    fn set_network_id(&mut self, network_id: uuid::Uuid) {
+        self.network_fields.net_id = Some(network_id);
+    }
+
+    fn is_replicated(&self) -> bool {
+        self.network_fields.is_replicated
+    }
+
+    fn set_replicated(&mut self, is_replicated: bool) {
+        self.network_fields.is_replicated = is_replicated;
+    }
+
+    fn on_replicated(&mut self) -> Vec<u8> {
+        if self.network_fields.replicated_datas.is_empty() {
+            return vec![];
+        }
+        let encoded_data = (|| {
+            rs_artifact::bincode_legacy::serialize::<TransmissionType>(
+                &self.network_fields.replicated_datas,
+                None,
+            )
+        })();
+        if let Err(err) = &encoded_data {
+            log::warn!("{}", err);
+        }
+        self.network_fields.reset();
+        encoded_data.unwrap_or_default()
+    }
+
+    fn on_sync(&mut self, data: &Vec<u8>) {
+        let sync_result: rs_artifact::error::Result<()> = (|| {
+            let decoded_data =
+                rs_artifact::bincode_legacy::deserialize::<TransmissionType>(&data, None)?;
+            for (k, v) in decoded_data {
+                match k {
+                    ReplicatedFieldType::Transformation => {
+                        self.transformation =
+                            rs_artifact::bincode_legacy::deserialize::<glam::Mat4>(&v, None)?;
+                    }
+                    ReplicatedFieldType::IsVisible => {
+                        self.is_visible =
+                            rs_artifact::bincode_legacy::deserialize::<bool>(&v, None)?;
+                    }
+                }
+            }
+            Ok(())
+        })();
+        if let Err(err) = &sync_result {
+            log::warn!("{}", err);
+        }
+    }
+
+    fn debug_name(&self) -> Option<String> {
+        Some(self.name.clone())
+    }
 }
 
 impl StaticMeshComponent {
@@ -103,6 +217,8 @@ impl StaticMeshComponent {
             is_visible: true,
             rigid_body_type: RigidBodyType::Dynamic,
             is_enable_multiresolution: false,
+            #[cfg(feature = "network")]
+            network_fields: NetworkFields::new(),
         }
     }
 
@@ -112,6 +228,10 @@ impl StaticMeshComponent {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
+        #[cfg(feature = "network")]
+        if self.network_fields.net_id.is_none() {
+            self.set_network_id(crate::network::default_uuid());
+        }
         let resource_manager = engine.get_resource_manager();
         let mut find_static_mesh: Option<Arc<StaticMesh>> = None;
 

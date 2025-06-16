@@ -1,5 +1,8 @@
 use super::{misc::update_window_with_input_mode, ui_window::UIWindow};
-use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
+use crate::{
+    editor_context::EWindowType, standalone_simulation_options::StandaloneSimulationType,
+    windows_manager::WindowsManager,
+};
 use anyhow::anyhow;
 use egui_winit::State;
 #[cfg(feature = "plugin_shared_crate")]
@@ -12,7 +15,7 @@ use rs_engine::{
     input_type::EInputType,
     standalone::application::Application,
 };
-use rs_render::command::RenderCommand;
+use rs_render::command::{RenderCommand, ScaleChangedInfo};
 use std::collections::HashMap;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
@@ -22,6 +25,7 @@ pub struct StandaloneUiWindow {
     frame_sync: FrameSync,
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     input_mode: EInputMode,
+    window_id: isize,
 }
 
 impl UIWindow for StandaloneUiWindow {
@@ -108,8 +112,18 @@ impl UIWindow for StandaloneUiWindow {
 
                 engine.window_redraw_requested_end(window_id);
             }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                engine.send_render_command(RenderCommand::ScaleChanged(ScaleChangedInfo {
+                    window_id,
+                    new_factor: *scale_factor as f32,
+                }));
+            }
             _ => {}
         }
+    }
+
+    fn get_window_id(&self) -> isize {
+        self.window_id
     }
 }
 
@@ -122,9 +136,13 @@ impl StandaloneUiWindow {
         #[cfg(feature = "plugin_shared_crate")] plugins: Vec<Box<dyn Plugin>>,
         active_level: &Level,
         contents: Vec<EContentFileType>,
+        standalone_simulation_type: StandaloneSimulationType,
     ) -> anyhow::Result<StandaloneUiWindow> {
-        let window_context =
-            window_manager.spwan_new_window(EWindowType::Standalone, event_loop_window_target)?;
+        let window_context = window_manager.spwan_new_window(
+            EWindowType::Standalone,
+            event_loop_window_target,
+            Self::title_of(&standalone_simulation_type),
+        )?;
         let window = &*window_context.window.borrow();
         let window_id = window_context.get_id();
 
@@ -154,12 +172,14 @@ impl StandaloneUiWindow {
 
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
-        let input_mode = EInputMode::GameUI;
+        // let input_mode = EInputMode::GameUI;
+        let input_mode = EInputMode::UI;
         update_window_with_input_mode(window, input_mode);
 
         // let level = active_level.make_copy_for_standalone(engine, &contents);
 
-        let application = Application::new(
+        #[allow(unused_mut)]
+        let mut application = Application::new(
             window_id,
             window.inner_size().width,
             window.inner_size().height,
@@ -170,17 +190,65 @@ impl StandaloneUiWindow {
             #[cfg(feature = "plugin_shared_crate")]
             plugins,
         );
+        #[cfg(feature = "network")]
+        {
+            let (server, client) = match &standalone_simulation_type {
+                StandaloneSimulationType::Single => {
+                    application.is_authority = true;
+                    (None, None)
+                }
+                StandaloneSimulationType::MultiplePlayer(multiple_player_options) => {
+                    if multiple_player_options.is_server {
+                        application.is_authority = true;
+                        let server = rs_network::server::Server::bind(
+                            multiple_player_options.server_socket_addr,
+                        );
+                        if let Err(err) = &server {
+                            log::warn!("{}", err);
+                        }
+                        (server.ok(), None)
+                    } else {
+                        application.is_authority = false;
+                        let client = rs_network::client::Client::bind(
+                            multiple_player_options.server_socket_addr,
+                            Some("Client".to_string()),
+                        );
+                        if let Err(err) = &client {
+                            log::warn!("{}", err);
+                        }
+                        (None, client.ok())
+                    }
+                }
+            };
+            application.server = server;
+            application.client = client;
+        }
+
         Ok(StandaloneUiWindow {
             egui_winit_state,
             frame_sync,
             virtual_key_code_states: HashMap::new(),
             input_mode,
             application,
+            window_id,
         })
     }
 
     #[cfg(feature = "plugin_shared_crate")]
     pub fn reload_plugins(&mut self, plugins: Vec<Box<dyn Plugin>>) {
         self.application.reload_plugins(plugins);
+    }
+
+    fn title_of(standalone_simulation_type: &StandaloneSimulationType) -> Option<String> {
+        match standalone_simulation_type {
+            StandaloneSimulationType::Single => None,
+            StandaloneSimulationType::MultiplePlayer(multiple_player_options) => {
+                if multiple_player_options.is_server {
+                    Some(format!("Standalone({})", "Server"))
+                } else {
+                    Some(format!("Standalone({})", "Client"))
+                }
+            }
+        }
     }
 }

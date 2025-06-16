@@ -7,6 +7,8 @@ use crate::directional_light::DirectionalLight;
 use crate::drawable::EDrawObjectType;
 use crate::engine::Engine;
 use crate::misc::{compute_appropriate_offset_look_and_projection_matrix, merge_aabb};
+#[cfg(feature = "network")]
+use crate::network::NetworkReplicated;
 use crate::player_viewport::PlayerViewport;
 use crate::scene_node::{EComponentType, SceneNode};
 use crate::{build_content_file_url, url_extension::UrlExtension};
@@ -551,7 +553,7 @@ impl Level {
         let mut camera_componenets = vec![];
         for actor in self.actors.clone() {
             let actor = actor.borrow_mut();
-            Actor::walk_node(actor.scene_node.clone(), &mut |node| {
+            Actor::walk_node_mut(actor.scene_node.clone(), &mut |node| {
                 let node = node.borrow();
                 if let EComponentType::CameraComponent(rc) = &node.component {
                     camera_componenets.push(rc.clone());
@@ -589,7 +591,7 @@ impl Level {
 
     fn remove_actor_physics(level_physics: &mut Physics, actor: &Actor) {
         let node = actor.scene_node.clone();
-        Actor::walk_node(node, &mut |node| {
+        Actor::walk_node_mut(node, &mut |node| {
             let node = node.borrow();
             match &node.component {
                 EComponentType::SceneComponent(_) => {}
@@ -670,7 +672,7 @@ impl Level {
         for actor in self.actors.clone() {
             let actor = actor.borrow();
             let scene_node = actor.scene_node.clone();
-            Actor::walk_node(scene_node, &mut |node| {
+            Actor::walk_node_mut(scene_node, &mut |node| {
                 let node = node.borrow();
                 match &node.component {
                     EComponentType::PointLightComponent(component) => {
@@ -688,7 +690,7 @@ impl Level {
         for actor in self.actors.clone() {
             let actor = actor.borrow();
             let scene_node = actor.scene_node.clone();
-            Actor::walk_node(scene_node, &mut |node| {
+            Actor::walk_node_mut(scene_node, &mut |node| {
                 let node = node.borrow();
                 match &node.component {
                     EComponentType::SpotLightComponent(component) => {
@@ -705,7 +707,7 @@ impl Level {
         for actor in self.actors.clone() {
             let actor = actor.borrow_mut();
             let scene_node = actor.scene_node.clone();
-            Actor::walk_node(scene_node, &mut |node| {
+            Actor::walk_node_mut(scene_node, &mut |node| {
                 let mut node = node.borrow_mut();
                 match &mut node.component {
                     EComponentType::PointLightComponent(component) => {
@@ -723,6 +725,25 @@ impl Level {
                     _ => {}
                 }
             });
+        }
+    }
+
+    #[cfg(feature = "network")]
+    pub fn visit_network_replicated_mut(
+        &mut self,
+        visit: &mut impl FnMut(&mut dyn NetworkReplicated),
+    ) {
+        for actor in self.actors.clone() {
+            let mut actor = actor.borrow_mut();
+            actor.visit_network_replicated_mut(visit);
+        }
+    }
+
+    #[cfg(feature = "network")]
+    pub fn visit_network_replicated(&self, visit: &impl Fn(&dyn NetworkReplicated)) {
+        for actor in self.actors.clone() {
+            let actor = actor.borrow();
+            actor.visit_network_replicated(visit);
         }
     }
 }

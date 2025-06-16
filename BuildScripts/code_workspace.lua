@@ -177,6 +177,11 @@ task("code_workspace") do
             table.join2(features, "renderdoc")
         end
         table.join2(features, "plugin_shared_crate")
+        table.join2(features, "reflection")
+        table.join2(features, "network")
+        -- table.join2(features, "profiler")
+        -- table.join2(features, "detect_encoding")
+        -- table.join2(features, "exit_check")
         -- table.join2(features, "plugin_dotnet")
         -- table.join2(features, "plugin_v8")
 

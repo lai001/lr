@@ -22,8 +22,9 @@ do
         }
         for k, v in ipairs(folders) do
             os.cd(path.join(engine_root_dir, v))
-            os.exec("cargo test")
-            os.exec("cargo test --release")
+            local package = path.basename(v)
+            os.exec(format("cargo test --package %s", package))
+            os.exec(format("cargo test --package %s --release", package))
         end
 
         local with_additional_args = {
@@ -36,8 +37,9 @@ do
             for k, v in ipairs(features) do
                 features_args = format("%s --features %s", features_args, v)
             end
-            os.exec("cargo test " .. features_args)
-            os.exec("cargo test --release " .. features_args)
+            local package = path.basename(k)
+            os.exec(format("cargo test --package %s %s", package, features_args))
+            os.exec(format("cargo test --package %s %s --release", package, features_args))
         end
     end)
     set_menu {

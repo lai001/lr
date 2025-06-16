@@ -1,3 +1,7 @@
+#[cfg(feature = "network")]
+use crate::network;
+#[cfg(feature = "network")]
+use crate::network::NetworkReplicated;
 use crate::{
     content::content_file_type::EContentFileType,
     drawable::EDrawObjectType,
@@ -11,25 +15,117 @@ use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, rc::Rc};
 
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+pub enum ReplicatedFieldType {}
+
+#[cfg(feature = "network")]
+type TransmissionType = HashMap<ReplicatedFieldType, Vec<u8>>;
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct NetworkFields {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    net_id: Option<uuid::Uuid>,
+    #[serde(default = "bool::default")]
+    pub is_replicated: bool,
+    #[serde(skip)]
+    replicated_datas: TransmissionType,
+}
+
+#[cfg(feature = "network")]
+impl NetworkFields {
+    pub fn new() -> NetworkFields {
+        NetworkFields {
+            net_id: Some(network::default_uuid()),
+            is_replicated: false,
+            replicated_datas: TransmissionType::new(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.replicated_datas.drain();
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Actor {
     pub name: String,
+    #[cfg(feature = "network")]
+    #[serde(default)]
+    pub network_fields: NetworkFields,
     pub scene_node: SingleThreadMutType<SceneNode>,
+}
+
+#[cfg(feature = "network")]
+impl crate::network::NetworkReplicated for Actor {
+    fn get_network_id(&self) -> &uuid::Uuid {
+        self.network_fields.net_id.as_ref().expect("A valid id")
+    }
+
+    fn set_network_id(&mut self, network_id: uuid::Uuid) {
+        self.network_fields.net_id = Some(network_id);
+    }
+
+    fn is_replicated(&self) -> bool {
+        self.network_fields.is_replicated
+    }
+
+    fn set_replicated(&mut self, is_replicated: bool) {
+        self.network_fields.is_replicated = is_replicated;
+    }
+
+    fn on_replicated(&mut self) -> Vec<u8> {
+        vec![]
+    }
+
+    fn on_sync(&mut self, data: &Vec<u8>) {
+        let _ = data;
+    }
+
+    fn debug_name(&self) -> Option<String> {
+        Some(self.name.clone())
+    }
 }
 
 impl Actor {
     pub fn new(name: String) -> Actor {
         let scene_node = SceneNode::new_sp("Scene".to_string());
-        Actor { name, scene_node }
+        Actor {
+            name,
+            scene_node,
+            #[cfg(feature = "network")]
+            network_fields: NetworkFields::new(),
+        }
+    }
+
+    pub fn new_with_node(name: String, scene_node: SingleThreadMutType<SceneNode>) -> Actor {
+        Actor {
+            name,
+            scene_node,
+            #[cfg(feature = "network")]
+            network_fields: NetworkFields::new(),
+        }
     }
 
     pub fn new_sp(name: String) -> SingleThreadMutType<Actor> {
         SingleThreadMut::new(Self::new(name))
     }
 
-    pub fn walk_node(
+    pub fn walk_node_mut(
         node: SingleThreadMutType<SceneNode>,
         walk: &mut impl FnMut(SingleThreadMutType<SceneNode>) -> (),
+    ) {
+        walk(node.clone());
+        let node = node.borrow();
+        for child in node.childs.clone() {
+            Self::walk_node_mut(child, walk);
+        }
+    }
+
+    pub fn walk_node(
+        node: SingleThreadMutType<SceneNode>,
+        walk: &impl Fn(SingleThreadMutType<SceneNode>) -> (),
     ) {
         walk(node.clone());
         let node = node.borrow();
@@ -44,7 +140,11 @@ impl Actor {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
-        Actor::walk_node(self.scene_node.clone(), &mut |node| {
+        #[cfg(feature = "network")]
+        if self.network_fields.net_id.is_none() {
+            self.set_network_id(crate::network::default_uuid());
+        }
+        Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
             node.borrow_mut().initialize(engine, files, player_viewport);
         });
         self.update_components_world_transformation();
@@ -55,7 +155,7 @@ impl Actor {
         rigid_body_set: &mut RigidBodySet,
         collider_set: &mut ColliderSet,
     ) {
-        Actor::walk_node(self.scene_node.clone(), &mut |node| {
+        Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
             node.borrow_mut()
                 .initialize_physics(rigid_body_set, collider_set);
         });
@@ -63,7 +163,7 @@ impl Actor {
 
     pub fn collect_draw_objects(&self) -> Vec<EDrawObjectType> {
         let mut draw_objects = vec![];
-        Actor::walk_node(
+        Actor::walk_node_mut(
             self.scene_node.clone(),
             &mut |node| match &node.borrow().component {
                 EComponentType::SceneComponent(_) => {}
@@ -127,7 +227,7 @@ impl Actor {
     ) {
         self.update_components_world_transformation();
 
-        Actor::walk_node(self.scene_node.clone(), {
+        Actor::walk_node_mut(self.scene_node.clone(), {
             &mut |node| {
                 let mut node = node.borrow_mut();
                 node.tick(time, engine, rigid_body_set, collider_set);
@@ -207,7 +307,7 @@ impl Actor {
         if Rc::ptr_eq(&self.scene_node, &node_will_remove) {
             return;
         }
-        Actor::walk_node(self.scene_node.clone(), &mut move |node| {
+        Actor::walk_node_mut(self.scene_node.clone(), &mut move |node| {
             let mut node = node.borrow_mut();
             node.childs
                 .retain(|element| !Rc::ptr_eq(element, &node_will_remove));
@@ -259,7 +359,7 @@ impl Actor {
         collider: &rapier3d::prelude::ColliderHandle,
     ) -> Option<SingleThreadMutType<SceneNode>> {
         let mut find_node = None;
-        Self::walk_node(self.scene_node.clone(), &mut |scene_node| {
+        Self::walk_node_mut(self.scene_node.clone(), &mut |scene_node| {
             if find_node.is_some() {
                 return;
             }
@@ -316,7 +416,7 @@ impl Actor {
 
     pub fn compute_components_aabb(&self) -> Option<rapier3d::prelude::Aabb> {
         let mut aabbs: Vec<rapier3d::prelude::Aabb> = vec![];
-        Self::walk_node(self.scene_node.clone(), &mut |node| {
+        Self::walk_node_mut(self.scene_node.clone(), &mut |node| {
             if let Some(aabb) = node.borrow().get_aabb() {
                 aabbs.push(aabb);
             }
@@ -329,6 +429,12 @@ impl Actor {
         let copy_actor = Actor {
             name,
             scene_node: SingleThreadMut::new(copy_root_scene_node),
+            #[cfg(feature = "network")]
+            network_fields: {
+                let mut network_fields = NetworkFields::new();
+                network_fields.is_replicated = self.network_fields.is_replicated;
+                network_fields
+            },
         };
         copy_actor
     }
@@ -342,5 +448,48 @@ impl Actor {
             copy_scene_node.childs.push(SingleThreadMut::new(copy_node));
         }
         copy_scene_node
+    }
+
+    #[cfg(feature = "network")]
+    pub fn visit_network_replicated_mut(
+        &mut self,
+        visit: &mut impl FnMut(&mut dyn NetworkReplicated),
+    ) {
+        Actor::walk_node_mut(self.scene_node.clone(), {
+            &mut |node| {
+                let mut node = node.borrow_mut();
+                match &mut node.component {
+                    EComponentType::StaticMeshComponent(component) => {
+                        visit(&mut *component.borrow_mut());
+                    }
+                    EComponentType::SceneComponent(_) => {}
+                    EComponentType::SkeletonMeshComponent(_) => {}
+                    EComponentType::CameraComponent(_) => {}
+                    EComponentType::CollisionComponent(_) => {}
+                    EComponentType::SpotLightComponent(_) => {}
+                    EComponentType::PointLightComponent(_) => {}
+                }
+            }
+        });
+    }
+
+    #[cfg(feature = "network")]
+    pub fn visit_network_replicated(&self, visit: &impl Fn(&dyn NetworkReplicated)) {
+        Actor::walk_node(self.scene_node.clone(), {
+            &|node| {
+                let node = node.borrow();
+                match &node.component {
+                    EComponentType::StaticMeshComponent(component) => {
+                        visit(&*component.borrow());
+                    }
+                    EComponentType::SceneComponent(_) => {}
+                    EComponentType::SkeletonMeshComponent(_) => {}
+                    EComponentType::CameraComponent(_) => {}
+                    EComponentType::CollisionComponent(_) => {}
+                    EComponentType::SpotLightComponent(_) => {}
+                    EComponentType::PointLightComponent(_) => {}
+                }
+            }
+        });
     }
 }

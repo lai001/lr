@@ -1,5 +1,6 @@
 use crate::{
     project_context::RecentProjects,
+    standalone_simulation_options::MultiplePlayerOptions,
     ui::{content_browser, curve_view::CurveViewDataSource, model_scene_view},
 };
 use rs_core_minimal::settings::Settings;
@@ -80,6 +81,7 @@ pub struct DataSource {
     pub is_gizmo_focused: bool,
     pub is_gizmo_setting_open: bool,
     pub is_show_debug: bool,
+    pub multiple_players: u32,
 }
 
 impl DataSource {
@@ -121,6 +123,7 @@ impl DataSource {
             is_gizmo_focused: false,
             is_gizmo_setting_open: false,
             is_show_debug: true,
+            multiple_players: MultiplePlayerOptions::default().players,
         }
     }
 

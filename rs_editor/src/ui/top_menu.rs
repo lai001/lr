@@ -34,7 +34,8 @@ pub enum EClickEventType {
     Export,
     OpenVisualStudioCode,
     Run,
-    Standalone,
+    PlayStandalone,
+    PlayAsServer,
     Build(BuildConfig),
     OpenWindow(EWindowType),
     Tool(EToolType),
@@ -218,10 +219,22 @@ impl TopMenu {
                         click = Some(EClickEventType::Run);
                         ui.close_menu();
                     }
-                    if ui.add(Button::new("Standalone Simulation")).clicked() {
-                        click = Some(EClickEventType::Standalone);
-                        ui.close_menu();
-                    }
+                    ui.menu_button("Standalone Simulation", |ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut datasource.multiple_players)
+                                .speed(1)
+                                .prefix("Players: ")
+                                .range(1..=8),
+                        );
+                        if ui.add(Button::new("Play As Server")).clicked() {
+                            click = Some(EClickEventType::PlayAsServer);
+                            ui.close_menu();
+                        }
+                        if ui.add(Button::new("Play")).clicked() {
+                            click = Some(EClickEventType::PlayStandalone);
+                            ui.close_menu();
+                        }
+                    });
                     ui.checkbox(&mut datasource.is_simulate_real_time, "Simulate Real Time");
                 });
                 ui.menu_button("Test", |ui| {

@@ -17,6 +17,7 @@ pub struct ActorUIWindow {
     pub egui_winit_state: State,
     frame_sync: FrameSync,
     virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
+    window_id: isize,
 }
 
 impl ActorUIWindow {
@@ -27,8 +28,9 @@ impl ActorUIWindow {
         engine: &mut Engine,
     ) -> anyhow::Result<ActorUIWindow> {
         let window_context =
-            window_manager.spwan_new_window(EWindowType::Actor, event_loop_window_target)?;
+            window_manager.spwan_new_window(EWindowType::Actor, event_loop_window_target, None)?;
         let window = &*window_context.window.borrow();
+        let window_id = window_context.get_id();
 
         engine
             .set_new_window(
@@ -63,6 +65,7 @@ impl ActorUIWindow {
             egui_winit_state,
             frame_sync,
             virtual_key_code_states: HashMap::new(),
+            window_id,
         })
     }
 }
@@ -95,5 +98,9 @@ impl UIWindow for ActorUIWindow {
             &mut self.virtual_key_code_states,
             60.0,
         );
+    }
+
+    fn get_window_id(&self) -> isize {
+        self.window_id
     }
 }

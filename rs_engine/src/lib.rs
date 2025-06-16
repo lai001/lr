@@ -26,6 +26,8 @@ pub mod logger;
 pub mod mesh_buffer;
 pub mod mipmap_generator;
 pub mod misc;
+#[cfg(feature = "network")]
+pub mod network;
 pub mod particle;
 pub mod physics_debug_render;
 pub mod planar_reflection;

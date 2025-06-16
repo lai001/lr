@@ -7,6 +7,9 @@ use crate::{
     material_resolve,
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
+    standalone_simulation_options::{
+        MultiplePlayerOptions, StandaloneSimulationType, DEFAULT_SERVER_ADDR,
+    },
     ui::{
         asset_view,
         blend_animations_ui_window::BlendAnimationUIWindow,
@@ -165,7 +168,7 @@ pub struct EditorContext {
     mesh_ui_window: Option<MeshUIWindow>,
     media_ui_window: Option<MediaUIWindow>,
     multiple_draw_ui_window: Option<MultipleDrawUiWindow>,
-    standalone_ui_window: Option<StandaloneUiWindow>,
+    standalone_ui_windows: Vec<StandaloneUiWindow>,
     blend_animation_ui_window: Option<BlendAnimationUIWindow>,
     watch_shader: WatchShader,
     #[cfg(feature = "plugin_dotnet")]
@@ -222,6 +225,7 @@ impl EditorContext {
             "Engine Root Dir: {:?}",
             rs_core_minimal::file_manager::get_engine_root_dir().canonicalize_slash()?
         );
+        log::trace!("Git hash: {}", rs_core_minimal::misc::get_git_hash());
         // for var in std::env::vars() {
         //     log::trace!("{:?}", var);
         // }
@@ -307,7 +311,7 @@ impl EditorContext {
             mesh_ui_window: None,
             media_ui_window: None,
             multiple_draw_ui_window: None,
-            standalone_ui_window: None,
+            standalone_ui_windows: Vec::new(),
             blend_animation_ui_window: None,
             watch_shader,
             mosue_state: MouseState {
@@ -391,7 +395,7 @@ impl EditorContext {
             WindowEvent::CloseRequested => {
                 // #[cfg(feature = "plugin_shared_crate")]
                 // self.plugins.clear();
-                self.standalone_ui_window = None;
+                self.standalone_ui_windows.clear();
                 self.egui_winit_state.egui_ctx().memory_mut(|writer| {
                     writer.data.clear();
                 });
@@ -513,13 +517,21 @@ impl EditorContext {
                 #[cfg(feature = "plugin_shared_crate")]
                 if let Some(project_context) = &mut self.project_context {
                     if project_context.is_need_reload_plugin() {
-                        match self.try_create_plugin() {
-                            Ok(plugin) => {
-                                if let Some(window) = &mut self.standalone_ui_window {
-                                    window.reload_plugins(vec![plugin]);
+                        let mut plugins = Vec::with_capacity(self.standalone_ui_windows.len());
+                        for _ in 0..self.standalone_ui_windows.len() {
+                            match self.try_create_plugin() {
+                                Ok(plugin) => {
+                                    plugins.push(plugin);
                                 }
+                                Err(err) => log::warn!("{}", err),
                             }
-                            Err(err) => log::warn!("{}", err),
+                        }
+                        if plugins.len() == self.standalone_ui_windows.len() {
+                            for (plugin, window) in
+                                std::iter::zip(plugins, &mut self.standalone_ui_windows)
+                            {
+                                window.reload_plugins(vec![plugin]);
+                            }
                         }
                     }
                 }
@@ -618,30 +630,27 @@ impl EditorContext {
         event: &Event<ECustomEventType>,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
-        macro_rules! insert_window {
-            ($type:tt, $name:tt) => {
-                (
-                    EWindowType::$type,
-                    self.$name.as_mut().map(|x| x as &mut dyn UIWindow),
-                )
+        let mut ui_windows: Vec<&mut dyn UIWindow> = Vec::new();
+        macro_rules! push_window {
+            ($name:tt) => {
+                if let Some(w) = self.$name.as_mut() {
+                    ui_windows.push(w);
+                }
             };
         }
-        let ui_windows = HashMap::from([
-            insert_window!(Material, material_ui_window),
-            insert_window!(Particle, particle_system_ui_window),
-            insert_window!(Mesh, mesh_ui_window),
-            insert_window!(Media, media_ui_window),
-            insert_window!(MultipleDraw, multiple_draw_ui_window),
-            insert_window!(Standalone, standalone_ui_window),
-            insert_window!(BlendAnimation, blend_animation_ui_window),
-        ]);
+        push_window!(material_ui_window);
+        push_window!(particle_system_ui_window);
+        push_window!(mesh_ui_window);
+        push_window!(media_ui_window);
+        push_window!(multiple_draw_ui_window);
+        push_window!(blend_animation_ui_window);
+        for w in &mut self.standalone_ui_windows {
+            ui_windows.push(w);
+        }
 
         match event {
             Event::DeviceEvent { event, .. } => {
-                for ui_window in ui_windows.into_values() {
-                    let Some(ui_window) = ui_window else {
-                        continue;
-                    };
+                for ui_window in &mut ui_windows {
                     ui_window.on_device_event(event);
                 }
                 self.player_viewport.on_device_event(event);
@@ -663,72 +672,91 @@ impl EditorContext {
                 else {
                     return;
                 };
+
+                if matches!(event, WindowEvent::RedrawRequested)
+                    && window_type == EWindowType::Standalone
+                {
+                    let other_ui_windows = ui_windows
+                        .iter_mut()
+                        .filter(|x| x.get_window_id() != window_id);
+                    for other_ui_window in other_ui_windows {
+                        let mut _window_manager = self.window_manager.borrow_mut();
+                        let id = other_ui_window.get_window_id();
+                        if let Some(window) = _window_manager.get_window_by_id(id) {
+                            let mut window = window.borrow_mut();
+                            let mut is_request_close = false;
+                            if window.has_focus() == false {
+                                other_ui_window.on_window_event(
+                                    id,
+                                    &mut window,
+                                    event,
+                                    event_loop_window_target,
+                                    &mut self.engine,
+                                    &mut _window_manager,
+                                    &mut is_request_close,
+                                );
+                            }
+                        }
+                    }
+                }
+
                 let window = &mut *window.borrow_mut();
                 let egui_event_response = self.egui_winit_state.on_window_event(window, event);
 
                 let mut close_windows = vec![];
 
-                for (ty, ui_window) in ui_windows {
-                    if ty != window_type {
+                for ui_window in &mut ui_windows {
+                    if ui_window.get_window_id() != window_id {
                         continue;
                     }
-                    if let Some(ui_window) = ui_window {
-                        if let WindowEvent::Resized(window_size) = &event {
-                            self.engine
-                                .resize(window_id, window_size.width, window_size.height);
-                        };
-                        let mut is_request_close = false;
-                        let mut is_close = false;
-                        ui_window.on_window_event(
-                            window_id,
-                            window,
-                            event,
-                            event_loop_window_target,
-                            &mut self.engine,
-                            &mut self.window_manager.borrow_mut(),
-                            &mut is_request_close,
-                        );
-                        if is_request_close {
-                            is_close = true;
-                        }
-                        if let WindowEvent::CloseRequested = &event {
-                            is_close = true;
-                        };
-                        if is_close {
-                            self.window_manager.borrow_mut().remove_window(ty);
-                            self.engine.remove_window(window_id);
-                            close_windows.push(ty);
-                        }
+                    if let WindowEvent::Resized(window_size) = &event {
+                        self.engine
+                            .resize(window_id, window_size.width, window_size.height);
+                    };
+                    let mut is_request_close = false;
+                    let mut is_close = false;
+                    ui_window.on_window_event(
+                        window_id,
+                        window,
+                        event,
+                        event_loop_window_target,
+                        &mut self.engine,
+                        &mut self.window_manager.borrow_mut(),
+                        &mut is_request_close,
+                    );
+                    if is_request_close {
+                        is_close = true;
+                    }
+                    if let WindowEvent::CloseRequested = &event {
+                        is_close = true;
+                    };
+                    if is_close {
+                        self.window_manager
+                            .borrow_mut()
+                            .remove_window_by_id(&window_id);
+                        self.engine.remove_window(window_id);
+                        close_windows.push(window_id);
                     }
                 }
 
-                for ty in close_windows {
-                    match ty {
-                        EWindowType::Material => {
-                            self.material_ui_window = None;
+                macro_rules! take_window {
+                    ($name:tt) => {
+                        if let Some(w) = self.$name.as_mut() {
+                            if close_windows.contains(&w.get_window_id()) {
+                                self.$name = None;
+                            }
                         }
-                        EWindowType::Mesh => {
-                            self.mesh_ui_window = None;
-                        }
-                        EWindowType::Media => {
-                            self.media_ui_window = None;
-                        }
-                        EWindowType::MultipleDraw => {
-                            self.multiple_draw_ui_window = None;
-                        }
-                        EWindowType::Particle => {
-                            self.particle_system_ui_window = None;
-                        }
-                        EWindowType::Standalone => {
-                            self.standalone_ui_window = None;
-                        }
-                        EWindowType::Main => {}
-                        EWindowType::Actor => {}
-                        EWindowType::BlendAnimation => {
-                            self.blend_animation_ui_window = None;
-                        }
-                    }
+                    };
                 }
+                take_window!(material_ui_window);
+                take_window!(particle_system_ui_window);
+                take_window!(mesh_ui_window);
+                take_window!(media_ui_window);
+                take_window!(multiple_draw_ui_window);
+                take_window!(blend_animation_ui_window);
+
+                self.standalone_ui_windows
+                    .retain(|x| !close_windows.contains(&x.get_window_id()));
 
                 if let Some(Some(event)) = self
                     .material_ui_window
@@ -1019,7 +1047,7 @@ impl EditorContext {
         }
 
         if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::F5], true) {
-            self.open_standalone_window(event_loop_window_target);
+            self.open_standalone_window(event_loop_window_target, StandaloneSimulationType::Single);
         }
     }
 
@@ -1478,11 +1506,14 @@ impl EditorContext {
         );
         content.files.append(&mut add_files);
         let mut active_level = active_level.borrow_mut();
-
+        let new_actor = SingleThreadMut::new(rs_engine::actor::Actor::new_with_node(
+            load_result.appropriate_name,
+            load_result.scene_node,
+        ));
         Self::add_new_actors(
             &mut active_level,
             &mut self.engine,
-            vec![load_result.actor.clone()],
+            vec![new_actor],
             &content.files,
             &mut self.player_viewport,
         );
@@ -1690,12 +1721,13 @@ impl EditorContext {
         Ok(())
     }
 
-    fn open_standalone_window(
+    fn create_standalone_window(
         &mut self,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
-    ) {
+        standalone_simulation_type: StandaloneSimulationType,
+    ) -> Option<StandaloneUiWindow> {
         let Some(level) = self.data_source.level.clone() else {
-            return;
+            return None;
         };
         let active_level = &level.borrow();
         #[cfg(feature = "plugin_shared_crate")]
@@ -1710,9 +1742,48 @@ impl EditorContext {
             plugins,
             active_level,
             contents,
+            standalone_simulation_type,
         )
         .expect("Should be opened");
-        self.standalone_ui_window = Some(ui_window);
+        return Some(ui_window);
+    }
+
+    fn open_standalone_window(
+        &mut self,
+        event_loop_window_target: &winit::event_loop::ActiveEventLoop,
+        standalone_simulation_type: StandaloneSimulationType,
+    ) {
+        assert!(self.standalone_ui_windows.is_empty());
+        match standalone_simulation_type {
+            StandaloneSimulationType::Single => {
+                let standalone_window = self
+                    .create_standalone_window(event_loop_window_target, standalone_simulation_type);
+                if let Some(standalone_window) = standalone_window {
+                    self.standalone_ui_windows.push(standalone_window);
+                }
+            }
+            StandaloneSimulationType::MultiplePlayer(multiple_player_options) => {
+                assert_eq!(
+                    self.data_source.multiple_players,
+                    multiple_player_options.players
+                );
+                for i in 0..self.data_source.multiple_players {
+                    let is_server = i == 0;
+                    let options = MultiplePlayerOptions {
+                        server_socket_addr: multiple_player_options.server_socket_addr,
+                        is_server,
+                        players: multiple_player_options.players,
+                    };
+                    let standalone_window = self.create_standalone_window(
+                        event_loop_window_target,
+                        StandaloneSimulationType::MultiplePlayer(options),
+                    );
+                    if let Some(standalone_window) = standalone_window {
+                        self.standalone_ui_windows.push(standalone_window);
+                    }
+                }
+            }
+        }
     }
 
     fn open_particle_window(
@@ -2161,11 +2232,25 @@ impl EditorContext {
             top_menu::EClickEventType::DebugShading(ty) => {
                 self.player_viewport.set_debug_shading(ty);
             }
-            top_menu::EClickEventType::Standalone => {
+            top_menu::EClickEventType::PlayStandalone => {
                 let Some(_) = self.project_context.as_mut() else {
                     return;
                 };
-                self.open_standalone_window(event_loop_window_target);
+                self.open_standalone_window(
+                    event_loop_window_target,
+                    StandaloneSimulationType::Single,
+                );
+            }
+            top_menu::EClickEventType::PlayAsServer => {
+                let players = self.data_source.multiple_players;
+                self.open_standalone_window(
+                    event_loop_window_target,
+                    StandaloneSimulationType::MultiplePlayer(MultiplePlayerOptions {
+                        server_socket_addr: DEFAULT_SERVER_ADDR,
+                        is_server: true,
+                        players: players,
+                    }),
+                );
             }
         }
     }

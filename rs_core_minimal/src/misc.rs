@@ -450,6 +450,10 @@ pub fn distance_from_point_to_segment(a: glam::Vec2, b: glam::Vec2, p: glam::Vec
     }
 }
 
+pub fn get_git_hash() -> String {
+    env!("GIT_HASH").to_string()
+}
+
 #[cfg(test)]
 mod test {
     use super::{

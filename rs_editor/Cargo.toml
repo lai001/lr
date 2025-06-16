@@ -37,6 +37,7 @@ plugin_v8 = [
 exit_check = []
 detect_encoding = ["rs_shader_compiler_core/detect_encoding"]
 reflection = ["dep:rs_reflection_core", "dep:rs_reflection_system"]
+network = ["dep:rs_network", "rs_engine/network"]
 
 [dependencies]
 futures = "0.3.31"
@@ -107,6 +108,7 @@ rs_v8_binding_api_manager = { path = "../crates/rs_v8_binding_api_manager", opti
 rs_reflection_system = { path = "../crates/rs_reflection_system", optional = true }
 rs_reflection_core = { path = "../crates/rs_reflection_core", optional = true }
 rs_model_loader = { path = "../crates/rs_model_loader" }
+rs_network = { path = "../crates/rs_network", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rs_dotnet = { path = "../rs_dotnet", optional = true }

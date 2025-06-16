@@ -19,6 +19,7 @@ pub struct MaterialUIWindow {
     pub data_source: DataSource,
     pub context: egui::Context,
     pub folder: SingleThreadMutType<ContentFolder>,
+    window_id: isize,
 }
 
 impl MaterialUIWindow {
@@ -29,9 +30,13 @@ impl MaterialUIWindow {
         engine: &mut Engine,
         folder: SingleThreadMutType<ContentFolder>,
     ) -> anyhow::Result<MaterialUIWindow> {
-        let window_context =
-            window_manager.spwan_new_window(EWindowType::Material, event_loop_window_target)?;
+        let window_context = window_manager.spwan_new_window(
+            EWindowType::Material,
+            event_loop_window_target,
+            None,
+        )?;
         let window = &*window_context.window.borrow();
+        let window_id = window_context.get_id();
 
         engine
             .set_new_window(
@@ -67,6 +72,7 @@ impl MaterialUIWindow {
             data_source,
             context,
             folder,
+            window_id,
         })
     }
 }
@@ -107,5 +113,9 @@ impl UIWindow for MaterialUIWindow {
             }
             _ => {}
         }
+    }
+
+    fn get_window_id(&self) -> isize {
+        self.window_id
     }
 }

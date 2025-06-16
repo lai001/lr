@@ -46,6 +46,7 @@ pub struct BaseUIWindow {
     pub camera_movement_speed: f32,
     pub camera_motion_speed: f32,
     pub input_mode: EInputMode,
+    window_id: isize,
 }
 
 impl BaseUIWindow {
@@ -55,6 +56,7 @@ impl BaseUIWindow {
         engine: &mut Engine,
     ) -> anyhow::Result<BaseUIWindow> {
         let window = &*window_context.window.borrow();
+        let window_id = window_context.get_id();
 
         engine
             .set_new_window(
@@ -121,6 +123,7 @@ impl BaseUIWindow {
             camera_movement_speed: 0.01,
             camera_motion_speed: 0.1,
             input_mode,
+            window_id,
         })
     }
 
@@ -284,6 +287,10 @@ impl UIWindow for ParticleSystemUIWindow {
             _ => {}
         }
     }
+
+    fn get_window_id(&self) -> isize {
+        self.base_ui_window.window_id
+    }
 }
 
 impl ParticleSystemUIWindow {
@@ -294,8 +301,11 @@ impl ParticleSystemUIWindow {
         engine: &mut Engine,
         particle_system: SingleThreadMutType<rs_engine::content::particle_system::ParticleSystem>,
     ) -> anyhow::Result<ParticleSystemUIWindow> {
-        let window_context =
-            window_manager.spwan_new_window(EWindowType::Particle, event_loop_window_target)?;
+        let window_context = window_manager.spwan_new_window(
+            EWindowType::Particle,
+            event_loop_window_target,
+            None,
+        )?;
 
         let particle_system_template = {
             let particle_system = particle_system.borrow();

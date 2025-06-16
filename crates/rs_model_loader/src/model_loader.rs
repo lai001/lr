@@ -36,7 +36,8 @@ pub struct LoadResult {
     pub skeleton: Option<Rc<RefCell<rs_engine::content::skeleton::Skeleton>>>,
     pub node_animations:
         Vec<Rc<RefCell<rs_engine::content::skeleton_animation::SkeletonAnimation>>>,
-    pub actor: SingleThreadMutType<rs_engine::actor::Actor>,
+    pub appropriate_name: String,
+    pub scene_node: SingleThreadMutType<rs_engine::scene_node::SceneNode>,
 }
 
 pub struct ModelLoader {
@@ -906,7 +907,6 @@ impl ModelLoader {
         let mut node_animations: Vec<
             Rc<RefCell<rs_engine::content::skeleton_animation::SkeletonAnimation>>,
         > = vec![];
-        let actor: rs_engine::actor::Actor;
 
         if let Some(armature) = scene.armatures.values().next() {
             let armature = armature.borrow();
@@ -986,6 +986,9 @@ impl ModelLoader {
             }
         }
 
+        let appropriate_name: String;
+        let scene_node: SingleThreadMutType<rs_engine::scene_node::SceneNode>;
+
         if let Some(skeleton) = skeleton.clone() {
             let animation_url: Option<url::Url>;
             if let Some(node_animation) = node_animations.first() {
@@ -1007,18 +1010,16 @@ impl ModelLoader {
                     glam::Mat4::IDENTITY,
                 );
 
-            actor = rs_engine::actor::Actor {
-                name: actor_name_generator.next(&scene.name),
-                scene_node: SingleThreadMut::new(rs_engine::scene_node::SceneNode {
-                    component: rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
-                        SingleThreadMut::new(skeleton_mesh_component),
-                    ),
-                    childs: vec![],
-                }),
-            };
+            scene_node = SingleThreadMut::new(rs_engine::scene_node::SceneNode {
+                component: rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
+                    SingleThreadMut::new(skeleton_mesh_component),
+                ),
+                childs: vec![],
+            });
+            appropriate_name = actor_name_generator.next(&scene.name);
         } else {
-            let scene_node = Self::node_to_scene_node_recursion(scene_root_node, &static_meshes);
-            let name = file_path
+            scene_node = Self::node_to_scene_node_recursion(scene_root_node, &static_meshes);
+            appropriate_name = file_path
                 .file_name()
                 .map(|x| x.to_str())
                 .flatten()
@@ -1027,14 +1028,6 @@ impl ModelLoader {
                     "Incorrect file path: {:?}",
                     file_path
                 )))?;
-            actor = rs_engine::actor::Actor {
-                name: actor_name_generator.next(if scene.name.is_empty() {
-                    &name
-                } else {
-                    &scene.name
-                }),
-                scene_node,
-            };
         }
 
         Ok(LoadResult {
@@ -1043,7 +1036,8 @@ impl ModelLoader {
             skeleton_meshes,
             skeleton,
             node_animations,
-            actor: SingleThreadMut::new(actor),
+            appropriate_name,
+            scene_node,
         })
     }
 }

@@ -1,18 +1,19 @@
-use crate::{codec::Encoder, length_prefix_encoder::LengthPrefixEncoder};
+use crate::{client::Client, codec::Encoder, length_prefix_encoder::LengthPrefixEncoder};
 use std::{
-    io::Write,
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
+    time::Duration,
 };
 
 pub struct Server {
-    streams: Vec<TcpStream>,
+    clients: Vec<Client>,
     encoder: LengthPrefixEncoder,
     recciver: std::sync::mpsc::Receiver<TcpStream>,
     shutdown: Arc<AtomicBool>,
+    addr: SocketAddr,
 }
 
 impl Drop for Server {
@@ -25,34 +26,29 @@ impl Server {
     pub fn bind(addr: SocketAddr) -> crate::error::Result<Server> {
         let (sender, recciver) = std::sync::mpsc::channel();
         let shutdown = Arc::new(AtomicBool::new(false));
+        let listener = TcpListener::bind(addr).map_err(|err| {
+            crate::error::Error::IO(err, Some(format!("Failed to bind to: {}", addr)))
+        })?;
         let _ = std::thread::Builder::new()
             .name(format!("Network"))
             .spawn({
                 let sender = sender.clone();
                 let shutdown = shutdown.clone();
                 move || {
-                    let listener =
-                        TcpListener::bind(addr).map_err(|err| crate::error::Error::IO(err, None));
-                    match listener {
-                        Ok(listener) => {
-                            for stream in listener.incoming() {
-                                if shutdown.load(Ordering::Relaxed) {
-                                    break;
-                                }
-                                match stream {
-                                    Ok(stream) => {
-                                        let _ = sender.send(stream);
-                                    }
-                                    Err(err) => {
-                                        log::warn!("{}", err);
-                                    }
-                                }
+                    for stream in listener.incoming() {
+                        if shutdown.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        match stream {
+                            Ok(stream) => {
+                                let _ = sender.send(stream);
+                            }
+                            Err(err) => {
+                                log::warn!("Connection failed: {}", err);
                             }
                         }
-                        Err(err) => {
-                            log::warn!("{}", err);
-                        }
                     }
+                    log::trace!("Shutdown server: {}", addr);
                 }
             })
             .map_err(|err| crate::error::Error::IO(err, None))?;
@@ -60,39 +56,42 @@ impl Server {
         let encoder = LengthPrefixEncoder::new(rs_artifact::EEndianType::Little);
         Ok(Server {
             encoder,
-            streams: Vec::new(),
+            clients: Vec::new(),
             recciver,
             shutdown: shutdown,
+            addr,
         })
     }
 
     pub fn process_incoming(&mut self) {
         for stream in self.recciver.try_iter() {
-            log::trace!("New stream {:?}", stream.peer_addr(),);
-            self.streams.push(stream);
-        }
-    }
-
-    pub fn broadcast(&mut self, data: &[u8]) {
-        let encoded = self.encoder.encode(data).unwrap();
-        for stream in &mut self.streams {
-            match stream.write(&encoded) {
-                Ok(size) => {
-                    log::trace!("Broadcast {:?}, {}", stream.peer_addr(), size);
-                    let _ = stream.flush();
+            log::trace!("New stream: {:?}", stream.peer_addr(),);
+            match stream.set_read_timeout(Some(Duration::from_millis(1))) {
+                Ok(_) => {}
+                Err(err) => {
+                    log::warn!("{err}")
+                }
+            }
+            match Client::from_stream(stream, Some("Server".to_string())) {
+                Ok(client) => {
+                    self.clients.push(client);
                 }
                 Err(err) => {
-                    log::warn!("{:?}, {}", stream.peer_addr(), err);
+                    log::warn!("{}", err);
                 }
             }
         }
     }
 
-    pub fn shutdown_all_streams(&mut self) {
-        for stream in &mut self.streams {
-            let _ = stream.shutdown(std::net::Shutdown::Both);
+    pub fn broadcast(&mut self, data: &[u8]) {
+        let encoded = self.encoder.encode(data).unwrap();
+        for client in &mut self.clients {
+            client.write(encoded.clone());
         }
-        self.streams.clear();
+    }
+
+    pub fn shutdown_all_streams(&mut self) {
+        self.clients.clear();
     }
 
     pub fn shutdown(mut self) {
@@ -102,6 +101,14 @@ impl Server {
     fn shutdown_internal(&mut self) {
         self.shutdown.store(true, Ordering::Relaxed);
         self.shutdown_all_streams();
+        let timeout = std::time::Duration::from_secs_f32(3.0);
+        if let Err(err) = TcpStream::connect_timeout(&self.addr, timeout) {
+            log::warn!("{}", err);
+        }
+    }
+
+    pub fn clients_mut(&mut self) -> &mut Vec<Client> {
+        &mut self.clients
     }
 }
 

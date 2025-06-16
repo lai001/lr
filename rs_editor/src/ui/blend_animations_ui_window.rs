@@ -39,6 +39,7 @@ pub struct BlendAnimationUIWindow {
     pub content: SingleThreadMutType<crate::content_folder::ContentFolder>,
     start: std::time::Instant,
     level: rs_engine::content::level::Level,
+    window_id: isize,
 }
 
 impl BlendAnimationUIWindow {
@@ -50,8 +51,11 @@ impl BlendAnimationUIWindow {
         content: SingleThreadMutType<crate::content_folder::ContentFolder>,
         blend_animation: SingleThreadMutType<BlendAnimations>,
     ) -> anyhow::Result<BlendAnimationUIWindow> {
-        let window_context = window_manager
-            .spwan_new_window(EWindowType::BlendAnimation, event_loop_window_target)?;
+        let window_context = window_manager.spwan_new_window(
+            EWindowType::BlendAnimation,
+            event_loop_window_target,
+            None,
+        )?;
         let window_id = window_context.get_id();
         let window = &*window_context.window.borrow();
         let width = window.inner_size().width;
@@ -102,6 +106,7 @@ impl BlendAnimationUIWindow {
             skeleton_meshes: vec![],
             start: std::time::Instant::now(),
             level: rs_engine::content::level::Level::empty_level(),
+            window_id,
         })
     }
 
@@ -383,5 +388,9 @@ impl UIWindow for BlendAnimationUIWindow {
             }
             _ => {}
         }
+    }
+
+    fn get_window_id(&self) -> isize {
+        self.window_id
     }
 }

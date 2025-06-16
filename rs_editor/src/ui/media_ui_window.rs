@@ -46,6 +46,7 @@ pub struct MediaUIWindow {
     composition_info: Option<CompositionInfo>,
     audio_engine: AudioEngine,
     audio_player_node: Option<MultipleThreadMutType<AudioPlayerNode>>,
+    window_id: isize,
 }
 
 impl UIWindow for MediaUIWindow {
@@ -133,6 +134,10 @@ impl UIWindow for MediaUIWindow {
             _ => {}
         }
     }
+
+    fn get_window_id(&self) -> isize {
+        self.window_id
+    }
 }
 
 impl MediaUIWindow {
@@ -143,9 +148,9 @@ impl MediaUIWindow {
         engine: &mut Engine,
     ) -> anyhow::Result<MediaUIWindow> {
         let window_context =
-            window_manager.spwan_new_window(EWindowType::Media, event_loop_window_target)?;
+            window_manager.spwan_new_window(EWindowType::Media, event_loop_window_target, None)?;
         let window = &*window_context.window.borrow();
-
+        let window_id = window_context.get_id();
         engine
             .set_new_window(
                 window_context.get_id(),
@@ -187,6 +192,7 @@ impl MediaUIWindow {
             composition_info: None,
             audio_engine,
             audio_player_node,
+            window_id,
         })
     }
 

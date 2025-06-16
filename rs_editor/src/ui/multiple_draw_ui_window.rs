@@ -43,6 +43,7 @@ pub struct MultipleDrawUiWindow {
     camera_movement_speed: f32,
     camera_motion_speed: f32,
     input_mode: EInputMode,
+    window_id: isize,
 }
 
 impl UIWindow for MultipleDrawUiWindow {
@@ -164,6 +165,10 @@ impl UIWindow for MultipleDrawUiWindow {
             _ => {}
         }
     }
+
+    fn get_window_id(&self) -> isize {
+        self.window_id
+    }
 }
 
 impl MultipleDrawUiWindow {
@@ -173,9 +178,13 @@ impl MultipleDrawUiWindow {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
     ) -> anyhow::Result<MultipleDrawUiWindow> {
-        let window_context =
-            window_manager.spwan_new_window(EWindowType::MultipleDraw, event_loop_window_target)?;
+        let window_context = window_manager.spwan_new_window(
+            EWindowType::MultipleDraw,
+            event_loop_window_target,
+            None,
+        )?;
         let window = &*window_context.window.borrow();
+        let window_id = window_context.get_id();
 
         engine
             .set_new_window(
@@ -243,6 +252,7 @@ impl MultipleDrawUiWindow {
             camera_movement_speed: 0.01,
             camera_motion_speed: 0.1,
             input_mode,
+            window_id,
         })
     }
 

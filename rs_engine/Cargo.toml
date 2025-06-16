@@ -12,13 +12,11 @@ editor = [
     "rs_render/editor",
     "rs_core_minimal/editor",
     "dep:anyhow",
-    "network",
 ]
 standalone = [
     "rs_shader_compiler_core/standalone",
     "rs_render/standalone",
     "rs_core_minimal/standalone",
-    "network",
 ]
 profiler = ["tracy-client/enable", "rs_render/profiler"]
 plugin_shared_crate = []
@@ -30,6 +28,7 @@ md-5 = { version = "0.10.6" }
 anyhow = { version = "1.0.98", optional = true }
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.140"
+bincode = { version = "2.0.1", features = ["serde"] }
 chrono = "0.4.41"
 log = "0.4.27"
 env_logger = "0.11.8"
