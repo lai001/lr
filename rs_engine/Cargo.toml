@@ -52,7 +52,7 @@ uuid = { version = "1.17.0", features = [
 rand = { version = "0.9.1" }
 tracy-client = { version = "0.18.0", default-features = false }
 rapier3d = { version = "0.26.1", features = ["simd-stable", "serde-serialize"] }
-uniform-cubic-splines = { version = "0.3" }
+uniform-cubic-splines = { version = "=0.3.1" }
 dyn-clone = "1.0.19"
 downcast-rs = "2.0.1"
 meshopt = "0.4.1"

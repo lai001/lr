@@ -2,6 +2,7 @@ use crate::{
     content::{content_file_type::EContentFileType, level::Level},
     engine::Engine,
     player_viewport::PlayerViewport,
+    standalone::application::Application,
 };
 
 pub trait Plugin {
@@ -16,10 +17,9 @@ pub trait Plugin {
     fn tick(
         &mut self,
         engine: &mut Engine,
-        level: &mut Level,
         ctx: egui::Context,
-        player_viewport: &mut PlayerViewport,
         files: &[EContentFileType],
+        application: &mut Application,
     );
 
     #[cfg(not(target_os = "android"))]

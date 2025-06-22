@@ -11,8 +11,6 @@ use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
 use std::{collections::HashMap, path::Path};
 use winit::event::{Event, WindowEvent};
 
-include!("../../build/target/generated/rs_desktop_standalone/load_plugins.generated.rs");
-
 pub struct ApplicationContext {
     engine: Engine,
     egui_winit_state: egui_winit::State,
@@ -84,7 +82,7 @@ impl ApplicationContext {
             .collect();
 
         #[cfg(feature = "plugin_shared_crate")]
-        let plugins = LoadPlugins::load();
+        let plugins = rs_proc_macros::load_static_plugins!(rs_desktop_standalone);
         let app = rs_engine::standalone::application::Application::new(
             window_id,
             window_width,

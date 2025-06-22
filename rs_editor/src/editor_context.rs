@@ -1731,7 +1731,17 @@ impl EditorContext {
         };
         let active_level = &level.borrow();
         #[cfg(feature = "plugin_shared_crate")]
-        let plugins = self.try_create_plugin().map_or(vec![], |x| vec![x]);
+        let plugins = {
+            let dynamic_plugins = self.try_create_plugin().map_or(vec![], |x| vec![x]);
+            let static_plugins = rs_proc_macros::load_static_plugins!(rs_editor);
+            if static_plugins.is_empty() {
+                log::trace!("Using dynamic plugins");
+                dynamic_plugins
+            } else {
+                log::trace!("Using static plugins");
+                static_plugins
+            }
+        };
         let contents = self.get_all_contents();
         let ui_window = StandaloneUiWindow::new(
             self.editor_ui.egui_context.clone(),

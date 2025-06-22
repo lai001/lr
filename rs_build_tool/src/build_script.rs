@@ -2,8 +2,9 @@ use crate::{
     cli::{ProfileType, ProjectArgs},
     load_plugins::create_load_plugins_file,
     toml_edit::{
-        add_plugin_dependencies_document_mut, add_plugin_dependencies_file, disable_dylib_file,
-        enable_dylib_file, fix_dylib_document_mut, remove_plugin_dependencies_file,
+        add_network_feature, add_plugin_dependencies_document_mut, add_plugin_dependencies_file,
+        disable_dylib_file, enable_dylib_file, file_remove_network_feature, fix_dylib_document_mut,
+        remove_plugin_dependencies_file,
     },
 };
 use anyhow::anyhow;
@@ -29,7 +30,9 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
         .ok_or(anyhow!("No project name"))?;
 
     let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();
-
+    for name in vec!["rs_desktop_standalone", "rs_editor"] {
+        create_load_plugins_file(name, None, true)?;
+    }
     match &project_args.mode_type {
         crate::cli::ModeType::Editor => {
             let crate_names = vec!["rs_engine", "rs_render"];
@@ -37,21 +40,29 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
                 .iter()
                 .map(|x| engine_root_dir.join(x).join("Cargo.toml"));
 
-            for path in manifest_files.clone() {
-                enable_dylib_file(&path)?;
-            }
+            if project_args.is_enable_dylib {
+                for path in manifest_files.clone() {
+                    enable_dylib_file(&path)?;
+                }
 
-            enable_dylib_file(&projcet_folder.join("Cargo.toml"))?;
+                enable_dylib_file(&projcet_folder.join("Cargo.toml"))?;
+            }
 
             {
                 let editor_manifest_file = engine_root_dir.join("rs_editor/Cargo.toml");
                 let content = std::fs::read_to_string(&editor_manifest_file)?;
                 let mut doc = content.parse::<DocumentMut>()?;
                 add_plugin_dependencies_document_mut(&mut doc, project_name, &projcet_folder)?;
-                fix_dylib_document_mut(&mut doc);
+                add_network_feature(&mut doc, project_name)?;
+                if project_args.is_enable_dylib {
+                    fix_dylib_document_mut(&mut doc);
+                }
                 std::fs::write(&editor_manifest_file, doc.to_string())?;
             }
-
+            if !project_args.is_enable_dylib {
+                create_load_plugins_file("rs_editor", Some(project_name.to_string()), true)?;
+                return Ok(());
+            }
             let old_dir = std::env::current_dir()?;
             std::env::set_current_dir(engine_root_dir.join("rs_editor"))?;
             let mut command = std::process::Command::new("cargo");
@@ -159,9 +170,12 @@ pub fn clean(project_args: &ProjectArgs) -> anyhow::Result<()> {
 
     let manifest_file = engine_root_dir.join("rs_editor/Cargo.toml");
     remove_plugin_dependencies_file(&manifest_file, project_name)?;
+    file_remove_network_feature(&manifest_file, project_name)?;
     let manifest_file = engine_root_dir.join("rs_desktop_standalone/Cargo.toml");
     remove_plugin_dependencies_file(&manifest_file, project_name)?;
-    create_load_plugins_file("rs_desktop_standalone", None, true)?;
+    for name in vec!["rs_desktop_standalone", "rs_editor"] {
+        create_load_plugins_file(name, None, true)?;
+    }
     let project_manifest_file = projcet_folder.join("Cargo.toml");
     disable_dylib_file(&project_manifest_file)?;
     Ok(())

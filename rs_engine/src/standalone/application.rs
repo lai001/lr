@@ -25,7 +25,7 @@ pub struct Application {
     current_active_level: SingleThreadMutType<Level>,
     _contents: Vec<EContentFileType>,
     #[cfg(feature = "plugin_shared_crate")]
-    plugins: Vec<Box<dyn Plugin>>,
+    plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
     #[cfg(feature = "network")]
     pub is_authority: bool,
     #[cfg(feature = "network")]
@@ -80,7 +80,7 @@ impl Application {
             _window_id: window_id,
             player_view_port,
             #[cfg(feature = "plugin_shared_crate")]
-            plugins,
+            plugins: SingleThreadMut::new(plugins),
             current_active_level: SingleThreadMut::new(current_active_level),
             _contents: contents,
             #[cfg(feature = "network")]
@@ -96,8 +96,11 @@ impl Application {
     pub fn on_device_event(&mut self, device_event: &winit::event::DeviceEvent) {
         self.player_view_port.on_device_event(device_event);
         #[cfg(feature = "plugin_shared_crate")]
-        for plugin in self.plugins.iter_mut() {
-            plugin.on_device_event(device_event);
+        {
+            let mut plugins = self.plugins.borrow_mut();
+            for plugin in plugins.iter_mut() {
+                plugin.on_device_event(device_event);
+            }
         }
     }
 
@@ -114,9 +117,12 @@ impl Application {
         #[cfg(not(feature = "plugin_shared_crate"))]
         let consume = vec![];
         #[cfg(feature = "plugin_shared_crate")]
-        for plugin in self.plugins.iter_mut() {
-            let mut plugin_consume = plugin.on_window_input(window, ty.clone());
-            consume.append(&mut plugin_consume);
+        {
+            let mut plugins = self.plugins.borrow_mut();
+            for plugin in plugins.iter_mut() {
+                let mut plugin_consume = plugin.on_window_input(window, ty.clone());
+                consume.append(&mut plugin_consume);
+            }
         }
         consume
     }
@@ -187,6 +193,20 @@ impl Application {
             }
         }
 
+        #[cfg(not(target_os = "android"))]
+        self.player_view_port
+            .on_window_input(crate::input_type::EInputType::KeyboardInput(
+                virtual_key_code_states,
+            ));
+
+        #[cfg(feature = "plugin_shared_crate")]
+        {
+            let plugins = self.plugins.clone();
+            let mut plugins = plugins.borrow_mut();
+            for plugin in plugins.iter_mut() {
+                plugin.tick(engine, ctx.clone(), &self._contents.clone(), self);
+            }
+        }
         let mut active_level = self.current_active_level.borrow_mut();
         #[cfg(feature = "network")]
         {
@@ -206,23 +226,6 @@ impl Application {
                     }
                 }
             }
-        }
-
-        #[cfg(not(target_os = "android"))]
-        self.player_view_port
-            .on_window_input(crate::input_type::EInputType::KeyboardInput(
-                virtual_key_code_states,
-            ));
-
-        #[cfg(feature = "plugin_shared_crate")]
-        for plugin in self.plugins.iter_mut() {
-            plugin.tick(
-                engine,
-                &mut active_level,
-                ctx.clone(),
-                &mut self.player_view_port,
-                &self._contents,
-            );
         }
 
         self.player_view_port.update_global_constants(engine);
@@ -328,6 +331,14 @@ impl Application {
 
     #[cfg(feature = "plugin_shared_crate")]
     pub fn reload_plugins(&mut self, plugins: Vec<Box<dyn Plugin>>) {
-        self.plugins = plugins;
+        *self.plugins.borrow_mut() = plugins;
+    }
+
+    pub fn current_active_level(&self) -> SingleThreadMutType<Level> {
+        self.current_active_level.clone()
+    }
+
+    pub fn player_view_port_mut(&mut self) -> &mut PlayerViewport {
+        &mut self.player_view_port
     }
 }

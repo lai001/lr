@@ -22,14 +22,16 @@ pub struct ProjectFilesArgs {
 
 #[derive(Debug, Clone, Args)]
 pub struct ProjectArgs {
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     pub is_enable: bool,
-    #[arg(short, long)]
+    #[arg(long)]
     pub project_file: std::path::PathBuf,
     #[arg(short, long)]
     pub mode_type: ModeType,
-    #[arg(short, long)]
+    #[arg(long)]
     pub profile_type: ProfileType,
+    #[arg(long, default_value_t = false)]
+    pub is_enable_dylib: bool,
 }
 
 #[derive(Parser, Debug, Clone)]

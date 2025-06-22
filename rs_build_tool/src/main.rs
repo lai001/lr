@@ -381,11 +381,9 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Cli::CreateDefaultLoadPluginsFile => {
-            rs_build_tool::load_plugins::create_load_plugins_file(
-                "rs_desktop_standalone",
-                None,
-                false,
-            )?;
+            for name in vec!["rs_desktop_standalone", "rs_editor"] {
+                rs_build_tool::load_plugins::create_load_plugins_file(name, None, false)?;
+            }
         }
     }
 

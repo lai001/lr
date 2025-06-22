@@ -114,7 +114,11 @@ impl Project {
     fn create_lib_file(project_parent_folder: &Path, project_name: &str) -> anyhow::Result<()> {
         let project_folder = project_parent_folder.join(project_name);
         let lib_file_path = project_folder.join(SRC_FOLDER_NAME).join("lib.rs");
-        let content = get_lib_template();
+        let mut content = get_lib_template().to_string();
+        content = content.replace(
+            "@symbol_name@",
+            rs_engine::plugin::symbol_name::CREATE_PLUGIN,
+        );
         let mut file = std::fs::File::create(lib_file_path)?;
         Ok(file.write_fmt(format_args!("{}", content))?)
     }
@@ -127,7 +131,7 @@ impl Project {
         let project_folder = project_parent_folder.join(project_name);
         let lib_file_path = project_folder.join(SRC_FOLDER_NAME).join("my_plugin.rs");
         let content =
-            fill_my_plugin_template(project_name, rs_engine::plugin::symbol_name::CREATE_PLUGIN);
+            fill_my_plugin_template(project_name);
         let mut file = std::fs::File::create(lib_file_path)?;
         Ok(file.write_fmt(format_args!("{}", content))?)
     }
@@ -242,15 +246,21 @@ standalone = [
     "rs_core_minimal/standalone",
 ]
 profiler = ["rs_engine/profiler", "rs_render/profiler"]
+network = ["dep:rs_network", "rs_engine/network"]
+lr_plugin = []
 
 [dependencies]
 egui = { version = "0.31.1" }
-log = "0.4.26"
+log = "0.4.27"
 rs_engine = { path = "@engine_path@/rs_engine" }
 rs_render = { path = "@engine_path@/rs_render" }
 rs_audio = { path = "@engine_path@/rs_audio" }
 rs_core_minimal = { path = "@engine_path@/rs_core_minimal" }
 rs_foundation = { path = "@engine_path@/rs_foundation" }
+rs_network = { path = "@engine_path@/crates/rs_network", optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winit = { version = "0.30.11" }
 
 [lib]
 crate-type = ["dylib"]
@@ -270,6 +280,13 @@ pub struct MyPlugin {}
 impl Plugin for MyPlugin {
 
 }
+    "#;
+}
+
+fn get_lib_template() -> &'static str {
+    return r#"pub mod my_plugin;
+use crate::my_plugin::MyPlugin;
+use rs_engine::plugin::plugin_crate::Plugin;
 
 #[no_mangle]
 pub fn @symbol_name@() -> Box<dyn Plugin> {
@@ -279,16 +296,10 @@ pub fn @symbol_name@() -> Box<dyn Plugin> {
     "#;
 }
 
-fn get_lib_template() -> &'static str {
-    return r#"pub mod my_plugin;
-    "#;
-}
-
 #[cfg(feature = "plugin_shared_crate")]
-fn fill_my_plugin_template(name: &str, symbol_name: &str) -> String {
+fn fill_my_plugin_template(name: &str) -> String {
     let mut template = get_my_plugin_template().to_string();
     template = template.replace("@name@", name);
-    template = template.replace("@symbol_name@", symbol_name);
     template
 }
 

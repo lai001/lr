@@ -99,3 +99,67 @@ pub fn remove_plugin_dependencies_file(path: &Path, name: &str) -> anyhow::Resul
     std::fs::write(path, doc.to_string())?;
     Ok(())
 }
+
+pub fn add_network_feature(doc: &mut DocumentMut, project_name: &str) -> anyhow::Result<()> {
+    let network_items = doc["features"]["network"]
+        .as_array_mut()
+        .ok_or(anyhow!("Not a array"))?;
+    let item = format!("{}/network", project_name);
+    let mut is_contains = false;
+    for network_item in network_items.iter() {
+        if let Some(s) = network_item.as_str() {
+            if s == item {
+                is_contains = true;
+                break;
+            }
+        }
+    }
+    if !is_contains {
+        network_items.push(item);
+    }
+    Ok(())
+}
+
+pub fn remove_network_feature(doc: &mut DocumentMut, project_name: &str) -> anyhow::Result<()> {
+    let network_items = doc["features"]["network"]
+        .as_array_mut()
+        .ok_or(anyhow!("Not a array"))?;
+    let item = format!("{}/network", project_name);
+    network_items.retain(|x| {
+        if let Some(s) = x.as_str() {
+            s != item
+        } else {
+            true
+        }
+    });
+    Ok(())
+}
+
+pub fn file_remove_network_feature(path: &Path, project_name: &str) -> anyhow::Result<()> {
+    let contents = std::fs::read_to_string(path)?;
+    let mut doc = contents.parse::<DocumentMut>()?;
+    remove_network_feature(&mut doc, project_name)?;
+    std::fs::write(path, doc.to_string())?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use crate::toml_edit::{add_network_feature, remove_network_feature};
+
+    #[test]
+    fn test_case() {
+        let contents = r#"[features]
+network = ["dep:rs_network"]"#;
+        let mut doc = contents.parse::<toml_edit::DocumentMut>().unwrap();
+        add_network_feature(&mut doc, "rs_engine").unwrap();
+        assert_eq!(
+            doc.to_string().trim(),
+            r#"[features]
+network = ["dep:rs_network", "rs_engine/network"]"#
+        );
+
+        remove_network_feature(&mut doc, "rs_engine").unwrap();
+        assert_eq!(doc.to_string().trim(), contents);
+    }
+}
