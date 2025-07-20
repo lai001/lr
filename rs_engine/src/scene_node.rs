@@ -340,6 +340,15 @@ impl SceneNode {
         SingleThreadMut::new(Self::new(name))
     }
 
+    pub fn static_mesh_component_node(
+        component: SingleThreadMutType<StaticMeshComponent>,
+    ) -> SingleThreadMutType<SceneNode> {
+        SingleThreadMut::new(SceneNode {
+            component: EComponentType::StaticMeshComponent(component),
+            childs: vec![],
+        })
+    }
+
     pub fn get_aabb(&self) -> Option<rapier3d::prelude::Aabb> {
         match &self.component {
             EComponentType::SceneComponent(_) => None,

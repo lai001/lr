@@ -1,4 +1,4 @@
-use crate::{client::Client, codec::Encoder, length_prefix_encoder::LengthPrefixEncoder};
+use crate::client::Client;
 use std::{
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
@@ -10,7 +10,6 @@ use std::{
 
 pub struct Server {
     clients: Vec<Client>,
-    encoder: LengthPrefixEncoder,
     recciver: std::sync::mpsc::Receiver<TcpStream>,
     shutdown: Arc<AtomicBool>,
     addr: SocketAddr,
@@ -53,9 +52,7 @@ impl Server {
             })
             .map_err(|err| crate::error::Error::IO(err, None))?;
 
-        let encoder = LengthPrefixEncoder::new(rs_artifact::EEndianType::Little);
         Ok(Server {
-            encoder,
             clients: Vec::new(),
             recciver,
             shutdown: shutdown,
@@ -84,9 +81,8 @@ impl Server {
     }
 
     pub fn broadcast(&mut self, data: &[u8]) {
-        let encoded = self.encoder.encode(data).unwrap();
         for client in &mut self.clients {
-            client.write(encoded.clone());
+            client.write(data.to_vec());
         }
     }
 

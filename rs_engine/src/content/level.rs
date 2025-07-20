@@ -17,7 +17,6 @@ use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use rs_core_minimal::name_generator::make_unique_name;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
@@ -139,14 +138,248 @@ pub struct Runtime {
     pub is_simulate: bool,
 }
 
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+pub enum ReplicatedFieldType {
+    IsVisible,
+    Transformation,
+}
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+pub enum RemoteCallType {
+    AddActor,
+}
+
+#[cfg(feature = "network")]
+impl RemoteCallType {
+    pub fn expected_parameter_length(&self) -> usize {
+        match self {
+            RemoteCallType::AddActor => 1,
+        }
+    }
+}
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+pub struct RemoteCall {
+    pub ty: RemoteCallType,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[cfg(feature = "network")]
+impl RemoteCall {
+    pub fn is_valid_args_len(&self) -> bool {
+        self.ty.expected_parameter_length() == self.args.len()
+    }
+}
+
+#[cfg(feature = "network")]
+type TransmissionType = std::collections::HashMap<ReplicatedFieldType, Vec<u8>>;
+#[cfg(feature = "network")]
+type RemoteCallsType = Vec<RemoteCall>;
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct NetworkFields {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    net_id: Option<uuid::Uuid>,
+    #[serde(default = "bool::default")]
+    pub is_replicated: bool,
+    #[serde(skip)]
+    pub newly_added_actors: Vec<SingleThreadMutType<Actor>>,
+    #[serde(skip)]
+    pub waiting_sync_added_actors: Vec<SingleThreadMutType<Actor>>,
+    #[serde(skip)]
+    replicated_datas: TransmissionType,
+    #[serde(skip)]
+    remote_calls: RemoteCallsType,
+    #[serde(skip)]
+    is_sync_with_server: bool,
+    #[serde(skip)]
+    pub(crate) is_server: bool,
+}
+
+#[cfg(feature = "network")]
+impl NetworkFields {
+    pub fn new() -> NetworkFields {
+        NetworkFields {
+            net_id: Some(crate::network::default_uuid()),
+            is_replicated: false,
+            newly_added_actors: Vec::new(),
+            waiting_sync_added_actors: Vec::new(),
+            replicated_datas: TransmissionType::new(),
+            remote_calls: RemoteCallsType::new(),
+            is_sync_with_server: false,
+            is_server: false,
+        }
+    }
+
+    pub fn add_new_actors(&mut self, mut actors: Vec<SingleThreadMutType<Actor>>) {
+        // FIXME: A network ID generated locally should not be used
+        let exists = self.waiting_sync_added_actors.clone();
+        actors.retain_mut(|x| {
+            for exist in exists.iter() {
+                if Rc::ptr_eq(&x, exist) {
+                    return false;
+                }
+            }
+            return true;
+        });
+        let exists = self.newly_added_actors.clone();
+        actors.retain_mut(|x| {
+            for exist in exists.iter() {
+                if Rc::ptr_eq(&x, exist) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        if actors.is_empty() {
+            return;
+        }
+        for actor in actors.iter_mut() {
+            let actor = actor.borrow();
+            debug_assert_ne!(actor.network_fields.net_id, None);
+            debug_assert_eq!(actor.is_sync_with_server(), false);
+        }
+        let arg_data = match rs_artifact::bincode_legacy::serialize::<Vec<SingleThreadMutType<Actor>>>(
+            &actors, None,
+        ) {
+            Ok(arg_data) => arg_data,
+            Err(err) => {
+                log::warn!("{err}");
+                return;
+            }
+        };
+        let call = RemoteCall {
+            ty: RemoteCallType::AddActor,
+            args: vec![arg_data],
+        };
+        debug_assert!(call.is_valid_args_len());
+        self.remote_calls.push(call);
+        if self.is_server {
+            for actor in actors.iter_mut() {
+                let mut actor = actor.borrow_mut();
+                actor.sync_with_server(true);
+            }
+            self.newly_added_actors.append(&mut actors);
+        } else {
+            self.waiting_sync_added_actors.append(&mut actors);
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.replicated_datas.drain();
+    }
+
+    fn reset_calls(&mut self) {
+        self.remote_calls.clear();
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Level {
     pub url: url::Url,
-    pub actors: Vec<Rc<RefCell<crate::actor::Actor>>>,
+    pub actors: Vec<SingleThreadMutType<Actor>>,
     pub directional_lights: Vec<SingleThreadMutType<DirectionalLight>>,
-
+    #[cfg(feature = "network")]
+    #[serde(default)]
+    pub network_fields: NetworkFields,
     #[serde(skip)]
     runtime: Option<Runtime>,
+}
+
+#[cfg(feature = "network")]
+impl crate::network::NetworkReplicated for Level {
+    fn get_network_id(&self) -> &uuid::Uuid {
+        self.network_fields.net_id.as_ref().expect("A valid id")
+    }
+
+    fn set_network_id(&mut self, network_id: uuid::Uuid) {
+        self.network_fields.net_id = Some(network_id);
+    }
+
+    fn is_replicated(&self) -> bool {
+        self.network_fields.is_replicated
+    }
+
+    fn set_replicated(&mut self, is_replicated: bool) {
+        self.network_fields.is_replicated = is_replicated;
+    }
+
+    fn debug_name(&self) -> Option<String> {
+        Some(format!("Level: {}", &self.url.get_name_in_editor()))
+    }
+
+    fn call(&mut self) -> Vec<u8> {
+        if self.network_fields.remote_calls.is_empty() {
+            return vec![];
+        }
+        let encoded_data = rs_artifact::bincode_legacy::serialize::<RemoteCallsType>(
+            &self.network_fields.remote_calls,
+            None,
+        );
+        if let Err(err) = &encoded_data {
+            log::warn!("{}", err);
+        }
+        self.network_fields.reset_calls();
+        encoded_data.unwrap_or_default()
+    }
+
+    fn on_call(&mut self, data: &Vec<u8>) {
+        let reuslt: rs_artifact::error::Result<()> = (|| {
+            let calls_data =
+                rs_artifact::bincode_legacy::deserialize::<RemoteCallsType>(&data, None)?;
+            for call_data in calls_data {
+                match call_data.ty {
+                    RemoteCallType::AddActor => {
+                        if call_data.is_valid_args_len() {
+                            let mut actors =
+                                rs_artifact::bincode_legacy::deserialize::<
+                                    Vec<SingleThreadMutType<Actor>>,
+                                >(&call_data.args[0], None)?;
+                            for actor in &mut actors {
+                                let mut is_added = false;
+                                for waiting_sync_actor in
+                                    self.network_fields.waiting_sync_added_actors.clone()
+                                {
+                                    let clone = waiting_sync_actor.clone();
+                                    let actor = actor.borrow();
+                                    let mut waiting_sync_actor = waiting_sync_actor.borrow_mut();
+                                    if actor.get_network_id() == waiting_sync_actor.get_network_id()
+                                    {
+                                        waiting_sync_actor.sync_with_server(true);
+                                        self.network_fields.newly_added_actors.push(clone);
+                                        is_added = true;
+                                    }
+                                }
+                                if !is_added {
+                                    self.network_fields.newly_added_actors.push(actor.clone());
+                                }
+                            }
+                            self.network_fields
+                                .waiting_sync_added_actors
+                                .retain(|x| x.borrow().is_sync_with_server() == false);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })();
+        if let Err(err) = reuslt {
+            log::warn!("{}", err);
+        }
+    }
+
+    fn sync_with_server(&mut self, is_sync: bool) {
+        self.network_fields.is_sync_with_server = is_sync;
+    }
+
+    fn is_sync_with_server(&self) -> bool {
+        self.network_fields.is_sync_with_server
+    }
 }
 
 impl Asset for Level {
@@ -169,6 +402,8 @@ impl Level {
                 physics: Self::default_physics(),
                 is_simulate: false,
             }),
+            #[cfg(feature = "network")]
+            network_fields: NetworkFields::new(),
         }
     }
 
@@ -224,6 +459,10 @@ impl Level {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
+        #[cfg(feature = "network")]
+        if self.network_fields.net_id.is_none() {
+            self.set_network_id(crate::network::default_uuid());
+        }
         for light in self.directional_lights.iter_mut() {
             let mut light = light.borrow_mut();
             light.initialize(engine, player_viewport);
@@ -728,22 +967,47 @@ impl Level {
         }
     }
 
-    #[cfg(feature = "network")]
+    pub fn is_actor_name_exists(&self, name: &str) -> bool {
+        for actor in self.actors.iter() {
+            let actor = actor.borrow();
+            if name == actor.name {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+#[cfg(feature = "network")]
+impl Level {
     pub fn visit_network_replicated_mut(
         &mut self,
         visit: &mut impl FnMut(&mut dyn NetworkReplicated),
     ) {
+        visit(self);
         for actor in self.actors.clone() {
             let mut actor = actor.borrow_mut();
             actor.visit_network_replicated_mut(visit);
         }
     }
 
-    #[cfg(feature = "network")]
     pub fn visit_network_replicated(&self, visit: &impl Fn(&dyn NetworkReplicated)) {
+        visit(self);
         for actor in self.actors.clone() {
             let actor = actor.borrow();
             actor.visit_network_replicated(visit);
+        }
+    }
+
+    pub fn process_added_net_actors(
+        &mut self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
+        if !self.network_fields.newly_added_actors.is_empty() {
+            let actors = self.network_fields.newly_added_actors.drain(..).collect();
+            self.add_new_actors(engine, actors, &files, player_viewport);
         }
     }
 }

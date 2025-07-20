@@ -1,11 +1,35 @@
 pub trait NetworkReplicated {
     fn get_network_id(&self) -> &uuid::Uuid;
+
     fn set_network_id(&mut self, network_id: uuid::Uuid);
+
     fn is_replicated(&self) -> bool;
+
     fn set_replicated(&mut self, is_replicated: bool);
-    fn on_replicated(&mut self) -> Vec<u8>;
-    fn on_sync(&mut self, data: &Vec<u8>);
-    fn debug_name(&self) -> Option<String>;
+
+    fn on_replicated(&mut self) -> Vec<u8> {
+        vec![]
+    }
+
+    fn on_sync(&mut self, data: &Vec<u8>) {
+        let _ = data;
+    }
+
+    fn call(&mut self) -> Vec<u8> {
+        vec![]
+    }
+
+    fn on_call(&mut self, data: &Vec<u8>) {
+        let _ = data;
+    }
+
+    fn debug_name(&self) -> Option<String> {
+        None
+    }
+
+    fn sync_with_server(&mut self, is_sync: bool);
+
+    fn is_sync_with_server(&self) -> bool;
 }
 
 pub(crate) fn default_uuid() -> uuid::Uuid {

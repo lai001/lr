@@ -393,4 +393,13 @@ impl UIWindow for BlendAnimationUIWindow {
     fn get_window_id(&self) -> isize {
         self.window_id
     }
+
+    fn show_viewport_deferred(&self) {
+        let viewport_id = self.egui_winit_state.egui_input().viewport_id;
+        self.egui_winit_state.egui_ctx().show_viewport_deferred(
+            viewport_id,
+            egui::ViewportBuilder::default(),
+            |_, _| {},
+        );
+    }
 }

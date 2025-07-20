@@ -1,6 +1,7 @@
 use crate::{
-    codec::{Decoder, Message},
+    codec::{Decoder, Encoder, Message},
     length_prefix_decoder::LengthPrefixDecoder,
+    length_prefix_encoder::LengthPrefixEncoder,
 };
 use std::{
     io::{Read, Write},
@@ -15,6 +16,7 @@ use std::{
 pub struct Client {
     recciver: std::sync::mpsc::Receiver<Vec<u8>>,
     sender: std::sync::mpsc::Sender<Vec<u8>>,
+    encoder: LengthPrefixEncoder,
     decoder: LengthPrefixDecoder,
     shutdown: Arc<AtomicBool>,
 }
@@ -135,23 +137,30 @@ impl Client {
             .map_err(|err| crate::error::Error::IO(err, None))?;
 
         let decoder = LengthPrefixDecoder::new();
+        let encoder = LengthPrefixEncoder::new(rs_artifact::EEndianType::Little);
+
         Ok(Client {
             recciver,
+            sender: sender1,
+            encoder,
             decoder,
             shutdown,
-            sender: sender1,
         })
     }
 
     pub fn take_messages(&mut self) -> Vec<Message> {
         while let Ok(data) = self.recciver.try_recv() {
-            let _ = self.decoder.decode(data);
+            let result = self.decoder.decode(data);
+            if let Err(err) = result {
+                log::warn!("{}", err);
+            }
         }
         self.decoder.take_messages()
     }
 
     pub fn write(&mut self, buf: Vec<u8>) {
-        match self.sender.send(buf) {
+        let encoded = self.encoder.encode(&buf).unwrap();
+        match self.sender.send(encoded) {
             Ok(_) => {}
             Err(err) => {
                 log::warn!("Write, {err}");

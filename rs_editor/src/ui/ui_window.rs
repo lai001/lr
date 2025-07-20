@@ -17,4 +17,6 @@ pub trait UIWindow {
     );
 
     fn get_window_id(&self) -> isize;
+
+    fn show_viewport_deferred(&self);
 }

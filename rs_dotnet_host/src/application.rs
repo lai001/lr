@@ -12,13 +12,13 @@ pub type ApplicationRedrawRequested = unsafe extern "C" fn(
 );
 
 pub type ApplicationKeyboardInput =
-    unsafe extern "C" fn(appPtr: RuntimeInstanceType, keyboard_input: NativeKeyboardInput);
+    unsafe extern "C" fn(app_ptr: RuntimeInstanceType, keyboard_input: NativeKeyboardInput);
 
 pub type ApplicationCursorMoved =
-    unsafe extern "C" fn(appPtr: RuntimeInstanceType, position: glam::DVec2);
+    unsafe extern "C" fn(app_ptr: RuntimeInstanceType, position: glam::DVec2);
 
 pub type ApplicationTick =
-    unsafe extern "C" fn(appPtr: RuntimeInstanceType, engine: *mut rs_engine::ffi::engine::Engine);
+    unsafe extern "C" fn(app_ptr: RuntimeInstanceType, engine: *mut rs_engine::ffi::engine::Engine);
 
 #[repr(C)]
 #[derive(Debug)]

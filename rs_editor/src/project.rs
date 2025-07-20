@@ -36,14 +36,16 @@ impl Project {
         Self::create_empty_project_folders(project_parent_folder, project_name)?;
         Self::create_empty_project_file_to_disk(&project_parent_folder, project_name)?;
         Self::create_cargo_toml_file(project_parent_folder, project_name)?;
-        Self::create_lib_file(project_parent_folder, project_name)?;
         Self::create_cargo_config_toml_file(project_parent_folder, project_name)?;
         Self::create_dotnet_script_file(project_parent_folder, project_name)?;
         Self::create_dotnet_project_file(project_parent_folder, project_name)?;
         Self::create_sln_file(project_parent_folder, project_name)?;
         Self::create_js_script_file(project_parent_folder, project_name)?;
         #[cfg(feature = "plugin_shared_crate")]
-        Self::create_my_plugin_file(project_parent_folder, project_name)?;
+        {
+            Self::create_my_plugin_file(project_parent_folder, project_name)?;
+            Self::create_lib_file(project_parent_folder, project_name)?;
+        }
         let project_folder = project_parent_folder.join(project_name);
         let project_file_path =
             project_folder.join(format!("{}.{}", project_name, PROJECT_FILE_EXTENSION));
@@ -111,6 +113,7 @@ impl Project {
         Ok(file.write_fmt(format_args!("{}", content))?)
     }
 
+    #[cfg(feature = "plugin_shared_crate")]
     fn create_lib_file(project_parent_folder: &Path, project_name: &str) -> anyhow::Result<()> {
         let project_folder = project_parent_folder.join(project_name);
         let lib_file_path = project_folder.join(SRC_FOLDER_NAME).join("lib.rs");
@@ -130,8 +133,7 @@ impl Project {
     ) -> anyhow::Result<()> {
         let project_folder = project_parent_folder.join(project_name);
         let lib_file_path = project_folder.join(SRC_FOLDER_NAME).join("my_plugin.rs");
-        let content =
-            fill_my_plugin_template(project_name);
+        let content = fill_my_plugin_template(project_name);
         let mut file = std::fs::File::create(lib_file_path)?;
         Ok(file.write_fmt(format_args!("{}", content))?)
     }
@@ -283,6 +285,7 @@ impl Plugin for MyPlugin {
     "#;
 }
 
+#[cfg(feature = "plugin_shared_crate")]
 fn get_lib_template() -> &'static str {
     return r#"pub mod my_plugin;
 use crate::my_plugin::MyPlugin;

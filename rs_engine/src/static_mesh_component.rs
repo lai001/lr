@@ -12,7 +12,7 @@ use crate::{
 };
 use rapier3d::prelude::*;
 use rs_artifact::static_mesh::StaticMesh;
-use rs_foundation::new::SingleThreadMutType;
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "network")]
 use std::collections::HashMap;
@@ -62,6 +62,8 @@ pub struct NetworkFields {
     pub is_replicated: bool,
     #[serde(skip)]
     replicated_datas: TransmissionType,
+    #[serde(skip)]
+    is_sync_with_server: bool,
 }
 
 #[cfg(feature = "network")]
@@ -71,6 +73,7 @@ impl NetworkFields {
             net_id: Some(network::default_uuid()),
             is_replicated: false,
             replicated_datas: TransmissionType::new(),
+            is_sync_with_server: false,
         }
     }
 
@@ -163,6 +166,14 @@ impl crate::network::NetworkReplicated for StaticMeshComponent {
     fn debug_name(&self) -> Option<String> {
         Some(self.name.clone())
     }
+
+    fn sync_with_server(&mut self, is_sync: bool) {
+        self.network_fields.is_sync_with_server = is_sync;
+    }
+
+    fn is_sync_with_server(&self) -> bool {
+        self.network_fields.is_sync_with_server
+    }
 }
 
 impl StaticMeshComponent {
@@ -222,6 +233,20 @@ impl StaticMeshComponent {
         }
     }
 
+    pub fn new_sp(
+        name: String,
+        static_mesh_url: Option<url::Url>,
+        material_url: Option<url::Url>,
+        transformation: glam::Mat4,
+    ) -> SingleThreadMutType<StaticMeshComponent> {
+        SingleThreadMut::new(Self::new(
+            name,
+            static_mesh_url,
+            material_url,
+            transformation,
+        ))
+    }
+
     pub fn initialize(
         &mut self,
         engine: &mut Engine,
@@ -242,7 +267,9 @@ impl StaticMeshComponent {
                     find_static_mesh = resource_manager
                         .get_static_mesh(&mesh.asset_info.get_url())
                         .ok();
-                    break;
+                    if find_static_mesh.is_some() {
+                        break;
+                    }
                 }
             }
         }
@@ -259,6 +286,18 @@ impl StaticMeshComponent {
         } else {
             None
         };
+
+        if let Some(url) = &self.static_mesh {
+            if find_static_mesh.is_none() {
+                log::warn!("Can not find static mesh {}", url);
+            }
+        }
+
+        if let Some(url) = &self.material_url {
+            if material.is_none() {
+                log::warn!("Can not find material {}", url);
+            }
+        }
 
         if let Some(find_static_mesh) = find_static_mesh {
             let mut draw_object: EDrawObjectType;

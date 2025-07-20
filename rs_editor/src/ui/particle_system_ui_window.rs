@@ -291,6 +291,18 @@ impl UIWindow for ParticleSystemUIWindow {
     fn get_window_id(&self) -> isize {
         self.base_ui_window.window_id
     }
+
+    fn show_viewport_deferred(&self) {
+        let viewport_id = self
+            .base_ui_window
+            .egui_winit_state
+            .egui_input()
+            .viewport_id;
+        self.base_ui_window
+            .egui_winit_state
+            .egui_ctx()
+            .show_viewport_deferred(viewport_id, egui::ViewportBuilder::default(), |_, _| {});
+    }
 }
 
 impl ParticleSystemUIWindow {

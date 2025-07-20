@@ -26,11 +26,13 @@ type TransmissionType = HashMap<ReplicatedFieldType, Vec<u8>>;
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct NetworkFields {
     #[serde(skip_serializing_if = "Option::is_none")]
-    net_id: Option<uuid::Uuid>,
+    pub(crate) net_id: Option<uuid::Uuid>,
     #[serde(default = "bool::default")]
     pub is_replicated: bool,
     #[serde(skip)]
     replicated_datas: TransmissionType,
+    #[serde(skip)]
+    is_sync_with_server: bool,
 }
 
 #[cfg(feature = "network")]
@@ -40,6 +42,7 @@ impl NetworkFields {
             net_id: Some(network::default_uuid()),
             is_replicated: false,
             replicated_datas: TransmissionType::new(),
+            is_sync_with_server: false,
         }
     }
 
@@ -84,7 +87,16 @@ impl crate::network::NetworkReplicated for Actor {
     }
 
     fn debug_name(&self) -> Option<String> {
-        Some(self.name.clone())
+        Some(format!("Actor: {}", &self.name))
+    }
+
+    fn sync_with_server(&mut self, is_sync: bool) {
+        self.network_fields.is_sync_with_server = is_sync;
+        self.mark_all_components_as_sync();
+    }
+
+    fn is_sync_with_server(&self) -> bool {
+        self.network_fields.is_sync_with_server
     }
 }
 
@@ -449,8 +461,10 @@ impl Actor {
         }
         copy_scene_node
     }
+}
 
-    #[cfg(feature = "network")]
+#[cfg(feature = "network")]
+impl Actor {
     pub fn visit_network_replicated_mut(
         &mut self,
         visit: &mut impl FnMut(&mut dyn NetworkReplicated),
@@ -473,7 +487,6 @@ impl Actor {
         });
     }
 
-    #[cfg(feature = "network")]
     pub fn visit_network_replicated(&self, visit: &impl Fn(&dyn NetworkReplicated)) {
         Actor::walk_node(self.scene_node.clone(), {
             &|node| {
@@ -490,6 +503,12 @@ impl Actor {
                     EComponentType::PointLightComponent(_) => {}
                 }
             }
+        });
+    }
+
+    pub fn mark_all_components_as_sync(&mut self) {
+        self.visit_network_replicated_mut(&mut |network_replicated| {
+            network_replicated.sync_with_server(true);
         });
     }
 }

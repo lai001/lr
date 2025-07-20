@@ -660,6 +660,12 @@ impl EditorContext {
                 self.process_custom_event(event, &mut *window.borrow_mut());
             }
             Event::WindowEvent { event, window_id } => {
+                if matches!(event, WindowEvent::RedrawRequested) {
+                    for ui_window in &mut ui_windows {
+                        ui_window.show_viewport_deferred();
+                    }
+                }
+
                 let window_id = u64::from(*window_id) as isize;
                 let Some(window_type) = self
                     .window_manager
@@ -1623,22 +1629,6 @@ impl EditorContext {
             log::warn!("{err}");
         }
 
-        if let Some(ui_window) = &mut self.particle_system_ui_window {
-            ui_window
-                .base_ui_window
-                .egui_winit_state
-                .egui_ctx()
-                .show_viewport_deferred(
-                    ui_window
-                        .base_ui_window
-                        .egui_winit_state
-                        .egui_input()
-                        .viewport_id,
-                    egui::ViewportBuilder::default(),
-                    |_, _| {},
-                );
-        }
-
         let gui_render_output =
             crate::ui::misc::ui_end(&mut self.egui_winit_state, window, window_id);
 
@@ -1732,9 +1722,9 @@ impl EditorContext {
         let active_level = &level.borrow();
         #[cfg(feature = "plugin_shared_crate")]
         let plugins = {
-            let dynamic_plugins = self.try_create_plugin().map_or(vec![], |x| vec![x]);
             let static_plugins = rs_proc_macros::load_static_plugins!(rs_editor);
             if static_plugins.is_empty() {
+                let dynamic_plugins = self.try_create_plugin().map_or(vec![], |x| vec![x]);
                 log::trace!("Using dynamic plugins");
                 dynamic_plugins
             } else {

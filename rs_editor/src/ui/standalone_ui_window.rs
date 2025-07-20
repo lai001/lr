@@ -125,6 +125,15 @@ impl UIWindow for StandaloneUiWindow {
     fn get_window_id(&self) -> isize {
         self.window_id
     }
+
+    fn show_viewport_deferred(&self) {
+        let viewport_id = self.egui_winit_state.egui_input().viewport_id;
+        self.egui_winit_state.egui_ctx().show_viewport_deferred(
+            viewport_id,
+            egui::ViewportBuilder::default(),
+            |_, _| {},
+        );
+    }
 }
 
 impl StandaloneUiWindow {
@@ -222,6 +231,7 @@ impl StandaloneUiWindow {
             };
             application.server = server;
             application.client = client;
+            application.on_network_changed();
         }
 
         Ok(StandaloneUiWindow {
