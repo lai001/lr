@@ -34,6 +34,14 @@ pub struct ProjectArgs {
     pub is_enable_dylib: bool,
 }
 
+#[derive(Debug, Clone, Args)]
+pub struct UpdateDependenciesArgs {
+    #[arg(long)]
+    pub crate_name: String,
+    #[arg(long)]
+    pub crate_version: String,
+}
+
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -41,4 +49,6 @@ pub enum Cli {
     ProjectFiles(ProjectFilesArgs),
     Project(ProjectArgs),
     CreateDefaultLoadPluginsFile,
+    UpdateEdition,
+    UpdateDependencies(UpdateDependenciesArgs)
 }

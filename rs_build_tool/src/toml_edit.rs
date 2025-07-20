@@ -143,6 +143,53 @@ pub fn file_remove_network_feature(path: &Path, project_name: &str) -> anyhow::R
     Ok(())
 }
 
+pub fn change_edition(doc: &mut DocumentMut, edition: i32) -> anyhow::Result<()> {
+    let current_edition = doc["package"]["edition"]
+        .as_value_mut()
+        .ok_or(anyhow!("Not a value"))?;
+    *current_edition = Value::String(Formatted::new(edition.to_string()));
+    Ok(())
+}
+
+pub fn change_edition_file(path: &Path, edition: i32) -> anyhow::Result<()> {
+    let contents = std::fs::read_to_string(path)?;
+    let mut doc = contents.parse::<DocumentMut>()?;
+    change_edition(&mut doc, edition)?;
+    std::fs::write(path, doc.to_string())?;
+    Ok(())
+}
+
+pub fn change_dependency_version(
+    doc: &mut DocumentMut,
+    crate_name: &str,
+    version: &str,
+) -> anyhow::Result<()> {
+    let create_dependency = &mut doc["dependencies"][crate_name];
+    if create_dependency.is_str() {
+        *create_dependency =
+            toml_edit::Item::Value(Value::String(Formatted::new(version.to_string())));
+    } else if create_dependency.is_inline_table() {
+        if let Some(table) = create_dependency.as_inline_table_mut() {
+            if table.contains_key("version") {
+                table["version"] = Value::String(Formatted::new(version.to_string()));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn change_dependency_version_file(
+    path: &Path,
+    crate_name: &str,
+    version: &str,
+) -> anyhow::Result<()> {
+    let contents = std::fs::read_to_string(path)?;
+    let mut doc = contents.parse::<DocumentMut>()?;
+    change_dependency_version(&mut doc, crate_name, version)?;
+    std::fs::write(path, doc.to_string())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use crate::toml_edit::{add_network_feature, remove_network_feature};
@@ -161,5 +208,56 @@ network = ["dep:rs_network", "rs_engine/network"]"#
 
         remove_network_feature(&mut doc, "rs_engine").unwrap();
         assert_eq!(doc.to_string().trim(), contents);
+    }
+
+    #[test]
+    fn change_edition() {
+        let contents = r#"[package]
+edition = "2021""#;
+        let target_edition: i32 = 2024;
+        let mut doc = contents.parse::<toml_edit::DocumentMut>().unwrap();
+        crate::toml_edit::change_edition(&mut doc, target_edition).unwrap();
+        assert_eq!(
+            doc.to_string().trim(),
+            format!(
+                r#"[package]
+edition = "{}""#,
+                target_edition
+            )
+        );
+    }
+
+    #[test]
+    fn change_dependency_version_case0() {
+        let contents = r#"[dependencies]
+test = { version = "0.0.1", features = ["derive"] }"#;
+        let target_version = "1.0.0";
+        let mut doc = contents.parse::<toml_edit::DocumentMut>().unwrap();
+        crate::toml_edit::change_dependency_version(&mut doc, "test", target_version).unwrap();
+        assert_eq!(
+            doc.to_string().trim(),
+            format!(
+                r#"[dependencies]
+test = {{ version = "{}", features = ["derive"] }}"#,
+                target_version
+            )
+        );
+    }
+
+    #[test]
+    fn change_dependency_version_case1() {
+        let contents = r#"[dependencies]
+test1 = "0.0.2""#;
+        let target_version = "1.0.0";
+        let mut doc = contents.parse::<toml_edit::DocumentMut>().unwrap();
+        crate::toml_edit::change_dependency_version(&mut doc, "test1", target_version).unwrap();
+        assert_eq!(
+            doc.to_string().trim(),
+            format!(
+                r#"[dependencies]
+test1 = "{}""#,
+                target_version
+            )
+        );
     }
 }

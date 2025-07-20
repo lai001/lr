@@ -4,6 +4,7 @@ use rs_build_tool::{
     build_script::{clean, make_build_script},
     cli::{Cli, ProjectFilesArgs},
     json_project::{Crate, JsonProject},
+    toml_edit::{change_dependency_version_file, change_edition_file},
 };
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_foundation::change_working_directory;
@@ -363,6 +364,25 @@ fn generate_project_files(project_files_args: ProjectFilesArgs) -> anyhow::Resul
     Ok(())
 }
 
+fn visit_manifest_files(
+    closure: &mut impl FnMut(&Path) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir().canonicalize()?;
+    let engine_root_dir = engine_root_dir.to_string_lossy();
+    let paths = glob::glob(&format!("{}/crates/rs_*/Cargo.toml", engine_root_dir))?
+        .chain(glob::glob(&format!(
+            "{}/programs/rs_*/Cargo.toml",
+            engine_root_dir
+        ))?)
+        .chain(glob::glob(&format!("{}/rs_*/Cargo.toml", engine_root_dir))?);
+    for path in paths {
+        if let Ok(path) = path {
+            closure(&path)?;
+        }
+    }
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     change_working_directory();
     let mut builder = env_logger::Builder::new();
@@ -384,6 +404,16 @@ fn main() -> anyhow::Result<()> {
             for name in vec!["rs_desktop_standalone", "rs_editor"] {
                 rs_build_tool::load_plugins::create_load_plugins_file(name, None, false)?;
             }
+        }
+        Cli::UpdateEdition => {
+            visit_manifest_files(&mut |path| change_edition_file(path, 2024))?;
+        }
+        Cli::UpdateDependencies(update_dependencies_args) => {
+            let crate_name = &update_dependencies_args.crate_name;
+            let version = &update_dependencies_args.crate_version;
+            visit_manifest_files(&mut |path| {
+                change_dependency_version_file(path, crate_name, version)
+            })?;
         }
     }
 
