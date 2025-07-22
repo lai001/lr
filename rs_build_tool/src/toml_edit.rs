@@ -164,7 +164,12 @@ pub fn change_dependency_version(
     crate_name: &str,
     version: &str,
 ) -> anyhow::Result<()> {
-    let create_dependency = &mut doc["dependencies"][crate_name];
+    let dependencies = doc["dependencies"]
+        .as_table_like_mut()
+        .ok_or(anyhow!("Not contain 'dependencies'"))?;
+    let (_, create_dependency) = dependencies
+        .get_key_value_mut(crate_name)
+        .ok_or(anyhow!("Did not found '{}'", crate_name))?;
     if create_dependency.is_str() {
         *create_dependency =
             toml_edit::Item::Value(Value::String(Formatted::new(version.to_string())));
@@ -174,6 +179,8 @@ pub fn change_dependency_version(
                 table["version"] = Value::String(Formatted::new(version.to_string()));
             }
         }
+    } else {
+        return Err(anyhow!("Did not found '{}'", crate_name));
     }
     Ok(())
 }
