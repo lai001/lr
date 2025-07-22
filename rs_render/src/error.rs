@@ -5,6 +5,7 @@ pub enum Error {
     RequestAdapterFailed,
     CreateSurfaceError(wgpu::CreateSurfaceError),
     RequestDeviceError(wgpu::RequestDeviceError),
+    RequestAdapterError(wgpu::RequestAdapterError),
     SurfaceNotSupported,
     Sync(Option<String>),
     ShaderReflection(naga::front::wgsl::ParseError, Option<String>),

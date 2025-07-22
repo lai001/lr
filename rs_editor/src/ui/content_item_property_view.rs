@@ -7,7 +7,7 @@ use rs_engine::{
     uniform_map::{BaseDataValueType, StructField},
 };
 use rs_foundation::new::SingleThreadMutType;
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
 
 pub enum EEventType {
     IBL(Rc<RefCell<IBL>>, Option<PathBuf>, Option<PathBuf>),
@@ -194,9 +194,9 @@ impl ContentItemPropertyView {
                 let mut delete_field_index: Option<usize> = None;
 
                 let is_add = ui
-                    .button(egui::WidgetText::RichText(
+                    .button(egui::WidgetText::RichText(Arc::new(
                         egui::RichText::new("+").strong(),
-                    ))
+                    )))
                     .clicked();
                 if is_add {
                     let names = material_paramenters_collection
@@ -318,9 +318,9 @@ impl ContentItemPropertyView {
                         }
 
                         let is_delete = ui
-                            .button(egui::WidgetText::RichText(
+                            .button(egui::WidgetText::RichText(Arc::new(
                                 egui::RichText::new("-").strong(),
-                            ))
+                            )))
                             .clicked();
                         if is_delete {
                             delete_field_index = Some(index);

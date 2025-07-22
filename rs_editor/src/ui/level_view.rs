@@ -42,13 +42,13 @@ fn draw_scene_node(
                         if response.clicked() {
                             *event =
                                 Some(EClickEventType::CreateSceneComponent(scene_node.clone()));
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                         let response = ui.button("Camera");
                         if response.clicked() {
                             *event =
                                 Some(EClickEventType::CreateCameraComponent(scene_node.clone()));
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                         let response = ui.button("Collision");
                         if response.clicked() {
@@ -56,21 +56,21 @@ fn draw_scene_node(
                                 actor.clone(),
                                 scene_node.clone(),
                             ));
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                         let response = ui.button("Spot Light");
                         if response.clicked() {
                             *event = Some(EClickEventType::CreateSpotLightComponent(
                                 scene_node.clone(),
                             ));
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                         let response = ui.button("Point Light");
                         if response.clicked() {
                             *event = Some(EClickEventType::CreatePointLightComponent(
                                 scene_node.clone(),
                             ));
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                     });
                     ui.menu_button("Copy", |ui| {
@@ -78,7 +78,7 @@ fn draw_scene_node(
                         if response.clicked() {
                             *event =
                                 Some(EClickEventType::CopyPath(actor.clone(), scene_node.clone()));
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                     });
                     let response = ui.button("Delete");
@@ -87,7 +87,7 @@ fn draw_scene_node(
                             actor.clone(),
                             scene_node.clone(),
                         ));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                 });
             }
@@ -117,13 +117,13 @@ fn level_node(
                     let response = ui.button("Duplicate");
                     if response.clicked() {
                         *event = Some(EClickEventType::DuplicateActor(actor.clone()));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
 
                     let response = ui.button("Delete");
                     if response.clicked() {
                         *event = Some(EClickEventType::DeleteActor(actor.clone()));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                 });
             }
@@ -153,7 +153,7 @@ pub fn draw(
                         let response = ui.button("Delete");
                         if response.clicked() {
                             event = Some(EClickEventType::DeleteDirectionalLight(light.clone()));
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                     });
                 }
@@ -162,20 +162,21 @@ pub fn draw(
                 }
             });
         });
-        response.response.context_menu(|ui| {
+        let interacted_response = response.response.interact(egui::Sense::all());
+        interacted_response.context_menu(|ui| {
             ui.menu_button("Add", |ui| {
                 if ui.button("Directional Light").clicked() {
                     event = Some(EClickEventType::CreateDirectionalLight);
-                    ui.close_menu();
+                    ui.close_kind(egui::UiKind::Menu);
                 }
                 if ui.button("Actor").clicked() {
                     event = Some(EClickEventType::CreateActor);
-                    ui.close_menu();
+                    ui.close_kind(egui::UiKind::Menu);
                 }
             });
             if ui.button("Create camera here").clicked() {
                 event = Some(EClickEventType::CreateCameraHere);
-                ui.close_menu();
+                ui.close_kind(egui::UiKind::Menu);
             }
         });
     });

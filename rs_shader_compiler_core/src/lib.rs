@@ -22,7 +22,7 @@ mod test {
             .unwrap();
 
             let (device, _) = pollster::block_on(
-                adapter.request_device(&wgpu::DeviceDescriptor::default(), None),
+                adapter.request_device(&wgpu::DeviceDescriptor::default()),
             )
             .unwrap();
             TestGPUContext { device }

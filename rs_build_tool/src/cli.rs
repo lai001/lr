@@ -40,6 +40,8 @@ pub struct UpdateDependenciesArgs {
     pub crate_name: String,
     #[arg(long)]
     pub crate_version: String,
+    #[arg(short, long)]
+    pub manifest_file: Option<std::path::PathBuf>,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -50,5 +52,5 @@ pub enum Cli {
     Project(ProjectArgs),
     CreateDefaultLoadPluginsFile,
     UpdateEdition,
-    UpdateDependencies(UpdateDependenciesArgs)
+    UpdateDependencies(UpdateDependenciesArgs),
 }

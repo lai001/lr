@@ -2,7 +2,7 @@ use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
     data_source::DataSource,
 };
-use egui::{menu, Button, Context, TopBottomPanel};
+use egui::{Button, Context, TopBottomPanel};
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
 use std::path::PathBuf;
@@ -55,7 +55,7 @@ impl TopMenu {
     ) -> Option<EClickEventType> {
         let mut click: Option<EClickEventType> = None;
         TopBottomPanel::top("menu_bar").show(context, |ui| {
-            menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     // ui.set_min_width(220.0);
                     // ui.style_mut().wrap = Some(false);
@@ -69,23 +69,23 @@ impl TopMenu {
                     });
                     if ui.add(Button::new("Open Project")).clicked() {
                         click = Some(EClickEventType::OpenProject);
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Open Project Settings")).clicked() {
                         click = Some(EClickEventType::OpenProjectSettings);
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Save Project")).clicked() {
                         click = Some(EClickEventType::SaveProject);
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Export")).clicked() {
                         click = Some(EClickEventType::Export);
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Open Visual Studio Code")).clicked() {
                         click = Some(EClickEventType::OpenVisualStudioCode);
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     ui.menu_button("Recent Projects", |ui| {
                         for recent_project_path in &datasource.recent_projects.paths {
@@ -102,7 +102,7 @@ impl TopMenu {
                                 click = Some(EClickEventType::OpenRecentProject(
                                     recent_project_path.to_path_buf(),
                                 ));
-                                ui.close_menu();
+                                ui.close_kind(egui::UiKind::Menu);
                             }
                         }
                     });
@@ -115,7 +115,7 @@ impl TopMenu {
                                         build_type: EBuildType::Debug,
                                         arch_type: EArchType::X64,
                                     }));
-                                    ui.close_menu();
+                                    ui.close_kind(egui::UiKind::Menu);
                                 }
                             });
                             ui.menu_button("Release", |ui| {
@@ -125,7 +125,7 @@ impl TopMenu {
                                         build_type: EBuildType::Release,
                                         arch_type: EArchType::X64,
                                     }));
-                                    ui.close_menu();
+                                    ui.close_kind(egui::UiKind::Menu);
                                 }
                             });
                         });
@@ -134,37 +134,37 @@ impl TopMenu {
                 ui.menu_button("Window", |ui| {
                     if ui.add(Button::new("Asset")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Asset));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Content")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Content));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Property")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Property));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Level")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Level));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Comsole Cmds")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::ComsoleCmds));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Object Property")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::ObjectProperty));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     if ui.add(Button::new("Debug Texture")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::DebugTexture));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                 });
                 ui.menu_button("Tool", |ui| {
                     if ui.add(Button::new("Debug Shader")).clicked() {
                         click = Some(EClickEventType::Tool(EToolType::DebugShader));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     ui.menu_button("View Mode", |ui| {
                         if ui
@@ -217,7 +217,7 @@ impl TopMenu {
                     });
                     if ui.add(Button::new("Run")).clicked() {
                         click = Some(EClickEventType::Run);
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                     ui.menu_button("Standalone Simulation", |ui| {
                         ui.add(
@@ -228,11 +228,11 @@ impl TopMenu {
                         );
                         if ui.add(Button::new("Play As Server")).clicked() {
                             click = Some(EClickEventType::PlayAsServer);
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                         if ui.add(Button::new("Play")).clicked() {
                             click = Some(EClickEventType::PlayStandalone);
-                            ui.close_menu();
+                            ui.close_kind(egui::UiKind::Menu);
                         }
                     });
                     ui.checkbox(&mut datasource.is_simulate_real_time, "Simulate Real Time");
@@ -240,7 +240,7 @@ impl TopMenu {
                 ui.menu_button("Test", |ui| {
                     if ui.add(Button::new("Multiple Draw")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::MultipleDrawUi));
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                 });
             });

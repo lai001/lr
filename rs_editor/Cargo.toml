@@ -41,18 +41,18 @@ network = ["dep:rs_network", "rs_engine/network"]
 
 [dependencies]
 futures = "0.3.31"
-tokio = { version = "1.45.1", features = ["full"] }
-egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "55f0af0", version = "0.7.1", features = [
+tokio = { version = "1.46.1", features = ["full"] }
+egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "7963512", version = "0.8.0", features = [
     "serde",
 ] }
-syn = { version = "2.0.101", features = ["full", "extra-traits"] }
+syn = { version = "2.0.104", features = ["full", "extra-traits"] }
 log = "0.4.27"
 env_logger = "0.11.8"
 russimp = { version = "3.2.1", features = ["prebuilt", "static-link"] }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde_json = "1.0.141"
 bincode = { version = "2.0.1", features = ["serde"] }
-glam = { version = "0.30.3", features = ["mint"] }
+glam = { version = "0.30.4", features = ["mint"] }
 uuid = { version = "1.17.0", features = [
     "v4",
     "fast-rng",
@@ -62,15 +62,15 @@ uuid = { version = "1.17.0", features = [
 url = { version = "2.5.4", features = ["serde"] }
 percent-encoding = "2.3.1"
 winit = { version = "0.30.11" }
-egui = { version = "0.31.1" }
-egui_extras = { version = "0.31.1", features = ["all_loaders"] }
-egui-winit = { version = "0.31.1" }
-egui_plot = "0.32.1"
+egui = { version = "0.32.0" }
+egui_extras = { version = "0.32.0", features = ["all_loaders"] }
+egui-winit = { version = "0.32.0" }
+egui_plot = "0.33.0"
 uniform-cubic-splines = { version = "=0.3.1" }
-rfd = "0.15.3"
+rfd = "0.15.4"
 image = "0.25.6"
 regex = "1.11.1"
-notify = "8.0.0"
+notify = "8.1.0"
 notify-debouncer-mini = { version = "0.6.0" }
 walkdir = "2.5.0"
 dunce = "1.0.5"
@@ -79,14 +79,14 @@ md-5 = { version = "0.10.6" }
 anyhow = { version = "1.0.98" }
 lazy_static = "1.5.0"
 image_dds = { version = "0.7.2" }
-clap = { version = "4.5.39", features = ["derive"] }
-naga = { version = "24.0.0", features = ["serialize", "deserialize"] }
-wgpu = "24.0.1"
+clap = { version = "4.5.41", features = ["derive"] }
+naga = { version = "25.0.0", features = ["serialize", "deserialize"] }
+wgpu = "25.0.0"
 rand = { version = "0.9.1" }
 mp4 = { version = "0.14.0" }
-tracy-client = { version = "0.18.0", default-features = false }
+tracy-client = { version = "0.18.2", default-features = false }
 rapier3d = { version = "0.26.1", features = ["simd-stable", "serde-serialize"] }
-meshopt = "0.4.1"
+meshopt = "0.5.0"
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
 rs_render = { path = "../rs_render" }
 rs_render_types = { path = "../rs_render_types" }

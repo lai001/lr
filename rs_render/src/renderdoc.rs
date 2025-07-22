@@ -41,12 +41,12 @@ impl Context {
     }
 
     pub fn start_capture(&mut self, device: &wgpu::Device) {
-        device.start_capture();
+        unsafe { device.start_graphics_debugger_capture() };
         self.inner.trigger_capture();
     }
 
     pub fn stop_capture(&mut self, device: &wgpu::Device) {
-        device.stop_capture();
+        unsafe { device.stop_graphics_debugger_capture() };
         self.inner
             .end_frame_capture(std::ptr::null(), std::ptr::null());
     }

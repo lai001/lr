@@ -71,7 +71,7 @@ pub fn draw(opend_curve: &mut Curve, ui: &mut Ui, data_source: &mut CurveViewDat
                     .push(ControlPoint::new(index, last_hover_plot_pos));
                 opend_curve.sort_by_x();
             }
-            ui.close_menu();
+            ui.close_kind(egui::UiKind::Menu);
         }
     });
 

@@ -377,7 +377,17 @@ fn visit_manifest_files(
         .chain(glob::glob(&format!("{}/rs_*/Cargo.toml", engine_root_dir))?);
     for path in paths {
         if let Ok(path) = path {
-            closure(&path)?;
+            let mut is_ignore = false;
+            if let Some(Some(Some(file_stem))) =
+                path.parent().map(|x| x.file_stem().map(|x| x.to_str()))
+            {
+                if file_stem.contains("rs_computer_graphics") {
+                    is_ignore = true;
+                }
+            }
+            if !is_ignore {
+                closure(&path)?;
+            }
         }
     }
     Ok(())
@@ -411,9 +421,16 @@ fn main() -> anyhow::Result<()> {
         Cli::UpdateDependencies(update_dependencies_args) => {
             let crate_name = &update_dependencies_args.crate_name;
             let version = &update_dependencies_args.crate_version;
-            visit_manifest_files(&mut |path| {
-                change_dependency_version_file(path, crate_name, version)
-            })?;
+            match &update_dependencies_args.manifest_file {
+                Some(manifest_file) => {
+                    change_dependency_version_file(manifest_file, crate_name, version)?;
+                }
+                None => {
+                    visit_manifest_files(&mut |path| {
+                        change_dependency_version_file(path, crate_name, version)
+                    })?;
+                }
+            }
         }
     }
 

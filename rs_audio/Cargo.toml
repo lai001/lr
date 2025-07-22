@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.27"
-cpal = "0.15.3"
+cpal = "0.16.0"
 lazy_static = "1.5.0"
 rs_media = { path = "../rs_media" }
 rs_core_audio = { path = "../rs_core_audio" }

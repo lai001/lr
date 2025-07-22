@@ -142,7 +142,7 @@ fn draw_content(
                                                 click_item = Some(EClickItemType::ImportAsActor(
                                                     file.clone(),
                                                 ));
-                                                ui.close_menu();
+                                                ui.close_kind(egui::UiKind::Menu);
                                             }
                                         });
                                     }
@@ -153,7 +153,7 @@ fn draw_content(
                                             if ui.button("Create sound").clicked() {
                                                 click_item =
                                                     Some(EClickItemType::CreateSound(file.clone()));
-                                                ui.close_menu();
+                                                ui.close_kind(egui::UiKind::Menu);
                                             }
                                         });
                                     }
@@ -169,7 +169,7 @@ fn draw_content(
                                                 click_item = Some(EClickItemType::CreateTexture(
                                                     file.clone(),
                                                 ));
-                                                ui.close_menu();
+                                                ui.close_kind(egui::UiKind::Menu);
                                             }
                                         });
                                     }
@@ -181,7 +181,7 @@ fn draw_content(
                                                 click_item = Some(
                                                     EClickItemType::CreateMediaSource(file.clone()),
                                                 );
-                                                ui.close_menu();
+                                                ui.close_kind(egui::UiKind::Menu);
                                             }
                                         });
                                     }

@@ -428,7 +428,7 @@ impl ParticleSystemView {
                             name,
                         },
                     )));
-                    ui.close_menu();
+                    ui.close_kind(egui::UiKind::Menu);
                 }
             });
         });

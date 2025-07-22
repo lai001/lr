@@ -6,7 +6,7 @@ use std::sync::Mutex;
 pub type RuntimeInstanceType = *mut std::ffi::c_void;
 
 pub type ApplicationRedrawRequested = unsafe extern "C" fn(
-    appPtr: RuntimeInstanceType,
+    app_ptr: RuntimeInstanceType,
     native_texture_view: NativeWGPUTextureView,
     native_queue: NativeWGPUQueue,
 );

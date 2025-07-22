@@ -174,7 +174,7 @@ impl Reflection {
                 ShaderStage::Fragment => {
                     fs_entry_point = Some(entry_point.clone());
                 }
-                ShaderStage::Compute => {}
+                _ => {}
             }
         }
         if let (Some(vs_entry_point), Some(fs_entry_point)) = (vs_entry_point, fs_entry_point) {
@@ -187,11 +187,10 @@ impl Reflection {
     fn extract_compute_entry_point(module: &naga::Module) -> Option<EntryPoint> {
         for entry_point in module.entry_points.iter() {
             match entry_point.stage {
-                ShaderStage::Vertex => {}
-                ShaderStage::Fragment => {}
                 ShaderStage::Compute => {
                     return Some(entry_point.clone());
                 }
+                _ => {}
             }
         }
         None

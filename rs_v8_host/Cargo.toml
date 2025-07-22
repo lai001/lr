@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-v8 = "137.1.0"
-notify = "8.0.0"
+v8 = "137.2.1"
+notify = "8.1.0"
 notify-debouncer-mini = { version = "0.6.0" }
 walkdir = "2.5.0"
 log = "0.4.27"

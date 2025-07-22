@@ -135,7 +135,6 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         &mut self,
         pin: &InPin,
         ui: &mut Ui,
-        _: f32,
         snarl: &mut Snarl<MaterialNode>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
         let node = &mut snarl[pin.id.node];
@@ -309,7 +308,10 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                                 .selected_text(format!("{}", text))
                                 .show_ui(ui, |ui| {
                                     if ui
-                                        .add(SelectableLabel::new(current_value.is_none(), "None"))
+                                        .add(egui::Button::selectable(
+                                            current_value.is_none(),
+                                            "None",
+                                        ))
                                         .clicked()
                                     {
                                         *current_value = None;
@@ -340,7 +342,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                                             )
                                         };
                                         if ui
-                                            .add(SelectableLabel::new(is_selected, &text))
+                                            .add(egui::Button::selectable(is_selected, &text))
                                             .clicked()
                                         {
                                             *current_value = Some(material_parameters_collection);
@@ -402,7 +404,6 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         &mut self,
         pin: &OutPin,
         ui: &mut Ui,
-        _: f32,
         snarl: &mut Snarl<MaterialNode>,
     ) -> impl egui_snarl::ui::SnarlPin + 'static {
         let node = &mut snarl[pin.id.node];
@@ -446,7 +447,6 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         inputs: &[InPin],
         outputs: &[OutPin],
         ui: &mut Ui,
-        _: f32,
         snarl: &mut Snarl<MaterialNode>,
     ) {
         ui.horizontal(|ui| {
@@ -493,13 +493,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
         true
     }
 
-    fn show_graph_menu(
-        &mut self,
-        pos: egui::Pos2,
-        ui: &mut Ui,
-        _: f32,
-        snarl: &mut Snarl<MaterialNode>,
-    ) {
+    fn show_graph_menu(&mut self, pos: egui::Pos2, ui: &mut Ui, snarl: &mut Snarl<MaterialNode>) {
         let node_types = vec![
             EMaterialNodeType::Add(EValueType::F32(0.0), EValueType::F32(0.0)),
             EMaterialNodeType::Texture(None),
@@ -514,7 +508,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             if ui.button(node_type.get_name()).clicked() {
                 let node = MaterialNode { node_type };
                 snarl.insert_node(pos, node);
-                ui.close_menu();
+                ui.close_kind(egui::UiKind::Menu);
             }
         }
     }
@@ -742,7 +736,7 @@ impl MaterialView {
         self.event = None;
 
         TopBottomPanel::top("material_menu_bar").show(context, |ui| {
-            menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("Tool", |ui| {
                     if ui.add(Button::new("Debug Shader Code")).clicked() {
                         data_source.is_shader_code_window_open = true;

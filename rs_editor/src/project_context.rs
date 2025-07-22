@@ -633,10 +633,10 @@ impl ProjectContext {
         for buildin_shader in buildin_shaders {
             let name = buildin_shader.get_name();
             let read_path = read_folder_path.join(format!("{}.nagamodule", &name));
-            let file = match std::fs::File::open(read_path) {
+            let file = match std::fs::File::open(&read_path) {
                 Ok(file) => file,
                 Err(err) => {
-                    log::warn!("{}", err);
+                    log::warn!("Failed to read naga module, consider rebuilding shader compiler program and recompiling shader again, {}. {}", &read_path.to_string_lossy(), err);
                     continue;
                 }
             };
@@ -649,7 +649,7 @@ impl ProjectContext {
             {
                 Ok(module) => module,
                 Err(err) => {
-                    log::warn!("{}", err);
+                    log::warn!("Failed to read naga module, consider rebuilding shader compiler program and recompiling shader again, {}. {}", &read_path.to_string_lossy(), err);
                     continue;
                 }
             };

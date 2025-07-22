@@ -10,13 +10,13 @@ proc-macro = true
 
 [dependencies]
 proc-macro2 = "1.0.95"
-syn = { version = "2.0.101", features = ["full", "extra-traits"] }
+syn = { version = "2.0.104", features = ["full", "extra-traits"] }
 quote = "1.0.40"
-prettyplease = "0.2.32"
+prettyplease = "0.2.35"
 dunce = "1.0.5"
 path-slash = "0.2.1"
-naga = { version = "24.0.0" }
-wgpu = "24.0.1"
+naga = { version = "25.0.0" }
+wgpu = "25.0.0"
 anyhow = { version = "1.0.98" }
-toml_edit = "0.22.26"
+toml_edit = "0.23.2"
 rs_foundation = { path = "../rs_foundation" }

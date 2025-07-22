@@ -85,49 +85,49 @@ pub fn draw(
                             ui.text_edit_singleline(&mut data_source.new_folder_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateFolder);
-                                ui.close_menu();
+                                ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Material", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_material_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateMaterial);
-                                ui.close_menu();
+                                ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("IBL", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_ibl_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateIBL);
-                                ui.close_menu();
+                                ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Particle System", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateParticleSystem);
-                                ui.close_menu();
+                                ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Curve", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateCurve);
-                                ui.close_menu();
+                                ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Blend Animation", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateBlendAnimations);
-                                ui.close_menu();
+                                ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Material Parameters Collection", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateMaterialParametersCollection);
-                                ui.close_menu();
+                                ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                     });
@@ -225,16 +225,16 @@ fn draw_content(
                             response.context_menu(|ui| {
                                 if ui.button("Detail").clicked() {
                                     click = Some(EClickEventType::Detail(file.clone()));
-                                    ui.close_menu();
+                                    ui.close_kind(egui::UiKind::Menu);
                                 }
                                 if ui.button("Copy Reference").clicked() {
                                     ui.ctx().copy_text(url.to_string());
                                     // ui.output_mut(|p| p.copied_text = url.to_string());
-                                    ui.close_menu();
+                                    ui.close_kind(egui::UiKind::Menu);
                                 }
                                 if ui.button("Delete").clicked() {
                                     click = Some(EClickEventType::DeleteFile(file.clone()));
-                                    ui.close_menu();
+                                    ui.close_kind(egui::UiKind::Menu);
                                 }
                             });
                             let mut edit_name = name.clone();

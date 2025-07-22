@@ -327,10 +327,12 @@ impl Renderer {
                 backend_options: BackendOptions {
                     gl: GlBackendOptions {
                         gles_minor_version: Gles3MinorVersion::Automatic,
+                        fence_behavior: GlFenceBehavior::Normal,
                     },
                     dx12: Dx12BackendOptions {
                         shader_compiler: Dx12Compiler::Fxc,
                     },
+                    noop: NoopBackendOptions::default(),
                 },
             }),
         )?;
@@ -979,7 +981,7 @@ impl Renderer {
                             sender.send(result).unwrap();
                         }
                     });
-                    device.poll(wgpu::Maintain::Wait);
+                    let _ = device.poll(wgpu::PollType::Wait);
                     if let Ok(Ok(_)) = receiver.recv() {
                         let mut padded_buffer_view = buffer.slice(..).get_mapped_range_mut();
                         let padded_buffer = padded_buffer_view.as_mut();

@@ -79,7 +79,7 @@ impl BoxCullingPipeline {
         let buffer_slice = results_buffer.slice(..);
         let (sender, receiver) = std::sync::mpsc::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
-        device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission_index));
+        let _ = device.poll(wgpu::PollType::WaitForSubmissionIndex(submission_index));
         receiver
             .recv()
             .map_err(|err| crate::error::Error::Sync(Some(err.to_string())))?

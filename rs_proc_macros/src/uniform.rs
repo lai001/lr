@@ -38,9 +38,7 @@ impl WgslAlignment for naga::Scalar {
             naga::ScalarKind::Sint => self.width as usize,
             naga::ScalarKind::Uint => self.width as usize,
             naga::ScalarKind::Float => self.width as usize,
-            naga::ScalarKind::Bool => todo!(),
-            naga::ScalarKind::AbstractInt => todo!(),
-            naga::ScalarKind::AbstractFloat => todo!(),
+            _ => todo!(),
         }
     }
 }
@@ -55,9 +53,6 @@ impl WgslAlignment for naga::TypeInner {
             naga::TypeInner::Matrix { rows, scalar, .. } => {
                 cal_align_of(get_dimension(rows) as isize, scalar.width as isize) as usize
             }
-            naga::TypeInner::Atomic(_) => todo!(),
-            naga::TypeInner::Pointer { .. } => todo!(),
-            naga::TypeInner::ValuePointer { .. } => todo!(),
             naga::TypeInner::Array { stride, .. } => *stride as usize,
             naga::TypeInner::Struct { members, .. } => {
                 let mut struct_align: usize = 0;
@@ -67,11 +62,7 @@ impl WgslAlignment for naga::TypeInner {
                 }
                 struct_align
             }
-            naga::TypeInner::Image { .. } => todo!(),
-            naga::TypeInner::Sampler { .. } => todo!(),
-            naga::TypeInner::AccelerationStructure => todo!(),
-            naga::TypeInner::RayQuery => todo!(),
-            naga::TypeInner::BindingArray { .. } => todo!(),
+            _ => todo!(),
         }
     }
 
@@ -84,13 +75,9 @@ impl WgslAlignment for naga::TypeInner {
             naga::TypeInner::Matrix { columns, .. } => {
                 get_dimension(columns) * self.align_of(module)
             }
-            naga::TypeInner::Atomic(_) => todo!(),
-            naga::TypeInner::Pointer { .. } => todo!(),
-            naga::TypeInner::ValuePointer { .. } => todo!(),
             naga::TypeInner::Array { size, stride, .. } => match size {
                 naga::ArraySize::Constant(len) => len.get() as usize * *stride as usize,
-                naga::ArraySize::Dynamic => todo!(),
-                naga::ArraySize::Pending(_pending_array_size) => todo!(),
+                _ => todo!(),
             },
             naga::TypeInner::Struct { members, .. } => {
                 if members.is_empty() {
@@ -107,11 +94,7 @@ impl WgslAlignment for naga::TypeInner {
                     offset + fill(offset, self_align)
                 }
             }
-            naga::TypeInner::Image { .. } => todo!(),
-            naga::TypeInner::Sampler { .. } => todo!(),
-            naga::TypeInner::AccelerationStructure => todo!(),
-            naga::TypeInner::RayQuery => todo!(),
-            naga::TypeInner::BindingArray { .. } => todo!(),
+            _ => todo!(),
         }
     }
 }

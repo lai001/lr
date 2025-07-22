@@ -8,12 +8,12 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "1.0.98" }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde_json = "1.0.141"
 lsp-server = "0.7.8"
 lsp-types = "0.97.0"
 crossbeam-channel = "0.5.15"
-naga = "24.0.0"
-wgpu = "24.0.1"
+naga = "25.0.0"
+wgpu = "25.0.0"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 log = "0.4.27"

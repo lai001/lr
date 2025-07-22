@@ -106,17 +106,15 @@ impl WGPUContext {
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
         }))
-        .ok_or(crate::error::Error::RequestAdapterFailed)?;
+        .map_err(|err| crate::error::Error::RequestAdapterError(err))?;
 
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                required_features: adapter.features(),
-                required_limits: adapter.limits(),
-                label: Some("Engine"),
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-            },
-            None,
-        ))
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            required_features: adapter.features(),
+            required_limits: adapter.limits(),
+            label: Some("Engine"),
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
+            trace: wgpu::Trace::Off,
+        }))
         .map_err(|err| crate::error::Error::RequestDeviceError(err))?;
 
         let surface_config =
@@ -153,17 +151,15 @@ impl WGPUContext {
             compatible_surface: None,
             force_fallback_adapter: false,
         }))
-        .ok_or(crate::error::Error::RequestAdapterFailed)?;
+        .map_err(|err| crate::error::Error::RequestAdapterError(err))?;
 
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                required_features: adapter.features(),
-                required_limits: adapter.limits(),
-                label: Some("Engine"),
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-            },
-            None,
-        ))
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            required_features: adapter.features(),
+            required_limits: adapter.limits(),
+            label: Some("Engine"),
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
+            trace: wgpu::Trace::Off,
+        }))
         .map_err(|err| crate::error::Error::RequestDeviceError(err))?;
 
         Self::dump(&adapter);

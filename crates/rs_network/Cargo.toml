@@ -16,4 +16,4 @@ rs_artifact = { path = "../../rs_artifact" }
 rs_core_minimal = { path = "../../rs_core_minimal" }
 
 [build-dependencies]
-bindgen = "0.71.1"
+bindgen = "0.72.0"
