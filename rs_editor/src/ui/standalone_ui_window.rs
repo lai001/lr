@@ -1,7 +1,7 @@
 use super::{misc::update_window_with_input_mode, ui_window::UIWindow};
 use crate::{
-    editor_context::EWindowType, standalone_simulation_options::StandaloneSimulationType,
-    windows_manager::WindowsManager,
+    editor_context::EWindowType, keys_detector::KeysDetector,
+    standalone_simulation_options::StandaloneSimulationType, windows_manager::WindowsManager,
 };
 use anyhow::anyhow;
 use egui_winit::State;
@@ -16,16 +16,15 @@ use rs_engine::{
     standalone::application::Application,
 };
 use rs_render::command::{RenderCommand, ScaleChangedInfo};
-use std::collections::HashMap;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 pub struct StandaloneUiWindow {
     application: Application,
     pub egui_winit_state: State,
     frame_sync: FrameSync,
-    virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
     input_mode: EInputMode,
     window_id: isize,
+    keys_detector: KeysDetector,
 }
 
 impl UIWindow for StandaloneUiWindow {
@@ -45,7 +44,7 @@ impl UIWindow for StandaloneUiWindow {
     ) {
         let _ = event_loop_window_target;
         let _ = self.egui_winit_state.on_window_event(window, event);
-        update_window_with_input_mode(window, self.input_mode);
+
         super::misc::on_window_event(
             window_id,
             EWindowType::Standalone,
@@ -54,7 +53,7 @@ impl UIWindow for StandaloneUiWindow {
             event,
             engine,
             window_manager,
-            &mut self.virtual_key_code_states,
+            self.keys_detector.virtual_key_code_states_mut(),
             60.0,
         );
 
@@ -79,13 +78,29 @@ impl UIWindow for StandaloneUiWindow {
                     *is_request_close = true;
                     return;
                 }
+                if self
+                    .keys_detector
+                    .is_keys_pressed(&[KeyCode::ShiftLeft, KeyCode::F1], true)
+                {
+                    if self.input_mode == EInputMode::UI {
+                        self.input_mode = EInputMode::Game;
+                        update_window_with_input_mode(window, self.input_mode);
+                        self.application
+                            .player_view_port_mut()
+                            .set_input_mode(self.input_mode);
+                    } else if self.input_mode == EInputMode::Game {
+                        self.input_mode = EInputMode::UI;
+                        update_window_with_input_mode(window, self.input_mode);
+                        self.application
+                            .player_view_port_mut()
+                            .set_input_mode(self.input_mode);
+                    }
+                }
                 let consume = self.application.on_window_input(
                     window,
-                    EInputType::KeyboardInput(&self.virtual_key_code_states),
+                    EInputType::KeyboardInput(&self.keys_detector.virtual_key_code_states()),
                 );
-                for item in consume {
-                    let _ = self.virtual_key_code_states.remove(&item);
-                }
+                 self.keys_detector.consume_keys(&consume);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.application
@@ -102,7 +117,7 @@ impl UIWindow for StandaloneUiWindow {
                     engine,
                     self.egui_winit_state.egui_ctx().clone(),
                     window,
-                    &self.virtual_key_code_states,
+                    self.keys_detector.virtual_key_code_states()
                 );
                 engine.send_render_command(RenderCommand::UiOutput(super::misc::ui_end(
                     &mut self.egui_winit_state,
@@ -120,6 +135,8 @@ impl UIWindow for StandaloneUiWindow {
             }
             _ => {}
         }
+
+        update_window_with_input_mode(window, self.input_mode);
     }
 
     fn get_window_id(&self) -> isize {
@@ -182,7 +199,7 @@ impl StandaloneUiWindow {
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
         // let input_mode = EInputMode::GameUI;
-        let input_mode = EInputMode::UI;
+        let input_mode = EInputMode::Game;
         update_window_with_input_mode(window, input_mode);
 
         // let level = active_level.make_copy_for_standalone(engine, &contents);
@@ -199,6 +216,9 @@ impl StandaloneUiWindow {
             #[cfg(feature = "plugin_shared_crate")]
             plugins,
         );
+        application
+            .player_view_port_mut()
+            .set_input_mode(input_mode);
         #[cfg(feature = "network")]
         {
             let (server, client) = match &standalone_simulation_type {
@@ -237,10 +257,10 @@ impl StandaloneUiWindow {
         Ok(StandaloneUiWindow {
             egui_winit_state,
             frame_sync,
-            virtual_key_code_states: HashMap::new(),
             input_mode,
             application,
             window_id,
+            keys_detector: KeysDetector::new(),
         })
     }
 

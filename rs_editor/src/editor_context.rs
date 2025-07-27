@@ -651,7 +651,15 @@ impl EditorContext {
         match event {
             Event::DeviceEvent { event, .. } => {
                 for ui_window in &mut ui_windows {
-                    ui_window.on_device_event(event);
+                    let window = self
+                        .window_manager
+                        .borrow_mut()
+                        .get_window_by_id(ui_window.get_window_id())
+                        .expect("A valid window");
+                    let window = window.borrow();
+                    if window.has_focus() {
+                        ui_window.on_device_event(event);
+                    }
                 }
                 self.player_viewport.on_device_event(event);
             }
@@ -707,7 +715,6 @@ impl EditorContext {
                 }
 
                 let window = &mut *window.borrow_mut();
-                let egui_event_response = self.egui_winit_state.on_window_event(window, event);
 
                 let mut close_windows = vec![];
 
@@ -781,13 +788,17 @@ impl EditorContext {
                 }
 
                 match window_type {
-                    EWindowType::Main => self.main_window_event_process(
-                        window_id,
-                        window,
-                        event,
-                        event_loop_window_target,
-                        egui_event_response,
-                    ),
+                    EWindowType::Main => {
+                        let egui_event_response =
+                            self.egui_winit_state.on_window_event(window, event);
+                        self.main_window_event_process(
+                            window_id,
+                            window,
+                            event,
+                            event_loop_window_target,
+                            egui_event_response,
+                        )
+                    }
                     _ => {}
                 }
             }

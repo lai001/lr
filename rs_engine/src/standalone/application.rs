@@ -303,6 +303,9 @@ impl Application {
             let plugins = self.plugins.clone();
             let mut plugins = plugins.borrow_mut();
             for plugin in plugins.iter_mut() {
+                #[cfg(not(target_os = "android"))]
+                plugin.tick(engine, ctx.clone(), &self._contents.clone(), self, window);
+                #[cfg(target_os = "android")]
                 plugin.tick(engine, ctx.clone(), &self._contents.clone(), self);
             }
         }

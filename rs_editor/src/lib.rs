@@ -6,6 +6,7 @@ pub mod editor;
 pub mod editor_context;
 pub mod editor_ui;
 pub mod error;
+pub mod keys_detector;
 pub mod load_content;
 pub mod material;
 pub mod material_resolve;

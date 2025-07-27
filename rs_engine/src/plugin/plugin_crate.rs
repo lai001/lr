@@ -20,6 +20,7 @@ pub trait Plugin {
         ctx: egui::Context,
         files: &[EContentFileType],
         application: &mut Application,
+        #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
     );
 
     #[cfg(not(target_os = "android"))]
@@ -31,4 +32,31 @@ pub trait Plugin {
         window: &mut winit::window::Window,
         ty: crate::input_type::EInputType,
     ) -> Vec<winit::keyboard::KeyCode>;
+}
+
+#[cfg(feature = "network")]
+impl crate::network::NetworkReplicated for dyn Plugin {
+    fn get_network_id(&self) -> &uuid::Uuid {
+        unimplemented!();
+    }
+
+    fn set_network_id(&mut self, _: uuid::Uuid) {
+        unimplemented!();
+    }
+
+    fn is_replicated(&self) -> bool {
+        unimplemented!();
+    }
+
+    fn set_replicated(&mut self, _: bool) {
+        unimplemented!();
+    }
+
+    fn sync_with_server(&mut self, _: bool) {
+        unimplemented!();
+    }
+
+    fn is_sync_with_server(&self) -> bool {
+        unimplemented!();
+    }
 }
