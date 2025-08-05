@@ -5,6 +5,7 @@ use crate::{
     engine::Engine,
     input_mode::EInputMode,
     player_viewport::PlayerViewport,
+    scene_node::ChangedStateFlags,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 #[cfg(feature = "network")]
@@ -183,7 +184,22 @@ impl Application {
                         for (k, v) in data {
                             match k {
                                 ReplicatedFieldType::Level => {}
-                                ReplicatedFieldType::NetworkReplicated => {}
+                                ReplicatedFieldType::NetworkReplicated => {
+                                    let replicated_data = Self::deserialize_replicated_data(&v);
+                                    let mut active_level = self.current_active_level.borrow_mut();
+                                    active_level.visit_network_replicated_mut(
+                                        &mut |network_replicated| {
+                                            let id = network_replicated.get_network_id();
+                                            if let Some(data) = replicated_data.get(id) {
+                                                log::trace!(
+                                                    "[Server]On sync, id: {id}, name: {:?}",
+                                                    network_replicated.debug_name()
+                                                );
+                                                network_replicated.on_sync(data);
+                                            }
+                                        },
+                                    );
+                                }
                                 ReplicatedFieldType::Call => {
                                     let call_data = Self::deserialize_call_data(&v);
                                     let mut active_level = self.current_active_level.borrow_mut();
@@ -298,6 +314,28 @@ impl Application {
                 virtual_key_code_states,
             ));
 
+        let active_level = self.current_active_level.clone();
+        {
+            let mut active_level = active_level.borrow_mut();
+
+            for actor in active_level.actors.clone() {
+                let actor = actor.borrow();
+                let mut changed_state = ChangedStateFlags::empty();
+                for (_, scene_node) in actor.collect_node_map() {
+                    let scene_node = scene_node.borrow();
+                    if let Some(state) = scene_node.changed_state() {
+                        changed_state.insert(state);
+                    }
+                }
+                if changed_state.contains(ChangedStateFlags::Transformation) {
+                    actor
+                        .scene_node
+                        .borrow_mut()
+                        .notify_transformation_updated(active_level.get_physics_mut());
+                }
+            }
+        }
+
         #[cfg(feature = "plugin_shared_crate")]
         {
             let plugins = self.plugins.clone();
@@ -309,6 +347,7 @@ impl Application {
                 plugin.tick(engine, ctx.clone(), &self._contents.clone(), self);
             }
         }
+
         let mut active_level = self.current_active_level.borrow_mut();
 
         self.player_view_port.update_global_constants(engine);

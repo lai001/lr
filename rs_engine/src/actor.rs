@@ -476,7 +476,9 @@ impl Actor {
                     EComponentType::StaticMeshComponent(component) => {
                         visit(&mut *component.borrow_mut());
                     }
-                    EComponentType::SceneComponent(_) => {}
+                    EComponentType::SceneComponent(component) => {
+                        visit(&mut *component.borrow_mut());
+                    }
                     EComponentType::SkeletonMeshComponent(_) => {}
                     EComponentType::CameraComponent(_) => {}
                     EComponentType::CollisionComponent(_) => {}
@@ -495,7 +497,9 @@ impl Actor {
                     EComponentType::StaticMeshComponent(component) => {
                         visit(&*component.borrow());
                     }
-                    EComponentType::SceneComponent(_) => {}
+                    EComponentType::SceneComponent(component) => {
+                        visit(&*component.borrow());
+                    }
                     EComponentType::SkeletonMeshComponent(_) => {}
                     EComponentType::CameraComponent(_) => {}
                     EComponentType::CollisionComponent(_) => {}

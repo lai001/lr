@@ -1,3 +1,7 @@
+#[cfg(feature = "network")]
+use crate::network;
+#[cfg(feature = "network")]
+use crate::network::NetworkReplicated;
 use crate::{
     camera_component::CameraComponent,
     collision_componenet::CollisionComponent,
@@ -16,10 +20,82 @@ use rapier3d::prelude::RigidBodySet;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 
+bitflags::bitflags! {
+    #[derive(Clone)]
+    pub struct ChangedStateFlags: u8 {
+        const Transformation = 1;
+    }
+}
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+pub enum ReplicatedFieldType {
+    Transformation,
+}
+
+#[cfg(feature = "network")]
+type TransmissionType = std::collections::HashMap<ReplicatedFieldType, Vec<u8>>;
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct NetworkFields {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) net_id: Option<uuid::Uuid>,
+    #[serde(default = "bool::default")]
+    pub is_replicated: bool,
+    #[serde(skip)]
+    replicated_datas: TransmissionType,
+    #[serde(skip)]
+    is_sync_with_server: bool,
+    #[serde(skip)]
+    net_transformation: Option<glam::Mat4>,
+}
+
+#[cfg(feature = "network")]
+impl NetworkFields {
+    pub fn new() -> NetworkFields {
+        NetworkFields {
+            net_id: Some(crate::network::default_uuid()),
+            is_replicated: false,
+            replicated_datas: TransmissionType::new(),
+            is_sync_with_server: false,
+            net_transformation: None,
+        }
+    }
+
+    pub fn set_transformation(
+        &mut self,
+        transformation: glam::Mat4,
+    ) -> rs_artifact::error::Result<()> {
+        let is_same = self
+            .net_transformation
+            .map(|x| x == transformation)
+            .unwrap_or(false);
+        if is_same {
+            return Ok(());
+        }
+        self.net_transformation = Some(transformation);
+        let data = rs_artifact::bincode_legacy::serialize(&transformation, None)?;
+        self.replicated_datas
+            .insert(ReplicatedFieldType::Transformation, data);
+        Ok(())
+    }
+
+    pub fn reset(&mut self) {
+        self.replicated_datas.drain();
+    }
+
+    pub fn transformation(&self) -> Option<glam::Mat4> {
+        self.net_transformation
+    }
+}
+
 #[derive(Clone)]
 struct SceneComponentRuntime {
     pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
+    net_transformation: Option<glam::Mat4>,
+    changed_state: ChangedStateFlags,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -28,6 +104,79 @@ pub struct SceneComponent {
     pub transformation: glam::Mat4,
     #[serde(skip)]
     run_time: Option<SceneComponentRuntime>,
+    #[cfg(feature = "network")]
+    #[serde(default)]
+    pub network_fields: NetworkFields,
+}
+
+#[cfg(feature = "network")]
+impl crate::network::NetworkReplicated for SceneComponent {
+    fn get_network_id(&self) -> &uuid::Uuid {
+        self.network_fields.net_id.as_ref().expect("A valid id")
+    }
+
+    fn set_network_id(&mut self, network_id: uuid::Uuid) {
+        self.network_fields.net_id = Some(network_id);
+    }
+
+    fn is_replicated(&self) -> bool {
+        self.network_fields.is_replicated
+    }
+
+    fn set_replicated(&mut self, is_replicated: bool) {
+        self.network_fields.is_replicated = is_replicated;
+    }
+
+    fn sync_with_server(&mut self, is_sync: bool) {
+        self.network_fields.is_sync_with_server = is_sync;
+    }
+
+    fn is_sync_with_server(&self) -> bool {
+        self.network_fields.is_sync_with_server
+    }
+
+    fn debug_name(&self) -> Option<String> {
+        Some(self.name.clone())
+    }
+
+    fn on_replicated(&mut self) -> Vec<u8> {
+        if self.network_fields.replicated_datas.is_empty() {
+            return vec![];
+        }
+        let encoded_data = (|| {
+            rs_artifact::bincode_legacy::serialize::<TransmissionType>(
+                &self.network_fields.replicated_datas,
+                None,
+            )
+        })();
+        if let Err(err) = &encoded_data {
+            log::warn!("{}", err);
+        }
+        self.network_fields.reset();
+        encoded_data.unwrap_or_default()
+    }
+
+    fn on_sync(&mut self, data: &Vec<u8>) {
+        let sync_result: rs_artifact::error::Result<()> = (|| {
+            let decoded_data =
+                rs_artifact::bincode_legacy::deserialize::<TransmissionType>(&data, None)?;
+            for (k, v) in decoded_data {
+                match k {
+                    ReplicatedFieldType::Transformation => {
+                        let transformation =
+                            rs_artifact::bincode_legacy::deserialize::<glam::Mat4>(&v, None)?;
+                        if let Some(runtime) = self.run_time.as_mut() {
+                            runtime.net_transformation = Some(transformation);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })();
+        if let Err(err) = &sync_result {
+            log::warn!("{}", err);
+        }
+    }
 }
 
 impl SceneComponent {
@@ -38,7 +187,11 @@ impl SceneComponent {
             run_time: Some(SceneComponentRuntime {
                 final_transformation: glam::Mat4::IDENTITY,
                 parent_final_transformation: glam::Mat4::IDENTITY,
+                net_transformation: None,
+                changed_state: ChangedStateFlags::empty(),
             }),
+            #[cfg(feature = "network")]
+            network_fields: NetworkFields::new(),
         }
     }
 
@@ -48,12 +201,18 @@ impl SceneComponent {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
+        #[cfg(feature = "network")]
+        if self.network_fields.net_id.is_none() {
+            self.set_network_id(network::default_uuid());
+        }
         let _ = player_viewport;
         let _ = files;
         let _ = engine;
         self.run_time = Some(SceneComponentRuntime {
             final_transformation: glam::Mat4::IDENTITY,
             parent_final_transformation: glam::Mat4::IDENTITY,
+            net_transformation: None,
+            changed_state: ChangedStateFlags::empty(),
         });
     }
 
@@ -126,6 +285,28 @@ impl SceneComponent {
         let _ = time;
         let _ = collider_set;
         let _ = rigid_body_set;
+        if let Some(run_time) = self.run_time.as_mut() {
+            if let Some(transformation) = run_time.net_transformation.take() {
+                self.transformation = transformation;
+                self.insert_changed_state(ChangedStateFlags::Transformation);
+            }
+        }
+    }
+
+    pub fn changed_state(&self) -> Option<ChangedStateFlags> {
+        self.run_time.as_ref().map(|x| x.changed_state.clone())
+    }
+
+    pub fn insert_changed_state(&mut self, state: ChangedStateFlags) {
+        if let Some(runtime) = &mut self.run_time {
+            runtime.changed_state.insert(state);
+        }
+    }
+
+    pub fn set_changed_state(&mut self, state: ChangedStateFlags) {
+        if let Some(runtime) = &mut self.run_time {
+            runtime.changed_state = state;
+        }
     }
 }
 
@@ -395,6 +576,31 @@ impl SceneNode {
                     None,
                 );
             }
+        }
+    }
+
+    pub fn changed_state(&self) -> Option<ChangedStateFlags> {
+        match &self.component {
+            EComponentType::SceneComponent(component) => component.borrow().changed_state(),
+            _ => None,
+        }
+    }
+
+    pub fn insert_changed_state(&mut self, state: ChangedStateFlags) {
+        match &mut self.component {
+            EComponentType::SceneComponent(component) => {
+                component.borrow_mut().insert_changed_state(state);
+            }
+            _ => {}
+        }
+    }
+
+    pub fn set_changed_state(&mut self, state: ChangedStateFlags) {
+        match &mut self.component {
+            EComponentType::SceneComponent(component) => {
+                component.borrow_mut().set_changed_state(state);
+            }
+            _ => {}
         }
     }
 

@@ -40,6 +40,13 @@ impl KeysDetector {
         }
     }
 
+    pub fn is_key_released(&mut self, key: &KeyCode) -> bool {
+        self.virtual_key_code_states
+            .get(key)
+            .map(|x| *x == ElementState::Released)
+            .unwrap_or(false)
+    }
+
     pub fn consume_key(&mut self, key: &KeyCode) {
         self.virtual_key_code_states.remove(key);
     }

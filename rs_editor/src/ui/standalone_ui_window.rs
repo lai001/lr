@@ -100,7 +100,7 @@ impl UIWindow for StandaloneUiWindow {
                     window,
                     EInputType::KeyboardInput(&self.keys_detector.virtual_key_code_states()),
                 );
-                 self.keys_detector.consume_keys(&consume);
+                self.keys_detector.consume_keys(&consume);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.application
@@ -117,7 +117,7 @@ impl UIWindow for StandaloneUiWindow {
                     engine,
                     self.egui_winit_state.egui_ctx().clone(),
                     window,
-                    self.keys_detector.virtual_key_code_states()
+                    self.keys_detector.virtual_key_code_states(),
                 );
                 engine.send_render_command(RenderCommand::UiOutput(super::misc::ui_end(
                     &mut self.egui_winit_state,
