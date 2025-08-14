@@ -316,6 +316,9 @@ if is_enable_quickjs then
             add_includedirs(quickjs_dir, { public = true })
             add_includedirs("rs_quickjs/src", { public = true })
             add_defines({ "CONFIG_BIGNUM", "JS_STRICT_NAN_BOXING" })
+            if is_mode("release") then
+                set_optimize("fast")
+            end
         else
             add_files("rs_quickjs/src/*.c")
             add_headerfiles("rs_quickjs/src/*.h")
