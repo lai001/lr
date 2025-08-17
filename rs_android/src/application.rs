@@ -130,9 +130,8 @@ impl Application {
     }
 }
 
-#[no_mangle]
-#[jni_fn::jni_fn("com.lai001.rs_android.Application")]
-pub fn Application_fromSurface(
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn fromSurface(
     mut env: jni::JNIEnv,
     _: jni::objects::JClass,
     surface: jni::sys::jobject,
@@ -169,8 +168,8 @@ pub fn Application_fromSurface(
 }
 
 #[no_mangle]
-#[jni_fn::jni_fn("com.lai001.rs_android.Application")]
-pub fn Application_setNewSurface(
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn setNewSurface(
     mut env: jni::JNIEnv,
     _: jni::objects::JClass,
     application: *mut Application,
@@ -193,15 +192,15 @@ pub fn Application_setNewSurface(
 }
 
 #[no_mangle]
-#[jni_fn::jni_fn("com.lai001.rs_android.Application")]
-pub fn Application_drop(_: jni::JNIEnv, _: jni::objects::JClass, application: *mut Application) {
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn drop(_: jni::JNIEnv, _: jni::objects::JClass, application: *mut Application) {
     debug_assert_ne!(application, std::ptr::null_mut());
     let _: Box<Application> = unsafe { Box::from_raw(application) };
 }
 
 #[no_mangle]
-#[jni_fn::jni_fn("com.lai001.rs_android.Application")]
-pub fn Application_redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: *mut Application) {
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: *mut Application) {
     debug_assert_ne!(application, std::ptr::null_mut());
     let mut application: Box<Application> = unsafe { Box::from_raw(application) };
 
@@ -289,8 +288,8 @@ pub fn Application_redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: 
 }
 
 #[no_mangle]
-#[jni_fn::jni_fn("com.lai001.rs_android.Application")]
-pub fn Application_onTouchEvent(
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn onTouchEvent(
     env: jni::JNIEnv,
     _: jni::objects::JClass,
     application: *mut Application,
@@ -308,8 +307,8 @@ pub fn Application_onTouchEvent(
 }
 
 #[no_mangle]
-#[jni_fn::jni_fn("com.lai001.rs_android.Application")]
-pub fn Application_surfaceChanged(
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn surfaceChanged(
     _: jni::JNIEnv,
     _: jni::objects::JClass,
     application: *mut Application,
@@ -335,8 +334,8 @@ pub fn Application_surfaceChanged(
 }
 
 #[no_mangle]
-#[jni_fn::jni_fn("com.lai001.rs_android.Application")]
-pub fn Application_surfaceDestroyed(
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn surfaceDestroyed(
     _: jni::JNIEnv,
     _: jni::objects::JClass,
     _: *mut Application,
@@ -345,16 +344,24 @@ pub fn Application_surfaceDestroyed(
 }
 
 #[no_mangle]
-#[jni_fn::jni_fn("com.lai001.rs_android.Application")]
-pub fn Application_setEnvironment(
-    mut env: jni::JNIEnv,
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn setEnvironment(
+    _: jni::JNIEnv,
     _: jni::objects::JClass,
-    application: *mut Application,
-    mut android_enviroment: jni::objects::JClass,
+    application: jni::sys::jlong,
+    enviroment: jni::sys::jlong,
 ) {
-    debug_assert_ne!(application, std::ptr::null_mut());
-
-    let mut application: Box<Application> = unsafe { Box::from_raw(application) };
-    application.enviroment = Some(Enviroment::new(&mut env, &mut android_enviroment));
-    let _ = Box::into_raw(Box::new(application));
+    let enviroment = unsafe {
+        (enviroment as *mut Enviroment)
+            .as_mut()
+            .expect("A valid pointer")
+    };
+    let application = unsafe {
+        (application as *mut Application)
+            .as_mut()
+            .expect("A valid pointer")
+    };
+    application.enviroment = Some(Enviroment {
+        status_bar_height: enviroment.status_bar_height,
+    });
 }

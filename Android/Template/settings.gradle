@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 rootProject.name = "Template"
 include ':app'
 include ':rs_android'
+include ':libraries:lrjni'

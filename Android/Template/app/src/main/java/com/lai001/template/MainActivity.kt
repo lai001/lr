@@ -2,6 +2,7 @@ package com.lai001.template
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -108,12 +109,8 @@ class MTApp : Closeable {
                 when (message) {
                     is SMsgType.SurfaceCreated -> {
                         if (application == null) {
-                            try {
-                                application =
-                                    context?.let { Application(it, "main.rs", message.surface) }
-                            } catch (e: Exception) {
-
-                            }
+                            application =
+                                context?.let { Application(it, "main.rs", message.surface) }
                         } else {
                             application.setNewSurface(message.surface)
                         }
@@ -135,6 +132,7 @@ class MTApp : Closeable {
                     is SMsgType.SetEnvironment -> {
                         if (application == null) {
                             synchronized(lock) {
+                                Log.d(TAG, "setEnviroment: ")
                                 messages.addLast(message)
                             }
                         } else {

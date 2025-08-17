@@ -1,12 +1,16 @@
 local ffmpeg_dir = ffmpeg_dir
+local deps_dir = deps_dir
 
 task("gen_config")
-do
     on_run(function()
         import("core.project.config")
         import("core.base.json")
+        import("core.base.option")
         config.load()
-
+        local is_dry = false
+        if option.get("dry") ~= nil then
+            is_dry = true
+        end
         local ndk_path = (get_config("ndk") and { get_config("ndk") } or { os.getenv("NDK_HOME") })[1]
         ndk_path = (ndk_path and { ndk_path } or { os.getenv("NDK_ROOT") })[1]
         if ndk_path == nil then
@@ -40,9 +44,15 @@ target-dir = "./build/target"
         ]]
         local ffmpeg_block = [[
 [env]
-FFMPEG_DIR = "@ffmpeg_dir@"
+FFMPEG_DIR = "%s"
+
+[target.aarch64-linux-android.env]
+FFMPEG_DIR = "%s"
+
+[target.x86_64-linux-android.env]
+FFMPEG_DIR = "%s"
         ]]
-        ffmpeg_block = ffmpeg_block:gsub("@ffmpeg_dir@", ffmpeg_dir)
+        ffmpeg_block = format(ffmpeg_block, ffmpeg_dir, path.join(deps_dir, "ffmpeg_android/arm64-v8a"), path.join(deps_dir, "ffmpeg_android/x86_64"))
         local fix_conflict_library = [[
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "link-arg=/FORCE:MULTIPLE"]
@@ -50,13 +60,16 @@ rustflags = ["-C", "link-arg=/FORCE:MULTIPLE"]
         content = content .. "\n" .. ffmpeg_block
         content = content .. "\n" .. fix_conflict_library
         content = content:gsub("\\", "/")
-        io.writefile(".cargo/config.toml", content)
+        if is_dry then
+            print(content)
+        else
+            io.writefile(".cargo/config.toml", content)
+        end
     end)
     set_menu {
         usage = "xmake gen_config",
         description = "Generate cargo config.toml",
         options = {
-            { nil, "gen_config", nil, nil, nil },
+            { "d", "dry", "k", nil, nil },
         }
     }
-end

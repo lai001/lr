@@ -3,7 +3,6 @@ use crate::antialias_type::EAntialiasType;
 use crate::base_compute_pipeline_pool::BaseComputePipelinePool;
 use crate::base_render_pipeline_pool::BaseRenderPipelinePool;
 use crate::compute_pipeline::light_culling::LightCullingComputePipeline;
-use crate::cube_map::CubeMap;
 use crate::depth_texture::DepthTexture;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
@@ -25,16 +24,14 @@ use crate::shader_library::ShaderLibrary;
 use crate::shadow_pass::ShadowPipelines;
 use crate::virtual_texture_pass::VirtualTexturePass;
 use crate::virtual_texture_source::VirtualTextureSource;
-use crate::{command::*, ibl_readback, shadow_pass};
+use crate::{command::*, shadow_pass};
 use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
-use image::{GenericImage, GenericImageView};
 use rs_core_minimal::settings::{self, RenderSettings};
 use rs_core_minimal::thread_pool::ThreadPool;
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::path::Path;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::*;
@@ -397,6 +394,7 @@ impl Renderer {
         }
     }
 
+    #[cfg(not(all(target_os = "android", target_arch = "x86_64")))]
     fn process_create_iblbake_command(
         &mut self,
         create_iblbake_command: CreateIBLBake,
@@ -411,24 +409,28 @@ impl Renderer {
             create_iblbake_command.bake_info,
         );
         baker.bake(device, queue, &self.shader_library);
-        let merge_cube_map = |x: &CubeMap<image::Rgba<f32>, Vec<f32>>| {
+        let merge_cube_map = |x: &crate::cube_map::CubeMap<image::Rgba<f32>, Vec<f32>>| {
             let size = x.negative_x.width();
             let mut merge_image = image::Rgba32FImage::new(size, size * 6);
-            let negative_x = x.negative_x.view(0, 0, size, size);
-            let positive_x = x.positive_x.view(0, 0, size, size);
-            let negative_y = x.negative_y.view(0, 0, size, size);
-            let positive_y = x.positive_y.view(0, 0, size, size);
-            let negative_z = x.negative_z.view(0, 0, size, size);
-            let positive_z = x.positive_z.view(0, 0, size, size);
+            let negative_x = image::GenericImageView::view(&x.negative_x, 0, 0, size, size);
+            let positive_x = image::GenericImageView::view(&x.positive_x, 0, 0, size, size);
+            let negative_y = image::GenericImageView::view(&x.negative_y, 0, 0, size, size);
+            let positive_y = image::GenericImageView::view(&x.positive_y, 0, 0, size, size);
+            let negative_z = image::GenericImageView::view(&x.negative_z, 0, 0, size, size);
+            let positive_z = image::GenericImageView::view(&x.positive_z, 0, 0, size, size);
             for (index, image) in [
                 negative_x, positive_x, negative_y, positive_y, negative_z, positive_z,
             ]
             .iter()
             .enumerate()
             {
-                merge_image
-                    .copy_from(image.deref(), 0, size * index as u32)
-                    .map_err(|err| crate::error::Error::ImageError(err))?;
+                image::GenericImage::copy_from(
+                    &mut merge_image,
+                    image.deref(),
+                    0,
+                    size * index as u32,
+                )
+                .map_err(|err| crate::error::Error::ImageError(err))?;
             }
             crate::error::Result::Ok(merge_image)
         };
@@ -437,7 +439,7 @@ impl Renderer {
                                 height: u32,
                                 layers: u32,
                                 mipmaps: u32,
-                                save_dir: &Path,
+                                save_dir: &std::path::Path,
                                 name: &str| {
             let surface = image_dds::SurfaceRgba32Float {
                 width,
@@ -474,7 +476,7 @@ impl Renderer {
             }
 
             let brdflut_image =
-                ibl_readback::IBLReadBack::read_brdflut_texture(&baker, device, queue)?;
+                crate::ibl_readback::IBLReadBack::read_brdflut_texture(&baker, device, queue)?;
             let brdflut_image = brdflut_image
                 .as_rgba32f()
                 .ok_or(crate::error::Error::Other(None))?;
@@ -489,7 +491,9 @@ impl Renderer {
             )?;
 
             let irradiance_image =
-                ibl_readback::IBLReadBack::read_irradiance_cube_map_texture(&baker, device, queue)?;
+                crate::ibl_readback::IBLReadBack::read_irradiance_cube_map_texture(
+                    &baker, device, queue,
+                )?;
             let irradiance_image = merge_cube_map(&irradiance_image)?;
             save_data_as_dds(
                 irradiance_image.as_ref(),
@@ -501,9 +505,10 @@ impl Renderer {
                 "irradiance",
             )?;
 
-            let pre_filter_images = ibl_readback::IBLReadBack::read_pre_filter_cube_map_textures(
-                &baker, device, queue,
-            )?;
+            let pre_filter_images =
+                crate::ibl_readback::IBLReadBack::read_pre_filter_cube_map_textures(
+                    &baker, device, queue,
+                )?;
             let mut data: Vec<f32> = vec![];
             macro_rules! merge_face_layer_data {
                 ($face:ident) => {
@@ -889,6 +894,8 @@ impl Renderer {
     pub fn send_command(&mut self, command: RenderCommand) -> Option<RenderOutput2> {
         match command {
             RenderCommand::CreateIBLBake(command) => {
+                let _ = command;
+                #[cfg(not(all(target_os = "android", target_arch = "x86_64")))]
                 self.process_create_iblbake_command(command);
             }
             RenderCommand::CreateTexture(create_texture_command) => {

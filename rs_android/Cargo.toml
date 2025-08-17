@@ -9,6 +9,7 @@ edition = "2021"
 [features]
 default = ["standalone"]
 standalone = ["rs_render/standalone", "rs_engine/standalone"]
+profiler = ["tracy-client/enable", "rs_engine/profiler", "rs_render/profiler"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 glam = { version = "0.30.4", features = ["mint", "serde"] }
@@ -21,9 +22,14 @@ jni_fn = "0.1.2"
 ndk-sys = "0.6.0"
 raw-window-handle = "0.6.2"
 android_logger = "0.15.1"
+tracy-client = { version = "0.18.2", default-features = false }
+winit = { version = "0.30.11", features = ["android-native-activity"]}
 rs_engine = { path = "../rs_engine" }
 rs_artifact = { path = "../rs_artifact" }
 rs_render = { path = "../rs_render" }
 
 [lib]
 crate-type = ["rlib", "cdylib"]
+
+[build-dependencies]
+rs_core_minimal = { path = "../rs_core_minimal" }

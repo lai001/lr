@@ -7,7 +7,10 @@ edition = "2021"
 default = ["standalone"]
 renderdoc = ["dep:renderdoc"]
 editor = ["rs_shader_compiler_core/editor", "rs_core_minimal/editor"]
-standalone = ["rs_shader_compiler_core/standalone", "rs_core_minimal/standalone"]
+standalone = [
+    "rs_shader_compiler_core/standalone",
+    "rs_core_minimal/standalone",
+]
 profiler = ["tracy-client/enable", "rs_metis/profiler"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -25,7 +28,6 @@ egui-wgpu = { version = "0.32.0" }
 image = "0.25.6"
 dunce = "1.0.5"
 path-slash = "0.2.1"
-image_dds = { version = "0.7.2" }
 ddsfile = "0.5.2"
 tracy-client = { version = "0.18.2", default-features = false }
 bitflags = "2.9.1"
@@ -37,6 +39,16 @@ rs_core_minimal = { path = "../rs_core_minimal" }
 rs_render_types = { path = "../rs_render_types" }
 rs_metis = { path = "../rs_metis" }
 rs_artifact = { path = "../rs_artifact" }
+
+[target.'cfg(all(target_os = "android", target_arch = "x86_64"))'.dependencies]
+image_dds = { version = "0.7.2", default-features = false, features = [
+    "ddsfile",
+    "image",
+    "strum",
+] }
+
+[target.'cfg(not(all(target_os = "android", target_arch = "x86_64")))'.dependencies]
+image_dds = { version = "0.7.2" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15.1"

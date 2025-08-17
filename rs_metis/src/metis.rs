@@ -415,9 +415,9 @@ impl Metis {
             };
 
             let msg = "ReadTPwgts: tpwgts";
-            #[cfg(target_os = "windows")]
+            #[cfg(target_arch = "x86_64")]
             let msg_raw = msg.as_ptr() as *mut i8;
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(not(target_arch = "x86_64"))]
             let msg_raw = msg.as_ptr() as *mut u8;
 
             params.tpwgts =

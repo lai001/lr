@@ -52,11 +52,11 @@ do
                 "https://download.visualstudio.microsoft.com/download/pr/5af098e1-e433-4fda-84af-3f54fd27c108/6bd1c6e48e64e64871957289023ca590/" ..
                 dotnetSDKFilename
 
-            if not check_hash_files(os, io, deps_dir .. dotnetSDKFilename, "ddb7dc983df37b20bd03b57c27c1ecdc3eee8f7187cca9d6498023381f912dc0") then
-                http.download(link, deps_dir .. dotnetSDKFilename)
+            if not check_hash_files(os, io, path.join(deps_dir, dotnetSDKFilename), "ddb7dc983df37b20bd03b57c27c1ecdc3eee8f7187cca9d6498023381f912dc0") then
+                http.download(link, path.join(deps_dir, dotnetSDKFilename))
             end
             if not check_hash_files(os, io, dotnet_sdk_dir .. "/**/*.exe", "fa916994a7eedcc3050f9bda118dfc4fb05a85bb1a04ed344fd8a79274e1b7f4") then
-                archive.extract(deps_dir .. dotnetSDKFilename, dotnet_sdk_dir)
+                archive.extract(path.join(deps_dir, dotnetSDKFilename), dotnet_sdk_dir)
             end
         end
 
@@ -81,7 +81,7 @@ do
             http.download(link, "Resource/Remote/neon_photostudio_2k.exr")
         end
 
-        local ffmpeg_zip_filename = deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0.zip"
+        local ffmpeg_zip_filename = path.join(deps_dir, "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0.zip")
         if not check_hash_files(os, io, ffmpeg_zip_filename, "ee396b019b29624dd2e9a2b538ed74e9a9b36eb9a60868d89efc255c80accbab") then
             local link =
             "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2023-07-24-12-50/ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0.zip"
@@ -101,7 +101,7 @@ do
             http.download(link, "Resource/Remote/sample-15s.mp3")
         end
 
-        local meshopt_rs_dir = deps_dir .. "meshopt-rs"
+        local meshopt_rs_dir = path.join(deps_dir, "meshopt-rs")
         if os.exists(meshopt_rs_dir) == false then
             git.clone("https://github.com/gwihlidal/meshopt-rs.git", { outputdir = meshopt_rs_dir })
             git.checkout("master", { repodir = meshopt_rs_dir })
@@ -117,7 +117,7 @@ do
             git.checkout("master", { repodir = gklib_dir })
         end
 
-        local russimp_file = deps_dir .. "russimp-2.0.2-x86_64-pc-windows-msvc-static.tar.gz"
+        local russimp_file = path.join(deps_dir, "russimp-2.0.2-x86_64-pc-windows-msvc-static.tar.gz")
         if os.exists(russimp_file) == false then
             local link = "https://github.com/jkvargas/russimp-sys/releases/download/v2.0.2/russimp-2.0.2-x86_64-pc-windows-msvc-static.tar.gz"
             http.download(link, russimp_file)
@@ -144,7 +144,7 @@ do
         if os.exists(kcp_root_dir) == false then
             git.clone("https://github.com/skywind3000/kcp.git", { outputdir = kcp_root_dir })
             git.checkout("f4f3a89cc632647dabdcb146932d2afd5591e62e", { repodir = kcp_root_dir })
-        end        
+        end
     end)
     set_menu {
         usage = "xmake download_deps",

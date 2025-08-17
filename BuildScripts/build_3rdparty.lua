@@ -3,7 +3,6 @@ local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
 
 task("build_3rdparty")
-do
     on_run(function()
         import("core.project.config")
         import("core.base.json")
@@ -23,6 +22,10 @@ do
                 os.exec("xmake build " .. target_name)
                 os.exec("xmake f -a arm64-v8a -m release -p android -k static " .. additional)
                 os.exec("xmake build " .. target_name)
+                os.exec("xmake f -a x86_64 -m debug -p android -k static " .. additional)
+                os.exec("xmake build " .. target_name)
+                os.exec("xmake f -a x86_64 -m release -p android -k static " .. additional)
+                os.exec("xmake build " .. target_name)                
             end
         end
         build("gpmetis", {windows=true, android=true}, "")
@@ -34,4 +37,3 @@ do
         usage = "xmake build_3rdparty",
         description = "Build 3rdparty libraries",
     }
-end

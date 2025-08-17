@@ -1,19 +1,19 @@
 set_xmakever("2.9.8")
 
-deps_dir = ".xmake/deps/"
+deps_dir = path.absolute(".xmake/deps/")
 rs_project_name = "rs_computer_graphics"
 csharp_workspace_name = "ExampleApplication"
-gizmo_dir = deps_dir .. "egui-gizmo"
-quickjs_dir = deps_dir .. "quickjs"
-metis_dir = path.absolute(deps_dir .. "METIS")
-gklib_dir = deps_dir .. "GKlib"
-ffmpeg_dir = path.absolute(deps_dir .. "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
-russimp_prebuild_dir = path.absolute(deps_dir)
+gizmo_dir = path.join(deps_dir, "egui-gizmo")
+quickjs_dir = path.join(deps_dir, "quickjs")
+metis_dir = path.join(deps_dir, "METIS")
+gklib_dir = path.join(deps_dir, "GKlib")
+ffmpeg_dir = path.join(deps_dir, "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
+russimp_prebuild_dir = deps_dir
 engine_root_dir = path.absolute("./")
-tracy_root_dir = path.absolute(deps_dir .. "tracy")
-dotnet_sdk_dir = path.absolute(deps_dir .. "dotnetSDK")
+tracy_root_dir = path.join(deps_dir, "tracy")
+dotnet_sdk_dir = path.join(deps_dir, "dotnetSDK")
 rs_target_dir = path.join(engine_root_dir, "build/target")
-kcp_root_dir = path.absolute(deps_dir .. "kcp")
+kcp_root_dir = path.join(deps_dir, "kcp")
 
 function trim_quotes_and_newlines(str)
     str = str:gsub("^[\r\n\"%s]+", "")
@@ -58,19 +58,9 @@ function check_hash_files(os_module, io_module, folder_or_file_path, expected)
     return value == expected
 end
 
-includes("BuildScripts/gen_config.lua")
-includes("BuildScripts/build_android_target.lua")
-includes("BuildScripts/code_workspace.lua")
-includes("BuildScripts/fmt.lua")
-includes("BuildScripts/download_deps.lua")
-includes("BuildScripts/build_clean.lua")
-includes("BuildScripts/install_editor.lua")
-includes("BuildScripts/ci.lua")
-includes("BuildScripts/setup.lua")
-includes("BuildScripts/build_3rdparty.lua")
-includes("BuildScripts/compile_tool.lua")
-includes("BuildScripts/cargo.lua")
-includes("BuildScripts/unit_test.lua")
+for _, task_file in ipairs(os.files("BuildScripts/*.lua")) do
+    includes(task_file)
+end
 
 option("enable_dotnet")
     set_default(false)

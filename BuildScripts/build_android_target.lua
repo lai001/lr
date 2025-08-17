@@ -1,11 +1,18 @@
+local deps_dir = deps_dir
+local engine_root_dir = engine_root_dir
 task("build_android_target")
-do
     on_run(function()
         import("core.project.config")
         import("core.base.json")
         import("core.base.option")
         import("core.project.task")
         config.load()
+        local target_map = {}
+        target_map["aarch64-linux-android"] = "arm64-v8a"
+        target_map["armv7-linux-androideabi"] = "armeabi-v7a"
+        target_map["x86_64-linux-android"] = "x86_64"
+        target_map["i686-linux-android"] = "x86"
+        target_map["arm-linux-androideabi"] = "armeabi"
         local mode = option.get("mode")
         if mode == nil then
             mode = "debug"
@@ -14,26 +21,37 @@ do
         if option.get("target") ~= nil then
             target = option.get("target")
         end
-        local project_name = "rs_android"
-        local old = os.cd(project_name)
-
         local jobs = option.get("jobs")
         if jobs == nil then
             jobs = os.meminfo().availsize//2000
         end
+        local arch = target_map[target]
+        local features = {"standalone"}
+        local features_arg = ""
+        local is_support_profiler = arch == "arm64-v8a"
+        local is_use_profiler = is_support_profiler and false
+        if is_use_profiler then
+            table.join2(features, "profiler")
+        end
+        for _, feature in ipairs(features) do
+            features_arg = format("%s%s,", features_arg, feature)
+        end
+        local ffmpeg_dir = path.join(deps_dir, "ffmpeg_android", arch)
+        local extra_envs = {
+            ["FFMPEG_DIR"] = ffmpeg_dir,
+            ["TRACY_CLIENT_LIB_PATH"] = path.join(engine_root_dir, format("build/android/%s/%s", arch, mode)),
+            ["TRACY_CLIENT_LIB"] = "tracy-client",
+            ["TRACY_CLIENT_STATIC"] = 1
+        }
+        local project_name = "rs_android"
+        local old = os.cd(path.join(engine_root_dir, project_name))
+        os.addenvs(extra_envs)
         if mode == "debug" then
-            os.exec("cargo build --features standalone --target %s -j %d", target, jobs)
+            os.exec("cargo build --features %s --target %s -j %d", features_arg, target, jobs)
         else
-            os.exec("cargo build --features standalone --target %s -r -j %d", target, jobs)
+            os.exec("cargo build --features %s --target %s -r -j %d", features_arg, target, jobs)
         end
         os.cd(old)
-        local target_map = { }
-        target_map["aarch64-linux-android"] = "arm64-v8a"
-        target_map["armv7-linux-androideabi"] = "armeabi-v7a"
-        target_map["x86_64-linux-android"] = "x86_64"
-        target_map["i686-linux-android"] = "x86"
-        target_map["arm-linux-androideabi"] = "armeabi"
-        local arch = target_map[target]
         local function cp_print(src, target)
             print("Copying %s to %s", src, target)
             os.cp(src, target)
@@ -64,4 +82,3 @@ do
                 " - arm-linux-androideabi", },
         }
     }
-end
