@@ -18,7 +18,7 @@ pub fn load_static_plugins_macro_impl(input: TokenStream) -> TokenStream {
     let mut create_plugins = String::new();
     let program = input.to_string();
     match program.as_str() {
-        "rs_editor" | "rs_desktop_standalone" => {
+        "rs_editor" | "rs_desktop_standalone" | "rs_android" => {
             let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("..")
                 .join(program.as_str())

@@ -132,7 +132,6 @@ class MTApp : Closeable {
                     is SMsgType.SetEnvironment -> {
                         if (application == null) {
                             synchronized(lock) {
-                                Log.d(TAG, "setEnviroment: ")
                                 messages.addLast(message)
                             }
                         } else {

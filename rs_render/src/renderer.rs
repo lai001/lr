@@ -1014,9 +1014,9 @@ impl Renderer {
                 let _span = tracy_client::span!("egui render");
                 let output_view = match self.surface_textures.get(&command.window_id) {
                     Some(surface_texture) => {
-                        let output_view = surface_texture
-                            .texture
-                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        let mut desc = wgpu::TextureViewDescriptor::default();
+                        desc.usage = Some(TextureUsages::RENDER_ATTACHMENT);
+                        let output_view = surface_texture.texture.create_view(&desc);
                         output_view
                     }
                     None => return None,

@@ -5,13 +5,19 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-# [dependencies]
 [features]
 default = ["standalone"]
 standalone = ["rs_render/standalone", "rs_engine/standalone"]
 profiler = ["tracy-client/enable", "rs_engine/profiler", "rs_render/profiler"]
+panic_hook = [
+    "dep:backtrace",
+    "dep:tracing",
+    "dep:tracing-subscriber",
+]
+plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 
-[target.'cfg(target_os = "android")'.dependencies]
+# [target.'cfg(target_os = "android")'.dependencies]
+[dependencies]
 glam = { version = "0.30.4", features = ["mint", "serde"] }
 log = "0.4.27"
 env_logger = "0.11.8"
@@ -20,13 +26,19 @@ url = { version = "2.5.4", features = ["serde"] }
 jni = "0.21.1"
 jni_fn = "0.1.2"
 ndk-sys = "0.6.0"
+ndk-context = "0.1.1"
 raw-window-handle = "0.6.2"
 android_logger = "0.15.1"
 tracy-client = { version = "0.18.2", default-features = false }
-winit = { version = "0.30.11", features = ["android-native-activity"]}
-rs_engine = { path = "../rs_engine" }
+winit = { version = "0.30.11", features = ["android-native-activity"] }
+backtrace = { version = "0.3", optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", optional = true }
 rs_artifact = { path = "../rs_artifact" }
+rs_engine = { path = "../rs_engine" }
+rs_foundation = { path = "../rs_foundation" }
 rs_render = { path = "../rs_render" }
+rs_proc_macros = { path = "../rs_proc_macros" }
 
 [lib]
 crate-type = ["rlib", "cdylib"]

@@ -20,6 +20,8 @@ pub struct Application {
     gui_context: egui::Context,
     geometries: Vec<Geometry>,
     camera: rs_engine::camera::Camera,
+    #[cfg(feature = "plugin_shared_crate")]
+    _plugins: Vec<Box<dyn rs_engine::plugin::plugin_crate::Plugin>>,
 }
 
 impl Application {
@@ -61,6 +63,8 @@ impl Application {
         engine.init_resources();
         let mut camera = rs_engine::camera::Camera::default(width, height);
         camera.set_world_location(glam::vec3(0.0, 10.0, 20.0));
+        #[cfg(feature = "plugin_shared_crate")]
+        let plugins = rs_proc_macros::load_static_plugins!(rs_android);
         Ok(Application {
             native_window,
             raw_input,
@@ -70,6 +74,8 @@ impl Application {
             gui_context,
             geometries: vec![],
             camera,
+            #[cfg(feature = "plugin_shared_crate")]
+            _plugins: plugins,
         })
     }
 

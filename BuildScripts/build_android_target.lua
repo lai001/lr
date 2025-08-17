@@ -26,12 +26,15 @@ task("build_android_target")
             jobs = os.meminfo().availsize//2000
         end
         local arch = target_map[target]
-        local features = {"standalone"}
+        local features = {"standalone", "plugin_shared_crate"}
         local features_arg = ""
         local is_support_profiler = arch == "arm64-v8a"
         local is_use_profiler = is_support_profiler and false
         if is_use_profiler then
             table.join2(features, "profiler")
+        end
+        if mode == "debug" then
+            table.join2(features, "panic_hook")
         end
         for _, feature in ipairs(features) do
             features_arg = format("%s%s,", features_arg, feature)

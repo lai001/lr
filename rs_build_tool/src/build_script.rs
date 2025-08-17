@@ -30,7 +30,7 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
         .ok_or(anyhow!("No project name"))?;
 
     let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();
-    for name in vec!["rs_desktop_standalone", "rs_editor"] {
+    for name in vec!["rs_desktop_standalone", "rs_editor", "rs_android"] {
         create_load_plugins_file(name, None, true)?;
     }
     match &project_args.mode_type {
@@ -127,16 +127,14 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
             std::env::set_current_dir(old_dir)?;
         }
         crate::cli::ModeType::Standalone => {
-            create_load_plugins_file(
-                "rs_desktop_standalone",
-                Some(project_name.to_string()),
-                true,
-            )?;
-            add_plugin_dependencies_file(
-                &engine_root_dir.join("rs_desktop_standalone/Cargo.toml"),
-                project_name,
-                &projcet_folder,
-            )?;
+            for crate_name in ["rs_desktop_standalone", "rs_android"] {
+                create_load_plugins_file(crate_name, Some(project_name.to_string()), true)?;
+                add_plugin_dependencies_file(
+                    &engine_root_dir.join(crate_name).join("Cargo.toml"),
+                    project_name,
+                    &projcet_folder,
+                )?;
+            }
             disable_dylib_file(&projcet_folder.join("Cargo.toml"))?;
         }
     }
@@ -171,9 +169,11 @@ pub fn clean(project_args: &ProjectArgs) -> anyhow::Result<()> {
     let manifest_file = engine_root_dir.join("rs_editor/Cargo.toml");
     remove_plugin_dependencies_file(&manifest_file, project_name)?;
     file_remove_network_feature(&manifest_file, project_name)?;
-    let manifest_file = engine_root_dir.join("rs_desktop_standalone/Cargo.toml");
-    remove_plugin_dependencies_file(&manifest_file, project_name)?;
-    for name in vec!["rs_desktop_standalone", "rs_editor"] {
+    for crate_name in ["rs_desktop_standalone", "rs_android"] {
+        let manifest_file = engine_root_dir.join(crate_name).join("Cargo.toml");
+        remove_plugin_dependencies_file(&manifest_file, project_name)?;
+    }
+    for name in vec!["rs_desktop_standalone", "rs_editor", "rs_android"] {
         create_load_plugins_file(name, None, true)?;
     }
     let project_manifest_file = projcet_folder.join("Cargo.toml");
