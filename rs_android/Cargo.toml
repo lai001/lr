@@ -15,6 +15,7 @@ panic_hook = [
     "dep:tracing-subscriber",
 ]
 plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
+network = ["dep:rs_network", "rs_engine/network"]
 
 # [target.'cfg(target_os = "android")'.dependencies]
 [dependencies]
@@ -39,6 +40,7 @@ rs_engine = { path = "../rs_engine" }
 rs_foundation = { path = "../rs_foundation" }
 rs_render = { path = "../rs_render" }
 rs_proc_macros = { path = "../rs_proc_macros" }
+rs_network = { path = "../crates/rs_network", optional = true }
 
 [lib]
 crate-type = ["rlib", "cdylib"]

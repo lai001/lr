@@ -45,13 +45,6 @@ impl AttachmentPipeline {
         let mut builder = BaseRenderPipelineBuilder::default();
         builder.shader_name = AttachmentShader {}.get_name();
         builder.targets = vec![Some(texture_format.clone().into())];
-        builder.depth_stencil = Some(DepthStencilState {
-            depth_compare: CompareFunction::Never,
-            format: TextureFormat::Depth32Float,
-            depth_write_enabled: true,
-            stencil: StencilState::default(),
-            bias: DepthBiasState::default(),
-        });
         builder.primitive = Some(PrimitiveState {
             cull_mode: None,
             ..Default::default()
@@ -64,6 +57,13 @@ impl AttachmentPipeline {
         let multisample_pipeline = pool.get(device, shader_library, &builder);
         builder.multisample = None;
         builder.targets = vec![];
+        builder.depth_stencil = Some(DepthStencilState {
+            depth_compare: CompareFunction::Never,
+            format: TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        });
         let clear_depth_pipeline = pool.get(device, shader_library, &builder);
         AttachmentPipeline {
             base_render_pipeline,

@@ -17,4 +17,8 @@ impl GlobalShader for BoxCullingShader {
     fn get_name(&self) -> String {
         "box_culling.wgsl".to_string()
     }
+
+    fn is_support_limits(&self, limits: &wgpu::Limits) -> bool {
+        limits.max_storage_buffers_per_shader_stage >= 2
+    }
 }

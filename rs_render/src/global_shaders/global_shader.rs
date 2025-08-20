@@ -11,7 +11,14 @@ use editor_mod::*;
 pub trait GlobalShader {
     fn get_shader_description(&self) -> ShaderDescription;
     fn get_name(&self) -> String;
-
+    fn is_support_features(&self, features: &wgpu::Features) -> bool {
+        let _ = features;
+        true
+    }
+    fn is_support_limits(&self, limits: &wgpu::Limits) -> bool {
+        let _ = limits;
+        true
+    }
     #[cfg(feature = "editor")]
     fn to_compile_command(&self) -> CompileCommand {
         let shader_description = self.get_shader_description();

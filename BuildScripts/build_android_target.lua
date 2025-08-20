@@ -26,7 +26,7 @@ task("build_android_target")
             jobs = os.meminfo().availsize//2000
         end
         local arch = target_map[target]
-        local features = {"standalone", "plugin_shared_crate"}
+        local features = {"standalone", "plugin_shared_crate", "network"}
         local features_arg = ""
         local is_support_profiler = arch == "arm64-v8a"
         local is_use_profiler = is_support_profiler and false

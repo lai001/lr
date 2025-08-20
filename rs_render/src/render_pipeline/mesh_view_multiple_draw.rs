@@ -18,19 +18,23 @@ pub struct MeshViewMultipleDrawPipeline {
 }
 
 impl MeshViewMultipleDrawPipeline {
-    pub fn new(
+    pub fn new_check_features(
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
         pool: &mut BaseRenderPipelinePool,
-    ) -> MeshViewMultipleDrawPipeline {
+    ) -> Option<MeshViewMultipleDrawPipeline> {
+        let shader = MeshViewMultipleDrawShader {};
+        if !shader.is_support_features(&device.features()) {
+            return None;
+        }
         let mut builder = BaseRenderPipelineBuilder::default();
         builder.targets = vec![Some(ColorTargetState {
             format: texture_format.clone(),
             blend: Some(BlendState::ALPHA_BLENDING),
             write_mask: ColorWrites::ALL,
         })];
-        builder.shader_name = MeshViewMultipleDrawShader {}.get_name();
+        builder.shader_name = shader.get_name();
         builder.depth_stencil = Some(DepthStencilState {
             depth_compare: CompareFunction::Less,
             format: TextureFormat::Depth32Float,
@@ -50,9 +54,9 @@ impl MeshViewMultipleDrawPipeline {
 
         let base_render_pipeline = pool.get(device, shader_library, &builder);
 
-        MeshViewMultipleDrawPipeline {
+        Some(MeshViewMultipleDrawPipeline {
             base_render_pipeline,
-        }
+        })
     }
 
     pub fn multi_draw_indirect(

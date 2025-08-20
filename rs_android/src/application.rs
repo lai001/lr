@@ -32,7 +32,7 @@ impl Application {
     ) -> Result<Application> {
         let scale_factor = 1.0f32;
 
-        let raw_input = egui::RawInput {
+        let mut raw_input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::default(),
                 egui::vec2(
@@ -40,8 +40,26 @@ impl Application {
                     native_window.get_height() as f32,
                 ) / scale_factor as f32,
             )),
+            viewport_id: egui::ViewportId::ROOT,
             ..Default::default()
         };
+
+        if let Some(viewport_info) = raw_input.viewports.get_mut(&raw_input.viewport_id) {
+            viewport_info.monitor_size = Some(
+                egui::vec2(
+                    native_window.get_width() as f32,
+                    native_window.get_height() as f32,
+                ) / scale_factor as f32,
+            );
+            viewport_info.native_pixels_per_point = Some(scale_factor);
+            viewport_info.inner_rect = raw_input.screen_rect;
+            viewport_info.outer_rect = raw_input.screen_rect;
+            viewport_info.fullscreen = Some(true);
+            viewport_info.focused = Some(true);
+            viewport_info.maximized = Some(true);
+            viewport_info.minimized = Some(false);
+        }
+
         let artifact_reader = ArtifactReader::new(artifact_input_stream, Some(EEndianType::Little))
             .map_err(|err| crate::error::Error::Artifact(err))?;
 
@@ -83,15 +101,9 @@ impl Application {
         self.engine.window_redraw_requested_begin(WINDOW_ID);
         let context = &self.gui_context;
         context.begin_pass(self.raw_input.clone());
+        context.clear_animations();
 
-        egui::Window::new("Pannel")
-            .default_pos((200.0, 200.0))
-            .show(&context, |ui| {
-                let response = ui.button("Button");
-                if response.clicked() {}
-                if ui.button("Button2").clicked() {}
-                ui.label(format!("Time: {:.2}", 0.0f32));
-            });
+        egui::CentralPanel::default().show(&self.gui_context, |_| {});
 
         let full_output = context.end_pass();
         let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
@@ -185,9 +197,12 @@ pub fn setNewSurface(
     debug_assert_ne!(surface, std::ptr::null_mut());
     let native_window = crate::native_window::NativeWindow::new(&mut env, surface);
     if let Some(native_window) = native_window {
-        let mut application: Box<Application> = unsafe { Box::from_raw(application) };
+        let application = unsafe {
+            (application as *mut Application)
+                .as_mut()
+                .expect("A valid pointer")
+        };
         let result = application.set_new_window(native_window);
-        let _ = Box::into_raw(Box::new(application));
         match result {
             Ok(_) => jni::sys::JNI_TRUE,
             Err(_) => jni::sys::JNI_FALSE,
@@ -207,9 +222,11 @@ pub fn drop(_: jni::JNIEnv, _: jni::objects::JClass, application: *mut Applicati
 #[no_mangle]
 #[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
 pub fn redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: *mut Application) {
-    debug_assert_ne!(application, std::ptr::null_mut());
-    let mut application: Box<Application> = unsafe { Box::from_raw(application) };
-
+    let application = unsafe {
+        (application as *mut Application)
+            .as_mut()
+            .expect("A valid pointer")
+    };
     for pair in application.geometries.windows(2) {
         let old_geometry = &pair[0];
         let new_geometry = &pair[1];
@@ -290,7 +307,6 @@ pub fn redraw(_: jni::JNIEnv, _: jni::objects::JClass, application: *mut Applica
 
     application.redraw();
     application.raw_input.events.clear();
-    let _ = Box::into_raw(Box::new(application));
 }
 
 #[no_mangle]
@@ -304,11 +320,14 @@ pub fn onTouchEvent(
     debug_assert_ne!(application, std::ptr::null_mut());
 
     let mut motion_event = motion_event::MotionEvent::new(env, event);
-    let mut application: Box<Application> = unsafe { Box::from_raw(application) };
+    let application = unsafe {
+        (application as *mut Application)
+            .as_mut()
+            .expect("A valid pointer")
+    };
     let new_geometry = motion_event.to_geometry();
     application.geometries.push(new_geometry);
 
-    let _ = Box::into_raw(Box::new(application));
     return jni::sys::JNI_TRUE;
 }
 
@@ -325,7 +344,11 @@ pub fn surfaceChanged(
     debug_assert_ne!(application, std::ptr::null_mut());
 
     // let format = ndk_sys::AHardwareBuffer_Format::AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM.0;
-    let mut application: Box<Application> = unsafe { Box::from_raw(application) };
+    let application = unsafe {
+        (application as *mut Application)
+            .as_mut()
+            .expect("A valid pointer")
+    };
     application.raw_input.screen_rect = Some(egui::Rect::from_min_size(
         egui::Pos2::default(),
         egui::vec2(w as f32, h as f32) / application.scale_factor as f32,
@@ -336,7 +359,6 @@ pub fn surfaceChanged(
         h as u32,
         application.native_window.get_format(),
     );
-    let _ = Box::into_raw(Box::new(application));
 }
 
 #[no_mangle]

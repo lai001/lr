@@ -17,4 +17,8 @@ impl GlobalShader for MeshViewMultipleDrawShader {
     fn get_name(&self) -> String {
         "mesh_view_multiple_draw.wgsl".to_string()
     }
+
+    fn is_support_features(&self, features: &wgpu::Features) -> bool {
+        features.contains(wgpu::Features::VERTEX_WRITABLE_STORAGE)
+    }
 }

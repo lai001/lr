@@ -37,7 +37,7 @@ impl MultipleResolutionMeshsPass {
         device: &wgpu::Device,
         shader_library: &ShaderLibrary,
         pool: &mut BaseRenderPipelinePool,
-    ) -> MultipleResolutionMeshsPass {
+    ) -> Option<MultipleResolutionMeshsPass> {
         let cluster_collection_resources = HashMap::new();
         let depth_pipeline = GenericPipeline::standard_depth_only(
             ViewDepthShader {}.get_name(),
@@ -49,13 +49,13 @@ impl MultipleResolutionMeshsPass {
             ])),
         );
 
-        let box_culling_pipeline = BoxCullingPipeline::new(device, shader_library);
+        let box_culling_pipeline = BoxCullingPipeline::new(device, shader_library)?;
 
-        MultipleResolutionMeshsPass {
+        Some(MultipleResolutionMeshsPass {
             cluster_collection_resources,
             depth_pipeline,
             box_culling_pipeline,
-        }
+        })
     }
 
     pub fn create_resource(

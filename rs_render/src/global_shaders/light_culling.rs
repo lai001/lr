@@ -17,4 +17,8 @@ impl GlobalShader for LightCullingShader {
     fn get_name(&self) -> String {
         "light_culling.wgsl".to_string()
     }
+
+    fn is_support_limits(&self, limits: &wgpu::Limits) -> bool {
+        limits.max_storage_buffers_per_shader_stage >= 3
+    }
 }

@@ -16,8 +16,14 @@ impl LightCullingComputePipeline {
         device: &wgpu::Device,
         shader_library: &ShaderLibrary,
     ) -> crate::error::Result<LightCullingComputePipeline> {
+        let shader = LightCullingShader {};
+        if !shader.is_support_limits(&device.limits()) {
+            return Err(crate::error::Error::Other(Some(format!(
+                "LightCullingComputePipeline, Not support"
+            ))));
+        }
         let base_compute_pipeline =
-            BaseComputePipeline::new(device, shader_library, &LightCullingShader {}.get_name());
+            BaseComputePipeline::new(device, shader_library, &shader.get_name());
         Ok(LightCullingComputePipeline {
             base_compute_pipeline,
         })

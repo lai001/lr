@@ -15,7 +15,7 @@ task("ci")
             "editor", "renderdoc", "plugin_shared_crate", "plugin_dotnet", "plugin_v8", "network"
         })
         local standalone_feature_args = build_feature_args({
-            "standalone", "plugin_shared_crate", "plugin_v8"
+            "standalone", "plugin_shared_crate", "plugin_v8", "network"
         })
         os.cd(path.join(engine_root_dir, "build/target/release"))
         os.exec("./rs_shader_compiler.exe")

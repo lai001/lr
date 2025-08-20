@@ -32,12 +32,19 @@ pub struct BoxCullingPipeline {
 }
 
 impl BoxCullingPipeline {
-    pub fn new(device: &wgpu::Device, shader_library: &ShaderLibrary) -> BoxCullingPipeline {
-        let base_compute_pipeline =
-            BaseComputePipeline::new(device, shader_library, &BoxCullingShader {}.get_name());
-        BoxCullingPipeline {
-            base_compute_pipeline,
+    pub fn new(
+        device: &wgpu::Device,
+        shader_library: &ShaderLibrary,
+    ) -> Option<BoxCullingPipeline> {
+        let shader = BoxCullingShader {};
+        if !shader.is_support_limits(&device.limits()) {
+            return None;
         }
+        let base_compute_pipeline =
+            BaseComputePipeline::new(device, shader_library, &shader.get_name());
+        Some(BoxCullingPipeline {
+            base_compute_pipeline,
+        })
     }
 
     pub fn execute(

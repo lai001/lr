@@ -78,10 +78,10 @@ pub struct Renderer {
     grid_render_pipeline: GridPipeline,
     attachment_pipeline: AttachmentPipeline,
     mesh_view_pipeline: MeshViewPipeline,
-    mesh_view_multiple_draw_pipeline: MeshViewMultipleDrawPipeline,
+    mesh_view_multiple_draw_pipeline: Option<MeshViewMultipleDrawPipeline>,
     particle_pipeline: ParticlePipeline,
     primitive_render_pipeline: PrimitiveRenderPipeline,
-    light_culling_compute_pipeline: LightCullingComputePipeline,
+    light_culling_compute_pipeline: Option<LightCullingComputePipeline>,
 
     depth_textures: HashMap<isize, DepthTexture>,
     // default_textures: DefaultTextures,
@@ -118,7 +118,7 @@ pub struct Renderer {
     light_culling: crate::light_culling::LightCulling,
 
     multiple_resolution_meshs: HashMap<u64, MultipleResolutionMesh>,
-    multiple_resolution_meshs_pass: MultipleResolutionMeshsPass,
+    multiple_resolution_meshs_pass: Option<MultipleResolutionMeshsPass>,
 }
 
 impl Renderer {
@@ -197,12 +197,15 @@ impl Renderer {
             &mut base_render_pipeline_pool,
         );
 
-        let mesh_view_multiple_draw_pipeline = MeshViewMultipleDrawPipeline::new(
+        let mesh_view_multiple_draw_pipeline = MeshViewMultipleDrawPipeline::new_check_features(
             wgpu_context.get_device(),
             &shader_library,
             &current_swapchain_format,
             &mut base_render_pipeline_pool,
         );
+        if mesh_view_multiple_draw_pipeline.is_none() {
+            log::debug!("Not support `MeshViewMultipleDrawPipeline`");
+        }
 
         let shadow_pipilines = ShadowPipelines::new(
             wgpu_context.get_device(),
@@ -232,7 +235,10 @@ impl Renderer {
         )?;
 
         let light_culling_compute_pipeline =
-            LightCullingComputePipeline::new(wgpu_context.get_device(), &shader_library)?;
+            LightCullingComputePipeline::new(wgpu_context.get_device(), &shader_library);
+        if let Err(err) = &light_culling_compute_pipeline {
+            log::debug!("{}", err);
+        }
 
         let is_enable_multiple_thread = settings.is_enable_multithread_rendering;
         let multiple_resolution_meshs_pass = MultipleResolutionMeshsPass::new(
@@ -240,6 +246,9 @@ impl Renderer {
             &shader_library,
             &mut base_render_pipeline_pool,
         );
+        if multiple_resolution_meshs_pass.is_none() {
+            log::debug!("Not support `MultipleResolutionMeshsPass`");
+        }
         let renderer = Renderer {
             wgpu_context,
             gui_renderer: egui_render_pass,
@@ -278,7 +287,7 @@ impl Renderer {
             texture_views: HashMap::new(),
             surface_textures: HashMap::new(),
             bind_groups_collection: moka::sync::Cache::new(1000),
-            light_culling_compute_pipeline,
+            light_culling_compute_pipeline: light_culling_compute_pipeline.ok(),
             light_culling: LightCulling::new(),
             multiple_resolution_meshs: HashMap::new(),
             multiple_resolution_meshs_pass,
@@ -642,7 +651,11 @@ impl Renderer {
             }
         };
 
-        let output_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let output_view = color_texture.create_view(&{
+            let mut des = wgpu::TextureViewDescriptor::default();
+            des.usage = Some(TextureUsages::RENDER_ATTACHMENT);
+            des
+        });
         let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         if self.is_enable_multiple_thread {
@@ -651,7 +664,9 @@ impl Renderer {
                 depth_texture,
                 &present_info.draw_objects,
             );
-        } else {
+        } else if let Some(multiple_resolution_meshs_pass) =
+            &mut self.multiple_resolution_meshs_pass
+        {
             let mut multiple_resolution_mesh_draw_objects: Vec<&DrawObject> = vec![];
             let mut non_multiple_resolution_mesh_draw_objects: Vec<&DrawObject> = vec![];
             for draw_object_command in &present_info.draw_objects {
@@ -673,7 +688,7 @@ impl Renderer {
                     for (k, v) in self.texture_views.iter() {
                         texture_views.insert(*k, v);
                     }
-                    let _ = self.multiple_resolution_meshs_pass.render(
+                    let _ = multiple_resolution_meshs_pass.render(
                         self.wgpu_context.get_device(),
                         self.wgpu_context.get_queue(),
                         &self.multiple_resolution_meshs,
@@ -685,8 +700,7 @@ impl Renderer {
                         &mut self.bind_groups_collection,
                     );
 
-                    let visible_object_indices = self
-                        .multiple_resolution_meshs_pass
+                    let visible_object_indices = multiple_resolution_meshs_pass
                         .instance_culling(
                             self.wgpu_context.get_device(),
                             self.wgpu_context.get_queue(),
@@ -704,8 +718,7 @@ impl Renderer {
                         );
                     }
 
-                    let _ = self
-                        .multiple_resolution_meshs_pass
+                    let _ = multiple_resolution_meshs_pass
                         .cluster_culling(
                             self.wgpu_context.get_device(),
                             self.wgpu_context.get_queue(),
@@ -1329,26 +1342,30 @@ impl Renderer {
                 }
             }
             RenderCommand::CreateMultiResMesh(create_multiple_resolution_mesh) => {
-                let mesh_vertices = create_multiple_resolution_mesh.vertexes;
-                let indices = create_multiple_resolution_mesh.indices;
-                let cluster_collection = create_multiple_resolution_mesh.cluster_collection;
-                if let Some(debug_label) = &create_multiple_resolution_mesh.debug_label {
-                    log::trace!("Create multiple resolution mesh, {}", debug_label);
+                if let Some(multiple_resolution_meshs_pass) =
+                    &mut self.multiple_resolution_meshs_pass
+                {
+                    let mesh_vertices = create_multiple_resolution_mesh.vertexes;
+                    let indices = create_multiple_resolution_mesh.indices;
+                    let cluster_collection = create_multiple_resolution_mesh.cluster_collection;
+                    if let Some(debug_label) = &create_multiple_resolution_mesh.debug_label {
+                        log::trace!("Create multiple resolution mesh, {}", debug_label);
+                    }
+                    let multiple_resolution_mesh = MultipleResolutionMesh {
+                        vertexes: mesh_vertices,
+                        indices,
+                        cluster_collection,
+                    };
+                    multiple_resolution_meshs_pass.create_resource(
+                        self.wgpu_context.get_device(),
+                        create_multiple_resolution_mesh.handle,
+                        &multiple_resolution_mesh,
+                    );
+                    self.multiple_resolution_meshs.insert(
+                        create_multiple_resolution_mesh.handle,
+                        multiple_resolution_mesh,
+                    );
                 }
-                let multiple_resolution_mesh = MultipleResolutionMesh {
-                    vertexes: mesh_vertices,
-                    indices,
-                    cluster_collection,
-                };
-                self.multiple_resolution_meshs_pass.create_resource(
-                    self.wgpu_context.get_device(),
-                    create_multiple_resolution_mesh.handle,
-                    &multiple_resolution_mesh,
-                );
-                self.multiple_resolution_meshs.insert(
-                    create_multiple_resolution_mesh.handle,
-                    multiple_resolution_mesh,
-                );
             }
         }
         return None;
@@ -1676,14 +1693,16 @@ impl Renderer {
                     );
                 }
                 EBuiltinPipelineType::MeshViewMultipleDraw => {
-                    self.mesh_view_multiple_draw_pipeline.multi_draw_indirect(
-                        device,
-                        queue,
-                        surface_texture_view,
-                        &depth_texture_view,
-                        &[mesh_buffer],
-                        group_binding_resource,
-                    );
+                    if let Some(pipeline) = &self.mesh_view_multiple_draw_pipeline {
+                        pipeline.multi_draw_indirect(
+                            device,
+                            queue,
+                            surface_texture_view,
+                            &depth_texture_view,
+                            &[mesh_buffer],
+                            group_binding_resource,
+                        );
+                    }
                 }
                 EBuiltinPipelineType::ShadowDepthSkinMesh => unimplemented!(),
                 EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
@@ -1944,11 +1963,13 @@ impl Renderer {
                             EBuiltinPipelineType::MeshView => {
                                 Some(self.mesh_view_pipeline.base_render_pipeline.as_ref())
                             }
-                            EBuiltinPipelineType::MeshViewMultipleDraw => Some(
-                                self.mesh_view_multiple_draw_pipeline
-                                    .base_render_pipeline
-                                    .as_ref(),
-                            ),
+                            EBuiltinPipelineType::MeshViewMultipleDraw => {
+                                if let Some(pipeline) = &self.mesh_view_multiple_draw_pipeline {
+                                    Some(pipeline.base_render_pipeline.as_ref())
+                                } else {
+                                    None
+                                }
+                            }
                             EBuiltinPipelineType::ShadowDepthSkinMesh => unimplemented!(),
                             EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
                             EBuiltinPipelineType::Particle => {
@@ -2027,11 +2048,13 @@ impl Renderer {
                         EBuiltinPipelineType::MeshView => {
                             Some(self.mesh_view_pipeline.base_render_pipeline.as_ref())
                         }
-                        EBuiltinPipelineType::MeshViewMultipleDraw => Some(
-                            self.mesh_view_multiple_draw_pipeline
-                                .base_render_pipeline
-                                .as_ref(),
-                        ),
+                        EBuiltinPipelineType::MeshViewMultipleDraw => {
+                            if let Some(pipeline) = &self.mesh_view_multiple_draw_pipeline {
+                                Some(pipeline.base_render_pipeline.as_ref())
+                            } else {
+                                None
+                            }
+                        }
                         EBuiltinPipelineType::ShadowDepthSkinMesh => unimplemented!(),
                         EBuiltinPipelineType::ShadowDepthStaticMesh => unimplemented!(),
                         EBuiltinPipelineType::Particle => {
@@ -2660,6 +2683,9 @@ impl Renderer {
             self.light_culling_no_lights_fallback_pass(scene_light);
             return;
         }
+        let Some(light_culling_compute_pipeline) = &self.light_culling_compute_pipeline else {
+            return;
+        };
         let device = self.wgpu_context.get_device();
         let queue = self.wgpu_context.get_queue();
         let get_result = self.light_culling.get_or_add(
@@ -2667,7 +2693,7 @@ impl Renderer {
             10 * 10 * 10,
             scene_light.point_light_shapes.len(),
         );
-        self.light_culling_compute_pipeline.execute_out(
+        light_culling_compute_pipeline.execute_out(
             device,
             queue,
             &scene_light.point_light_shapes,

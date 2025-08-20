@@ -64,9 +64,9 @@ impl Logger {
                         ret
                     };
                     let level = record.level();
-                    if !record.target().starts_with("rs_")
-                        && level >= log::Level::Warn
-                        && !is_in_white_list
+                    if !(record.target().starts_with("rs_")
+                        || is_in_white_list
+                        || level <= log::Level::Warn)
                     {
                         return Err(std::fmt::Error {});
                     }

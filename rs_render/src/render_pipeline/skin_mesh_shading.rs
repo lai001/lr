@@ -29,7 +29,7 @@ pub struct Constants {
     _pad8_0: u32,
     _pad8_1: u32,
     _pad8_2: u32,
-    pub bones: [glam::Mat4; 255],
+    pub bones: [glam::Mat4; NUM_MAX_BONE],
 }
 
 impl Default for Constants {

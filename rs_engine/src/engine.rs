@@ -260,10 +260,15 @@ impl Engine {
         (|| {
             let mut resource_manager = ResourceManager::default();
             let Some(url) = Self::find_first_level(&mut resource_manager) else {
+                log::error!("Can not find a valid url");
                 return;
             };
-            let Ok(_level) = resource_manager.get_level(&url) else {
-                return;
+            let _level = match resource_manager.get_level(&url) {
+                Ok(_level) => _level,
+                Err(err) => {
+                    log::error!("{}", err);
+                    return;
+                }
             };
             log::trace!("Load level: {}", _level.url.to_string());
             level = Some(_level);
