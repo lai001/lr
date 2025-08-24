@@ -1,6 +1,9 @@
+pub mod android_main;
 pub mod application;
+pub mod egui_state;
 pub mod enviroment;
 pub mod error;
+pub mod gui;
 pub mod jni_onload;
 pub mod motion_event;
 pub mod native_window;

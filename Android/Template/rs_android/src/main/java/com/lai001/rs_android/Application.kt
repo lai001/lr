@@ -8,7 +8,7 @@ import java.io.InputStream
 
 class ApplicationException(message: String) : Exception(message)
 
-class Application(context: Context, artifactName: String, surface: Surface) : java.io.Closeable {
+class Application(context: Context, artifactName: String, surface: Surface, scaleFactor: Float) : java.io.Closeable {
     companion object {
         init {
             AutoLoadLibs
@@ -21,7 +21,7 @@ class Application(context: Context, artifactName: String, surface: Surface) : ja
 
     init {
         artifactInputStream = context.assets.open(artifactName)
-        nativeApplication = Application.fromSurface(surface, artifactInputStream).takeIf {
+        nativeApplication = Application.fromSurface(surface, scaleFactor, artifactInputStream).takeIf {
             it != 0L
         } ?: run {
             throw ApplicationException("Failed to create application.")

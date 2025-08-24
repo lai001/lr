@@ -9,7 +9,9 @@ impl NativeWindow {
         if a_native_window.is_null() {
             None
         } else {
-            Some(Self { a_native_window })
+            let mut native_window = Self { a_native_window };
+            native_window.acquire();
+            Some(native_window)
         }
     }
 
@@ -34,6 +36,10 @@ impl NativeWindow {
                 format,
             )
         }
+    }
+
+    fn acquire(&mut self) {
+        unsafe { ndk_sys::ANativeWindow_acquire(self.a_native_window) };
     }
 }
 

@@ -9,15 +9,14 @@ edition = "2021"
 default = ["standalone"]
 standalone = ["rs_render/standalone", "rs_engine/standalone"]
 profiler = ["tracy-client/enable", "rs_engine/profiler", "rs_render/profiler"]
-panic_hook = [
-    "dep:backtrace",
-    "dep:tracing",
-    "dep:tracing-subscriber",
-]
+panic_hook = ["dep:backtrace", "dep:tracing", "dep:tracing-subscriber"]
 plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 network = ["dep:rs_network", "rs_engine/network"]
+android-native-activity = [
+    "winit/android-native-activity",
+    "rs_engine/android-native-activity",
+]
 
-# [target.'cfg(target_os = "android")'.dependencies]
 [dependencies]
 glam = { version = "0.30.4", features = ["mint", "serde"] }
 log = "0.4.27"
@@ -31,7 +30,7 @@ ndk-context = "0.1.1"
 raw-window-handle = "0.6.2"
 android_logger = "0.15.1"
 tracy-client = { version = "0.18.2", default-features = false }
-winit = { version = "0.30.11", features = ["android-native-activity"] }
+winit = { version = "0.30.11" }
 backtrace = { version = "0.3", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", optional = true }

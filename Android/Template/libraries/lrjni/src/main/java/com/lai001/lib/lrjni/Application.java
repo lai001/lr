@@ -6,7 +6,7 @@ import android.view.Surface;
 import java.io.InputStream;
 
 public class Application {
-    public static native long fromSurface(Surface surface, InputStream inputStream);
+    public static native long fromSurface(Surface surface, float scaleFactor, InputStream inputStream);
 
     public static native boolean setNewSurface(long application, Surface surface);
 

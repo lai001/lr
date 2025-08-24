@@ -21,6 +21,7 @@ standalone = [
 profiler = ["tracy-client/enable", "rs_render/profiler"]
 plugin_shared_crate = []
 network = ["dep:rs_network"]
+android-native-activity = ["winit/android-native-activity"]
 
 [dependencies]
 bitflags = "2.9.1"
@@ -56,6 +57,7 @@ uniform-cubic-splines = { version = "=0.3.1" }
 dyn-clone = "1.0.19"
 downcast-rs = "2.0.1"
 meshopt = "0.5.0"
+winit = { version = "0.30.11" }
 rs_foundation = { path = "../rs_foundation" }
 rs_audio = { path = "../rs_audio" }
 rs_artifact = { path = "../rs_artifact" }
@@ -65,9 +67,6 @@ rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
 rs_proc_macros = { path = "../rs_proc_macros" }
 rs_render_types = { path = "../rs_render_types" }
 rs_network = { path = "../crates/rs_network", optional = true }
-
-[target.'cfg(not(target_os = "android"))'.dependencies]
-winit = { version = "0.30.11" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15.1"

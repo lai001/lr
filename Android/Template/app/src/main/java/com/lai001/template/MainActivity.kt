@@ -2,7 +2,6 @@ package com.lai001.template
 
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -17,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.lai001.rs_android.Application
 import com.lai001.rs_android.Environment
 import com.lai001.template.ui.theme.TemplateTheme
@@ -24,19 +25,16 @@ import java.io.Closeable
 
 const val TAG = "MainActivity"
 
-class MySurfaceView(context: android.content.Context) : SurfaceView(context) {
+class MySurfaceView(context: Context) : SurfaceView(context) {
+    var touchEvent: ((MotionEvent) -> Boolean)? = null
 
-    var touchEvent: ((MotionEvent?) -> Boolean)? = null
-
-    override fun onTouchEvent(event: MotionEvent?): Boolean {
-        if (event?.action == MotionEvent.ACTION_DOWN) {
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_UP) {
             performClick()
         }
-        return if (touchEvent != null) {
-            touchEvent!!.invoke(event)
-        } else {
-            super.onTouchEvent(event)
-        }
+        return touchEvent?.let {
+            it(event)
+        } ?: super.onTouchEvent(event)
     }
 
     override fun performClick(): Boolean {
@@ -44,40 +42,50 @@ class MySurfaceView(context: android.content.Context) : SurfaceView(context) {
     }
 }
 
-class MainActivity : ComponentActivity() {
-    val enviroment: Environment = Environment()
+class MyViewModel : ViewModel() {
+    var callback: MySurfaceCallback? = null
+    var environment: Environment = Environment()
 
+    fun init(context: Context) {
+        if (callback == null) {
+            callback = MySurfaceCallback(context)
+        }
+        environment.statusBarHeight = getStatusBarHeight(context)
+    }
+
+    private fun getStatusBarHeight(context: Context): Int {
+        var height = 0
+        val resourceId =
+            context.resources.getIdentifier("status_bar_height", "dimen", "android")
+        if (resourceId > 0) {
+            height = context.resources.getDimensionPixelSize(resourceId)
+        }
+        return height
+    }
+}
+
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enviroment.statusBarHeight = getStatusBarHeight()
-
+        val viewModel = ViewModelProvider(this)[MyViewModel::class.java]
+        viewModel.init(this)
         setContent {
             TemplateTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
                 ) {
                     Greeting({ surfaceView ->
-                        val callback = MySurfaceCallback()
-                        callback.mtApp.context = this
-                        callback.setEnviroment(enviroment)
-                        surfaceView.holder.addCallback(callback)
-                        surfaceView.touchEvent = { motionEvent ->
-                            callback.onTouchEvent(motionEvent)
+                        viewModel.callback?.let { callback ->
+                            callback.setEnvironment(viewModel.environment)
+                            surfaceView.holder.addCallback(callback)
+                            surfaceView.touchEvent = { motionEvent ->
+                                callback.onTouchEvent(motionEvent)
+                            }
                         }
                     })
                 }
             }
         }
-    }
-
-    fun getStatusBarHeight(): Int {
-        var height = 0
-        val resourceId =
-            applicationContext.resources.getIdentifier("status_bar_height", "dimen", "android")
-        if (resourceId > 0) {
-            height = applicationContext.resources.getDimensionPixelSize(resourceId)
-        }
-        return height
     }
 }
 
@@ -87,16 +95,17 @@ sealed class SMsgType {
     class SurfaceDestroyed(val surface: Surface) : SMsgType()
     class SurfaceChanged(val format: Int, val w: Int, val h: Int) : SMsgType()
     class SetEnvironment(val env: Environment) : SMsgType()
-    class Close : SMsgType()
+    object Close : SMsgType()
 }
 
-class MTApp : Closeable {
+class MTApp(private val context: Context) : Closeable {
     private val lock = Any()
     private var thread: Thread? = null
     private var messages: ArrayDeque<SMsgType> = ArrayDeque()
-     var context: Context? = null
 
     init {
+        val scaleFactor = context.resources.displayMetrics.density
+
         thread = Thread {
             var application: Application? = null
 
@@ -110,7 +119,7 @@ class MTApp : Closeable {
                     is SMsgType.SurfaceCreated -> {
                         if (application == null) {
                             application =
-                                context?.let { Application(it, "main.rs", message.surface) }
+                                Application(context, "main.rs", message.surface, scaleFactor)
                         } else {
                             application.setNewSurface(message.surface)
                         }
@@ -122,7 +131,6 @@ class MTApp : Closeable {
 
                     is SMsgType.SurfaceDestroyed -> {
                         application?.surfaceDestroyed(message.surface)
-                        break
                     }
 
                     is SMsgType.TouchEvent -> {
@@ -156,14 +164,15 @@ class MTApp : Closeable {
 
     override fun close() {
         synchronized(lock) {
-            messages.add(SMsgType.Close())
+            messages.add(SMsgType.Close)
         }
         thread = null
     }
 
     fun touchEvent(event: MotionEvent) {
+        val crossThreadEvent = MotionEvent.obtain(event)
         synchronized(lock) {
-            messages.add(SMsgType.TouchEvent(event))
+            messages.add(SMsgType.TouchEvent(crossThreadEvent))
         }
     }
 
@@ -185,15 +194,15 @@ class MTApp : Closeable {
         }
     }
 
-    fun setEnviroment(env: Environment) {
+    fun setEnvironment(env: Environment) {
         synchronized(lock) {
             messages.add(SMsgType.SetEnvironment(env))
         }
     }
 }
 
-class MySurfaceCallback : SurfaceHolder.Callback {
-    var mtApp = MTApp()
+class MySurfaceCallback(context: Context) : SurfaceHolder.Callback {
+    private var mtApp = MTApp(context)
 
     override fun surfaceCreated(p0: SurfaceHolder) {
         mtApp.surfaceCreated(p0.surface)
@@ -207,15 +216,13 @@ class MySurfaceCallback : SurfaceHolder.Callback {
         mtApp.surfaceDestroyed(p0.surface)
     }
 
-    fun onTouchEvent(event: MotionEvent?): Boolean {
-        event?.let {
-            mtApp.touchEvent(it)
-        }
+    fun onTouchEvent(event: MotionEvent): Boolean {
+        mtApp.touchEvent(event)
         return true
     }
 
-    fun setEnviroment(env: Environment) {
-        mtApp.setEnviroment(env)
+    fun setEnvironment(env: Environment) {
+        mtApp.setEnvironment(env)
     }
 }
 
