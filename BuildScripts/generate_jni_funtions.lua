@@ -32,7 +32,7 @@ task("generate_jni_funtions")
         end
         local param_map = {}
         param_map["JNIEnv *"]="jni::JNIEnv"
-        param_map["jobject"]="jni::sys::jobject"
+        param_map["jobject"]="jni::objects::JObject"
         param_map["jlong"]="jni::sys::jlong"
         param_map["jstring"]="jni::sys::jstring"
         param_map["jint"]="jni::sys::jint"

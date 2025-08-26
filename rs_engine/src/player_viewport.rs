@@ -1296,7 +1296,6 @@ impl PlayerViewport {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
     pub fn on_window_input(&mut self, ty: crate::input_type::EInputType) {
         use crate::{
             camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},

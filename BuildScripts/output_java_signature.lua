@@ -51,7 +51,8 @@ task("generate_android_java_signature")
         local classes = {
             "java.io.InputStream",
             "android.view.Surface",
-            "android.view.MotionEvent"
+            "android.view.MotionEvent",
+            "android.view.KeyEvent"
         }
         for _, class in ipairs(classes) do
             local tmp_dir = path.join(engine_root_dir, "build/java/signature/android")

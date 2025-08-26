@@ -96,7 +96,6 @@ impl UIWindow for ActorUIWindow {
             engine,
             window_manager,
             &mut self.virtual_key_code_states,
-            60.0,
         );
     }
 

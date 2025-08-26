@@ -485,7 +485,7 @@ impl EditorContext {
                 log::trace!("{:?}", result);
             }
             WindowEvent::RedrawRequested => {
-                self.frame_sync.sync(60.0);
+                self.frame_sync.sync();
 
                 let _span = tracy_client::span!();
                 let (is_minimized, is_visible) = {

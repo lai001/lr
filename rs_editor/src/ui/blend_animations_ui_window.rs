@@ -334,7 +334,7 @@ impl UIWindow for BlendAnimationUIWindow {
             }
             winit::event::WindowEvent::RedrawRequested => {
                 let time = std::time::Instant::now() - self.start;
-                self.frame_sync.sync(60.0);
+                self.frame_sync.sync();
                 engine.window_redraw_requested_begin(window_id);
                 self.player_view_port.on_window_input(
                     rs_engine::input_type::EInputType::KeyboardInput(&self.virtual_key_code_states),

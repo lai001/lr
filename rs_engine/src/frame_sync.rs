@@ -46,11 +46,9 @@ impl FrameSync {
         self.last_elapsed
     }
 
-    pub fn sync(&mut self, fps: f32) {
-        assert!(fps > 0.0);
-        let wait = self
-            .tick()
-            .unwrap_or(std::time::Duration::from_secs_f32(1.0 / fps));
-        std::thread::sleep(wait);
+    pub fn sync(&mut self) {
+        if let Some(wait) = self.tick() {
+            std::thread::sleep(wait);
+        }
     }
 }

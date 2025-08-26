@@ -1,6 +1,7 @@
 package com.lai001.rs_android
 
 import android.content.Context
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
 import com.lai001.lib.lrjni.Application
@@ -8,7 +9,8 @@ import java.io.InputStream
 
 class ApplicationException(message: String) : Exception(message)
 
-class Application(context: Context, artifactName: String, surface: Surface, scaleFactor: Float) : java.io.Closeable {
+class Application(context: Context, artifactName: String, surface: Surface, scaleFactor: Float) :
+    java.io.Closeable {
     companion object {
         init {
             AutoLoadLibs
@@ -21,11 +23,12 @@ class Application(context: Context, artifactName: String, surface: Surface, scal
 
     init {
         artifactInputStream = context.assets.open(artifactName)
-        nativeApplication = Application.fromSurface(surface, scaleFactor, artifactInputStream).takeIf {
-            it != 0L
-        } ?: run {
-            throw ApplicationException("Failed to create application.")
-        }
+        nativeApplication =
+            Application.fromSurface(surface, scaleFactor, artifactInputStream).takeIf {
+                it != 0L
+            } ?: run {
+                throw ApplicationException("Failed to create application.")
+            }
     }
 
     override fun close() {
@@ -37,10 +40,16 @@ class Application(context: Context, artifactName: String, surface: Surface, scal
         Application.redraw(nativeApplication)
     }
 
-    fun onTouchEvent(event: MotionEvent?): Boolean {
-        return event?.let {
-            return Application.onTouchEvent(nativeApplication, it)
-        } ?: true
+    fun onTouchEvent(event: MotionEvent): Boolean {
+        return Application.onTouchEvent(nativeApplication, event)
+    }
+
+    fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        return Application.onKeyUp(nativeApplication, keyCode, event)
+    }
+
+    fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        return Application.onKeyDown(nativeApplication, keyCode, event)
     }
 
     fun setEnvironment(env: Environment) {

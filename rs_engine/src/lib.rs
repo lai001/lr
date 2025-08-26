@@ -1,7 +1,6 @@
 pub mod actor;
 pub mod camera;
 pub mod camera_component;
-#[cfg(not(target_os = "android"))]
 pub mod camera_input_event_handle;
 pub mod cluster_light;
 pub mod collision_componenet;
@@ -19,7 +18,7 @@ pub mod file_type;
 pub mod frame_sync;
 pub mod handle;
 pub mod input_mode;
-#[cfg(not(target_os = "android"))]
+pub mod keys_detector;
 pub mod input_type;
 pub mod kinematic_component;
 pub mod logger;

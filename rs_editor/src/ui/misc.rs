@@ -109,7 +109,6 @@ pub fn on_window_event(
     engine: &mut Engine,
     window_manager: &mut WindowsManager,
     virtual_key_code_states: &mut HashMap<KeyCode, ElementState>,
-    taget_fps: f32,
 ) {
     let _ = window_type;
     let _ = window_manager;
@@ -123,7 +122,7 @@ pub fn on_window_event(
         }
         WindowEvent::RedrawRequested => {
             engine.tick();
-            frame_sync.sync(taget_fps);
+            frame_sync.sync();
             window.request_redraw();
         }
         _ => {}

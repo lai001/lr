@@ -106,12 +106,12 @@ impl Application {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
     pub fn on_window_input(
         &mut self,
-        window: &mut winit::window::Window,
+        #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
         ty: crate::input_type::EInputType,
     ) -> Vec<winit::keyboard::KeyCode> {
+        #[cfg(not(target_os = "android"))]
         let _ = window;
         self.player_view_port.on_window_input(ty.clone());
         #[cfg(feature = "plugin_shared_crate")]
@@ -122,7 +122,10 @@ impl Application {
         {
             let mut plugins = self.plugins.borrow_mut();
             for plugin in plugins.iter_mut() {
+                #[cfg(not(target_os = "android"))]
                 let mut plugin_consume = plugin.on_window_input(window, ty.clone());
+                #[cfg(target_os = "android")]
+                let mut plugin_consume = plugin.on_window_input(ty.clone());
                 consume.append(&mut plugin_consume);
             }
         }

@@ -282,7 +282,7 @@ impl UIWindow for ParticleSystemUIWindow {
 
                 engine.window_redraw_requested_end(window_id);
                 window.request_redraw();
-                self.base_ui_window.frame_sync.sync(60.0);
+                self.base_ui_window.frame_sync.sync();
             }
             _ => {}
         }

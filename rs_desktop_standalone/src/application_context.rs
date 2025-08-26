@@ -191,7 +191,7 @@ impl ApplicationContext {
     }
 
     fn sync(&mut self, window: &mut winit::window::Window) {
-        self.frame_sync.sync(60.0);
+        self.frame_sync.sync();
         window.request_redraw();
     }
 

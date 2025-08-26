@@ -1,7 +1,7 @@
 use super::{misc::update_window_with_input_mode, ui_window::UIWindow};
 use crate::{
-    editor_context::EWindowType, keys_detector::KeysDetector,
-    standalone_simulation_options::StandaloneSimulationType, windows_manager::WindowsManager,
+    editor_context::EWindowType, standalone_simulation_options::StandaloneSimulationType,
+    windows_manager::WindowsManager,
 };
 use anyhow::anyhow;
 use egui_winit::State;
@@ -13,6 +13,7 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
     input_type::EInputType,
+    keys_detector::KeysDetector,
     standalone::application::Application,
 };
 use rs_render::command::{RenderCommand, ScaleChangedInfo};
@@ -54,7 +55,6 @@ impl UIWindow for StandaloneUiWindow {
             engine,
             window_manager,
             self.keys_detector.virtual_key_code_states_mut(),
-            60.0,
         );
 
         match event {

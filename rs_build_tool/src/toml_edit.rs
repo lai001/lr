@@ -1,7 +1,33 @@
 use anyhow::anyhow;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use toml_edit::*;
+
+pub struct TomlEdit {
+    path: PathBuf,
+    doc: DocumentMut,
+}
+
+impl TomlEdit {
+    pub fn new(path: PathBuf) -> anyhow::Result<Self> {
+        let doc_mut = read_toml(&path)?;
+        Ok(Self { path, doc: doc_mut })
+    }
+
+    pub fn save(&self) -> anyhow::Result<()> {
+        Ok(std::fs::write(&self.path, self.doc.to_string())?)
+    }
+
+    pub fn doc_mut(&mut self) -> &mut DocumentMut {
+        &mut self.doc
+    }
+}
+
+pub fn read_toml(path: &Path) -> anyhow::Result<DocumentMut> {
+    let content = std::fs::read_to_string(path)?;
+    let doc = content.parse::<DocumentMut>()?;
+    Ok(doc)
+}
 
 pub fn enable_dylib_file(path: &Path) -> anyhow::Result<()> {
     let content = std::fs::read_to_string(path)?;

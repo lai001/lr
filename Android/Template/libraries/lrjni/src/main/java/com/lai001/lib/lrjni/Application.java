@@ -1,5 +1,6 @@
 package com.lai001.lib.lrjni;
 
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 
@@ -17,6 +18,10 @@ public class Application {
     public static native void surfaceChanged(long application, int format, int w, int h);
 
     public static native boolean onTouchEvent(long application, MotionEvent event);
+
+    public static native boolean onKeyDown(long application, int keyCode, KeyEvent event);
+
+    public static native boolean onKeyUp(long application, int keyCode, KeyEvent event);
 
     public static native void setEnvironment(long application, long environment);
 

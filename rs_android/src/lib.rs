@@ -5,5 +5,6 @@ pub mod enviroment;
 pub mod error;
 pub mod gui;
 pub mod jni_onload;
+pub mod key_event;
 pub mod motion_event;
 pub mod native_window;

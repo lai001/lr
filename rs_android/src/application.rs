@@ -1,14 +1,17 @@
 use crate::enviroment::Enviroment;
 use crate::error::Result;
 use crate::gui::GUI;
-use crate::motion_event::{self};
+use crate::key_event::{to_element_state, to_key_code};
+use crate::motion_event::{self, MotionEvent};
 use rs_artifact::artifact::{ArtifactFileHeader, ArtifactReader};
 use rs_artifact::java_input_stream::JavaInputStream;
 use rs_artifact::{
     file_header::{FileHeader, ARTIFACT_FILE_MAGIC_NUMBERS},
     EEndianType,
 };
+use rs_engine::frame_sync::FrameSync;
 use rs_engine::input_mode::EInputMode;
+use rs_engine::keys_detector::KeysDetector;
 use rs_engine::logger::{Logger, SlotFlags};
 use rs_render::command::ResizeInfo;
 
@@ -21,6 +24,8 @@ pub struct ApplicationContext {
     gui: GUI,
     app: rs_engine::standalone::application::Application,
     is_window_available: bool,
+    frame_sync: FrameSync,
+    keys_detector: KeysDetector,
 }
 
 impl ApplicationContext {
@@ -70,7 +75,8 @@ impl ApplicationContext {
             #[cfg(feature = "plugin_shared_crate")]
             plugins,
         );
-
+        let sync = FrameSync::new(rs_engine::frame_sync::EOptions::FPS(60.0));
+        let keys_detector = KeysDetector::new();
         Ok(ApplicationContext {
             native_window,
             enviroment: None,
@@ -78,6 +84,8 @@ impl ApplicationContext {
             app,
             gui,
             is_window_available: true,
+            frame_sync: sync,
+            keys_detector,
         })
     }
 
@@ -87,9 +95,8 @@ impl ApplicationContext {
         }
         self.engine.window_redraw_requested_begin(WINDOW_ID);
         self.gui.begin_ui();
-        egui::CentralPanel::default().show(&self.gui.egui_context(), |ui| {
+        egui::TopBottomPanel::top("my_top_panel").exact_height(0.01).show(&self.gui.egui_context(), |ui| {
             let _ = ui;
-            if ui.button("Click me!").clicked() {}
         });
         self.app
             .on_redraw_requested(&mut self.engine, self.gui.egui_context().clone());
@@ -97,6 +104,7 @@ impl ApplicationContext {
         self.engine.tick();
         self.engine.draw_gui(gui_render_output);
         self.engine.window_redraw_requested_end(WINDOW_ID);
+        self.frame_sync.sync();
     }
 
     pub fn get_status_bar_height(&self) -> i32 {
@@ -151,6 +159,38 @@ impl ApplicationContext {
             h as u32,
             self.native_window.get_format(),
         );
+    }
+
+    pub fn on_touch(&mut self, motion_event: MotionEvent<'_>) {
+        self.gui.on_touch(motion_event);
+    }
+
+    fn on_key_up(&mut self, key_code: i32, key_event: &mut crate::key_event::KeyEvent) {
+        let Some(key_code) = to_key_code(key_code) else {
+            return;
+        };
+        let Some(element_state) = to_element_state(key_event.get_action()) else {
+            return;
+        };
+        self.keys_detector.on_key(key_code, element_state);
+        self.app
+            .on_window_input(rs_engine::input_type::EInputType::KeyboardInput(
+                self.keys_detector.virtual_key_code_states(),
+            ));
+    }
+
+    fn on_key_down(&mut self, key_code: i32, key_event: &mut crate::key_event::KeyEvent) {
+        let Some(key_code) = to_key_code(key_code) else {
+            return;
+        };
+        let Some(element_state) = to_element_state(key_event.get_action()) else {
+            return;
+        };
+        self.keys_detector.on_key(key_code, element_state);
+        self.app
+            .on_window_input(rs_engine::input_type::EInputType::KeyboardInput(
+                self.keys_detector.virtual_key_code_states(),
+            ));
     }
 }
 
@@ -256,7 +296,7 @@ pub fn onTouchEvent(
             .as_mut()
             .expect("A valid pointer")
     };
-    application.gui.on_touch(motion_event);
+    application.on_touch(motion_event);
     return jni::sys::JNI_TRUE;
 }
 
@@ -321,4 +361,44 @@ pub fn setEnvironment(
     application
         .gui
         .set_status_bar_height(enviroment.status_bar_height);
+}
+
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn onKeyDown(
+    env: jni::JNIEnv,
+    _: jni::objects::JClass,
+    application: jni::sys::jlong,
+    key_code: jni::sys::jint,
+    key_event: jni::objects::JObject,
+) -> jni::sys::jboolean {
+    let application = unsafe {
+        (application as *mut ApplicationContext)
+            .as_mut()
+            .expect("A valid pointer")
+    };
+    application.on_key_down(
+        key_code,
+        &mut crate::key_event::KeyEvent::new(env, key_event),
+    );
+    return jni::sys::JNI_TRUE;
+}
+
+#[jni_fn::jni_fn("com.lai001.lib.lrjni.Application")]
+pub fn onKeyUp(
+    env: jni::JNIEnv,
+    _: jni::objects::JClass,
+    application: jni::sys::jlong,
+    key_code: jni::sys::jint,
+    key_event: jni::objects::JObject,
+) -> jni::sys::jboolean {
+    let application = unsafe {
+        (application as *mut ApplicationContext)
+            .as_mut()
+            .expect("A valid pointer")
+    };
+    application.on_key_up(
+        key_code,
+        &mut crate::key_event::KeyEvent::new(env, key_event),
+    );
+    return jni::sys::JNI_TRUE;
 }

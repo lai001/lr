@@ -158,7 +158,7 @@ impl UIWindow for MultipleDrawUiWindow {
                     rs_render::command::ERenderTargetType::SurfaceTexture(window_id),
                     present_draw_objects,
                 )));
-                self.frame_sync.sync(60.0);
+                self.frame_sync.sync();
                 engine.window_redraw_requested_end(window_id);
                 window.request_redraw();
             }

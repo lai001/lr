@@ -70,7 +70,7 @@ impl UIWindow for MediaUIWindow {
         let _ = self.egui_winit_state.on_window_event(window, event);
         match event {
             WindowEvent::RedrawRequested => {
-                self.frame_sync.sync(60.0);
+                self.frame_sync.sync();
 
                 engine.window_redraw_requested_begin(window_id);
 
