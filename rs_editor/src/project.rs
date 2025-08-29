@@ -236,6 +236,7 @@ fn get_cargo_toml_template() -> &'static str {
 name = "@name@"
 version = "0.1.0"
 edition = "2021"
+metadata = { lr = { is_plugin = true } }
 
 [features]
 default = ["editor", "plugin_shared_crate"]
@@ -249,7 +250,6 @@ standalone = [
 ]
 profiler = ["rs_engine/profiler", "rs_render/profiler"]
 network = ["dep:rs_network", "rs_engine/network"]
-lr_plugin = []
 
 [dependencies]
 egui = { version = "0.31.1" }
