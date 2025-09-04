@@ -1,3 +1,12 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum ENetMode {
+    #[default]
+    Server,
+    Client,
+}
+
 pub trait NetworkReplicated {
     fn get_network_id(&self) -> &uuid::Uuid;
 
@@ -30,6 +39,10 @@ pub trait NetworkReplicated {
     fn sync_with_server(&mut self, is_sync: bool);
 
     fn is_sync_with_server(&self) -> bool;
+
+    fn on_net_mode_changed(&mut self, net_mode: ENetMode) {
+        let _ = net_mode;
+    }
 }
 
 pub(crate) fn default_uuid() -> uuid::Uuid {

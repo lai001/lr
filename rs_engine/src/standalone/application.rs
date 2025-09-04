@@ -147,169 +147,7 @@ impl Application {
         let _ = window;
 
         #[cfg(feature = "network")]
-        {
-            if self.is_authority {
-                if let Some(server) = &mut self.server {
-                    {
-                        let mut active_level = self.current_active_level.borrow_mut();
-                        server.process_incoming();
-                        let mut network_replicated_data_map = HashMap::new();
-                        let mut network_call_data_map = HashMap::new();
-                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                            let data = network_replicated.on_replicated();
-                            if !data.is_empty() {
-                                let id = network_replicated.get_network_id();
-                                network_replicated_data_map.insert(id.to_owned(), data);
-                            }
-                            let data = network_replicated.call();
-                            if !data.is_empty() {
-                                let id = network_replicated.get_network_id();
-                                network_call_data_map.insert(id.to_owned(), data);
-                            }
-                        });
-                        let data = Self::serialize_replicated_data(&network_replicated_data_map);
-                        if !data.is_empty() {
-                            server.broadcast(&data);
-                        }
-                        let data = Self::serialize_call_data(&network_call_data_map);
-                        if !data.is_empty() {
-                            server.broadcast(&data);
-                        }
-                    }
-
-                    let mut messages = vec![];
-                    for client in server.clients_mut() {
-                        messages.append(&mut client.take_messages());
-                    }
-                    for message in &messages {
-                        server.broadcast(&message.data);
-                        let data = Self::deserialize_data(&message.data);
-                        for (k, v) in data {
-                            match k {
-                                ReplicatedFieldType::Level => {}
-                                ReplicatedFieldType::NetworkReplicated => {
-                                    let replicated_data = Self::deserialize_replicated_data(&v);
-                                    let mut active_level = self.current_active_level.borrow_mut();
-                                    active_level.visit_network_replicated_mut(
-                                        &mut |network_replicated| {
-                                            let id = network_replicated.get_network_id();
-                                            if let Some(data) = replicated_data.get(id) {
-                                                log::trace!(
-                                                    "[Server]On sync, id: {id}, name: {:?}",
-                                                    network_replicated.debug_name()
-                                                );
-                                                network_replicated.on_sync(data);
-                                            }
-                                        },
-                                    );
-                                }
-                                ReplicatedFieldType::Call => {
-                                    let call_data = Self::deserialize_call_data(&v);
-                                    let mut active_level = self.current_active_level.borrow_mut();
-                                    active_level.visit_network_replicated_mut(
-                                        &mut |network_replicated| {
-                                            let id = network_replicated.get_network_id();
-                                            if let Some(data) = call_data.get(id) {
-                                                log::trace!(
-                                                    "[Server]On call, id: {id}, name: {:?}",
-                                                    network_replicated.debug_name()
-                                                );
-                                                network_replicated.on_call(data);
-                                            }
-                                        },
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                if let Some(client) = &mut self.client {
-                    {
-                        let mut active_level = self.current_active_level.borrow_mut();
-                        let mut network_replicated_data_map = HashMap::new();
-                        let mut network_call_data_map = HashMap::new();
-                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                            let data = network_replicated.on_replicated();
-                            if !data.is_empty() {
-                                let id = network_replicated.get_network_id();
-                                network_replicated_data_map.insert(id.to_owned(), data);
-                            }
-                            let data = network_replicated.call();
-                            if !data.is_empty() {
-                                let id = network_replicated.get_network_id();
-                                network_call_data_map.insert(id.to_owned(), data);
-                            }
-                        });
-                        let data = Self::serialize_replicated_data(&network_replicated_data_map);
-                        if !data.is_empty() {
-                            client.write(data);
-                        }
-                        let data = Self::serialize_call_data(&network_call_data_map);
-                        if !data.is_empty() {
-                            client.write(data);
-                        }
-                    }
-
-                    for message in client.take_messages() {
-                        let data = Self::deserialize_data(&message.data);
-                        for (k, v) in data {
-                            match k {
-                                ReplicatedFieldType::Level => {
-                                    let level =
-                                        rs_artifact::bincode_legacy::deserialize::<Level>(&v, None);
-                                    if let Ok(mut remote_level) = level {
-                                        log::trace!(
-                                            "To remote level: {}",
-                                            &remote_level.get_name()
-                                        );
-                                        remote_level.initialize(
-                                            engine,
-                                            &self._contents,
-                                            &mut self.player_view_port,
-                                        );
-                                        self.current_active_level =
-                                            SingleThreadMut::new(remote_level);
-                                    }
-                                }
-                                ReplicatedFieldType::NetworkReplicated => {
-                                    let replicated_data = Self::deserialize_replicated_data(&v);
-                                    let mut active_level = self.current_active_level.borrow_mut();
-                                    active_level.visit_network_replicated_mut(
-                                        &mut |network_replicated| {
-                                            let id = network_replicated.get_network_id();
-                                            if let Some(data) = replicated_data.get(id) {
-                                                log::trace!(
-                                                    "On sync, id: {id}, name: {:?}",
-                                                    network_replicated.debug_name()
-                                                );
-                                                network_replicated.on_sync(data);
-                                            }
-                                        },
-                                    );
-                                }
-                                ReplicatedFieldType::Call => {
-                                    let call_data = Self::deserialize_call_data(&v);
-                                    let mut active_level = self.current_active_level.borrow_mut();
-                                    active_level.visit_network_replicated_mut(
-                                        &mut |network_replicated| {
-                                            let id = network_replicated.get_network_id();
-                                            if let Some(data) = call_data.get(id) {
-                                                log::trace!(
-                                                    "[Client]On call, id: {id}, name: {:?}",
-                                                    network_replicated.debug_name()
-                                                );
-                                                network_replicated.on_call(data);
-                                            }
-                                        },
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        self.net_tick(engine);
 
         #[cfg(not(target_os = "android"))]
         self.player_view_port
@@ -403,18 +241,185 @@ impl Application {
 
 #[cfg(feature = "network")]
 impl Application {
+    fn server_tick(active_level: &mut Level, server: &mut rs_network::server::Server) {
+        {
+            server.process_incoming();
+            let mut network_replicated_data_map = HashMap::new();
+            let mut network_call_data_map = HashMap::new();
+            active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                let data = network_replicated.on_replicated();
+                if !data.is_empty() {
+                    let id = network_replicated.get_network_id();
+                    network_replicated_data_map.insert(id.to_owned(), data);
+                }
+                let data = network_replicated.call();
+                if !data.is_empty() {
+                    let id = network_replicated.get_network_id();
+                    network_call_data_map.insert(id.to_owned(), data);
+                }
+            });
+            let data = Self::serialize_replicated_data(&network_replicated_data_map);
+            if !data.is_empty() {
+                server.broadcast(&data);
+            }
+            let data = Self::serialize_call_data(&network_call_data_map);
+            if !data.is_empty() {
+                server.broadcast(&data);
+            }
+        }
+
+        let mut messages = vec![];
+        for client in server.clients_mut() {
+            messages.append(&mut client.take_messages());
+        }
+        for message in &messages {
+            server.broadcast(&message.data);
+            let data = Self::deserialize_data(&message.data);
+            for (k, v) in data {
+                match k {
+                    ReplicatedFieldType::Level => {}
+                    ReplicatedFieldType::NetworkReplicated => {
+                        let replicated_data = Self::deserialize_replicated_data(&v);
+                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                            let id = network_replicated.get_network_id();
+                            if let Some(data) = replicated_data.get(id) {
+                                log::trace!(
+                                    "[Server]On sync, id: {id}, name: {:?}",
+                                    network_replicated.debug_name()
+                                );
+                                network_replicated.on_sync(data);
+                            }
+                        });
+                    }
+                    ReplicatedFieldType::Call => {
+                        let call_data = Self::deserialize_call_data(&v);
+                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                            let id = network_replicated.get_network_id();
+                            if let Some(data) = call_data.get(id) {
+                                log::trace!(
+                                    "[Server]On call, id: {id}, name: {:?}",
+                                    network_replicated.debug_name()
+                                );
+                                network_replicated.on_call(data);
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    fn client_tick(
+        engine: &mut Engine,
+        current_active_level: &mut SingleThreadMutType<Level>,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+        client: &mut rs_network::client::Client,
+    ) {
+        {
+            let mut active_level = current_active_level.borrow_mut();
+            let mut network_replicated_data_map = HashMap::new();
+            let mut network_call_data_map = HashMap::new();
+            active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                let data = network_replicated.on_replicated();
+                if !data.is_empty() {
+                    let id = network_replicated.get_network_id();
+                    network_replicated_data_map.insert(id.to_owned(), data);
+                }
+                let data = network_replicated.call();
+                if !data.is_empty() {
+                    let id = network_replicated.get_network_id();
+                    network_call_data_map.insert(id.to_owned(), data);
+                }
+            });
+            let data = Self::serialize_replicated_data(&network_replicated_data_map);
+            if !data.is_empty() {
+                client.write(data);
+            }
+            let data = Self::serialize_call_data(&network_call_data_map);
+            if !data.is_empty() {
+                client.write(data);
+            }
+        }
+
+        for message in client.take_messages() {
+            let data = Self::deserialize_data(&message.data);
+            for (k, v) in data {
+                match k {
+                    ReplicatedFieldType::Level => {
+                        let level = rs_artifact::bincode_legacy::deserialize::<Level>(&v, None);
+                        if let Ok(mut remote_level) = level {
+                            log::trace!("To remote level: {}", &remote_level.get_name());
+                            remote_level.initialize(engine, files, player_viewport);
+                            *current_active_level = SingleThreadMut::new(remote_level);
+                        }
+                    }
+                    ReplicatedFieldType::NetworkReplicated => {
+                        let replicated_data = Self::deserialize_replicated_data(&v);
+                        let mut active_level = current_active_level.borrow_mut();
+                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                            let id = network_replicated.get_network_id();
+                            if let Some(data) = replicated_data.get(id) {
+                                log::trace!(
+                                    "On sync, id: {id}, name: {:?}",
+                                    network_replicated.debug_name()
+                                );
+                                network_replicated.on_sync(data);
+                            }
+                        });
+                    }
+                    ReplicatedFieldType::Call => {
+                        let call_data = Self::deserialize_call_data(&v);
+                        let mut active_level = current_active_level.borrow_mut();
+                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                            let id = network_replicated.get_network_id();
+                            if let Some(data) = call_data.get(id) {
+                                log::trace!(
+                                    "[Client]On call, id: {id}, name: {:?}",
+                                    network_replicated.debug_name()
+                                );
+                                network_replicated.on_call(data);
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    fn net_tick(&mut self, engine: &mut Engine) {
+        if self.is_authority {
+            if let Some(server) = &mut self.server {
+                let mut active_level = self.current_active_level.borrow_mut();
+                Application::server_tick(&mut active_level, server);
+            }
+        } else {
+            if let Some(client) = &mut self.client {
+                Application::client_tick(
+                    engine,
+                    &mut self.current_active_level,
+                    &self._contents,
+                    &mut self.player_view_port,
+                    client,
+                );
+            }
+        }
+    }
+
     pub fn on_network_changed(&mut self) {
         debug_assert_eq!(self.server.is_some() && self.client.is_some(), false);
         if self.server.is_some() {
-            self.current_active_level
-                .borrow_mut()
-                .network_fields
-                .is_server = true;
+            let mut level = self.current_active_level.borrow_mut();
+            level.visit_network_replicated_mut(&mut |rep| {
+                rep.on_net_mode_changed(crate::network::ENetMode::Server);
+            });
+            level.network_fields.is_server = true;
         } else if self.client.is_some() {
-            self.current_active_level
-                .borrow_mut()
-                .network_fields
-                .is_server = false;
+            let mut level = self.current_active_level.borrow_mut();
+            level.visit_network_replicated_mut(&mut |rep| {
+                rep.on_net_mode_changed(crate::network::ENetMode::Client);
+            });
+            level.network_fields.is_server = false;
         }
     }
 

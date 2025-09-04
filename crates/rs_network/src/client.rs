@@ -7,8 +7,8 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -67,6 +67,7 @@ impl Client {
             .spawn({
                 let sender = sender.clone();
                 let shutdown = shutdown.clone();
+                #[cfg(feature="network_debug_trace")]
                 let debug_label = debug_label.clone();
                 move || {
                     let mut buffer: Vec<u8> = vec![0; 512 * 10];
@@ -81,6 +82,7 @@ impl Client {
                                     if buffer.len() < size {
                                         buffer.resize(size, 0);
                                     }
+                                    #[cfg(feature="network_debug_trace")]
                                     match &debug_label {
                                         Some(debug_label) => {
                                             log::trace!("[{debug_label}] Receive data. {size}");
@@ -94,7 +96,14 @@ impl Client {
                             }
                             Err(err) => {
                                 if !matches!(err.kind(), std::io::ErrorKind::TimedOut) {
-                                    log::warn!("Failed to read from: {peer_addr}, {err}");
+                                    match &debug_label {
+                                        Some(debug_label) => {
+                                            log::warn!("[{debug_label}] Failed to read from: {peer_addr}, {err}");
+                                        }
+                                        None => {
+                                            log::warn!("Failed to read from: {peer_addr}, {err}");
+                                        }
+                                    }                                    
                                 }
                             }
                         }
@@ -105,6 +114,7 @@ impl Client {
                                     Ok(bytes) => {
                                         // let _ = tcp_stream.flush();
                                         if bytes != 0 {
+                                            #[cfg(feature="network_debug_trace")]
                                             match &debug_label {
                                                 Some(debug_label) => {
                                                     log::trace!(
@@ -120,7 +130,14 @@ impl Client {
                                     }
                                     Err(err) => {
                                         if !matches!(err.kind(), std::io::ErrorKind::TimedOut) {
-                                            log::warn!("Failed to write to: {peer_addr}, {err}");
+                                            match &debug_label {
+                                                Some(debug_label) => {
+                                                    log::warn!("[{debug_label}] Failed to write to: {peer_addr}, {err}");
+                                                }
+                                                None => {
+                                                    log::warn!("Failed to write to: {peer_addr}, {err}");
+                                                }
+                                            }
                                         }
                                     }
                                 }

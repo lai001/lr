@@ -49,6 +49,8 @@ pub struct NetworkFields {
     is_sync_with_server: bool,
     #[serde(skip)]
     net_transformation: Option<glam::Mat4>,
+    #[serde(skip)]
+    net_mode: network::ENetMode,
 }
 
 #[cfg(feature = "network")]
@@ -60,33 +62,12 @@ impl NetworkFields {
             replicated_datas: TransmissionType::new(),
             is_sync_with_server: false,
             net_transformation: None,
+            net_mode: network::ENetMode::Server,
         }
-    }
-
-    pub fn set_transformation(
-        &mut self,
-        transformation: glam::Mat4,
-    ) -> rs_artifact::error::Result<()> {
-        let is_same = self
-            .net_transformation
-            .map(|x| x == transformation)
-            .unwrap_or(false);
-        if is_same {
-            return Ok(());
-        }
-        self.net_transformation = Some(transformation);
-        let data = rs_artifact::bincode_legacy::serialize(&transformation, None)?;
-        self.replicated_datas
-            .insert(ReplicatedFieldType::Transformation, data);
-        Ok(())
     }
 
     pub fn reset(&mut self) {
         self.replicated_datas.drain();
-    }
-
-    pub fn transformation(&self) -> Option<glam::Mat4> {
-        self.net_transformation
     }
 }
 
@@ -106,7 +87,38 @@ pub struct SceneComponent {
     run_time: Option<SceneComponentRuntime>,
     #[cfg(feature = "network")]
     #[serde(default)]
-    pub network_fields: NetworkFields,
+    network_fields: NetworkFields,
+}
+
+#[cfg(feature = "network")]
+impl SceneComponent {
+    pub fn network_set_transformation(
+        &mut self,
+        transformation: glam::Mat4,
+    ) -> rs_artifact::error::Result<()> {
+        if self.network_fields.net_mode == crate::network::ENetMode::Server {
+            self.transformation = transformation;
+            self.insert_changed_state(ChangedStateFlags::Transformation);
+        }
+        let is_same = self
+            .network_fields
+            .net_transformation
+            .map(|x| x == transformation)
+            .unwrap_or(false);
+        if is_same {
+            return Ok(());
+        }
+        self.network_fields.net_transformation = Some(transformation);
+        let data = rs_artifact::bincode_legacy::serialize(&transformation, None)?;
+        self.network_fields
+            .replicated_datas
+            .insert(ReplicatedFieldType::Transformation, data);
+        Ok(())
+    }
+
+    pub fn network_transformation(&self) -> Option<glam::Mat4> {
+        self.network_fields.net_transformation
+    }
 }
 
 #[cfg(feature = "network")]
@@ -176,6 +188,10 @@ impl crate::network::NetworkReplicated for SceneComponent {
         if let Err(err) = &sync_result {
             log::warn!("{}", err);
         }
+    }
+
+    fn on_net_mode_changed(&mut self, net_mode: network::ENetMode) {
+        self.network_fields.net_mode = net_mode;
     }
 }
 

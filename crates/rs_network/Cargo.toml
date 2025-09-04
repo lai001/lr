@@ -3,6 +3,9 @@ name = "rs_network"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+network_debug_trace = []
+
 [dependencies]
 log = "0.4.27"
 uuid = { version = "1.17.0", features = [

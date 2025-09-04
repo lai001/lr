@@ -95,9 +95,11 @@ impl ApplicationContext {
         }
         self.engine.window_redraw_requested_begin(WINDOW_ID);
         self.gui.begin_ui();
-        egui::TopBottomPanel::top("my_top_panel").exact_height(0.01).show(&self.gui.egui_context(), |ui| {
-            let _ = ui;
-        });
+        egui::TopBottomPanel::top("my_top_panel")
+            .exact_height(0.01)
+            .show(&self.gui.egui_context(), |ui| {
+                let _ = ui;
+            });
         self.app
             .on_redraw_requested(&mut self.engine, self.gui.egui_context().clone());
         let gui_render_output = self.gui.end_ui(WINDOW_ID);
