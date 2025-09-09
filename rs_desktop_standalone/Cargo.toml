@@ -19,35 +19,35 @@ plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 network = ["dep:rs_network", "rs_engine/network"]
 
 [dependencies]
-clap = { version = "4.5.41", features = ["derive"] }
-log = "0.4.27"
+clap = { version = "4.5.47", features = ["derive"] }
+log = "0.4.28"
 env_logger = "0.11.8"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.141"
+serde_json = "1.0.143"
 bincode = { version = "2.0.1", features = ["serde"] }
-glam = { version = "0.30.4" }
-uuid = { version = "1.17.0", features = [
+glam = { version = "0.30.5" }
+uuid = { version = "1.18.1", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
     "serde",
 ] }
-url = { version = "2.5.4", features = ["serde"] }
-percent-encoding = "2.3.1"
-winit = { version = "0.30.11" }
-egui = { version = "0.32.0" }
-egui_extras = { version = "0.32.0", features = ["all_loaders"] }
-egui-winit = { version = "0.32.0" }
+url = { version = "2.5.7", features = ["serde"] }
+percent-encoding = "2.3.2"
+winit = { version = "0.30.12" }
+egui = { version = "0.32.2" }
+egui_extras = { version = "0.32.2", features = ["all_loaders"] }
+egui-winit = { version = "0.32.2" }
 rfd = "0.15.4"
-image = "0.25.6"
-regex = "1.11.1"
-notify = "8.1.0"
-notify-debouncer-mini = { version = "0.6.0" }
+image = "0.25.8"
+regex = "1.11.2"
+notify = "8.2.0"
+notify-debouncer-mini = { version = "0.7.0" }
 walkdir = "2.5.0"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 md-5 = { version = "0.10.6" }
-anyhow = { version = "1.0.98" }
+anyhow = { version = "1.0.99" }
 lazy_static = "1.5.0"
 naga = { version = "25.0.0" }
 wgpu = "25.0.0"

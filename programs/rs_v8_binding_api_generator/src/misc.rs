@@ -97,7 +97,7 @@ pub fn make_unwrap_object(native_struct_name: &str, wrap_type: EWrappedStructTyp
         let #name = unsafe {
             let #name = v8::Object::unwrap::<CPPGC_TAG, #native_struct_name>(scope, args.this())
                 .expect("Not null");
-            #name.wrapped_value.as_ptr().as_mut().expect("Not null")
+            #name.as_ref().wrapped_value.as_ptr().as_mut().expect("Not null")
         };
     }
 }
@@ -324,8 +324,8 @@ pub fn make_wrapped_struct(
                 pub struct #wrap_struct_name {
                     pub wrapped_value: Rc<RefCell<#wrapped_value_type>>,
                 }
-                impl v8::cppgc::GarbageCollected for #wrap_struct_name {
-                    fn trace(&self, _visitor: &v8::cppgc::Visitor) {}
+                unsafe impl v8::cppgc::GarbageCollected for #wrap_struct_name {
+                    fn trace(&self, _visitor: &mut v8::cppgc::Visitor) {}
 
                     fn get_name(&self) -> &'static std::ffi::CStr {
                         #name
@@ -340,8 +340,8 @@ pub fn make_wrapped_struct(
                     pub wrapped_value: std::ptr::NonNull<#wrapped_value_type>,
                 }
 
-                impl v8::cppgc::GarbageCollected for #wrap_struct_name {
-                    fn trace(&self, _visitor: &v8::cppgc::Visitor) {}
+                unsafe  impl v8::cppgc::GarbageCollected for #wrap_struct_name {
+                    fn trace(&self, _visitor: &mut v8::cppgc::Visitor) {}
 
                     fn get_name(&self) -> &'static std::ffi::CStr {
                         #name

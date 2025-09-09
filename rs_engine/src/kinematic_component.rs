@@ -41,32 +41,29 @@ impl KinematicComponent {
 
         let controller = KinematicCharacterController::default();
         let character_body = &physics.rigid_body_set[character_handle];
-        let character_collider = &physics.collider_set[character_body.colliders()[0]];
+        let character_collider = physics.collider_set[character_body.colliders()[0]].clone();
         let character_mass = character_body.mass();
 
         let mut collisions = vec![];
         let mvt = controller.move_shape(
             physics.integration_parameters.dt,
-            &physics.rigid_body_set,
-            &physics.collider_set,
-            &physics.query_pipeline,
+            &physics.query_pipeline(Some(
+                QueryFilter::new().exclude_rigid_body(character_handle),
+            )),
             character_collider.shape(),
             character_collider.position(),
             desired_movement.cast::<f32>(),
-            QueryFilter::new().exclude_rigid_body(character_handle),
             |c| collisions.push(c),
         );
         controller.solve_character_collision_impulses(
             physics.integration_parameters.dt,
-            &mut physics.rigid_body_set,
-            &physics.collider_set,
-            &physics.query_pipeline,
+            &mut physics.query_pipeline_mut(Some(
+                QueryFilter::new().exclude_rigid_body(character_handle),
+            )),
             character_collider.shape(),
             character_mass,
             &*collisions,
-            QueryFilter::new().exclude_rigid_body(character_handle),
         );
-
         let character_body = &mut physics.rigid_body_set[character_handle];
         let pos = character_body.position();
         character_body.set_next_kinematic_translation(pos.translation.vector + mvt.translation);

@@ -6,17 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "0.4.27"
+log = "0.4.28"
 env_logger = "0.11.8"
 serde = { version = "1.0.219", features = ["derive"] }
 # typetag = "0.2"
 # dyn-clone = "1.0.16"
 bincode = { version = "2.0.1", features = ["serde"] }
-glam = { version = "0.30.4", features = ["mint", "serde"] }
+glam = { version = "0.30.5", features = ["mint", "serde"] }
 type-layout = "0.2.0"
-image = "0.25.6"
-url = { version = "2.5.4", features = ["serde"] }
-uuid = { version = "1.17.0", features = [
+image = "0.25.8"
+url = { version = "2.5.7", features = ["serde"] }
+uuid = { version = "1.18.1", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
@@ -27,7 +27,7 @@ rs_core_minimal = { path = "../rs_core_minimal" }
 rs_render_types = { path = "../rs_render_types" }
 
 [dev-dependencies]
-serde_json = "1.0.141"
+serde_json = "1.0.143"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21.1"

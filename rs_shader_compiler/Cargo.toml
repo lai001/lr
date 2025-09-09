@@ -11,11 +11,11 @@ standalone = ["rs_render/standalone", "rs_core_minimal/standalone"]
 detect_encoding = ["dep:encoding_rs", "dep:chardetng"]
 
 [dependencies]
-anyhow = { version = "1.0.98" }
+anyhow = { version = "1.0.99" }
 bincode = { version = "2.0.1", features = ["serde"] }
-log = "0.4.27"
+log = "0.4.28"
 env_logger = "0.11.8"
-clap = { version = "4.5.41", features = ["derive"] }
+clap = { version = "4.5.47", features = ["derive"] }
 wgpu = "25.0.0"
 naga = { version = "25.0.0", features = ["serialize", "deserialize"] }
 pollster = "0.4.0"
@@ -23,7 +23,7 @@ dunce = "1.0.5"
 path-slash = "0.2.1"
 walkdir = "2.5.0"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.141"
+serde_json = "1.0.143"
 chardetng = { version = "0.1.17", optional = true }
 encoding_rs = { version = "0.8.35", optional = true }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }

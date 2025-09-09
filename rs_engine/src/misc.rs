@@ -34,7 +34,7 @@ pub fn points_to_aabb(points: &[glam::Vec3]) -> rapier3d::prelude::Aabb {
         .map(|x| rapier3d::math::Point::<f32>::from_slice(&x.to_array()))
         .collect();
 
-    let aabb = rapier3d::prelude::Aabb::from_points(&points);
+    let aabb = rapier3d::prelude::Aabb::from_points(points);
     aabb
 }
 

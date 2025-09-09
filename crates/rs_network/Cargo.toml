@@ -7,8 +7,8 @@ edition = "2024"
 network_debug_trace = []
 
 [dependencies]
-log = "0.4.27"
-uuid = { version = "1.17.0", features = [
+log = "0.4.28"
+uuid = { version = "1.18.1", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
@@ -19,4 +19,4 @@ rs_artifact = { path = "../../rs_artifact" }
 rs_core_minimal = { path = "../../rs_core_minimal" }
 
 [build-dependencies]
-bindgen = "0.72.0"
+bindgen = "0.72.1"

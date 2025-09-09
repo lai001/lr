@@ -10,15 +10,132 @@ use crate::{
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 #[cfg(feature = "network")]
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "network")]
-use std::collections::HashMap;
 
 #[cfg(feature = "network")]
-#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct NetworkObjectData {
+    pub id: uuid::Uuid,
+    pub replicated: Vec<u8>,
+    pub call: Vec<u8>,
+}
+
+#[cfg(feature = "network")]
+impl NetworkObjectData {
+    pub fn is_valid(&self) -> bool {
+        !(self.call.is_empty() && self.replicated.is_empty())
+    }
+}
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ReplicatedFieldType {
     Level,
     NetworkReplicated,
     Call,
+}
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub struct EndpointData {
+    pub network_object_datas: Vec<NetworkObjectData>,
+}
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct ServerNetData {
+    pub endpoint_data: EndpointData,
+    pub client_net_datas: Vec<Vec<u8>>,
+    pub level_net_data: Vec<u8>,
+}
+
+#[cfg(feature = "network")]
+impl ServerNetData {
+    pub fn is_valid(&self) -> bool {
+        !(self.level_net_data.is_empty()
+            && self.client_net_datas.is_empty()
+            && self.endpoint_data.network_object_datas.is_empty())
+    }
+
+    pub fn serialize(&self) -> rs_artifact::error::Result<Vec<u8>> {
+        rs_artifact::bincode_legacy::serialize(&self, Some(rs_artifact::EEndianType::Little))
+    }
+
+    pub fn deserialize(data: &[u8]) -> rs_artifact::error::Result<ServerNetData> {
+        let server_net_data = rs_artifact::bincode_legacy::deserialize::<ServerNetData>(
+            data,
+            Some(rs_artifact::EEndianType::Little),
+        );
+        server_net_data
+    }
+
+    pub fn client_endpoint_datas(&self) -> Vec<EndpointData> {
+        let mut client_endpoint_datas: Vec<EndpointData> = vec![];
+        for client_net_data in &self.client_net_datas {
+            let Ok(client_endpoint_data) = rs_artifact::bincode_legacy::deserialize::<EndpointData>(
+                client_net_data,
+                Some(rs_artifact::EEndianType::Little),
+            ) else {
+                continue;
+            };
+            client_endpoint_datas.push(client_endpoint_data);
+        }
+        client_endpoint_datas
+    }
+
+    pub fn level(&self) -> Option<Level> {
+        let level = rs_artifact::bincode_legacy::deserialize::<Level>(&self.level_net_data, None);
+        level.ok()
+    }
+
+    pub fn serialize_level(&mut self, level: &Level) -> rs_artifact::error::Result<()> {
+        let data =
+            rs_artifact::bincode_legacy::serialize(level, Some(rs_artifact::EEndianType::Little))?;
+        self.level_net_data = data;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "network")]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct ClientNetData {
+    pub endpoint_data: EndpointData,
+}
+
+#[cfg(feature = "network")]
+impl ClientNetData {
+    pub fn is_valid(&self) -> bool {
+        !self.endpoint_data.network_object_datas.is_empty()
+    }
+
+    pub fn serialize(&self) -> rs_artifact::error::Result<Vec<u8>> {
+        rs_artifact::bincode_legacy::serialize(&self, Some(rs_artifact::EEndianType::Little))
+    }
+
+    pub fn deserialize(data: &[u8]) -> rs_artifact::error::Result<ClientNetData> {
+        let client_net_data = rs_artifact::bincode_legacy::deserialize::<ClientNetData>(
+            data,
+            Some(rs_artifact::EEndianType::Little),
+        );
+        client_net_data
+    }
+}
+
+#[cfg(feature = "network")]
+pub struct NetModule {
+    pub is_authority: bool,
+    pub server: Option<rs_network::server::Server>,
+    pub client: Option<rs_network::client::Client>,
+}
+
+#[cfg(feature = "network")]
+impl NetModule {
+    pub fn new() -> NetModule {
+        NetModule {
+            is_authority: false,
+            server: None,
+            client: None,
+        }
+    }
 }
 
 pub struct Application {
@@ -29,11 +146,8 @@ pub struct Application {
     #[cfg(feature = "plugin_shared_crate")]
     plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
     #[cfg(feature = "network")]
-    pub is_authority: bool,
-    #[cfg(feature = "network")]
-    pub server: Option<rs_network::server::Server>,
-    #[cfg(feature = "network")]
-    pub client: Option<rs_network::client::Client>,
+    pub net_module: NetModule,
+    pub frame: u32,
 }
 
 impl Application {
@@ -86,11 +200,8 @@ impl Application {
             current_active_level: SingleThreadMut::new(current_active_level),
             _contents: contents,
             #[cfg(feature = "network")]
-            is_authority: false,
-            #[cfg(feature = "network")]
-            server: None,
-            #[cfg(feature = "network")]
-            client: None,
+            net_module: NetModule::new(),
+            frame: 0,
         }
     }
 
@@ -215,6 +326,8 @@ impl Application {
             );
         }
         engine.present_player_viewport(&mut self.player_view_port);
+
+        self.frame += 1;
     }
 
     pub fn on_size_changed(&mut self, width: u32, height: u32) {
@@ -242,68 +355,61 @@ impl Application {
 #[cfg(feature = "network")]
 impl Application {
     fn server_tick(active_level: &mut Level, server: &mut rs_network::server::Server) {
+        let mut endpoint_data: EndpointData = EndpointData::default();
+        let mut client_net_datas: Vec<Vec<u8>> = vec![];
         {
             server.process_incoming();
-            let mut network_replicated_data_map = HashMap::new();
-            let mut network_call_data_map = HashMap::new();
             active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                let data = network_replicated.on_replicated();
-                if !data.is_empty() {
-                    let id = network_replicated.get_network_id();
-                    network_replicated_data_map.insert(id.to_owned(), data);
-                }
-                let data = network_replicated.call();
-                if !data.is_empty() {
-                    let id = network_replicated.get_network_id();
-                    network_call_data_map.insert(id.to_owned(), data);
+                let network_object_data = NetworkObjectData {
+                    id: *network_replicated.get_network_id(),
+                    replicated: network_replicated.on_replicated(),
+                    call: network_replicated.call(),
+                };
+                if network_object_data.is_valid() {
+                    endpoint_data.network_object_datas.push(network_object_data);
                 }
             });
-            let data = Self::serialize_replicated_data(&network_replicated_data_map);
-            if !data.is_empty() {
-                server.broadcast(&data);
-            }
-            let data = Self::serialize_call_data(&network_call_data_map);
-            if !data.is_empty() {
-                server.broadcast(&data);
-            }
         }
 
         let mut messages = vec![];
         for client in server.clients_mut() {
             messages.append(&mut client.take_messages());
         }
-        for message in &messages {
-            server.broadcast(&message.data);
-            let data = Self::deserialize_data(&message.data);
-            for (k, v) in data {
-                match k {
-                    ReplicatedFieldType::Level => {}
-                    ReplicatedFieldType::NetworkReplicated => {
-                        let replicated_data = Self::deserialize_replicated_data(&v);
-                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                            let id = network_replicated.get_network_id();
-                            if let Some(data) = replicated_data.get(id) {
-                                log::trace!(
-                                    "[Server]On sync, id: {id}, name: {:?}",
-                                    network_replicated.debug_name()
-                                );
-                                network_replicated.on_sync(data);
-                            }
-                        });
+        for message in messages {
+            if message.data.is_empty() {
+                continue;
+            }
+            let Ok(client_net_data) = ClientNetData::deserialize(&message.data) else {
+                continue;
+            };
+            for network_object_data in &client_net_data.endpoint_data.network_object_datas {
+                active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                    let id = network_replicated.get_network_id();
+                    if id == &network_object_data.id {
+                        log::trace!(
+                            "[Server]On sync, id: {id}, name: {:?}",
+                            network_replicated.debug_name()
+                        );
+                        network_replicated.on_sync(&network_object_data.replicated);
+                        network_replicated.on_call(&network_object_data.call);
                     }
-                    ReplicatedFieldType::Call => {
-                        let call_data = Self::deserialize_call_data(&v);
-                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                            let id = network_replicated.get_network_id();
-                            if let Some(data) = call_data.get(id) {
-                                log::trace!(
-                                    "[Server]On call, id: {id}, name: {:?}",
-                                    network_replicated.debug_name()
-                                );
-                                network_replicated.on_call(data);
-                            }
-                        });
-                    }
+                });
+            }
+
+            client_net_datas.push(message.data);
+        }
+        let server_net_data = ServerNetData {
+            endpoint_data,
+            client_net_datas,
+            level_net_data: vec![],
+        };
+        if server_net_data.is_valid() {
+            match server_net_data.serialize() {
+                Ok(data) => {
+                    server.broadcast(&data);
+                }
+                Err(err) => {
+                    log::warn!("{}", err)
                 }
             }
         }
@@ -316,85 +422,78 @@ impl Application {
         player_viewport: &mut PlayerViewport,
         client: &mut rs_network::client::Client,
     ) {
+        let mut endpoint_data: EndpointData = EndpointData::default();
         {
             let mut active_level = current_active_level.borrow_mut();
-            let mut network_replicated_data_map = HashMap::new();
-            let mut network_call_data_map = HashMap::new();
             active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                let data = network_replicated.on_replicated();
-                if !data.is_empty() {
-                    let id = network_replicated.get_network_id();
-                    network_replicated_data_map.insert(id.to_owned(), data);
-                }
-                let data = network_replicated.call();
-                if !data.is_empty() {
-                    let id = network_replicated.get_network_id();
-                    network_call_data_map.insert(id.to_owned(), data);
+                let network_object_data = NetworkObjectData {
+                    id: *network_replicated.get_network_id(),
+                    replicated: network_replicated.on_replicated(),
+                    call: network_replicated.call(),
+                };
+                if network_object_data.is_valid() {
+                    endpoint_data.network_object_datas.push(network_object_data);
                 }
             });
-            let data = Self::serialize_replicated_data(&network_replicated_data_map);
-            if !data.is_empty() {
-                client.write(data);
-            }
-            let data = Self::serialize_call_data(&network_call_data_map);
-            if !data.is_empty() {
-                client.write(data);
-            }
         }
 
         for message in client.take_messages() {
-            let data = Self::deserialize_data(&message.data);
-            for (k, v) in data {
-                match k {
-                    ReplicatedFieldType::Level => {
-                        let level = rs_artifact::bincode_legacy::deserialize::<Level>(&v, None);
-                        if let Ok(mut remote_level) = level {
-                            log::trace!("To remote level: {}", &remote_level.get_name());
-                            remote_level.initialize(engine, files, player_viewport);
-                            *current_active_level = SingleThreadMut::new(remote_level);
-                        }
+            if message.data.is_empty() {
+                continue;
+            }
+            let Ok(server_net_data) = ServerNetData::deserialize(&message.data) else {
+                continue;
+            };
+            if let Some(mut remote_level) = server_net_data.level() {
+                log::trace!("To remote level: {}", &remote_level.get_name());
+                remote_level.initialize(engine, files, player_viewport);
+                *current_active_level = SingleThreadMut::new(remote_level);
+            }
+
+            let client_endpoint_datas = server_net_data.client_endpoint_datas();
+            let endpoint_data = &server_net_data.endpoint_data;
+
+            let mut active_level = current_active_level.borrow_mut();
+            for network_object_data in std::iter::once(endpoint_data)
+                .chain(client_endpoint_datas.iter())
+                .flat_map(|ed| ed.network_object_datas.iter())
+                .collect::<Vec<&NetworkObjectData>>()
+            {
+                active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                    let id = network_replicated.get_network_id();
+                    if id == &network_object_data.id {
+                        log::trace!(
+                            "[Server]On sync, id: {id}, name: {:?}",
+                            network_replicated.debug_name()
+                        );
+                        network_replicated.on_sync(&network_object_data.replicated);
+                        network_replicated.on_call(&network_object_data.call);
                     }
-                    ReplicatedFieldType::NetworkReplicated => {
-                        let replicated_data = Self::deserialize_replicated_data(&v);
-                        let mut active_level = current_active_level.borrow_mut();
-                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                            let id = network_replicated.get_network_id();
-                            if let Some(data) = replicated_data.get(id) {
-                                log::trace!(
-                                    "On sync, id: {id}, name: {:?}",
-                                    network_replicated.debug_name()
-                                );
-                                network_replicated.on_sync(data);
-                            }
-                        });
-                    }
-                    ReplicatedFieldType::Call => {
-                        let call_data = Self::deserialize_call_data(&v);
-                        let mut active_level = current_active_level.borrow_mut();
-                        active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                            let id = network_replicated.get_network_id();
-                            if let Some(data) = call_data.get(id) {
-                                log::trace!(
-                                    "[Client]On call, id: {id}, name: {:?}",
-                                    network_replicated.debug_name()
-                                );
-                                network_replicated.on_call(data);
-                            }
-                        });
-                    }
+                });
+            }
+        }
+
+        let client_net_data = ClientNetData { endpoint_data };
+        if client_net_data.is_valid() {
+            match client_net_data.serialize() {
+                Ok(data) => {
+                    client.write(data);
+                }
+                Err(err) => {
+                    log::warn!("{}", err)
                 }
             }
         }
     }
 
     fn net_tick(&mut self, engine: &mut Engine) {
-        if self.is_authority {
-            if let Some(server) = &mut self.server {
+        if self.net_module.is_authority {
+            if let Some(server) = &mut self.net_module.server {
                 let mut active_level = self.current_active_level.borrow_mut();
                 Application::server_tick(&mut active_level, server);
             }
         } else {
-            if let Some(client) = &mut self.client {
+            if let Some(client) = &mut self.net_module.client {
                 Application::client_tick(
                     engine,
                     &mut self.current_active_level,
@@ -407,14 +506,17 @@ impl Application {
     }
 
     pub fn on_network_changed(&mut self) {
-        debug_assert_eq!(self.server.is_some() && self.client.is_some(), false);
-        if self.server.is_some() {
+        debug_assert_eq!(
+            self.net_module.server.is_some() && self.net_module.client.is_some(),
+            false
+        );
+        if self.net_module.server.is_some() {
             let mut level = self.current_active_level.borrow_mut();
             level.visit_network_replicated_mut(&mut |rep| {
                 rep.on_net_mode_changed(crate::network::ENetMode::Server);
             });
             level.network_fields.is_server = true;
-        } else if self.client.is_some() {
+        } else if self.net_module.client.is_some() {
             let mut level = self.current_active_level.borrow_mut();
             level.visit_network_replicated_mut(&mut |rep| {
                 rep.on_net_mode_changed(crate::network::ENetMode::Client);
@@ -424,98 +526,23 @@ impl Application {
     }
 
     pub fn open_server_level(&mut self) -> Option<()> {
-        if !self.is_authority {
+        if !self.net_module.is_authority {
             return None;
         }
-        let Some(server) = &mut self.server else {
+        let Some(server) = &mut self.net_module.server else {
             return None;
         };
         let current_active_level = self.current_active_level.borrow();
-        let level_data =
-            rs_artifact::bincode_legacy::serialize(&*current_active_level, None).ok()?;
-        let net_data = HashMap::from([(ReplicatedFieldType::Level, level_data)]);
-        let net_data = rs_artifact::bincode_legacy::serialize(&net_data, None).ok()?;
-        server.broadcast(&net_data);
+        let mut server_net_data = ServerNetData {
+            endpoint_data: EndpointData::default(),
+            client_net_datas: vec![],
+            level_net_data: vec![],
+        };
+        server_net_data
+            .serialize_level(&current_active_level)
+            .ok()?;
+        let data = server_net_data.serialize().ok()?;
+        server.broadcast(&data);
         return Some(());
-    }
-
-    fn deserialize_data(data: &[u8]) -> HashMap<ReplicatedFieldType, Vec<u8>> {
-        if data.is_empty() {
-            return HashMap::new();
-        }
-        match rs_artifact::bincode_legacy::deserialize::<HashMap<ReplicatedFieldType, Vec<u8>>>(
-            data, None,
-        ) {
-            Ok(data) => data,
-            Err(err) => {
-                log::warn!("Deserialize data, {err}, {}", data.len());
-                HashMap::new()
-            }
-        }
-    }
-
-    fn serialize_call_data(network_call_data_map: &HashMap<uuid::Uuid, Vec<u8>>) -> Vec<u8> {
-        if network_call_data_map.is_empty() {
-            return vec![];
-        }
-
-        let v = match rs_artifact::bincode_legacy::serialize(network_call_data_map, None) {
-            Ok(v) => v,
-            Err(err) => {
-                log::warn!("Serialize call data, {err}");
-                return vec![];
-            }
-        };
-
-        let data = HashMap::from([(ReplicatedFieldType::Call, v)]);
-        match rs_artifact::bincode_legacy::serialize(&data, None) {
-            Ok(data) => data,
-            Err(err) => {
-                log::warn!("Serialize call data, {err}, {}", data.len());
-                vec![]
-            }
-        }
-    }
-
-    fn deserialize_call_data(data: &[u8]) -> HashMap<uuid::Uuid, Vec<u8>> {
-        Self::deserialize_replicated_data(data)
-    }
-
-    fn serialize_replicated_data(
-        network_replicated_data_map: &HashMap<uuid::Uuid, Vec<u8>>,
-    ) -> Vec<u8> {
-        if network_replicated_data_map.is_empty() {
-            return vec![];
-        }
-
-        let v = match rs_artifact::bincode_legacy::serialize(network_replicated_data_map, None) {
-            Ok(v) => v,
-            Err(err) => {
-                log::warn!("Serialize replicated data, {err}");
-                return vec![];
-            }
-        };
-
-        let data = HashMap::from([(ReplicatedFieldType::NetworkReplicated, v)]);
-        match rs_artifact::bincode_legacy::serialize(&data, None) {
-            Ok(data) => data,
-            Err(err) => {
-                log::warn!("Serialize replicated data, {err}, {}", data.len());
-                vec![]
-            }
-        }
-    }
-
-    fn deserialize_replicated_data(data: &[u8]) -> HashMap<uuid::Uuid, Vec<u8>> {
-        if data.is_empty() {
-            return HashMap::new();
-        }
-        match rs_artifact::bincode_legacy::deserialize::<HashMap<uuid::Uuid, Vec<u8>>>(data, None) {
-            Ok(data) => data,
-            Err(err) => {
-                log::warn!("Deserialize replicated data, {err}, {}", data.len());
-                HashMap::new()
-            }
-        }
     }
 }

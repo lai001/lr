@@ -58,6 +58,10 @@ impl UIWindow for StandaloneUiWindow {
         );
 
         match event {
+            WindowEvent::Resized(size) => {
+                self.application.on_size_changed(size.width, size.height);
+                engine.resize(window_id, size.width, size.height);
+            }
             WindowEvent::CursorEntered { .. } => {
                 self.application
                     .on_window_input(window, EInputType::CursorEntered);
@@ -223,12 +227,12 @@ impl StandaloneUiWindow {
         {
             let (server, client) = match &standalone_simulation_type {
                 StandaloneSimulationType::Single => {
-                    application.is_authority = true;
+                    application.net_module.is_authority = true;
                     (None, None)
                 }
                 StandaloneSimulationType::MultiplePlayer(multiple_player_options) => {
                     if multiple_player_options.is_server {
-                        application.is_authority = true;
+                        application.net_module.is_authority = true;
                         let server = rs_network::server::Server::bind(
                             multiple_player_options.server_socket_addr,
                         );
@@ -237,7 +241,7 @@ impl StandaloneUiWindow {
                         }
                         (server.ok(), None)
                     } else {
-                        application.is_authority = false;
+                        application.net_module.is_authority = false;
                         let client = rs_network::client::Client::bind(
                             multiple_player_options.server_socket_addr,
                             Some("Client".to_string()),
@@ -249,8 +253,8 @@ impl StandaloneUiWindow {
                     }
                 }
             };
-            application.server = server;
-            application.client = client;
+            application.net_module.server = server;
+            application.net_module.client = client;
             application.on_network_changed();
         }
 

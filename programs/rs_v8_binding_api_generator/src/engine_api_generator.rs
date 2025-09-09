@@ -152,25 +152,48 @@ impl EngineApiGenerator {
     }
 
     pub fn manifest_content() -> String {
+        let v8_version = {
+            let mut cargo_manifest = rs_manifest::CargoManifest::new(
+                rs_core_minimal::file_manager::get_engine_root_dir().join("rs_v8_host/Cargo.toml"),
+            )
+            .unwrap();
+            let mut versions = HashMap::from([("v8", "".to_string())]);
+            cargo_manifest.read_create_version(&mut versions);
+            versions["v8"].clone()
+        };
+
+        let (log_version, anyhow_version) = {
+            let mut cargo_manifest = rs_manifest::CargoManifest::new(
+                rs_core_minimal::file_manager::get_engine_root_dir()
+                    .join("programs/rs_v8_binding_api_generator/Cargo.toml"),
+            )
+            .unwrap();
+            let mut versions = HashMap::from([("log", "".to_string()), ("anyhow", "".to_string())]);
+            cargo_manifest.read_create_version(&mut versions);
+            (versions["log"].clone(), versions["anyhow"].clone())
+        };
+
         let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir()
             .canonicalize_slash()
             .expect("Success");
-        let mut template = r#"
-[package]
+        let mut template = r#"[package]
 name = "rs_v8_engine_binding_api"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-v8 = "137.1.0"
-log = "0.4.27"
-anyhow = { version = "1.0.98" }
+v8 = "@v8_version@"
+log = "@log_version@"
+anyhow = { version = "@anyhow_version@" }
 rs_engine = { path = "@engine_dir@/rs_engine" }
 rs_render = { path = "@engine_dir@/rs_render" }
 rs_v8_host = { path = "@engine_dir@/rs_v8_host" }        
-        "#
+"#
         .to_string();
         template = template.replace("@engine_dir@", engine_root_dir.to_str().expect("Success"));
+        template = template.replace("@v8_version@", &v8_version);
+        template = template.replace("@log_version@", &log_version);
+        template = template.replace("@anyhow_version@", &anyhow_version);
         template
     }
 

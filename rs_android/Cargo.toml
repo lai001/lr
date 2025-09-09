@@ -18,11 +18,11 @@ android-native-activity = [
 ]
 
 [dependencies]
-glam = { version = "0.30.4", features = ["mint", "serde"] }
-log = "0.4.27"
+glam = { version = "0.30.5", features = ["mint", "serde"] }
+log = "0.4.28"
 env_logger = "0.11.8"
-egui = "0.32.0"
-url = { version = "2.5.4", features = ["serde"] }
+egui = "0.32.2"
+url = { version = "2.5.7", features = ["serde"] }
 jni = "0.21.1"
 jni_fn = "0.1.2"
 ndk-sys = "0.6.0"
@@ -30,7 +30,7 @@ ndk-context = "0.1.1"
 raw-window-handle = "0.6.2"
 android_logger = "0.15.1"
 tracy-client = { version = "0.18.2", default-features = false }
-winit = { version = "0.30.11" }
+winit = { version = "0.30.12" }
 backtrace = { version = "0.3", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", optional = true }

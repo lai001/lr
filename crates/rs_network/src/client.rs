@@ -7,8 +7,8 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     time::Duration,
 };
@@ -103,7 +103,7 @@ impl Client {
                                         None => {
                                             log::warn!("Failed to read from: {peer_addr}, {err}");
                                         }
-                                    }                                    
+                                    }
                                 }
                             }
                         }

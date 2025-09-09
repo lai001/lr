@@ -427,7 +427,8 @@ fn main() -> anyhow::Result<()> {
                 }
                 None => {
                     visit_manifest_files(&mut |path| {
-                        change_dependency_version_file(path, crate_name, version)
+                        let _ = change_dependency_version_file(path, crate_name, version);
+                        Ok(())
                     })?;
                 }
             }

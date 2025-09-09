@@ -9,7 +9,7 @@ rs_quickjs = []
 
 [dependencies]
 lazy_static = "1.5.0"
-bitflags = "2.9.1"
+bitflags = "2.9.4"
 
 [build-dependencies]
-bindgen = "0.72.0"
+bindgen = "0.72.1"

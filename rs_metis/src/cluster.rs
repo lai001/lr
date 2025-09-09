@@ -538,7 +538,7 @@ fn indexed_vertices_to_aabb(indices: &[u32], vertices: &[glam::Vec3]) -> rapier3
         .map(|x| rapier3d::math::Point::<f32>::from_slice(&x.to_array()))
         .collect();
 
-    let aabb = rapier3d::prelude::Aabb::from_points(&points);
+    let aabb = rapier3d::prelude::Aabb::from_points(points);
     aabb
 }
 
@@ -554,7 +554,7 @@ fn indexed_vertices_to_aabb2(
         .map(|x| rapier3d::math::Point::<f32>::from_slice(&x.to_array()))
         .collect();
 
-    let aabb = rapier3d::prelude::Aabb::from_points(&points);
+    let aabb = rapier3d::prelude::Aabb::from_points(points);
     aabb
 }
 

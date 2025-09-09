@@ -1,3 +1,4 @@
+use ra_ap_hir::FindPathConfig;
 use ra_ap_ide::*;
 use ra_ap_ide_db::*;
 use ra_ap_syntax::*;
@@ -129,13 +130,13 @@ pub fn find_use_path_helper(
         db,
         ra_ap_hir::ItemInNs::Types(ra_ap_hir::ModuleDef::Module(target_module)),
         ra_ap_hir::PrefixKind::Plain,
-        import_path_config(),
+        find_path_config(),
     );
     return use_path;
 }
 
-pub fn import_path_config() -> ra_ap_hir::ImportPathConfig {
-    ra_ap_hir::ImportPathConfig {
+pub fn find_path_config() -> FindPathConfig {
+    FindPathConfig {
         prefer_no_std: true,
         prefer_prelude: false,
         prefer_absolute: true,

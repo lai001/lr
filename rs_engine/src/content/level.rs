@@ -27,16 +27,15 @@ pub struct Physics {
     pub integration_parameters: IntegrationParameters,
     pub physics_pipeline: PhysicsPipeline,
     pub island_manager: IslandManager,
-    pub broad_phase: BroadPhaseMultiSap,
+    pub broad_phase: BroadPhaseBvh,
     pub narrow_phase: NarrowPhase,
     pub impulse_joint_set: ImpulseJointSet,
     pub multibody_joint_set: MultibodyJointSet,
     pub ccd_solver: CCDSolver,
-    pub query_pipeline: QueryPipeline,
     pub physics_hooks: (),
     pub event_handler: ChannelEventCollector,
-    pub collision_recv: rapier3d::crossbeam::channel::Receiver<CollisionEvent>,
-    pub contact_force_recv: rapier3d::crossbeam::channel::Receiver<ContactForceEvent>,
+    pub collision_recv: std::sync::mpsc::Receiver<CollisionEvent>,
+    pub contact_force_recv: std::sync::mpsc::Receiver<ContactForceEvent>,
     pub collision_events: VecDeque<CollisionEvent>,
     pub contact_force_events: VecDeque<ContactForceEvent>,
 }
@@ -60,7 +59,6 @@ impl Physics {
             &mut self.impulse_joint_set,
             &mut self.multibody_joint_set,
             &mut self.ccd_solver,
-            Some(&mut self.query_pipeline),
             &self.physics_hooks,
             &self.event_handler,
         );
@@ -74,9 +72,7 @@ impl Physics {
         }
     }
 
-    pub fn query_update(&mut self) {
-        self.query_pipeline.update(&self.collider_set);
-    }
+    pub fn query_update(&mut self) {}
 
     pub fn find_the_contact_pair(
         &self,
@@ -90,20 +86,50 @@ impl Physics {
     pub fn intersections_with_shape(
         &self,
         collider_handle: ColliderHandle,
-        callback: impl FnMut(ColliderHandle) -> bool,
+        mut callback: impl FnMut(ColliderHandle) -> bool,
     ) {
         let collider = &self.collider_set[collider_handle];
         let shape = collider.shape();
         let shape_pos = collider.position();
         let filter = QueryFilter::default();
-        self.query_pipeline.intersections_with_shape(
+        let dispatcher = self.narrow_phase.query_dispatcher();
+        let query_pipeline = self.broad_phase.as_query_pipeline(
+            dispatcher,
             &self.rigid_body_set,
             &self.collider_set,
-            &shape_pos,
-            shape,
             filter,
-            callback,
         );
+        let iter = query_pipeline.intersect_shape(*shape_pos, shape);
+        for (handle, _) in iter {
+            callback(handle);
+        }
+    }
+
+    pub fn query_pipeline<'a>(&'a self, filter: Option<QueryFilter<'a>>) -> QueryPipeline<'a> {
+        let filter = filter.unwrap_or(QueryFilter::default());
+        let dispatcher = self.narrow_phase.query_dispatcher();
+        let query_pipeline = self.broad_phase.as_query_pipeline(
+            dispatcher,
+            &self.rigid_body_set,
+            &self.collider_set,
+            filter,
+        );
+        query_pipeline
+    }
+
+    pub fn query_pipeline_mut<'a>(
+        &'a mut self,
+        filter: Option<QueryFilter<'a>>,
+    ) -> QueryPipelineMut<'a> {
+        let filter = filter.unwrap_or(QueryFilter::default());
+        let dispatcher = self.narrow_phase.query_dispatcher();
+        let query_pipeline = self.broad_phase.as_query_pipeline_mut(
+            dispatcher,
+            &mut self.rigid_body_set,
+            &mut self.collider_set,
+            filter,
+        );
+        query_pipeline
     }
 
     pub fn remove_colliders(&mut self, collider_handle: ColliderHandle) {
@@ -419,15 +445,14 @@ impl Level {
         let integration_parameters: IntegrationParameters = IntegrationParameters::default();
         let physics_pipeline: PhysicsPipeline = PhysicsPipeline::new();
         let island_manager: IslandManager = IslandManager::new();
-        let broad_phase: BroadPhaseMultiSap = DefaultBroadPhase::new();
+        let broad_phase: BroadPhaseBvh = DefaultBroadPhase::new();
         let narrow_phase: NarrowPhase = NarrowPhase::new();
         let impulse_joint_set: ImpulseJointSet = ImpulseJointSet::new();
         let multibody_joint_set: MultibodyJointSet = MultibodyJointSet::new();
         let ccd_solver: CCDSolver = CCDSolver::new();
-        let query_pipeline: QueryPipeline = QueryPipeline::new();
         let physics_hooks: () = ();
-        let (collision_send, collision_recv) = rapier3d::crossbeam::channel::unbounded();
-        let (contact_force_send, contact_force_recv) = rapier3d::crossbeam::channel::unbounded();
+        let (collision_send, collision_recv) = std::sync::mpsc::channel();
+        let (contact_force_send, contact_force_recv) = std::sync::mpsc::channel();
         let event_handler = ChannelEventCollector::new(collision_send, contact_force_send);
 
         let physics = Physics {
@@ -442,7 +467,6 @@ impl Level {
             impulse_joint_set,
             multibody_joint_set,
             ccd_solver,
-            query_pipeline,
             physics_hooks,
             event_handler,
             collision_recv,
@@ -681,14 +705,7 @@ impl Level {
         let ray_origin = rapier3d::na::Point3::new(ray_pt1.x, ray_pt1.y, ray_pt1.z);
         let ray_dir = rapier3d::na::Vector3::new(ray_dir.x, ray_dir.y, ray_dir.z);
         let ray = rapier3d::prelude::Ray::new(ray_origin, ray_dir);
-        let hit = physics.query_pipeline.cast_ray(
-            &physics.rigid_body_set,
-            &physics.collider_set,
-            &ray,
-            f32::MAX,
-            true,
-            QueryFilter::new(),
-        );
+        let hit = physics.query_pipeline(None).cast_ray(&ray, f32::MAX, true);
         if let Some((handle, _)) = hit {
             let mut search_node: Option<SingleThreadMutType<SceneNode>> = None;
             for actor in self.actors.clone() {

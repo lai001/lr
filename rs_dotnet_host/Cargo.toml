@@ -5,16 +5,16 @@ edition = "2021"
 
 [dependencies]
 lazy_static = "1.5.0"
-glam = { version = "0.30.4", features = ["mint"] }
+glam = { version = "0.30.5", features = ["mint"] }
 wgpu = "25.0.0"
-notify = "8.1.0"
-notify-debouncer-mini = { version = "0.6.0" }
+notify = "8.2.0"
+notify-debouncer-mini = { version = "0.7.0" }
 walkdir = "2.5.0"
-log = "0.4.27"
+log = "0.4.28"
 rs_render = { path = "../rs_render" }
 rs_engine = { path = "../rs_engine" }
 rs_dotnet = { path = "../rs_dotnet" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winit = { version = "0.30.11" }
+winit = { version = "0.30.12" }
