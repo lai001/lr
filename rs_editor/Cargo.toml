@@ -109,6 +109,7 @@ rs_reflection_system = { path = "../crates/rs_reflection_system", optional = tru
 rs_reflection_core = { path = "../crates/rs_reflection_core", optional = true }
 rs_model_loader = { path = "../crates/rs_model_loader" }
 rs_network = { path = "../crates/rs_network", optional = true }
+rs_manifest = { path = "../crates/rs_manifest" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rs_dotnet = { path = "../rs_dotnet", optional = true }

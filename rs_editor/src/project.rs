@@ -6,6 +6,7 @@ use rs_engine::content::content_file_type::EContentFileType;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
+    collections::HashMap,
     io::Write,
     path::{Path, PathBuf},
     rc::Rc,
@@ -252,17 +253,15 @@ profiler = ["rs_engine/profiler", "rs_render/profiler"]
 network = ["dep:rs_network", "rs_engine/network"]
 
 [dependencies]
-egui = { version = "0.31.1" }
-log = "0.4.27"
+egui = { version = "@egui_version@" }
+log = "@log_version@"
+winit = { version = "@winit_version@" }
 rs_engine = { path = "@engine_path@/rs_engine" }
 rs_render = { path = "@engine_path@/rs_render" }
 rs_audio = { path = "@engine_path@/rs_audio" }
 rs_core_minimal = { path = "@engine_path@/rs_core_minimal" }
 rs_foundation = { path = "@engine_path@/rs_foundation" }
 rs_network = { path = "@engine_path@/crates/rs_network", optional = true }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-winit = { version = "0.30.11" }
 
 [lib]
 crate-type = ["dylib"]
@@ -307,9 +306,22 @@ fn fill_my_plugin_template(name: &str) -> String {
 }
 
 fn fill_cargo_toml_template(name: &str, engine_path: &str) -> String {
+    let mut cargo_manifest = rs_manifest::CargoManifest::new(
+        rs_core_minimal::file_manager::get_engine_root_dir().join("rs_editor/Cargo.toml"),
+    )
+    .unwrap();
+    let mut versions = HashMap::from([
+        ("egui", "".to_string()),
+        ("log", "".to_string()),
+        ("winit", "".to_string()),
+    ]);
+    cargo_manifest.read_create_version(&mut versions);
     let mut template = get_cargo_toml_template().to_string();
     template = template.replace("@name@", name);
     template = template.replace("@engine_path@", engine_path);
+    template = template.replace("@egui_version@", &versions["egui"]);
+    template = template.replace("@log_version@", &versions["log"]);
+    template = template.replace("@winit_version@", &versions["winit"]);
     template
 }
 
