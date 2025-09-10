@@ -54,6 +54,7 @@ use rs_engine::{
     logger::SlotFlags,
     player_viewport::PlayerViewport,
     scene_node::SceneNode,
+    static_mesh_component::StaticMeshComponent,
     url_extension::UrlExtension,
 };
 use rs_engine::{
@@ -2559,6 +2560,31 @@ impl EditorContext {
                     );
                 }
                 parent_node.childs.push(point_light_component);
+            }
+            crate::ui::level_view::EClickEventType::CreateStaticMeshComponent(parent_node) => {
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+                let content = project_context.project.content.clone();
+                let content = content.borrow_mut();
+                let mut parent_node = parent_node.borrow_mut();
+                let component = StaticMeshComponent::new_sp(
+                    format!("Untitled"),
+                    None,
+                    None,
+                    glam::Mat4::IDENTITY,
+                );
+                {
+                    let mut component = component.borrow_mut();
+                    component.initialize(
+                        &mut self.engine,
+                        &content.files,
+                        &mut self.player_viewport,
+                    );
+                }
+                parent_node
+                    .childs
+                    .push(SceneNode::static_mesh_component_node(component));
             }
         }
     }

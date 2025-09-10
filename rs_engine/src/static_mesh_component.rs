@@ -337,8 +337,17 @@ impl StaticMeshComponent {
                 parent_final_transformation: glam::Mat4::IDENTITY,
                 aabb: Some(aabb),
             });
-            self.on_is_enable_multiresolution_changed();
+        } else {
+            self.run_time = Some(StaticMeshComponentRuntime {
+                draw_objects: None,
+                _mesh: None,
+                physics: None,
+                final_transformation: glam::Mat4::IDENTITY,
+                parent_final_transformation: glam::Mat4::IDENTITY,
+                aabb: None,
+            });
         }
+        self.on_is_enable_multiresolution_changed();
     }
 
     pub fn tick(

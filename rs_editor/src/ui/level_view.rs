@@ -15,6 +15,7 @@ pub enum EClickEventType {
     DeleteDirectionalLight(SingleThreadMutType<DirectionalLight>),
     CreateCameraComponent(SingleThreadMutType<SceneNode>),
     CreateSceneComponent(SingleThreadMutType<SceneNode>),
+    CreateStaticMeshComponent(SingleThreadMutType<SceneNode>),
     CopyPath(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
     DeleteNode(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
     CreateCollisionComponent(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
@@ -68,6 +69,13 @@ fn draw_scene_node(
                         let response = ui.button("Point Light");
                         if response.clicked() {
                             *event = Some(EClickEventType::CreatePointLightComponent(
+                                scene_node.clone(),
+                            ));
+                            ui.close_kind(egui::UiKind::Menu);
+                        }
+                        let response = ui.button("Static Mesh");
+                        if response.clicked() {
+                            *event = Some(EClickEventType::CreateStaticMeshComponent(
                                 scene_node.clone(),
                             ));
                             ui.close_kind(egui::UiKind::Menu);
