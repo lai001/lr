@@ -126,45 +126,107 @@ pub fn remove_plugin_dependencies_file(path: &Path, name: &str) -> anyhow::Resul
     Ok(())
 }
 
-pub fn add_network_feature(doc: &mut DocumentMut, project_name: &str) -> anyhow::Result<()> {
-    let network_items = doc["features"]["network"]
-        .as_array_mut()
-        .ok_or(anyhow!("Not a array"))?;
-    let item = format!("{}/network", project_name);
-    let mut is_contains = false;
-    for network_item in network_items.iter() {
-        if let Some(s) = network_item.as_str() {
-            if s == item {
-                is_contains = true;
-                break;
+pub fn add_propagation_features(
+    doc: &mut DocumentMut,
+    add_features: impl IntoIterator<Item = impl AsRef<str>> + Clone,
+    propagation_crate_names: impl IntoIterator<Item = impl AsRef<str>>,
+) -> anyhow::Result<()> {
+    let features = doc
+        .get_mut("features")
+        .and_then(|x| x.as_table_like_mut())
+        .ok_or(anyhow!("Not contains features"))?;
+    for propagation_crate_name in propagation_crate_names {
+        for add_feature in add_features.clone() {
+            let items = features
+                .get_mut(add_feature.as_ref())
+                .and_then(|x| x.as_array_mut())
+                .ok_or(anyhow!("Not contains crate"))?;
+            let mut is_contains = false;
+            let add_item = format!(
+                "{}/{}",
+                propagation_crate_name.as_ref(),
+                add_feature.as_ref()
+            );
+            for item in items.iter() {
+                if let Some(s) = item.as_str() {
+                    if s == add_item {
+                        is_contains = true;
+                        break;
+                    }
+                }
+            }
+            if !is_contains {
+                items.push(add_item);
             }
         }
     }
-    if !is_contains {
-        network_items.push(item);
+    Ok(())
+}
+
+pub fn remove_propagation_features(
+    doc: &mut DocumentMut,
+    remove_features: impl IntoIterator<Item = impl AsRef<str>> + Clone,
+    propagation_crate_names: impl IntoIterator<Item = impl AsRef<str>>,
+) -> anyhow::Result<()> {
+    let features = doc
+        .get_mut("features")
+        .and_then(|x| x.as_table_like_mut())
+        .ok_or(anyhow!("Not contains features"))?;
+    for propagation_crate_name in propagation_crate_names {
+        for feature in remove_features.clone() {
+            let items = features
+                .get_mut(feature.as_ref())
+                .and_then(|x| x.as_array_mut())
+                .ok_or(anyhow!("Not contains crate"))?;
+            let item = format!("{}/{}", propagation_crate_name.as_ref(), feature.as_ref());
+            items.retain(|x| {
+                if let Some(s) = x.as_str() {
+                    s != item
+                } else {
+                    true
+                }
+            });
+        }
     }
     Ok(())
 }
 
-pub fn remove_network_feature(doc: &mut DocumentMut, project_name: &str) -> anyhow::Result<()> {
-    let network_items = doc["features"]["network"]
-        .as_array_mut()
-        .ok_or(anyhow!("Not a array"))?;
-    let item = format!("{}/network", project_name);
-    network_items.retain(|x| {
-        if let Some(s) = x.as_str() {
-            s != item
-        } else {
-            true
-        }
-    });
-    Ok(())
+pub fn propagate_feature_to_plugin(
+    doc: &mut DocumentMut,
+    project_name: &str,
+    is_editor: bool,
+) -> anyhow::Result<()> {
+    let mut features = vec!["network", "profiler"];
+    if is_editor {
+        features.push("editor");
+    } else {
+        features.push("standalone");
+    }
+    add_propagation_features(doc, features, std::iter::once(project_name))
 }
 
-pub fn file_remove_network_feature(path: &Path, project_name: &str) -> anyhow::Result<()> {
+pub fn remove_propagation_features_from_plugin(
+    doc: &mut DocumentMut,
+    project_name: &str,
+    is_editor: bool,
+) -> anyhow::Result<()> {
+    let mut features = vec!["network", "profiler"];
+    if is_editor {
+        features.push("editor");
+    } else {
+        features.push("standalone");
+    }
+    remove_propagation_features(doc, features, std::iter::once(project_name))
+}
+
+pub fn file_remove_propagation_features_from_plugin(
+    path: &Path,
+    project_name: &str,
+    is_editor: bool,
+) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(path)?;
     let mut doc = contents.parse::<DocumentMut>()?;
-    remove_network_feature(&mut doc, project_name)?;
+    remove_propagation_features_from_plugin(&mut doc, project_name, is_editor)?;
     std::fs::write(path, doc.to_string())?;
     Ok(())
 }
@@ -225,21 +287,33 @@ pub fn change_dependency_version_file(
 
 #[cfg(test)]
 mod test {
-    use crate::toml_edit::{add_network_feature, remove_network_feature};
+    use crate::toml_edit::{add_propagation_features, remove_propagation_features};
 
     #[test]
-    fn test_case() {
+    fn propagation_features() {
         let contents = r#"[features]
-network = ["dep:rs_network"]"#;
+network = ["dep:rs_network"]
+editor = []"#;
         let mut doc = contents.parse::<toml_edit::DocumentMut>().unwrap();
-        add_network_feature(&mut doc, "rs_engine").unwrap();
+        add_propagation_features(
+            &mut doc,
+            vec!["network", "editor"],
+            vec!["rs_engine", "rs_render"],
+        )
+        .unwrap();
         assert_eq!(
             doc.to_string().trim(),
             r#"[features]
-network = ["dep:rs_network", "rs_engine/network"]"#
+network = ["dep:rs_network", "rs_engine/network", "rs_render/network"]
+editor = ["rs_engine/editor", "rs_render/editor"]"#
         );
 
-        remove_network_feature(&mut doc, "rs_engine").unwrap();
+        remove_propagation_features(
+            &mut doc,
+            vec!["network", "editor"],
+            vec!["rs_engine", "rs_render"],
+        )
+        .unwrap();
         assert_eq!(doc.to_string().trim(), contents);
     }
 

@@ -2,9 +2,9 @@ use crate::{
     cli::{ProfileType, ProjectArgs},
     load_plugins::create_load_plugins_file,
     toml_edit::{
-        add_network_feature, add_plugin_dependencies_document_mut, disable_dylib_file,
-        enable_dylib_file, file_remove_network_feature, fix_dylib_document_mut,
-        remove_plugin_dependencies_file,
+        add_plugin_dependencies_document_mut, disable_dylib_file, enable_dylib_file,
+        file_remove_propagation_features_from_plugin, fix_dylib_document_mut,
+        propagate_feature_to_plugin, remove_plugin_dependencies_file,
     },
 };
 use anyhow::anyhow;
@@ -53,7 +53,7 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
                 let content = std::fs::read_to_string(&editor_manifest_file)?;
                 let mut doc = content.parse::<DocumentMut>()?;
                 add_plugin_dependencies_document_mut(&mut doc, project_name, &projcet_folder)?;
-                add_network_feature(&mut doc, project_name)?;
+                propagate_feature_to_plugin(&mut doc, project_name, true)?;
                 if project_args.is_enable_dylib {
                     fix_dylib_document_mut(&mut doc);
                 }
@@ -137,7 +137,7 @@ pub fn make_build_script(project_args: &ProjectArgs) -> anyhow::Result<()> {
                     project_name,
                     &projcet_folder,
                 )?;
-                add_network_feature(toml_edit.doc_mut(), project_name)?;
+                propagate_feature_to_plugin(toml_edit.doc_mut(), project_name, false)?;
                 toml_edit.save()?;
             }
             disable_dylib_file(&projcet_folder.join("Cargo.toml"))?;
@@ -173,7 +173,8 @@ pub fn clean(project_args: &ProjectArgs) -> anyhow::Result<()> {
     for crate_name in ["rs_editor", "rs_desktop_standalone", "rs_android"] {
         let manifest_file = engine_root_dir.join(crate_name).join("Cargo.toml");
         remove_plugin_dependencies_file(&manifest_file, project_name)?;
-        file_remove_network_feature(&manifest_file, project_name)?;
+        let _ = file_remove_propagation_features_from_plugin(&manifest_file, project_name, true);
+        let _ = file_remove_propagation_features_from_plugin(&manifest_file, project_name, false);
         create_load_plugins_file(crate_name, None, true)?;
     }
     let project_manifest_file = projcet_folder.join("Cargo.toml");
