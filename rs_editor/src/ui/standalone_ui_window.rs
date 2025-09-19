@@ -59,7 +59,8 @@ impl UIWindow for StandaloneUiWindow {
 
         match event {
             WindowEvent::Resized(size) => {
-                self.application.on_size_changed(size.width, size.height);
+                self.application
+                    .on_size_changed(engine, size.width, size.height);
                 engine.resize(window_id, size.width, size.height);
             }
             WindowEvent::CursorEntered { .. } => {
@@ -140,7 +141,7 @@ impl UIWindow for StandaloneUiWindow {
             _ => {}
         }
 
-        update_window_with_input_mode(window, self.input_mode);
+        // update_window_with_input_mode(window, self.input_mode);
     }
 
     fn get_window_id(&self) -> isize {
@@ -203,7 +204,7 @@ impl StandaloneUiWindow {
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
         // let input_mode = EInputMode::GameUI;
-        let input_mode = EInputMode::Game;
+        let input_mode = EInputMode::UI;
         update_window_with_input_mode(window, input_mode);
 
         // let level = active_level.make_copy_for_standalone(engine, &contents);

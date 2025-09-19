@@ -193,6 +193,7 @@ impl EditorUI {
                 context,
                 &mut data_source.project_settings_open,
                 project_settings,
+                data_source.content_data_source.contents.clone(),
             );
         }
         if let Some(project_folder_path) = self.project_folder_path.as_ref() {

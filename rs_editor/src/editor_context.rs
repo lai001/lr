@@ -1298,6 +1298,8 @@ impl EditorContext {
 
         self.data_source.content_data_source.current_folder =
             Some(project_context.project.content.clone());
+        self.data_source.content_data_source.contents =
+            SingleThreadMut::new(self.get_all_contents());
         Self::content_load_resources(
             &mut self.engine,
             &mut self.model_loader,
@@ -1313,31 +1315,29 @@ impl EditorContext {
         self.data_source.project_settings = Some(project_context.project.settings.clone());
 
         {
+            let settings = project_context.project.settings.borrow();
+            let engine_settings = &settings.engine_settings;
+            let default_level = engine_settings.default_level.clone();
             let binding = project_context.project.content.borrow();
             let find_level = binding
                 .files
                 .iter()
                 .find(|x| match x {
-                    EContentFileType::Level(_) => true,
+                    EContentFileType::Level(level) => {
+                        if let Some(default_level) = &default_level {
+                            &level.borrow().url == default_level
+                        } else {
+                            true
+                        }
+                    }
                     _ => false,
                 })
-                .map(|x| match x {
+                .and_then(|x| match x {
                     EContentFileType::Level(level) => Some(level),
                     _ => None,
-                })
-                .flatten();
-
-            self.data_source.level = find_level.cloned();
-
+                });
             if let Some(level) = find_level.cloned() {
-                let mut level = level.borrow_mut();
-                if let Some(folder) = &self.data_source.content_data_source.current_folder {
-                    level.initialize(
-                        &mut self.engine,
-                        &folder.borrow().files,
-                        &mut self.player_viewport,
-                    );
-                }
+                self.open_level(level);
             }
         }
 
@@ -1394,6 +1394,17 @@ impl EditorContext {
         self.post_build_asset_folder();
 
         Ok(())
+    }
+
+    fn open_level(&mut self, level: Rc<RefCell<rs_engine::content::level::Level>>) {
+        self.data_source.level = Some(level.clone());
+        if let Some(folder) = &self.data_source.content_data_source.current_folder {
+            level.borrow_mut().initialize(
+                &mut self.engine,
+                &folder.borrow().files,
+                &mut self.player_viewport,
+            );
+        }
     }
 
     fn process_custom_event(
@@ -2647,7 +2658,9 @@ impl EditorContext {
                     EContentFileType::SkeletonAnimation(_) => {}
                     EContentFileType::Skeleton(_) => {}
                     EContentFileType::Texture(_) => {}
-                    EContentFileType::Level(_) => {}
+                    EContentFileType::Level(level) => {
+                        self.open_level(level);
+                    }
                     EContentFileType::Material(material) => {
                         self.open_material_window(event_loop_window_target, Some(material.clone()));
                     }
@@ -2853,6 +2866,21 @@ impl EditorContext {
             content_browser::EClickEventType::Detail(file) => {
                 self.editor_ui.content_item_property_view.content = Some(file.clone());
                 self.data_source.is_content_item_property_view_open = true;
+            }
+            content_browser::EClickEventType::CreateLevel => {
+                let names = self.get_all_content_names();
+                let Some(project_context) = &mut self.project_context else {
+                    return;
+                };
+                let name =
+                    make_unique_name(names, &self.data_source.content_data_source.new_level_name);
+                let new_level = rs_engine::content::level::Level::new(name);
+                project_context
+                    .project
+                    .content
+                    .borrow_mut()
+                    .files
+                    .push(EContentFileType::Level(SingleThreadMut::new(new_level)));
             }
         }
     }

@@ -1,16 +1,19 @@
 use crate::{content_folder::ContentFolder, thumbnail_cache::ThumbnailCache};
 use egui::{Color32, Context, RichText, Sense, Ui};
 use rs_engine::content::content_file_type::EContentFileType;
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 pub struct DataSource {
     pub is_open: bool,
+    pub contents: SingleThreadMutType<Vec<EContentFileType>>,
     pub current_folder: Option<Rc<RefCell<ContentFolder>>>,
     pub highlight_file: Option<EContentFileType>,
     pub new_folder_name: String,
     pub new_material_name: String,
     pub new_ibl_name: String,
     pub new_content_name: String,
+    pub new_level_name: String,
 }
 
 impl DataSource {
@@ -23,6 +26,8 @@ impl DataSource {
             new_material_name: "Untitled".to_string(),
             new_ibl_name: "Untitled".to_string(),
             new_content_name: "Untitled".to_string(),
+            new_level_name: "Untitled".to_string(),
+            contents: SingleThreadMut::new(vec![]),
         }
     }
 }
@@ -34,13 +39,14 @@ pub enum EClickEventType {
     CreateParticleSystem,
     CreateCurve,
     CreateBlendAnimations,
+    CreateLevel,
+    CreateMaterialParametersCollection,
     OpenFolder(Rc<RefCell<ContentFolder>>),
     OpenFile(EContentFileType),
     DeleteFile(EContentFileType),
     SingleClickFile(EContentFileType),
     Back,
     Rename(EContentFileType, String),
-    CreateMaterialParametersCollection,
     Detail(EContentFileType),
 }
 
@@ -127,6 +133,13 @@ pub fn draw(
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button("Ok").clicked() {
                                 click = Some(EClickEventType::CreateMaterialParametersCollection);
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
+                        });
+                        ui.menu_button("Level", |ui| {
+                            ui.text_edit_singleline(&mut data_source.new_level_name);
+                            if ui.button("Ok").clicked() {
+                                click = Some(EClickEventType::CreateLevel);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });

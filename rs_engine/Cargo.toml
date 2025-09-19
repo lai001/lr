@@ -22,6 +22,7 @@ profiler = ["tracy-client/enable", "rs_render/profiler"]
 plugin_shared_crate = []
 network = ["dep:rs_network"]
 android-native-activity = ["winit/android-native-activity"]
+network_debug_trace = []
 
 [dependencies]
 bitflags = "2.9.4"

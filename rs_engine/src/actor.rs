@@ -33,6 +33,8 @@ pub struct NetworkFields {
     replicated_datas: TransmissionType,
     #[serde(skip)]
     is_sync_with_server: bool,
+    #[serde(skip)]
+    net_mode: network::ENetMode,
 }
 
 #[cfg(feature = "network")]
@@ -43,6 +45,7 @@ impl NetworkFields {
             is_replicated: false,
             replicated_datas: TransmissionType::new(),
             is_sync_with_server: false,
+            net_mode: network::ENetMode::Server,
         }
     }
 
@@ -97,6 +100,11 @@ impl crate::network::NetworkReplicated for Actor {
 
     fn is_sync_with_server(&self) -> bool {
         self.network_fields.is_sync_with_server
+    }
+
+    fn on_net_mode_changed(&mut self, net_mode: network::ENetMode) {
+        self.network_fields.net_mode = net_mode;
+        self.notify_netmode_changed();
     }
 }
 
@@ -513,6 +521,13 @@ impl Actor {
     pub fn mark_all_components_as_sync(&mut self) {
         self.visit_network_replicated_mut(&mut |network_replicated| {
             network_replicated.sync_with_server(true);
+        });
+    }
+
+    pub fn notify_netmode_changed(&mut self) {
+        let mode = self.network_fields.net_mode;
+        self.visit_network_replicated_mut(&mut |network_replicated| {
+            network_replicated.on_net_mode_changed(mode);
         });
     }
 }

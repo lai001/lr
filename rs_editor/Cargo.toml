@@ -35,6 +35,7 @@ plugin_v8 = [
     "dep:rs_v8_binding_api_manager",
 ]
 exit_check = []
+network_debug_trace = ["rs_engine/network_debug_trace"]
 detect_encoding = ["rs_shader_compiler_core/detect_encoding"]
 reflection = ["dep:rs_reflection_core", "dep:rs_reflection_system"]
 network = ["dep:rs_network", "rs_engine/network"]

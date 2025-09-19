@@ -67,10 +67,18 @@ pub struct EditorSettings {
     pub is_enable_log_to_file: bool,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct EngineSettings {
+    #[serde(default)]
+    pub default_level: Option<url::Url>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Settings {
     pub editor_settings: EditorSettings,
     pub render_setting: RenderSettings,
+    #[serde(default)]
+    pub engine_settings: EngineSettings,
 }
 
 impl Default for Settings {
@@ -104,6 +112,7 @@ impl Default for Settings {
                 is_auto_open_last_project: true,
                 is_enable_log_to_file: false,
             },
+            engine_settings: EngineSettings::default(),
         }
     }
 }

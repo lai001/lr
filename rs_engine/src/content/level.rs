@@ -224,6 +224,8 @@ pub struct NetworkFields {
     is_sync_with_server: bool,
     #[serde(skip)]
     pub(crate) is_server: bool,
+    #[serde(skip)]
+    net_mode: crate::network::ENetMode,
 }
 
 #[cfg(feature = "network")]
@@ -238,6 +240,7 @@ impl NetworkFields {
             remote_calls: RemoteCallsType::new(),
             is_sync_with_server: false,
             is_server: false,
+            net_mode: crate::network::ENetMode::Server,
         }
     }
 
@@ -285,15 +288,11 @@ impl NetworkFields {
         };
         debug_assert!(call.is_valid_args_len());
         self.remote_calls.push(call);
-        if self.is_server {
-            for actor in actors.iter_mut() {
-                let mut actor = actor.borrow_mut();
-                actor.sync_with_server(true);
-            }
-            self.newly_added_actors.append(&mut actors);
-        } else {
-            self.waiting_sync_added_actors.append(&mut actors);
+        for actor in actors.iter_mut() {
+            let mut actor = actor.borrow_mut();
+            actor.sync_with_server(true);
         }
+        self.newly_added_actors.append(&mut actors);
     }
 
     pub fn reset(&mut self) {
@@ -367,27 +366,13 @@ impl crate::network::NetworkReplicated for Level {
                                     Vec<SingleThreadMutType<Actor>>,
                                 >(&call_data.args[0], None)?;
                             for actor in &mut actors {
-                                let mut is_added = false;
-                                for waiting_sync_actor in
-                                    self.network_fields.waiting_sync_added_actors.clone()
-                                {
-                                    let clone = waiting_sync_actor.clone();
-                                    let actor = actor.borrow();
-                                    let mut waiting_sync_actor = waiting_sync_actor.borrow_mut();
-                                    if actor.get_network_id() == waiting_sync_actor.get_network_id()
-                                    {
-                                        waiting_sync_actor.sync_with_server(true);
-                                        self.network_fields.newly_added_actors.push(clone);
-                                        is_added = true;
-                                    }
-                                }
-                                if !is_added {
-                                    self.network_fields.newly_added_actors.push(actor.clone());
-                                }
+                                self.network_fields.newly_added_actors.push(actor.clone());
+                                let actor = actor.borrow_mut();
+                                let mut waiting_sync_actor = actor;
+                                waiting_sync_actor
+                                    .on_net_mode_changed(self.network_fields.net_mode);
+                                waiting_sync_actor.sync_with_server(true);
                             }
-                            self.network_fields
-                                .waiting_sync_added_actors
-                                .retain(|x| x.borrow().is_sync_with_server() == false);
                         }
                     }
                 }
@@ -406,6 +391,10 @@ impl crate::network::NetworkReplicated for Level {
     fn is_sync_with_server(&self) -> bool {
         self.network_fields.is_sync_with_server
     }
+
+    fn on_net_mode_changed(&mut self, net_mode: crate::network::ENetMode) {
+        self.network_fields.net_mode = net_mode;
+    }
 }
 
 impl Asset for Level {
@@ -420,9 +409,13 @@ impl Asset for Level {
 
 impl Level {
     pub fn empty_level() -> Self {
+        Self::new("Empty")
+    }
+
+    pub fn new(name: impl AsRef<str>) -> Self {
         Self {
             actors: vec![],
-            url: build_content_file_url("Empty").unwrap(),
+            url: build_content_file_url(name).unwrap(),
             directional_lights: vec![],
             runtime: Some(Runtime {
                 physics: Self::default_physics(),
@@ -540,6 +533,8 @@ impl Level {
         for actor in actors {
             self.init_actor_physics(actor.clone());
         }
+        let name = self.get_name();
+        log::trace!("initialize level: {}", name);
     }
 
     pub fn init_actors(
@@ -1026,5 +1021,16 @@ impl Level {
             let actors = self.network_fields.newly_added_actors.drain(..).collect();
             self.add_new_actors(engine, actors, &files, player_viewport);
         }
+    }
+
+    pub fn find_actor_by_net_id(&self, id: &uuid::Uuid) -> Option<SingleThreadMutType<Actor>> {
+        self.actors
+            .iter()
+            .find(|x| x.borrow().get_network_id() == id)
+            .cloned()
+    }
+
+    pub fn is_server(&self) -> bool {
+        self.network_fields.is_server
     }
 }

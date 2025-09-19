@@ -1,3 +1,5 @@
+#[cfg(feature = "network")]
+use crate::network::NetworkModule;
 #[cfg(feature = "plugin_shared_crate")]
 use crate::plugin::plugin_crate::Plugin;
 use crate::{
@@ -125,6 +127,7 @@ pub struct NetModule {
     pub is_authority: bool,
     pub server: Option<rs_network::server::Server>,
     pub client: Option<rs_network::client::Client>,
+    pub connections: Vec<rs_network::server::Connection>,
 }
 
 #[cfg(feature = "network")]
@@ -134,8 +137,15 @@ impl NetModule {
             is_authority: false,
             server: None,
             client: None,
+            connections: vec![],
         }
     }
+}
+
+#[cfg(feature = "network")]
+enum ClientTickResultType {
+    OpenLevel(Level),
+    None,
 }
 
 pub struct Application {
@@ -148,6 +158,8 @@ pub struct Application {
     #[cfg(feature = "network")]
     pub net_module: NetModule,
     pub frame: u32,
+    #[cfg(feature = "network")]
+    server_pending_open_level: Option<url::Url>,
 }
 
 impl Application {
@@ -192,6 +204,16 @@ impl Application {
             );
         }
 
+        #[cfg(feature = "plugin_shared_crate")]
+        for plugin in plugins.iter_mut() {
+            plugin.on_open_level(
+                engine,
+                &mut current_active_level,
+                &mut player_view_port,
+                &contents,
+            );
+        }
+
         Application {
             _window_id: window_id,
             player_view_port,
@@ -202,6 +224,8 @@ impl Application {
             #[cfg(feature = "network")]
             net_module: NetModule::new(),
             frame: 0,
+            #[cfg(feature = "network")]
+            server_pending_open_level: None,
         }
     }
 
@@ -292,6 +316,10 @@ impl Application {
         {
             let plugins = self.plugins.clone();
             let mut plugins = plugins.borrow_mut();
+            #[cfg(feature = "network")]
+            if self.server_pending_open_level.take().is_some() {
+                self.notify_level_opend(engine, plugins.iter_mut());
+            }
             for plugin in plugins.iter_mut() {
                 #[cfg(not(target_os = "android"))]
                 plugin.tick(engine, ctx.clone(), &self._contents.clone(), self, window);
@@ -330,8 +358,8 @@ impl Application {
         self.frame += 1;
     }
 
-    pub fn on_size_changed(&mut self, width: u32, height: u32) {
-        self.player_view_port.camera.set_window_size(width, height);
+    pub fn on_size_changed(&mut self, engine: &mut Engine, width: u32, height: u32) {
+        self.player_view_port.size_changed(width, height, engine);
     }
 
     #[cfg(feature = "plugin_shared_crate")]
@@ -354,11 +382,39 @@ impl Application {
 
 #[cfg(feature = "network")]
 impl Application {
-    fn server_tick(active_level: &mut Level, server: &mut rs_network::server::Server) {
+    pub fn open_server(&mut self, server_addr: std::net::SocketAddr) {
+        match rs_network::server::Server::bind(server_addr) {
+            Ok(server) => {
+                self.net_module.server = Some(server);
+                self.net_module.is_authority = true;
+            }
+            Err(err) => {
+                log::error!("{}", err);
+            }
+        }
+    }
+
+    pub fn connect_to_server(&mut self, server_addr: std::net::SocketAddr) {
+        match rs_network::client::Client::bind(server_addr, Some(format!(""))) {
+            Ok(client) => {
+                self.net_module.client = Some(client);
+                self.net_module.is_authority = false;
+            }
+            Err(err) => {
+                log::error!("{}", err);
+            }
+        }
+    }
+
+    fn server_tick(
+        active_level: &mut Level,
+        server: &mut rs_network::server::Server,
+    ) -> Vec<rs_network::server::Connection> {
+        use std::collections::HashMap;
+
         let mut endpoint_data: EndpointData = EndpointData::default();
-        let mut client_net_datas: Vec<Vec<u8>> = vec![];
+        let new_connections = server.process_incoming();
         {
-            server.process_incoming();
             active_level.visit_network_replicated_mut(&mut |network_replicated| {
                 let network_object_data = NetworkObjectData {
                     id: *network_replicated.get_network_id(),
@@ -371,48 +427,81 @@ impl Application {
             });
         }
 
-        let mut messages = vec![];
-        for client in server.clients_mut() {
-            messages.append(&mut client.take_messages());
-        }
-        for message in messages {
-            if message.data.is_empty() {
-                continue;
-            }
-            let Ok(client_net_data) = ClientNetData::deserialize(&message.data) else {
-                continue;
-            };
-            for network_object_data in &client_net_data.endpoint_data.network_object_datas {
-                active_level.visit_network_replicated_mut(&mut |network_replicated| {
-                    let id = network_replicated.get_network_id();
-                    if id == &network_object_data.id {
-                        log::trace!(
-                            "[Server]On sync, id: {id}, name: {:?}",
-                            network_replicated.debug_name()
-                        );
-                        network_replicated.on_sync(&network_object_data.replicated);
-                        network_replicated.on_call(&network_object_data.call);
-                    }
-                });
-            }
+        let mut peer_addr_to_client: HashMap<
+            std::net::SocketAddr,
+            &mut rs_network::client::Client,
+        > = HashMap::new();
+        let mut peer_addr_to_messages: HashMap<
+            std::net::SocketAddr,
+            Vec<rs_network::codec::Message>,
+        > = HashMap::new();
+        let mut peer_addr_to_send: HashMap<std::net::SocketAddr, Vec<u8>> = HashMap::new();
 
-            client_net_datas.push(message.data);
+        for client in server.clients_mut() {
+            let mut messages = client.take_messages();
+            messages.retain(|x| !x.data.is_empty());
+            peer_addr_to_messages.insert(client.peer_addr, messages);
+            peer_addr_to_client.insert(client.peer_addr, client);
         }
-        let server_net_data = ServerNetData {
-            endpoint_data,
-            client_net_datas,
-            level_net_data: vec![],
-        };
-        if server_net_data.is_valid() {
-            match server_net_data.serialize() {
-                Ok(data) => {
-                    server.broadcast(&data);
+
+        for peer_addr in peer_addr_to_client.keys() {
+            let mut messages: Vec<&Vec<rs_network::codec::Message>> = vec![];
+            let mut client_net_datas: Vec<Vec<u8>> = vec![];
+            for pair in &peer_addr_to_messages {
+                if pair.0 != peer_addr {
+                    messages.push(pair.1);
                 }
-                Err(err) => {
-                    log::warn!("{}", err)
+            }
+            let messages = messages.into_iter().flatten();
+            for message in messages {
+                client_net_datas.push(message.data.clone());
+            }
+            let server_net_data = ServerNetData {
+                endpoint_data: endpoint_data.clone(),
+                client_net_datas,
+                level_net_data: vec![],
+            };
+            if server_net_data.is_valid() {
+                match server_net_data.serialize() {
+                    Ok(data) => {
+                        peer_addr_to_send.insert(*peer_addr, data);
+                    }
+                    Err(err) => {
+                        log::warn!("{}", err)
+                    }
                 }
             }
         }
+
+        for (peer_addr, data) in peer_addr_to_send {
+            let client = peer_addr_to_client.get_mut(&peer_addr).unwrap();
+            client.write(data);
+        }
+
+        for messages in peer_addr_to_messages.values() {
+            for message in messages {
+                debug_assert!(message.data.is_empty());
+                let Ok(client_net_data) = ClientNetData::deserialize(&message.data) else {
+                    continue;
+                };
+                for network_object_data in &client_net_data.endpoint_data.network_object_datas {
+                    active_level.visit_network_replicated_mut(&mut |network_replicated| {
+                        let id = network_replicated.get_network_id();
+                        if id == &network_object_data.id {
+                            #[cfg(feature = "network_debug_trace")]
+                            log::trace!(
+                                "[Server]On sync, id: {id}, name: {:?}",
+                                network_replicated.debug_name()
+                            );
+                            network_replicated.on_sync(&network_object_data.replicated);
+                            network_replicated.on_call(&network_object_data.call);
+                        }
+                    });
+                }
+            }
+        }
+
+        new_connections
     }
 
     fn client_tick(
@@ -421,7 +510,8 @@ impl Application {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
         client: &mut rs_network::client::Client,
-    ) {
+    ) -> ClientTickResultType {
+        let mut result = ClientTickResultType::None;
         let mut endpoint_data: EndpointData = EndpointData::default();
         {
             let mut active_level = current_active_level.borrow_mut();
@@ -447,7 +537,7 @@ impl Application {
             if let Some(mut remote_level) = server_net_data.level() {
                 log::trace!("To remote level: {}", &remote_level.get_name());
                 remote_level.initialize(engine, files, player_viewport);
-                *current_active_level = SingleThreadMut::new(remote_level);
+                result = ClientTickResultType::OpenLevel(remote_level);
             }
 
             let client_endpoint_datas = server_net_data.client_endpoint_datas();
@@ -462,8 +552,9 @@ impl Application {
                 active_level.visit_network_replicated_mut(&mut |network_replicated| {
                     let id = network_replicated.get_network_id();
                     if id == &network_object_data.id {
+                        #[cfg(feature = "network_debug_trace")]
                         log::trace!(
-                            "[Server]On sync, id: {id}, name: {:?}",
+                            "[Client]On sync, id: {id}, name: {:?}",
                             network_replicated.debug_name()
                         );
                         network_replicated.on_sync(&network_object_data.replicated);
@@ -484,23 +575,41 @@ impl Application {
                 }
             }
         }
+        result
     }
 
     fn net_tick(&mut self, engine: &mut Engine) {
         if self.net_module.is_authority {
             if let Some(server) = &mut self.net_module.server {
                 let mut active_level = self.current_active_level.borrow_mut();
-                Application::server_tick(&mut active_level, server);
+                let mut new_connections = Application::server_tick(&mut active_level, server);
+                #[cfg(feature = "plugin_shared_crate")]
+                if !new_connections.is_empty() {
+                    for plugin in self.plugins.borrow_mut().iter_mut() {
+                        plugin.on_new_connections(&new_connections);
+                    }
+                    self.net_module.connections.append(&mut new_connections);
+                }
             }
         } else {
             if let Some(client) = &mut self.net_module.client {
-                Application::client_tick(
+                let result = Application::client_tick(
                     engine,
                     &mut self.current_active_level,
                     &self._contents,
                     &mut self.player_view_port,
                     client,
                 );
+                match result {
+                    ClientTickResultType::OpenLevel(level) => {
+                        self.current_active_level = SingleThreadMut::new(level);
+                        let plugins = self.plugins.clone();
+                        let mut plugins = plugins.borrow_mut();
+                        self.on_network_changed();
+                        self.notify_level_opend(engine, plugins.iter_mut());
+                    }
+                    ClientTickResultType::None => {}
+                }
             }
         }
     }
@@ -525,24 +634,57 @@ impl Application {
         }
     }
 
-    pub fn open_server_level(&mut self) -> Option<()> {
+    pub fn open_server_level(&mut self, engine: &mut Engine, url: url::Url) -> Option<()> {
+        let mut find_level = self
+            ._contents
+            .iter()
+            .find(|x| match x {
+                EContentFileType::Level(level) => level.borrow().url == url,
+                _ => false,
+            })
+            .and_then(|x| match x {
+                EContentFileType::Level(level) => Some(level.borrow().make_copy_for_standalone(
+                    engine,
+                    &self._contents,
+                    &mut self.player_view_port,
+                )),
+                _ => None,
+            })?;
+
         if !self.net_module.is_authority {
             return None;
         }
         let Some(server) = &mut self.net_module.server else {
             return None;
         };
-        let current_active_level = self.current_active_level.borrow();
+        find_level.initialize(engine, &self._contents, &mut self.player_view_port);
+        find_level.set_physics_simulate(true);
         let mut server_net_data = ServerNetData {
             endpoint_data: EndpointData::default(),
             client_net_datas: vec![],
             level_net_data: vec![],
         };
-        server_net_data
-            .serialize_level(&current_active_level)
-            .ok()?;
+        server_net_data.serialize_level(&find_level).ok()?;
         let data = server_net_data.serialize().ok()?;
         server.broadcast(&data);
+        self.current_active_level = SingleThreadMut::new(find_level);
+        self.server_pending_open_level = Some(url);
+        self.on_network_changed();
         return Some(());
+    }
+
+    fn notify_level_opend<'a>(
+        &mut self,
+        engine: &mut Engine,
+        plugins: impl Iterator<Item = &'a mut Box<dyn Plugin>>,
+    ) {
+        for plugin in plugins {
+            plugin.on_open_level(
+                engine,
+                &mut self.current_active_level.borrow_mut(),
+                &mut self.player_view_port,
+                &self._contents,
+            );
+        }
     }
 }

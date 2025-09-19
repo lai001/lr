@@ -45,6 +45,12 @@ pub trait NetworkReplicated {
     }
 }
 
+pub trait NetworkModule {
+    fn on_new_connections(&mut self, connections: &[rs_network::server::Connection]) {
+        let _ = connections;
+    }
+}
+
 pub(crate) fn default_uuid() -> uuid::Uuid {
     uuid::Uuid::new_v4()
 }

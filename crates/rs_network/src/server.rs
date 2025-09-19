@@ -8,6 +8,12 @@ use std::{
     time::Duration,
 };
 
+#[derive(Clone, Debug)]
+pub struct Connection {
+    pub peer_addr: SocketAddr,
+    pub local_addr: SocketAddr,
+}
+
 pub struct Server {
     clients: Vec<Client>,
     recciver: std::sync::mpsc::Receiver<TcpStream>,
@@ -60,7 +66,8 @@ impl Server {
         })
     }
 
-    pub fn process_incoming(&mut self) {
+    pub fn process_incoming(&mut self) -> Vec<Connection> {
+        let mut connections = vec![];
         for stream in self.recciver.try_iter() {
             log::trace!("New stream: {:?}", stream.peer_addr(),);
             match stream.set_read_timeout(Some(Duration::from_millis(1))) {
@@ -71,6 +78,10 @@ impl Server {
             }
             match Client::from_stream(stream, Some("Server".to_string())) {
                 Ok(client) => {
+                    connections.push(Connection {
+                        peer_addr: client.peer_addr,
+                        local_addr: client.local_addr,
+                    });
                     self.clients.push(client);
                 }
                 Err(err) => {
@@ -78,6 +89,7 @@ impl Server {
                 }
             }
         }
+        connections
     }
 
     pub fn broadcast(&mut self, data: &[u8]) {
@@ -105,6 +117,10 @@ impl Server {
 
     pub fn clients_mut(&mut self) -> &mut Vec<Client> {
         &mut self.clients
+    }
+
+    pub fn shutdown_stream(&mut self, peer_addr: SocketAddr) {
+        self.clients.retain_mut(|x| x.peer_addr != peer_addr);
     }
 }
 

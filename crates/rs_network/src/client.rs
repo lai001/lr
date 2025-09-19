@@ -19,6 +19,8 @@ pub struct Client {
     encoder: LengthPrefixEncoder,
     decoder: LengthPrefixDecoder,
     shutdown: Arc<AtomicBool>,
+    pub peer_addr: SocketAddr,
+    pub local_addr: SocketAddr,
 }
 
 impl Drop for Client {
@@ -162,6 +164,8 @@ impl Client {
             encoder,
             decoder,
             shutdown,
+            peer_addr,
+            local_addr,
         })
     }
 

@@ -14,6 +14,14 @@ pub trait Plugin {
         files: &[EContentFileType],
     );
 
+    fn on_open_level(
+        &mut self,
+        engine: &mut Engine,
+        level: &mut Level,
+        player_viewport: &mut PlayerViewport,
+        files: &[EContentFileType],
+    );
+
     fn tick(
         &mut self,
         engine: &mut Engine,
@@ -57,5 +65,12 @@ impl crate::network::NetworkReplicated for dyn Plugin {
 
     fn is_sync_with_server(&self) -> bool {
         unimplemented!();
+    }
+}
+
+#[cfg(feature = "network")]
+impl crate::network::NetworkModule for dyn Plugin {
+    fn on_new_connections(&mut self, connections: &[rs_network::server::Connection]) {
+        let _ = connections;
     }
 }
