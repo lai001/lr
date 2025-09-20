@@ -1,4 +1,4 @@
-use std::{iter::zip, num::NonZeroUsize};
+use std::{f32::consts::PI, iter::zip, num::NonZeroUsize};
 
 #[derive(Debug)]
 pub struct PrimitiveData {
@@ -280,6 +280,134 @@ impl PrimitiveData {
             .collect();
 
         primitive_data
+    }
+
+    pub fn arrow(arrow_options: ArrowOptions) -> PrimitiveData {
+        let mut positions = Vec::new();
+        let mut normals = Vec::new();
+        let mut tangents = Vec::new();
+        let mut bitangents = Vec::new();
+        let mut tex_coords = Vec::new();
+        let mut colors = Vec::new();
+        let mut indices = Vec::new();
+
+        let ArrowOptions {
+            segments,
+            shaft_height,
+            shaft_radius,
+            cone_height,
+            cone_radius,
+        } = arrow_options;
+
+        for i in 0..segments {
+            let theta = 2.0 * PI * i as f32 / segments as f32;
+            let next = (i + 1) % segments;
+            let x0 = shaft_radius * theta.cos();
+            let z0 = shaft_radius * theta.sin();
+            let x1 = shaft_radius * (2.0 * PI * next as f32 / segments as f32).cos();
+            let z1 = shaft_radius * (2.0 * PI * next as f32 / segments as f32).sin();
+
+            let base0 = glam::Vec3::new(x0, 0.0, z0);
+            let top0 = glam::Vec3::new(x0, shaft_height, z0);
+            let base1 = glam::Vec3::new(x1, 0.0, z1);
+            let top1 = glam::Vec3::new(x1, shaft_height, z1);
+
+            let base_index = positions.len() as u32;
+            positions.extend([base0, top0, base1, top1]);
+
+            let normal = glam::Vec3::new(x0, 0.0, z0).normalize();
+            normals.extend([normal; 4]);
+
+            tangents.extend([glam::Vec3::X; 4]);
+            bitangents.extend([glam::Vec3::Y; 4]);
+
+            tex_coords.extend([
+                glam::Vec2::new(i as f32 / segments as f32, 0.0),
+                glam::Vec2::new(i as f32 / segments as f32, 1.0),
+                glam::Vec2::new(next as f32 / segments as f32, 0.0),
+                glam::Vec2::new(next as f32 / segments as f32, 1.0),
+            ]);
+
+            colors.extend([glam::vec4(1.0, 0.0, 0.0, 1.0); 4]);
+
+            indices.extend_from_slice(&[
+                base_index,
+                base_index + 1,
+                base_index + 2,
+                base_index + 1,
+                base_index + 3,
+                base_index + 2,
+            ]);
+        }
+
+        let tip = glam::Vec3::new(0.0, shaft_height + cone_height, 0.0);
+        let tip_index = positions.len() as u32;
+        positions.push(tip);
+        normals.push(glam::Vec3::Y);
+        tangents.push(glam::Vec3::X);
+        bitangents.push(glam::Vec3::Z);
+        tex_coords.push(glam::Vec2::new(0.5, 1.0));
+        colors.push(glam::Vec4::ONE);
+
+        for i in 0..segments {
+            let theta = 2.0 * PI * i as f32 / segments as f32;
+            let next = (i + 1) % segments;
+            let x0 = cone_radius * theta.cos();
+            let z0 = cone_radius * theta.sin();
+            let x1 = cone_radius * (2.0 * PI * next as f32 / segments as f32).cos();
+            let z1 = cone_radius * (2.0 * PI * next as f32 / segments as f32).sin();
+
+            let base0 = glam::Vec3::new(x0, shaft_height, z0);
+            let base1 = glam::Vec3::new(x1, shaft_height, z1);
+
+            let base_index = positions.len() as u32;
+            positions.extend([base0, base1]);
+            normals.extend([glam::Vec3::Y; 2]);
+            tangents.extend([glam::Vec3::X; 2]);
+            bitangents.extend([glam::Vec3::Z; 2]);
+            tex_coords.extend([glam::Vec2::new(0.0, 0.0); 2]);
+            colors.extend([glam::Vec4::ONE; 2]);
+
+            indices.extend_from_slice(&[tip_index, base_index, base_index + 1]);
+        }
+
+        PrimitiveData {
+            vertex_positions: positions,
+            vertex_normals: normals,
+            vertex_tangents: tangents,
+            vertex_bitangents: bitangents,
+            vertex_tex_coords: tex_coords,
+            vertex_colors: colors,
+            indices,
+        }
+    }
+
+    pub fn apply_transformation(&mut self, transformation: glam::Mat4) {
+        self.vertex_positions = self
+            .vertex_positions
+            .iter()
+            .map(|x| transformation.project_point3(*x))
+            .collect();
+    }
+}
+
+pub struct ArrowOptions {
+    pub segments: i32,
+    pub shaft_height: f32,
+    pub shaft_radius: f32,
+    pub cone_height: f32,
+    pub cone_radius: f32,
+}
+
+impl Default for ArrowOptions {
+    fn default() -> Self {
+        Self {
+            segments: 16,
+            shaft_height: 1.0,
+            shaft_radius: 0.05,
+            cone_height: 0.3,
+            cone_radius: 0.15,
+        }
     }
 }
 

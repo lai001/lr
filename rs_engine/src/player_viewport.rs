@@ -34,7 +34,8 @@ bitflags::bitflags! {
     #[derive(PartialEq, Debug, Copy, Clone, Hash, Eq)]
     pub struct DebugFlags: u8 {
         const Line = 1;
-        const Physics = 1 << 1 | DebugFlags::Line.bits();
+        const Primitive = 1 << 1;
+        const Physics = 1 << 2 | DebugFlags::Line.bits() | DebugFlags::Primitive.bits();
     }
 }
 
@@ -1250,6 +1251,54 @@ impl PlayerViewport {
             vec![*vertex_handle],
             vertex_count as u32,
             EPipelineType::Builtin(EBuiltinPipelineType::Primitive(None)),
+            None,
+            None,
+            vec![
+                vec![EBindingResource::Constants(*self.global_constants_handle)],
+                vec![EBindingResource::Constants(*constants_handle)],
+            ],
+        );
+        self.debug_draw_objects.push(draw_object);
+    }
+
+    pub fn draw_debug_primitive<'a>(
+        &mut self,
+        engine: &mut Engine,
+        primitive_datas: impl Iterator<Item = &'a rs_core_minimal::primitive_data::PrimitiveData>,
+    ) {
+        if !self.debug_flags.contains(DebugFlags::Primitive) {
+            return;
+        }
+        let mut contents: Vec<MeshVertex3> = vec![];
+        for primitive_data in primitive_datas {
+            for chunk in primitive_data.indices.chunks_exact(3) {
+                for i in 0..3 {
+                    let vertex = MeshVertex3 {
+                        position: primitive_data.vertex_positions[chunk[i] as usize],
+                        vertex_color: primitive_data.vertex_colors[chunk[i] as usize],
+                    };
+                    contents.push(vertex);
+                }
+            }
+        }
+        if contents.is_empty() {
+            return;
+        }
+        let vertex_count = contents.len();
+        let vertex_handle =
+            engine.create_vertex_buffer(&contents, Some(String::from("DebugPrimitive.Vertex")));
+        let contents = Constants::default();
+        let constants_handle = engine.create_constants_buffer(
+            &vec![contents],
+            Some(String::from("DebugPrimitive.Constants")),
+        );
+        let draw_object = DrawObject::new(
+            0,
+            vec![*vertex_handle],
+            vertex_count as u32,
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive(Some(
+                wgpu::PrimitiveState::default(),
+            ))),
             None,
             None,
             vec![
