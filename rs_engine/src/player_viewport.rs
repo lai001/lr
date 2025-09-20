@@ -1214,12 +1214,15 @@ impl PlayerViewport {
         draw_object
     }
 
-    pub fn draw_debug_lines(&mut self, engine: &mut Engine, bundles: &[RenderRigidBodiesBundle]) {
+    pub fn draw_debug_lines<'a>(
+        &mut self,
+        engine: &mut Engine,
+        bundles: impl Iterator<Item = &'a RenderRigidBodiesBundle>,
+    ) {
         if !self.debug_flags.contains(DebugFlags::Line) {
             return;
         }
         let contents: Vec<MeshVertex3> = bundles
-            .iter()
             .flat_map(|x| {
                 vec![
                     MeshVertex3 {
@@ -1233,6 +1236,9 @@ impl PlayerViewport {
                 ]
             })
             .collect();
+        if contents.is_empty() {
+            return;
+        }
         let vertex_count = contents.len();
         let vertex_handle =
             engine.create_vertex_buffer(&contents, Some(String::from("DebugLine.Vertex")));
@@ -1271,7 +1277,10 @@ impl PlayerViewport {
         bundles.append(&mut rigid_bodies_bundle);
         let mut colliders_bundle = physics_debug_render.render_colliders(bodies, colliders);
         bundles.append(&mut colliders_bundle);
-        self.draw_debug_lines(engine, &bundles);
+        if bundles.is_empty() {
+            return;
+        }
+        self.draw_debug_lines(engine, bundles.iter());
     }
 
     pub fn set_debug_flags(&mut self, debug_flags: DebugFlags) {
