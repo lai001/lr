@@ -31,7 +31,7 @@ impl KinematicComponent {
         self.character_body = rigid_body_set.insert(self.rigid_body.clone());
     }
 
-    pub fn update(&mut self, desired_movement: &glam::Vec3, physics: &mut level::Physics) {
+    pub fn update(&mut self, desired_movement: &glam::Vec3, physics: &mut level::LevelPhysics) {
         let character_handle = self.character_body;
         let mut desired_movement =
             Vector3::new(desired_movement.x, desired_movement.y, desired_movement.z);

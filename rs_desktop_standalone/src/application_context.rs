@@ -114,6 +114,8 @@ impl ApplicationContext {
         // _: &winit::event_loop::EventLoopWindowTarget<ECustomEventType>,
     ) {
         // let _ = event_loop_proxy;
+        let egui_ctx = self.egui_winit_state.egui_ctx().clone();
+        let egui_ctx = &egui_ctx;
         match event {
             Event::DeviceEvent { event, .. } => {
                 self.app.on_device_event(event);
@@ -126,14 +128,19 @@ impl ApplicationContext {
                         self.quit_app();
                     }
                     WindowEvent::CursorEntered { .. } => {
-                        self.app.on_window_input(window, EInputType::CursorEntered);
+                        self.app
+                            .on_window_input(window, egui_ctx, EInputType::CursorEntered);
                     }
                     WindowEvent::CursorLeft { .. } => {
-                        self.app.on_window_input(window, EInputType::CursorLeft);
+                        self.app
+                            .on_window_input(window, egui_ctx, EInputType::CursorLeft);
                     }
                     WindowEvent::CursorMoved { position, .. } => {
-                        self.app
-                            .on_window_input(window, EInputType::CursorMoved(position));
+                        self.app.on_window_input(
+                            window,
+                            egui_ctx,
+                            EInputType::CursorMoved(position),
+                        );
                     }
                     WindowEvent::KeyboardInput { event, .. } => {
                         let winit::keyboard::PhysicalKey::Code(virtual_keycode) =
@@ -145,6 +152,7 @@ impl ApplicationContext {
                             .insert(virtual_keycode, event.state);
                         let consume = self.app.on_window_input(
                             window,
+                            egui_ctx,
                             EInputType::KeyboardInput(&self.virtual_key_code_states),
                         );
                         for item in consume {
@@ -153,11 +161,14 @@ impl ApplicationContext {
                     }
                     WindowEvent::MouseWheel { delta, .. } => {
                         self.app
-                            .on_window_input(window, EInputType::MouseWheel(delta));
+                            .on_window_input(window, egui_ctx, EInputType::MouseWheel(delta));
                     }
                     WindowEvent::MouseInput { state, button, .. } => {
-                        self.app
-                            .on_window_input(window, EInputType::MouseInput(state, button));
+                        self.app.on_window_input(
+                            window,
+                            egui_ctx,
+                            EInputType::MouseInput(state, button),
+                        );
                     }
                     WindowEvent::RedrawRequested => {
                         let window_id = u64::from(window.id()) as isize;

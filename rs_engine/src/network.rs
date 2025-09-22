@@ -32,6 +32,21 @@ pub trait NetworkReplicated {
         let _ = data;
     }
 
+    fn on_sync2(
+        &mut self,
+        replicated: &Vec<u8>,
+        calls: &Vec<u8>,
+        engine: &mut crate::engine::Engine,
+        contents: &[crate::content::content_file_type::EContentFileType],
+        player_viewport: &mut crate::player_viewport::PlayerViewport,
+    ) {
+        let _ = player_viewport;
+        let _ = contents;
+        let _ = engine;
+        let _ = calls;
+        let _ = replicated;
+    }
+
     fn debug_name(&self) -> Option<String> {
         None
     }

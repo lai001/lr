@@ -362,8 +362,7 @@ impl UIWindow for BlendAnimationUIWindow {
                         preview_skeleton_mesh_component.tick(
                             time.as_secs_f32(),
                             engine,
-                            &mut level_physics.rigid_body_set,
-                            &mut level_physics.collider_set,
+                            level_physics,
                         );
                     }
                     let mut draw_objects: Vec<_> = preview_skeleton_mesh_component

@@ -9,14 +9,12 @@ use crate::{
         component::Component, point_light_component::PointLightComponent,
         spot_light_component::SpotLightComponent,
     },
-    content::content_file_type::EContentFileType,
+    content::{content_file_type::EContentFileType, level::LevelPhysics},
     engine::Engine,
     player_viewport::PlayerViewport,
     skeleton_mesh_component::SkeletonMeshComponent,
     static_mesh_component::StaticMeshComponent,
 };
-use rapier3d::prelude::ColliderSet;
-use rapier3d::prelude::RigidBodySet;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 
@@ -256,10 +254,7 @@ impl SceneComponent {
         final_transformation
     }
 
-    pub fn on_post_update_transformation(
-        &mut self,
-        level_physics: Option<&mut crate::content::level::Physics>,
-    ) {
+    pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
         let _ = level_physics;
     }
 
@@ -267,26 +262,14 @@ impl SceneComponent {
         vec![]
     }
 
-    pub fn initialize_physics(
-        &mut self,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
-        let _ = collider_set;
-        let _ = rigid_body_set;
+    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+        let _ = level_physics;
     }
 
-    pub fn tick(
-        &mut self,
-        time: f32,
-        engine: &mut Engine,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
+    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
         let _ = engine;
         let _ = time;
-        let _ = collider_set;
-        let _ = rigid_body_set;
+        let _ = level_physics;
         if let Some(run_time) = self.run_time.as_mut() {
             if let Some(transformation) = run_time.net_transformation.take() {
                 self.transformation = transformation;
@@ -415,7 +398,7 @@ macro_rules! common_fn {
             }
         }
 
-        pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut crate::content::level::Physics>) {
+        pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
             match &mut self.component {
                 $(
                     EComponentType::$x(component) => {
@@ -476,14 +459,13 @@ macro_rules! common_fn {
 
         pub fn initialize_physics(
             &mut self,
-            rigid_body_set: &mut RigidBodySet,
-            collider_set: &mut ColliderSet,
+            level_physics: &mut LevelPhysics,
         ) {
             match &mut self.component {
                 $(
                     EComponentType::$x(component) => {
                         let mut component = component.borrow_mut();
-                        component.initialize_physics(rigid_body_set, collider_set);
+                        component.initialize_physics(level_physics);
                     }
                 )*
             }
@@ -493,14 +475,13 @@ macro_rules! common_fn {
             &mut self,
             time: f32,
             engine: &mut Engine,
-            rigid_body_set: &mut RigidBodySet,
-            collider_set: &mut ColliderSet,
+            level_physics: &mut LevelPhysics,
         ) {
             match &mut self.component {
                 $(
                     EComponentType::$x(component) => {
                         let mut component = component.borrow_mut();
-                        component.tick(time, engine, rigid_body_set, collider_set);
+                        component.tick(time, engine, level_physics);
                     }
                 )*
             }
@@ -544,10 +525,7 @@ impl SceneNode {
         }
     }
 
-    pub fn notify_transformation_updated(
-        &mut self,
-        mut level_physics: Option<&mut crate::content::level::Physics>,
-    ) {
+    pub fn notify_transformation_updated(&mut self, mut level_physics: Option<&mut LevelPhysics>) {
         let parent_final_transformation = self.get_parent_final_transformation();
         let final_transformation = parent_final_transformation * self.get_transformation();
         self.set_final_transformation(final_transformation);

@@ -1,5 +1,5 @@
 use crate::{
-    content::content_file_type::EContentFileType,
+    content::{content_file_type::EContentFileType, level::LevelPhysics},
     drawable::{CustomDrawObject, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
@@ -199,11 +199,7 @@ impl CollisionComponent {
         })
     }
 
-    pub fn initialize_physics(
-        &mut self,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
+    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
         let Some(run_time) = &mut self.run_time else {
             return;
         };
@@ -212,9 +208,15 @@ impl CollisionComponent {
         else {
             return;
         };
-        let handle = rigid_body_set.insert(physics.rigid_body.clone());
+        let handle = level_physics
+            .rigid_body_set
+            .insert(physics.rigid_body.clone());
         for collider in physics.colliders.clone() {
-            let collider_handle = collider_set.insert_with_parent(collider, handle, rigid_body_set);
+            let collider_handle = level_physics.collider_set.insert_with_parent(
+                collider,
+                handle,
+                &mut level_physics.rigid_body_set,
+            );
             physics.collider_handles.push(collider_handle);
         }
         physics.rigid_body_handle = handle;
@@ -222,12 +224,8 @@ impl CollisionComponent {
         run_time.physics = Some(physics);
     }
 
-    pub fn recreate_physics(
-        &mut self,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
-        self.initialize_physics(rigid_body_set, collider_set);
+    pub fn recreate_physics(&mut self, level_physics: &mut LevelPhysics) {
+        self.initialize_physics(level_physics);
     }
 
     pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
@@ -240,15 +238,8 @@ impl CollisionComponent {
             .unwrap_or(vec![])
     }
 
-    pub fn tick(
-        &mut self,
-        time: f32,
-        engine: &mut Engine,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
-        let _ = collider_set;
-        let _ = rigid_body_set;
+    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
+        let _ = level_physics;
         let _ = time;
         if let Some(run_time) = self.run_time.as_mut() {
             run_time.constants.model = run_time.final_transformation;
@@ -259,17 +250,11 @@ impl CollisionComponent {
         }
     }
 
-    pub fn on_post_update_transformation(
-        &mut self,
-        level_physics: Option<&mut crate::content::level::Physics>,
-    ) {
+    pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
         let Some(level_physics) = level_physics else {
             return;
         };
-        self.recreate_physics(
-            &mut level_physics.rigid_body_set,
-            &mut level_physics.collider_set,
-        );
+        self.recreate_physics(level_physics);
     }
 
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {

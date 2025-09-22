@@ -1,13 +1,12 @@
 use crate::{
     build_built_in_resouce_url,
     camera::Camera,
-    content::content_file_type::EContentFileType,
+    content::{content_file_type::EContentFileType, level::LevelPhysics},
     drawable::{CustomDrawObject, EDrawObjectType},
     engine::Engine,
     input_mode::EInputMode,
     player_viewport::PlayerViewport,
 };
-use rapier3d::prelude::{ColliderSet, RigidBodySet};
 use rs_core_minimal::{frustum::Frustum, misc::split_frustum};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_render::{
@@ -281,15 +280,8 @@ impl CameraComponent {
         (draw_object, constants_handle)
     }
 
-    pub fn tick(
-        &mut self,
-        time: f32,
-        engine: &mut Engine,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
-        let _ = rigid_body_set;
-        let _ = collider_set;
+    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
+        let _ = level_physics;
         let _ = time;
         let _ = engine;
         let Some(run_time) = &mut self.run_time else {
@@ -331,20 +323,12 @@ impl CameraComponent {
         run_time.bundles.iter().map(|x| &x.draw_object).collect()
     }
 
-    pub fn on_post_update_transformation(
-        &mut self,
-        level_physics: Option<&mut crate::content::level::Physics>,
-    ) {
+    pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
         let _ = level_physics;
     }
 
-    pub fn initialize_physics(
-        &mut self,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
-        let _ = collider_set;
-        let _ = rigid_body_set;
+    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+        let _ = level_physics;
     }
 
     pub fn set_is_show_preview(&mut self, is_show_preview: bool) {

@@ -37,6 +37,7 @@ pub trait Plugin {
     fn on_window_input(
         &mut self,
         #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
+        ctx: egui::Context,
         ty: crate::input_type::EInputType,
     ) -> Vec<winit::keyboard::KeyCode>;
 }

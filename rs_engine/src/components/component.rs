@@ -1,7 +1,8 @@
 use crate::{
-    content::content_file_type::EContentFileType, engine::Engine, player_viewport::PlayerViewport,
+    content::{content_file_type::EContentFileType, level::LevelPhysics},
+    engine::Engine,
+    player_viewport::PlayerViewport,
 };
-use rapier3d::prelude::{ColliderSet, RigidBodySet};
 
 pub trait Component {
     fn get_name(&self) -> String;
@@ -16,7 +17,7 @@ pub trait Component {
 
     fn on_post_update_transformation(
         &mut self,
-        level_physics: Option<&mut crate::content::level::Physics>,
+        level_physics: Option<&mut crate::content::level::LevelPhysics>,
     );
 
     fn set_final_transformation(&mut self, final_transformation: glam::Mat4);
@@ -32,17 +33,7 @@ pub trait Component {
         player_viewport: &mut PlayerViewport,
     );
 
-    fn initialize_physics(
-        &mut self,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    );
+    fn initialize_physics(&mut self, level_physics: &mut LevelPhysics);
 
-    fn tick(
-        &mut self,
-        time: f32,
-        engine: &mut Engine,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    );
+    fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics);
 }

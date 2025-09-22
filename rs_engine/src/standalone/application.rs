@@ -19,6 +19,8 @@ pub struct NetworkObjectData {
     pub id: uuid::Uuid,
     pub replicated: Vec<u8>,
     pub call: Vec<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_description: Option<String>,
 }
 
 #[cfg(feature = "network")]
@@ -244,6 +246,7 @@ impl Application {
     pub fn on_window_input(
         &mut self,
         #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
+        ctx: &egui::Context,
         ty: crate::input_type::EInputType,
     ) -> Vec<winit::keyboard::KeyCode> {
         #[cfg(not(target_os = "android"))]
@@ -258,9 +261,9 @@ impl Application {
             let mut plugins = self.plugins.borrow_mut();
             for plugin in plugins.iter_mut() {
                 #[cfg(not(target_os = "android"))]
-                let mut plugin_consume = plugin.on_window_input(window, ty.clone());
+                let mut plugin_consume = plugin.on_window_input(window, ctx.clone(), ty.clone());
                 #[cfg(target_os = "android")]
-                let mut plugin_consume = plugin.on_window_input(ty.clone());
+                let mut plugin_consume = plugin.on_window_input(ctx.clone(), ty.clone());
                 consume.append(&mut plugin_consume);
             }
         }
@@ -335,8 +338,6 @@ impl Application {
         if let Some(physics) = active_level.get_physics_mut() {
             physics.collision_events.clear();
         }
-        #[cfg(feature = "network")]
-        active_level.process_added_net_actors(engine, &self._contents, &mut self.player_view_port);
         active_level.tick(engine.get_game_time(), engine, &mut self.player_view_port);
         let mut draw_objects = active_level.collect_draw_objects();
         for draw_object in draw_objects.iter_mut() {
@@ -409,6 +410,9 @@ impl Application {
     fn server_tick(
         active_level: &mut Level,
         server: &mut rs_network::server::Server,
+        engine: &mut Engine,
+        contents: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
     ) -> Vec<rs_network::server::Connection> {
         use std::collections::HashMap;
 
@@ -420,6 +424,7 @@ impl Application {
                     id: *network_replicated.get_network_id(),
                     replicated: network_replicated.on_replicated(),
                     call: network_replicated.call(),
+                    debug_description: network_replicated.debug_name(),
                 };
                 if network_object_data.is_valid() {
                     endpoint_data.network_object_datas.push(network_object_data);
@@ -480,10 +485,11 @@ impl Application {
 
         for messages in peer_addr_to_messages.values() {
             for message in messages {
-                debug_assert!(message.data.is_empty());
+                debug_assert!(!message.data.is_empty());
                 let Ok(client_net_data) = ClientNetData::deserialize(&message.data) else {
                     continue;
                 };
+                let mut sync_ids = vec![];
                 for network_object_data in &client_net_data.endpoint_data.network_object_datas {
                     active_level.visit_network_replicated_mut(&mut |network_replicated| {
                         let id = network_replicated.get_network_id();
@@ -493,10 +499,36 @@ impl Application {
                                 "[Server]On sync, id: {id}, name: {:?}",
                                 network_replicated.debug_name()
                             );
+                            sync_ids.push(id.clone());
                             network_replicated.on_sync(&network_object_data.replicated);
                             network_replicated.on_call(&network_object_data.call);
+                            network_replicated.on_sync2(
+                                &network_object_data.replicated,
+                                &network_object_data.call,
+                                engine,
+                                contents,
+                                player_viewport,
+                            );
                         }
                     });
+                }
+                if sync_ids.len() != client_net_data.endpoint_data.network_object_datas.len() {
+                    log::warn!("[Server]Some objects are not synchronized");
+                    for network_object_data in &client_net_data.endpoint_data.network_object_datas {
+                        if !sync_ids.contains(&network_object_data.id) {
+                            let id = &network_object_data.id;
+                            match &network_object_data.debug_description {
+                                Some(debug_description) => {
+                                    log::warn!(
+                                        "[Server]{id} not synchronized, {debug_description}"
+                                    );
+                                }
+                                None => {
+                                    log::warn!("[Server]{id} not synchronized");
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -507,7 +539,7 @@ impl Application {
     fn client_tick(
         engine: &mut Engine,
         current_active_level: &mut SingleThreadMutType<Level>,
-        files: &[EContentFileType],
+        contents: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
         client: &mut rs_network::client::Client,
     ) -> ClientTickResultType {
@@ -520,6 +552,7 @@ impl Application {
                     id: *network_replicated.get_network_id(),
                     replicated: network_replicated.on_replicated(),
                     call: network_replicated.call(),
+                    debug_description: network_replicated.debug_name(),
                 };
                 if network_object_data.is_valid() {
                     endpoint_data.network_object_datas.push(network_object_data);
@@ -536,7 +569,7 @@ impl Application {
             };
             if let Some(mut remote_level) = server_net_data.level() {
                 log::trace!("To remote level: {}", &remote_level.get_name());
-                remote_level.initialize(engine, files, player_viewport);
+                remote_level.initialize(engine, contents, player_viewport);
                 result = ClientTickResultType::OpenLevel(remote_level);
             }
 
@@ -544,11 +577,12 @@ impl Application {
             let endpoint_data = &server_net_data.endpoint_data;
 
             let mut active_level = current_active_level.borrow_mut();
-            for network_object_data in std::iter::once(endpoint_data)
+            let mut sync_ids = vec![];
+            let network_object_datas = std::iter::once(endpoint_data)
                 .chain(client_endpoint_datas.iter())
                 .flat_map(|ed| ed.network_object_datas.iter())
-                .collect::<Vec<&NetworkObjectData>>()
-            {
+                .collect::<Vec<&NetworkObjectData>>();
+            for network_object_data in &network_object_datas {
                 active_level.visit_network_replicated_mut(&mut |network_replicated| {
                     let id = network_replicated.get_network_id();
                     if id == &network_object_data.id {
@@ -557,10 +591,34 @@ impl Application {
                             "[Client]On sync, id: {id}, name: {:?}",
                             network_replicated.debug_name()
                         );
+                        sync_ids.push(id.clone());
                         network_replicated.on_sync(&network_object_data.replicated);
                         network_replicated.on_call(&network_object_data.call);
+                        network_replicated.on_sync2(
+                            &network_object_data.replicated,
+                            &network_object_data.call,
+                            engine,
+                            contents,
+                            player_viewport,
+                        );
                     }
                 });
+            }
+            if sync_ids.len() != network_object_datas.len() {
+                log::warn!("[Client]Some objects are not synchronized");
+                for network_object_data in &network_object_datas {
+                    if !sync_ids.contains(&network_object_data.id) {
+                        let id = &network_object_data.id;
+                        match &network_object_data.debug_description {
+                            Some(debug_description) => {
+                                log::warn!("[Client]{id} not synchronized, {debug_description}");
+                            }
+                            None => {
+                                log::warn!("[Client]{id} not synchronized");
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -582,7 +640,13 @@ impl Application {
         if self.net_module.is_authority {
             if let Some(server) = &mut self.net_module.server {
                 let mut active_level = self.current_active_level.borrow_mut();
-                let mut new_connections = Application::server_tick(&mut active_level, server);
+                let mut new_connections = Application::server_tick(
+                    &mut active_level,
+                    server,
+                    engine,
+                    &self._contents,
+                    &mut self.player_view_port,
+                );
                 #[cfg(feature = "plugin_shared_crate")]
                 if !new_connections.is_empty() {
                     for plugin in self.plugins.borrow_mut().iter_mut() {

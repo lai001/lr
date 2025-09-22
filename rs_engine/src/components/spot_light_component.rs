@@ -1,5 +1,8 @@
 use super::point_light_component::PointLight;
-use crate::scene_node::{EComponentType, SceneNode};
+use crate::{
+    content::level::LevelPhysics,
+    scene_node::{EComponentType, SceneNode},
+};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 
@@ -87,7 +90,7 @@ impl super::component::Component for SpotLightComponent {
 
     fn on_post_update_transformation(
         &mut self,
-        level_physics: Option<&mut crate::content::level::Physics>,
+        level_physics: Option<&mut crate::content::level::LevelPhysics>,
     ) {
         let _ = level_physics;
     }
@@ -128,24 +131,17 @@ impl super::component::Component for SpotLightComponent {
         })
     }
 
-    fn initialize_physics(
-        &mut self,
-        rigid_body_set: &mut rapier3d::prelude::RigidBodySet,
-        collider_set: &mut rapier3d::prelude::ColliderSet,
-    ) {
-        let _ = collider_set;
-        let _ = rigid_body_set;
+    fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+        let _ = level_physics;
     }
 
     fn tick(
         &mut self,
         time: f32,
         engine: &mut crate::engine::Engine,
-        rigid_body_set: &mut rapier3d::prelude::RigidBodySet,
-        collider_set: &mut rapier3d::prelude::ColliderSet,
+        level_physics: &mut LevelPhysics,
     ) {
-        let _ = collider_set;
-        let _ = rigid_body_set;
+        let _ = level_physics;
         let _ = engine;
         let _ = time;
     }

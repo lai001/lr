@@ -64,16 +64,25 @@ impl UIWindow for StandaloneUiWindow {
                 engine.resize(window_id, size.width, size.height);
             }
             WindowEvent::CursorEntered { .. } => {
-                self.application
-                    .on_window_input(window, EInputType::CursorEntered);
+                self.application.on_window_input(
+                    window,
+                    self.egui_winit_state.egui_ctx(),
+                    EInputType::CursorEntered,
+                );
             }
             WindowEvent::CursorLeft { .. } => {
-                self.application
-                    .on_window_input(window, EInputType::CursorLeft);
+                self.application.on_window_input(
+                    window,
+                    self.egui_winit_state.egui_ctx(),
+                    EInputType::CursorLeft,
+                );
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.application
-                    .on_window_input(window, EInputType::CursorMoved(position));
+                self.application.on_window_input(
+                    window,
+                    self.egui_winit_state.egui_ctx(),
+                    EInputType::CursorMoved(position),
+                );
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
@@ -103,17 +112,24 @@ impl UIWindow for StandaloneUiWindow {
                 }
                 let consume = self.application.on_window_input(
                     window,
+                    self.egui_winit_state.egui_ctx(),
                     EInputType::KeyboardInput(&self.keys_detector.virtual_key_code_states()),
                 );
                 self.keys_detector.consume_keys(&consume);
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.application
-                    .on_window_input(window, EInputType::MouseWheel(delta));
+                self.application.on_window_input(
+                    window,
+                    self.egui_winit_state.egui_ctx(),
+                    EInputType::MouseWheel(delta),
+                );
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                self.application
-                    .on_window_input(window, EInputType::MouseInput(state, button));
+                self.application.on_window_input(
+                    window,
+                    self.egui_winit_state.egui_ctx(),
+                    EInputType::MouseInput(state, button),
+                );
             }
             WindowEvent::RedrawRequested => {
                 engine.window_redraw_requested_begin(window_id);

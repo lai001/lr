@@ -3,7 +3,7 @@ use crate::network;
 #[cfg(feature = "network")]
 use crate::network::NetworkReplicated;
 use crate::{
-    content::{content_file_type::EContentFileType, material::Material},
+    content::{content_file_type::EContentFileType, level::LevelPhysics, material::Material},
     drawable::EDrawObjectType,
     engine::Engine,
     misc::{static_mesh_get_aabb, transform_aabb},
@@ -18,12 +18,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AgentTransformation {
+    pub translation: glam::Vec3,
+    pub rotation: glam::Quat,
+}
+
 #[derive(Clone)]
 pub struct Physics {
     pub colliders: Vec<Collider>,
+    pub collider_handles: Vec<ColliderHandle>,
     pub rigid_body: RigidBody,
     pub rigid_body_handle: RigidBodyHandle,
-    pub collider_handles: Vec<ColliderHandle>,
     pub is_apply_simulate: bool,
 }
 
@@ -41,13 +47,17 @@ pub struct StaticMeshComponentRuntime {
     pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
     aabb: Option<Aabb>,
+    pending_rigid_body: Option<RigidBody>,
+    pending_agent_transformation: Option<AgentTransformation>,
 }
 
 #[cfg(feature = "network")]
-#[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
 pub enum ReplicatedFieldType {
     IsVisible,
     Transformation,
+    PhysicsRigidBody,
+    AgentTransformation,
 }
 
 #[cfg(feature = "network")]
@@ -64,6 +74,8 @@ pub struct NetworkFields {
     replicated_datas: TransmissionType,
     #[serde(skip)]
     is_sync_with_server: bool,
+    #[serde(skip)]
+    net_mode: network::ENetMode,
 }
 
 #[cfg(feature = "network")]
@@ -74,6 +86,7 @@ impl NetworkFields {
             is_replicated: false,
             replicated_datas: TransmissionType::new(),
             is_sync_with_server: false,
+            net_mode: network::ENetMode::Server,
         }
     }
 
@@ -154,6 +167,33 @@ impl crate::network::NetworkReplicated for StaticMeshComponent {
                         self.is_visible =
                             rs_artifact::bincode_legacy::deserialize::<bool>(&v, None)?;
                     }
+                    ReplicatedFieldType::PhysicsRigidBody => {
+                        //
+                        match self.network_fields.net_mode {
+                            network::ENetMode::Server => {
+                                let rigid_body: RigidBody =
+                                    rs_artifact::bincode_legacy::deserialize(&v, None)?;
+                                let Some(run_time) = self.run_time.as_mut() else {
+                                    panic!();
+                                };
+                                run_time.pending_rigid_body = Some(rigid_body);
+                            }
+                            network::ENetMode::Client => {}
+                        }
+                    }
+                    ReplicatedFieldType::AgentTransformation => {
+                        let agent_transformation: AgentTransformation =
+                            rs_artifact::bincode_legacy::deserialize(&v, None)?;
+                        match self.network_fields.net_mode {
+                            network::ENetMode::Server => {}
+                            network::ENetMode::Client => {
+                                let Some(run_time) = self.run_time.as_mut() else {
+                                    panic!();
+                                };
+                                run_time.pending_agent_transformation = Some(agent_transformation);
+                            }
+                        }
+                    }
                 }
             }
             Ok(())
@@ -173,6 +213,10 @@ impl crate::network::NetworkReplicated for StaticMeshComponent {
 
     fn is_sync_with_server(&self) -> bool {
         self.network_fields.is_sync_with_server
+    }
+
+    fn on_net_mode_changed(&mut self, net_mode: network::ENetMode) {
+        self.network_fields.net_mode = net_mode;
     }
 }
 
@@ -253,6 +297,7 @@ impl StaticMeshComponent {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
+        assert!(self.run_time.is_none());
         #[cfg(feature = "network")]
         if self.network_fields.net_id.is_none() {
             self.set_network_id(crate::network::default_uuid());
@@ -299,7 +344,7 @@ impl StaticMeshComponent {
             }
         }
 
-        if let Some(find_static_mesh) = find_static_mesh {
+        let (draw_object, mesh, aabb) = if let Some(find_static_mesh) = find_static_mesh {
             let mut draw_object: EDrawObjectType;
             if let Some(material) = material.clone() {
                 draw_object = engine.create_material_draw_object_from_static_mesh(
@@ -329,35 +374,24 @@ impl StaticMeshComponent {
                 _ => unimplemented!(),
             }
             let aabb = static_mesh_get_aabb(&find_static_mesh);
-            self.run_time = Some(StaticMeshComponentRuntime {
-                draw_objects: Some(draw_object),
-                _mesh: Some(find_static_mesh),
-                physics: None,
-                final_transformation: glam::Mat4::IDENTITY,
-                parent_final_transformation: glam::Mat4::IDENTITY,
-                aabb: Some(aabb),
-            });
+            (Some(draw_object), Some(find_static_mesh), Some(aabb))
         } else {
-            self.run_time = Some(StaticMeshComponentRuntime {
-                draw_objects: None,
-                _mesh: None,
-                physics: None,
-                final_transformation: glam::Mat4::IDENTITY,
-                parent_final_transformation: glam::Mat4::IDENTITY,
-                aabb: None,
-            });
-        }
+            (None, None, None)
+        };
+        self.run_time = Some(StaticMeshComponentRuntime {
+            draw_objects: draw_object,
+            _mesh: mesh,
+            physics: None,
+            parent_final_transformation: glam::Mat4::IDENTITY,
+            final_transformation: glam::Mat4::IDENTITY,
+            aabb,
+            pending_rigid_body: None,
+            pending_agent_transformation: None,
+        });
         self.on_is_enable_multiresolution_changed();
     }
 
-    pub fn tick(
-        &mut self,
-        time: f32,
-        engine: &mut Engine,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
-        let _ = collider_set;
+    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
         let _ = time;
         let _ = engine;
         let Some(run_time) = &mut self.run_time else {
@@ -366,6 +400,22 @@ impl StaticMeshComponent {
         let Some(draw_objects) = run_time.draw_objects.as_mut() else {
             return;
         };
+        if let Some(physics) = run_time.physics.as_mut() {
+            if let Some(pending_rigid_body) = run_time.pending_rigid_body.take() {
+                let handle = level_physics.rigid_body_set.insert(pending_rigid_body);
+                physics.collider_handles.clear();
+                for collider in physics.colliders.clone() {
+                    let collider_handle = level_physics.collider_set.insert_with_parent(
+                        collider,
+                        handle,
+                        &mut level_physics.rigid_body_set,
+                    );
+                    physics.collider_handles.push(collider_handle);
+                }
+                level_physics.remove_rigid_body(physics.rigid_body_handle);
+                physics.rigid_body_handle = handle;
+            }
+        }
 
         let is_simulate = run_time
             .physics
@@ -373,23 +423,43 @@ impl StaticMeshComponent {
             .map(|x| x.is_apply_simulate)
             .unwrap_or(false);
 
-        match (
-            run_time.physics.as_mut(),
-            // rigid_body_set.as_mut(),
-            is_simulate,
-        ) {
+        #[cfg(feature = "network")]
+        let mut send_agent_transformation: Option<AgentTransformation> = None;
+        match (run_time.physics.as_mut(), is_simulate) {
             (Some(physics), true) => {
-                let rigid_body = &rigid_body_set[physics.rigid_body_handle];
-                let translation = rigid_body.translation();
-                let translation = glam::vec3(translation.x, translation.y, translation.z);
-                let rotation = rigid_body.rotation();
-                let rotation = glam::quat(rotation.i, rotation.j, rotation.k, rotation.w);
-                let scale = run_time
-                    .final_transformation
-                    .to_scale_rotation_translation()
-                    .0;
-                let transformation =
-                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
+                let transformation = if let Some(AgentTransformation {
+                    translation,
+                    rotation,
+                }) = &run_time.pending_agent_transformation
+                {
+                    let scale = run_time
+                        .final_transformation
+                        .to_scale_rotation_translation()
+                        .0;
+                    glam::Mat4::from_scale_rotation_translation(scale, *rotation, *translation)
+                } else {
+                    let rigid_body = &level_physics.rigid_body_set[physics.rigid_body_handle];
+                    let translation = rigid_body.translation();
+                    let translation = glam::vec3(translation.x, translation.y, translation.z);
+                    let rotation = rigid_body.rotation();
+                    let rotation = glam::quat(rotation.i, rotation.j, rotation.k, rotation.w);
+                    let scale = run_time
+                        .final_transformation
+                        .to_scale_rotation_translation()
+                        .0;
+                    #[cfg(feature = "network")]
+                    match &self.network_fields.net_mode {
+                        network::ENetMode::Server => {
+                            send_agent_transformation = Some(AgentTransformation {
+                                translation: translation,
+                                rotation: rotation,
+                            });
+                        }
+                        network::ENetMode::Client => {}
+                    }
+                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                };
+
                 match draw_objects {
                     EDrawObjectType::Static(draw_object) => {
                         draw_object.constants.model = transformation;
@@ -412,6 +482,10 @@ impl StaticMeshComponent {
                     _ => unimplemented!(),
                 }
             }
+        }
+        #[cfg(feature = "network")]
+        if let Some(send_agent_transformation) = send_agent_transformation {
+            let _ = self.set_agent_transformation(&send_agent_transformation);
         }
     }
 
@@ -491,12 +565,10 @@ impl StaticMeshComponent {
         run_time.draw_objects = Some(draw_object);
     }
 
-    fn build_physics(
+    pub fn build_collider(
         mesh: &StaticMesh,
         is_use_convex_decomposition: bool,
-        transformation: glam::Mat4,
-        rigid_body_type: RigidBodyType,
-    ) -> crate::error::Result<Physics> {
+    ) -> crate::error::Result<Collider> {
         let vertices: Vec<_> = mesh
             .vertexes
             .iter()
@@ -524,14 +596,20 @@ impl StaticMeshComponent {
                     crate::error::Error::Other(Some(format!("Fail to build mesh, {}", err)))
                 })?
         };
-        let (_, rotation, translation) = transformation.to_scale_rotation_translation();
-        let translation = vector![translation.x, translation.y, translation.z];
-        let (axis, angle) = rotation.to_axis_angle();
         let collider = ColliderBuilder::new(decomposed_shape)
             .contact_skin(0.1)
             .active_events(ActiveEvents::COLLISION_EVENTS)
             .build();
+        Ok(collider)
+    }
 
+    pub fn build_rigid_body(
+        rigid_body_type: RigidBodyType,
+        rotation: glam::Quat,
+        translation: glam::Vec3,
+    ) -> RigidBody {
+        let translation = vector![translation.x, translation.y, translation.z];
+        let (axis, angle) = rotation.to_axis_angle();
         let mut builder = match rigid_body_type {
             RigidBodyType::Dynamic => RigidBodyBuilder::dynamic(),
             RigidBodyType::Fixed => RigidBodyBuilder::fixed(),
@@ -545,27 +623,37 @@ impl StaticMeshComponent {
         );
         // builder = builder.enabled_rotations(false, false, false);
         let rigid_body = builder.build();
+        rigid_body
+    }
 
+    fn build_physics(
+        mesh: &StaticMesh,
+        is_use_convex_decomposition: bool,
+        transformation: glam::Mat4,
+        rigid_body_type: RigidBodyType,
+    ) -> crate::error::Result<Physics> {
+        let (_, rotation, translation) = transformation.to_scale_rotation_translation();
+        let collider = Self::build_collider(mesh, is_use_convex_decomposition)?;
+        let rigid_body = Self::build_rigid_body(rigid_body_type, rotation, translation);
         Ok(Physics {
             colliders: vec![collider],
+            collider_handles: vec![],
             rigid_body,
             rigid_body_handle: RigidBodyHandle::invalid(),
             is_apply_simulate: true,
-            collider_handles: vec![],
         })
     }
 
-    pub fn initialize_physics(
-        &mut self,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
+    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
         let Some(run_time) = &mut self.run_time else {
             return;
         };
         let Some(static_mesh) = run_time._mesh.as_ref() else {
             return;
         };
+        if run_time.physics.is_some() {
+            log::warn!("Double initialize physics, {}", self.name);
+        }
         let Ok(mut physics) = Self::build_physics(
             static_mesh,
             false,
@@ -574,9 +662,15 @@ impl StaticMeshComponent {
         ) else {
             return;
         };
-        let handle = rigid_body_set.insert(physics.rigid_body.clone());
+        let handle = level_physics
+            .rigid_body_set
+            .insert(physics.rigid_body.clone());
         for collider in physics.colliders.clone() {
-            let collider_handle = collider_set.insert_with_parent(collider, handle, rigid_body_set);
+            let collider_handle = level_physics.collider_set.insert_with_parent(
+                collider,
+                handle,
+                &mut level_physics.rigid_body_set,
+            );
             physics.collider_handles.push(collider_handle);
         }
         physics.rigid_body_handle = handle;
@@ -591,10 +685,7 @@ impl StaticMeshComponent {
         physics.is_apply_simulate = is_apply_simulate;
     }
 
-    pub fn on_post_update_transformation(
-        &mut self,
-        level_physics: Option<&mut crate::content::level::Physics>,
-    ) {
+    pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
         let Some(run_time) = self.run_time.as_mut() else {
             return;
         };
@@ -784,5 +875,56 @@ impl StaticMeshComponent {
             }
             _ => {}
         }
+    }
+
+    #[cfg(feature = "network")]
+    fn sync_physics(&mut self) -> rs_artifact::error::Result<()> {
+        let Some(run_time) = self.run_time.as_mut() else {
+            panic!();
+        };
+        match self.network_fields.net_mode {
+            network::ENetMode::Server => {}
+            network::ENetMode::Client => {
+                if let Some(physics) = run_time.physics.as_mut() {
+                    let data = rs_artifact::bincode_legacy::serialize(&physics.rigid_body, None)?;
+                    self.network_fields
+                        .replicated_datas
+                        .insert(ReplicatedFieldType::PhysicsRigidBody, data);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn modify_physics(
+        &mut self,
+        level_physics: &mut LevelPhysics,
+        mut modify: impl FnMut(&mut RigidBody) -> (),
+    ) -> rs_artifact::error::Result<()> {
+        let Some(run_time) = self.run_time.as_mut() else {
+            panic!();
+        };
+        if let Some(physics) = run_time.physics.as_mut() {
+            if physics.rigid_body_handle != RigidBodyHandle::invalid() {
+                modify(&mut physics.rigid_body);
+                let exist = &mut level_physics.rigid_body_set[physics.rigid_body_handle];
+                exist.copy_from(&physics.rigid_body);
+                #[cfg(feature = "network")]
+                return self.sync_physics();
+            }
+        }
+        return Ok(());
+    }
+
+    #[cfg(feature = "network")]
+    pub fn set_agent_transformation(
+        &mut self,
+        agent_transformation: &AgentTransformation,
+    ) -> rs_artifact::error::Result<()> {
+        let data = rs_artifact::bincode_legacy::serialize(&agent_transformation, None)?;
+        self.network_fields
+            .replicated_datas
+            .insert(ReplicatedFieldType::AgentTransformation, data);
+        Ok(())
     }
 }

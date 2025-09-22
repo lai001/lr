@@ -3,14 +3,13 @@ use crate::network;
 #[cfg(feature = "network")]
 use crate::network::NetworkReplicated;
 use crate::{
-    content::content_file_type::EContentFileType,
+    content::{content_file_type::EContentFileType, level::LevelPhysics},
     drawable::EDrawObjectType,
     engine::Engine,
     misc,
     player_viewport::PlayerViewport,
     scene_node::{EComponentType, SceneNode},
 };
-use rapier3d::prelude::{ColliderSet, RigidBodySet};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, rc::Rc};
@@ -170,14 +169,9 @@ impl Actor {
         self.update_components_world_transformation();
     }
 
-    pub fn initialize_physics(
-        &mut self,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
+    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
         Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
-            node.borrow_mut()
-                .initialize_physics(rigid_body_set, collider_set);
+            node.borrow_mut().initialize_physics(level_physics);
         });
     }
 
@@ -238,19 +232,13 @@ impl Actor {
         draw_objects
     }
 
-    pub fn tick(
-        &mut self,
-        time: f32,
-        engine: &mut Engine,
-        rigid_body_set: &mut RigidBodySet,
-        collider_set: &mut ColliderSet,
-    ) {
+    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
         self.update_components_world_transformation();
 
         Actor::walk_node_mut(self.scene_node.clone(), {
             &mut |node| {
                 let mut node = node.borrow_mut();
-                node.tick(time, engine, rigid_body_set, collider_set);
+                node.tick(time, engine, level_physics);
             }
         });
     }
@@ -305,7 +293,7 @@ impl Actor {
 
     pub fn on_post_update_transformation_recursion(
         scene_node: &mut SceneNode,
-        level_physics: Option<&mut crate::content::level::Physics>,
+        level_physics: Option<&mut crate::content::level::LevelPhysics>,
     ) {
         if let Some(level_physics) = level_physics {
             scene_node.on_post_update_transformation(Some(level_physics));

@@ -174,11 +174,14 @@ impl ApplicationContext {
         let Some(element_state) = to_element_state(key_event.get_action()) else {
             return;
         };
+
         self.keys_detector.on_key(key_code, element_state);
-        self.app
-            .on_window_input(rs_engine::input_type::EInputType::KeyboardInput(
+        self.app.on_window_input(
+            self.gui.egui_context(),
+            rs_engine::input_type::EInputType::KeyboardInput(
                 self.keys_detector.virtual_key_code_states(),
-            ));
+            ),
+        );
     }
 
     fn on_key_down(&mut self, key_code: i32, key_event: &mut crate::key_event::KeyEvent) {
@@ -189,10 +192,12 @@ impl ApplicationContext {
             return;
         };
         self.keys_detector.on_key(key_code, element_state);
-        self.app
-            .on_window_input(rs_engine::input_type::EInputType::KeyboardInput(
+        self.app.on_window_input(
+            self.gui.egui_context(),
+            rs_engine::input_type::EInputType::KeyboardInput(
                 self.keys_detector.virtual_key_code_states(),
-            ));
+            ),
+        );
     }
 }
 

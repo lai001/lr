@@ -3275,10 +3275,7 @@ impl EditorContext {
                                 let mut active_level = active_level.borrow_mut();
                                 let physics = active_level.get_physics_mut();
                                 if let Some(physics) = physics {
-                                    static_mesh_component.initialize_physics(
-                                        &mut physics.rigid_body_set,
-                                        &mut physics.collider_set,
-                                    );
+                                    static_mesh_component.initialize_physics(physics);
                                 }
                             }
                             _ => unimplemented!(),

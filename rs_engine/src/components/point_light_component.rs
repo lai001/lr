@@ -1,4 +1,5 @@
 use crate::{
+    content::level::LevelPhysics,
     drawable::{CustomDrawObject, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
@@ -185,10 +186,7 @@ impl super::component::Component for PointLightComponent {
         self.transformation
     }
 
-    fn on_post_update_transformation(
-        &mut self,
-        level_physics: Option<&mut crate::content::level::Physics>,
-    ) {
+    fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
         let _ = level_physics;
     }
 
@@ -239,24 +237,17 @@ impl super::component::Component for PointLightComponent {
         })
     }
 
-    fn initialize_physics(
-        &mut self,
-        rigid_body_set: &mut rapier3d::prelude::RigidBodySet,
-        collider_set: &mut rapier3d::prelude::ColliderSet,
-    ) {
-        let _ = collider_set;
-        let _ = rigid_body_set;
+    fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+        let _ = level_physics;
     }
 
     fn tick(
         &mut self,
         time: f32,
         engine: &mut crate::engine::Engine,
-        rigid_body_set: &mut rapier3d::prelude::RigidBodySet,
-        collider_set: &mut rapier3d::prelude::ColliderSet,
+        level_physics: &mut LevelPhysics,
     ) {
-        let _ = collider_set;
-        let _ = rigid_body_set;
+        let _ = level_physics;
         let _ = engine;
         let _ = time;
         let radius = self.get_radius();

@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-pub struct Physics {
+pub struct LevelPhysics {
     pub rigid_body_set: RigidBodySet,
     pub collider_set: ColliderSet,
     pub gravity: nalgebra::Vector3<f32>,
@@ -40,7 +40,7 @@ pub struct Physics {
     pub contact_force_events: VecDeque<ContactForceEvent>,
 }
 
-impl Physics {
+impl LevelPhysics {
     pub fn step(&mut self) {
         let span = tracy_client::span!();
         span.emit_text(&format!(
@@ -160,7 +160,7 @@ impl Physics {
 }
 
 pub struct Runtime {
-    pub physics: Physics,
+    pub physics: LevelPhysics,
     pub is_simulate: bool,
 }
 
@@ -213,10 +213,6 @@ pub struct NetworkFields {
     #[serde(default = "bool::default")]
     pub is_replicated: bool,
     #[serde(skip)]
-    pub newly_added_actors: Vec<SingleThreadMutType<Actor>>,
-    #[serde(skip)]
-    pub waiting_sync_added_actors: Vec<SingleThreadMutType<Actor>>,
-    #[serde(skip)]
     replicated_datas: TransmissionType,
     #[serde(skip)]
     remote_calls: RemoteCallsType,
@@ -234,8 +230,6 @@ impl NetworkFields {
         NetworkFields {
             net_id: Some(crate::network::default_uuid()),
             is_replicated: false,
-            newly_added_actors: Vec::new(),
-            waiting_sync_added_actors: Vec::new(),
             replicated_datas: TransmissionType::new(),
             remote_calls: RemoteCallsType::new(),
             is_sync_with_server: false,
@@ -244,35 +238,7 @@ impl NetworkFields {
         }
     }
 
-    pub fn add_new_actors(&mut self, mut actors: Vec<SingleThreadMutType<Actor>>) {
-        // FIXME: A network ID generated locally should not be used
-        let exists = self.waiting_sync_added_actors.clone();
-        actors.retain_mut(|x| {
-            for exist in exists.iter() {
-                if Rc::ptr_eq(&x, exist) {
-                    return false;
-                }
-            }
-            return true;
-        });
-        let exists = self.newly_added_actors.clone();
-        actors.retain_mut(|x| {
-            for exist in exists.iter() {
-                if Rc::ptr_eq(&x, exist) {
-                    return false;
-                }
-            }
-            return true;
-        });
-
-        if actors.is_empty() {
-            return;
-        }
-        for actor in actors.iter_mut() {
-            let actor = actor.borrow();
-            debug_assert_ne!(actor.network_fields.net_id, None);
-            debug_assert_eq!(actor.is_sync_with_server(), false);
-        }
+    fn add_new_actors(&mut self, actors: Vec<SingleThreadMutType<Actor>>) {
         let arg_data = match rs_artifact::bincode_legacy::serialize::<Vec<SingleThreadMutType<Actor>>>(
             &actors, None,
         ) {
@@ -288,11 +254,6 @@ impl NetworkFields {
         };
         debug_assert!(call.is_valid_args_len());
         self.remote_calls.push(call);
-        for actor in actors.iter_mut() {
-            let mut actor = actor.borrow_mut();
-            actor.sync_with_server(true);
-        }
-        self.newly_added_actors.append(&mut actors);
     }
 
     pub fn reset(&mut self) {
@@ -353,10 +314,18 @@ impl crate::network::NetworkReplicated for Level {
         encoded_data.unwrap_or_default()
     }
 
-    fn on_call(&mut self, data: &Vec<u8>) {
+    fn on_sync2(
+        &mut self,
+        replicated: &Vec<u8>,
+        calls: &Vec<u8>,
+        engine: &mut crate::engine::Engine,
+        contents: &[crate::content::content_file_type::EContentFileType],
+        player_viewport: &mut crate::player_viewport::PlayerViewport,
+    ) {
+        let _ = replicated;
         let reuslt: rs_artifact::error::Result<()> = (|| {
             let calls_data =
-                rs_artifact::bincode_legacy::deserialize::<RemoteCallsType>(&data, None)?;
+                rs_artifact::bincode_legacy::deserialize::<RemoteCallsType>(&calls, None)?;
             for call_data in calls_data {
                 match call_data.ty {
                     RemoteCallType::AddActor => {
@@ -366,13 +335,11 @@ impl crate::network::NetworkReplicated for Level {
                                     Vec<SingleThreadMutType<Actor>>,
                                 >(&call_data.args[0], None)?;
                             for actor in &mut actors {
-                                self.network_fields.newly_added_actors.push(actor.clone());
-                                let actor = actor.borrow_mut();
-                                let mut waiting_sync_actor = actor;
-                                waiting_sync_actor
-                                    .on_net_mode_changed(self.network_fields.net_mode);
-                                waiting_sync_actor.sync_with_server(true);
+                                let mut actor = actor.borrow_mut();
+                                actor.on_net_mode_changed(self.network_fields.net_mode);
+                                actor.sync_with_server(true);
                             }
+                            self.add_new_actors(engine, actors, contents, player_viewport);
                         }
                     }
                 }
@@ -430,7 +397,7 @@ impl Level {
         self.url.get_name_in_editor()
     }
 
-    fn default_physics() -> Physics {
+    fn default_physics() -> LevelPhysics {
         let rigid_body_set: RigidBodySet = RigidBodySet::new();
         let collider_set: ColliderSet = ColliderSet::new();
 
@@ -448,7 +415,7 @@ impl Level {
         let (contact_force_send, contact_force_recv) = std::sync::mpsc::channel();
         let event_handler = ChannelEventCollector::new(collision_send, contact_force_send);
 
-        let physics = Physics {
+        let physics = LevelPhysics {
             rigid_body_set,
             collider_set,
             gravity,
@@ -476,6 +443,7 @@ impl Level {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
+        assert!(self.runtime.is_none());
         #[cfg(feature = "network")]
         if self.network_fields.net_id.is_none() {
             self.set_network_id(crate::network::default_uuid());
@@ -554,10 +522,9 @@ impl Level {
         let Some(physics) = self.get_physics_mut() else {
             return;
         };
-        let rigid_body_set = &mut physics.rigid_body_set;
-        let collider_set = &mut physics.collider_set;
+        let level_physics = physics;
         let mut actor = actor.borrow_mut();
-        actor.initialize_physics(rigid_body_set, collider_set);
+        actor.initialize_physics(level_physics);
     }
 
     // pub fn update_actor_physics(&mut self, actor: SingleThreadMutType<Actor>) {
@@ -595,11 +562,10 @@ impl Level {
         } else {
             runtime.physics.query_update();
         }
-        let rigid_body_set = &mut runtime.physics.rigid_body_set;
-        let collider_set = &mut runtime.physics.collider_set;
+        let level_physics = &mut runtime.physics;
         for actor in self.actors.clone() {
             let mut actor = actor.borrow_mut();
-            actor.tick(time, engine, rigid_body_set, collider_set);
+            actor.tick(time, engine, level_physics);
             // actor.tick_physics(rigid_body_set, collider_set);
         }
 
@@ -620,7 +586,7 @@ impl Level {
         runtime.is_simulate = enable;
     }
 
-    pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
+    pub fn get_physics_mut(&mut self) -> Option<&mut LevelPhysics> {
         self.runtime.as_mut().map(|x| &mut x.physics)
     }
 
@@ -631,9 +597,11 @@ impl Level {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) -> Level {
+        let _ = engine;
+        let _ = files;
+        let _ = player_viewport;
         let ser_level = serde_json::to_string(self).unwrap();
-        let mut copy_level: Level = serde_json::from_str(&ser_level).unwrap();
-        copy_level.initialize(engine, files, player_viewport);
+        let copy_level: Level = serde_json::from_str(&ser_level).unwrap();
         copy_level
     }
 
@@ -840,7 +808,7 @@ impl Level {
         self.actors.retain(|element| !Rc::ptr_eq(&element, &actor));
     }
 
-    fn remove_actor_physics(level_physics: &mut Physics, actor: &Actor) {
+    fn remove_actor_physics(level_physics: &mut LevelPhysics, actor: &Actor) {
         let node = actor.scene_node.clone();
         Actor::walk_node_mut(node, &mut |node| {
             let node = node.borrow();
@@ -1011,18 +979,6 @@ impl Level {
         }
     }
 
-    pub fn process_added_net_actors(
-        &mut self,
-        engine: &mut Engine,
-        files: &[EContentFileType],
-        player_viewport: &mut PlayerViewport,
-    ) {
-        if !self.network_fields.newly_added_actors.is_empty() {
-            let actors = self.network_fields.newly_added_actors.drain(..).collect();
-            self.add_new_actors(engine, actors, &files, player_viewport);
-        }
-    }
-
     pub fn find_actor_by_net_id(&self, id: &uuid::Uuid) -> Option<SingleThreadMutType<Actor>> {
         self.actors
             .iter()
@@ -1032,5 +988,41 @@ impl Level {
 
     pub fn is_server(&self) -> bool {
         self.network_fields.is_server
+    }
+
+    pub fn net_mode(&self) -> crate::network::ENetMode {
+        self.network_fields.net_mode
+    }
+
+    pub fn net_add_new_actors(
+        &mut self,
+        engine: &mut crate::engine::Engine,
+        mut actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
+        // FIXME: A network ID generated locally should not be used
+        if actors.is_empty() {
+            return;
+        }
+        for exist in self.actors.iter() {
+            assert_eq!(
+                actors.iter().any(|x| Rc::ptr_eq(&x, exist)),
+                false,
+                "Adding an existing Actor is not allowed"
+            );
+        }
+        for actor in actors.iter_mut() {
+            let mut actor = actor.borrow_mut();
+            actor.on_net_mode_changed(self.net_mode());
+            assert_ne!(actor.network_fields.net_id, None);
+            assert_eq!(actor.is_sync_with_server(), false);
+        }
+        self.network_fields.add_new_actors(actors.clone());
+        self.init_actors(engine, actors.clone(), files, player_viewport);
+        for actor in actors.clone() {
+            self.init_actor_physics(actor.clone());
+        }
+        self.actors.append(&mut actors);
     }
 }
