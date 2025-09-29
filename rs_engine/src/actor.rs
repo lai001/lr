@@ -10,9 +10,13 @@ use crate::{
     player_viewport::PlayerViewport,
     scene_node::{EComponentType, SceneNode},
 };
+use rs_core_minimal::serde_user_data::SerdeUserData;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 #[cfg(feature = "network")]
 #[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
@@ -56,10 +60,14 @@ impl NetworkFields {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Actor {
     pub name: String,
+    #[serde(default)]
+    pub tags: HashSet<String>,
     #[cfg(feature = "network")]
     #[serde(default)]
     pub network_fields: NetworkFields,
     pub scene_node: SingleThreadMutType<SceneNode>,
+    #[serde(default)]
+    pub serde_user_data: Option<SerdeUserData>,
 }
 
 #[cfg(feature = "network")]
@@ -112,18 +120,22 @@ impl Actor {
         let scene_node = SceneNode::new_sp("Scene".to_string());
         Actor {
             name,
-            scene_node,
+            tags: HashSet::new(),
             #[cfg(feature = "network")]
             network_fields: NetworkFields::new(),
+            scene_node,
+            serde_user_data: None,
         }
     }
 
     pub fn new_with_node(name: String, scene_node: SingleThreadMutType<SceneNode>) -> Actor {
         Actor {
             name,
-            scene_node,
+            tags: HashSet::new(),
             #[cfg(feature = "network")]
             network_fields: NetworkFields::new(),
+            scene_node,
+            serde_user_data: None,
         }
     }
 
@@ -436,13 +448,15 @@ impl Actor {
         let copy_root_scene_node = Self::copy_recursion(&self.scene_node.borrow());
         let copy_actor = Actor {
             name,
-            scene_node: SingleThreadMut::new(copy_root_scene_node),
+            tags: self.tags.clone(),
             #[cfg(feature = "network")]
             network_fields: {
                 let mut network_fields = NetworkFields::new();
                 network_fields.is_replicated = self.network_fields.is_replicated;
                 network_fields
             },
+            scene_node: SingleThreadMut::new(copy_root_scene_node),
+            serde_user_data: self.serde_user_data.clone(),
         };
         copy_actor
     }

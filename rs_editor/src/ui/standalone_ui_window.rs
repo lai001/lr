@@ -272,6 +272,7 @@ impl StandaloneUiWindow {
             };
             application.net_module.server = server;
             application.net_module.client = client;
+            application.notify_plugins_network_changed();
             application.on_network_changed();
         }
 

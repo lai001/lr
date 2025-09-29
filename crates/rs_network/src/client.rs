@@ -188,6 +188,14 @@ impl Client {
             }
         }
     }
+
+    pub fn peer_addr(&self) -> &SocketAddr {
+        &self.peer_addr
+    }
+
+    pub fn local_addr(&self) -> &SocketAddr {
+        &self.local_addr
+    }
 }
 
 #[cfg(test)]

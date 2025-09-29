@@ -1,5 +1,3 @@
-#[cfg(feature = "network")]
-use crate::network::NetworkModule;
 #[cfg(feature = "plugin_shared_crate")]
 use crate::plugin::plugin_crate::Plugin;
 use crate::{
@@ -19,7 +17,7 @@ pub struct NetworkObjectData {
     pub id: uuid::Uuid,
     pub replicated: Vec<u8>,
     pub call: Vec<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_description: Option<String>,
 }
 
@@ -173,7 +171,7 @@ impl Application {
         current_active_level: &Level,
         contents: Vec<EContentFileType>,
         input_mode: EInputMode,
-        #[cfg(feature = "plugin_shared_crate")] mut plugins: Vec<Box<dyn Plugin>>,
+        #[cfg(feature = "plugin_shared_crate")] plugins: Vec<Box<dyn Plugin>>,
     ) -> Application {
         // let resource_manager = ResourceManager::default();
 
@@ -196,39 +194,41 @@ impl Application {
         current_active_level.initialize(engine, &contents, &mut player_view_port);
         current_active_level.set_physics_simulate(true);
 
-        #[cfg(feature = "plugin_shared_crate")]
-        for plugin in plugins.iter_mut() {
-            plugin.on_init(
-                engine,
-                &mut current_active_level,
-                &mut player_view_port,
-                &contents,
-            );
-        }
-
-        #[cfg(feature = "plugin_shared_crate")]
-        for plugin in plugins.iter_mut() {
-            plugin.on_open_level(
-                engine,
-                &mut current_active_level,
-                &mut player_view_port,
-                &contents,
-            );
-        }
-
-        Application {
+        let mut app = Application {
             _window_id: window_id,
             player_view_port,
             #[cfg(feature = "plugin_shared_crate")]
             plugins: SingleThreadMut::new(plugins),
             current_active_level: SingleThreadMut::new(current_active_level),
-            _contents: contents,
+            _contents: contents.clone(),
             #[cfg(feature = "network")]
             net_module: NetModule::new(),
             frame: 0,
             #[cfg(feature = "network")]
             server_pending_open_level: None,
+        };
+
+        let plugins = app.plugins.clone();
+        let mut plugins = plugins.borrow_mut();
+        let current_active_level = app.current_active_level.clone();
+        #[cfg(feature = "plugin_shared_crate")]
+        for plugin in plugins.iter_mut() {
+            {
+                plugin.on_init(
+                    engine,
+                    &mut current_active_level.borrow_mut(),
+                    &mut app,
+                    &contents,
+                );
+            }
+            plugin.on_open_level(
+                engine,
+                &mut current_active_level.borrow_mut(),
+                &mut app,
+                &contents,
+            );
         }
+        app
     }
 
     #[cfg(not(target_os = "android"))]
@@ -413,6 +413,7 @@ impl Application {
         engine: &mut Engine,
         contents: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
+        #[cfg(feature = "plugin_shared_crate")] plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
     ) -> Vec<rs_network::server::Connection> {
         use std::collections::HashMap;
 
@@ -430,6 +431,21 @@ impl Application {
                     endpoint_data.network_object_datas.push(network_object_data);
                 }
             });
+            let mut plugins = plugins.borrow_mut();
+            for network_replicated in plugins.iter_mut() {
+                let Some(network_replicated) = network_replicated.as_network_replicated() else {
+                    continue;
+                };
+                let network_object_data = NetworkObjectData {
+                    id: *network_replicated.get_network_id(),
+                    replicated: network_replicated.on_replicated(),
+                    call: network_replicated.call(),
+                    debug_description: network_replicated.debug_name(),
+                };
+                if network_object_data.is_valid() {
+                    endpoint_data.network_object_datas.push(network_object_data);
+                }
+            }
         }
 
         let mut peer_addr_to_client: HashMap<
@@ -486,8 +502,12 @@ impl Application {
         for messages in peer_addr_to_messages.values() {
             for message in messages {
                 debug_assert!(!message.data.is_empty());
-                let Ok(client_net_data) = ClientNetData::deserialize(&message.data) else {
-                    continue;
+                let client_net_data = match ClientNetData::deserialize(&message.data) {
+                    Ok(client_net_data) => client_net_data,
+                    Err(err) => {
+                        log::warn!("{err}");
+                        continue;
+                    }
                 };
                 let mut sync_ids = vec![];
                 for network_object_data in &client_net_data.endpoint_data.network_object_datas {
@@ -511,6 +531,31 @@ impl Application {
                             );
                         }
                     });
+                    let mut plugins = plugins.borrow_mut();
+                    for network_replicated in plugins.iter_mut() {
+                        let Some(network_replicated) = network_replicated.as_network_replicated()
+                        else {
+                            continue;
+                        };
+                        let id = network_replicated.get_network_id();
+                        if id == &network_object_data.id {
+                            #[cfg(feature = "network_debug_trace")]
+                            log::trace!(
+                                "[Server]On sync, id: {id}, name: {:?}",
+                                network_replicated.debug_name()
+                            );
+                            sync_ids.push(id.clone());
+                            network_replicated.on_sync(&network_object_data.replicated);
+                            network_replicated.on_call(&network_object_data.call);
+                            network_replicated.on_sync2(
+                                &network_object_data.replicated,
+                                &network_object_data.call,
+                                engine,
+                                contents,
+                                player_viewport,
+                            );
+                        }
+                    }
                 }
                 if sync_ids.len() != client_net_data.endpoint_data.network_object_datas.len() {
                     log::warn!("[Server]Some objects are not synchronized");
@@ -542,6 +587,7 @@ impl Application {
         contents: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
         client: &mut rs_network::client::Client,
+        #[cfg(feature = "plugin_shared_crate")] plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
     ) -> ClientTickResultType {
         let mut result = ClientTickResultType::None;
         let mut endpoint_data: EndpointData = EndpointData::default();
@@ -558,14 +604,33 @@ impl Application {
                     endpoint_data.network_object_datas.push(network_object_data);
                 }
             });
+            let mut plugins = plugins.borrow_mut();
+            for network_replicated in plugins.iter_mut() {
+                let Some(network_replicated) = network_replicated.as_network_replicated() else {
+                    continue;
+                };
+                let network_object_data = NetworkObjectData {
+                    id: *network_replicated.get_network_id(),
+                    replicated: network_replicated.on_replicated(),
+                    call: network_replicated.call(),
+                    debug_description: network_replicated.debug_name(),
+                };
+                if network_object_data.is_valid() {
+                    endpoint_data.network_object_datas.push(network_object_data);
+                }
+            }
         }
 
         for message in client.take_messages() {
             if message.data.is_empty() {
                 continue;
             }
-            let Ok(server_net_data) = ServerNetData::deserialize(&message.data) else {
-                continue;
+            let server_net_data = match ServerNetData::deserialize(&message.data) {
+                Ok(server_net_data) => server_net_data,
+                Err(err) => {
+                    log::warn!("{err}");
+                    continue;
+                }
             };
             if let Some(mut remote_level) = server_net_data.level() {
                 log::trace!("To remote level: {}", &remote_level.get_name());
@@ -603,6 +668,31 @@ impl Application {
                         );
                     }
                 });
+                let mut plugins = plugins.borrow_mut();
+                for network_replicated in plugins.iter_mut() {
+                    let Some(network_replicated) = network_replicated.as_network_replicated()
+                    else {
+                        continue;
+                    };
+                    let id = network_replicated.get_network_id();
+                    if id == &network_object_data.id {
+                        #[cfg(feature = "network_debug_trace")]
+                        log::trace!(
+                            "[Server]On sync, id: {id}, name: {:?}",
+                            network_replicated.debug_name()
+                        );
+                        sync_ids.push(id.clone());
+                        network_replicated.on_sync(&network_object_data.replicated);
+                        network_replicated.on_call(&network_object_data.call);
+                        network_replicated.on_sync2(
+                            &network_object_data.replicated,
+                            &network_object_data.call,
+                            engine,
+                            contents,
+                            player_viewport,
+                        );
+                    }
+                }
             }
             if sync_ids.len() != network_object_datas.len() {
                 log::warn!("[Client]Some objects are not synchronized");
@@ -646,11 +736,16 @@ impl Application {
                     engine,
                     &self._contents,
                     &mut self.player_view_port,
+                    #[cfg(feature = "plugin_shared_crate")]
+                    self.plugins.clone(),
                 );
                 #[cfg(feature = "plugin_shared_crate")]
                 if !new_connections.is_empty() {
-                    for plugin in self.plugins.borrow_mut().iter_mut() {
-                        plugin.on_new_connections(&new_connections);
+                    for network_module in self.plugins.borrow_mut().iter_mut() {
+                        let Some(network_module) = network_module.as_network_module() else {
+                            continue;
+                        };
+                        network_module.on_new_connections(&new_connections);
                     }
                     self.net_module.connections.append(&mut new_connections);
                 }
@@ -663,13 +758,15 @@ impl Application {
                     &self._contents,
                     &mut self.player_view_port,
                     client,
+                    #[cfg(feature = "plugin_shared_crate")]
+                    self.plugins.clone(),
                 );
                 match result {
                     ClientTickResultType::OpenLevel(level) => {
                         self.current_active_level = SingleThreadMut::new(level);
+                        self.on_network_changed();
                         let plugins = self.plugins.clone();
                         let mut plugins = plugins.borrow_mut();
-                        self.on_network_changed();
                         self.notify_level_opend(engine, plugins.iter_mut());
                     }
                     ClientTickResultType::None => {}
@@ -695,6 +792,30 @@ impl Application {
                 rep.on_net_mode_changed(crate::network::ENetMode::Client);
             });
             level.network_fields.is_server = false;
+        }
+    }
+
+    pub fn notify_plugins_network_changed(&mut self) {
+        debug_assert_eq!(
+            self.net_module.server.is_some() && self.net_module.client.is_some(),
+            false
+        );
+        if self.net_module.server.is_some() {
+            let plugins = self.plugins.clone();
+            let mut plugins = plugins.borrow_mut();
+            for plugin in plugins.iter_mut() {
+                if let Some(as_network_replicated) = plugin.as_network_replicated() {
+                    as_network_replicated.on_net_mode_changed(crate::network::ENetMode::Server);
+                }
+            }
+        } else if self.net_module.client.is_some() {
+            let plugins = self.plugins.clone();
+            let mut plugins = plugins.borrow_mut();
+            for plugin in plugins.iter_mut() {
+                if let Some(as_network_replicated) = plugin.as_network_replicated() {
+                    as_network_replicated.on_net_mode_changed(crate::network::ENetMode::Client);
+                }
+            }
         }
     }
 
@@ -742,13 +863,10 @@ impl Application {
         engine: &mut Engine,
         plugins: impl Iterator<Item = &'a mut Box<dyn Plugin>>,
     ) {
+        let opend_level = self.current_active_level.clone();
+        let contents = self._contents.clone();
         for plugin in plugins {
-            plugin.on_open_level(
-                engine,
-                &mut self.current_active_level.borrow_mut(),
-                &mut self.player_view_port,
-                &self._contents,
-            );
+            plugin.on_open_level(engine, &mut opend_level.borrow_mut(), self, &contents);
         }
     }
 }

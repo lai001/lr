@@ -122,6 +122,10 @@ impl Server {
     pub fn shutdown_stream(&mut self, peer_addr: SocketAddr) {
         self.clients.retain_mut(|x| x.peer_addr != peer_addr);
     }
+
+    pub fn addr(&self) -> &SocketAddr {
+        &self.addr
+    }
 }
 
 #[cfg(test)]

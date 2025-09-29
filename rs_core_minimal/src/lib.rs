@@ -9,6 +9,7 @@ pub mod parallel;
 pub mod path_ext;
 pub mod plane_3d;
 pub mod primitive_data;
+pub mod serde_user_data;
 pub mod settings;
 pub mod sphere_3d;
 pub mod thread_pool;

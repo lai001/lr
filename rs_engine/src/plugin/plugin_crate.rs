@@ -1,7 +1,6 @@
 use crate::{
     content::{content_file_type::EContentFileType, level::Level},
     engine::Engine,
-    player_viewport::PlayerViewport,
     standalone::application::Application,
 };
 
@@ -10,23 +9,23 @@ pub trait Plugin {
         &mut self,
         engine: &mut Engine,
         level: &mut Level,
-        player_viewport: &mut PlayerViewport,
-        files: &[EContentFileType],
+        application: &mut Application,
+        contents: &[EContentFileType],
     );
 
     fn on_open_level(
         &mut self,
         engine: &mut Engine,
         level: &mut Level,
-        player_viewport: &mut PlayerViewport,
-        files: &[EContentFileType],
+        application: &mut Application,
+        contents: &[EContentFileType],
     );
 
     fn tick(
         &mut self,
         engine: &mut Engine,
         ctx: egui::Context,
-        files: &[EContentFileType],
+        contents: &[EContentFileType],
         application: &mut Application,
         #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
     );
@@ -40,38 +39,14 @@ pub trait Plugin {
         ctx: egui::Context,
         ty: crate::input_type::EInputType,
     ) -> Vec<winit::keyboard::KeyCode>;
-}
 
-#[cfg(feature = "network")]
-impl crate::network::NetworkReplicated for dyn Plugin {
-    fn get_network_id(&self) -> &uuid::Uuid {
+    #[cfg(feature = "network")]
+    fn as_network_replicated(&mut self) -> Option<&mut dyn crate::network::NetworkReplicated> {
         unimplemented!();
     }
 
-    fn set_network_id(&mut self, _: uuid::Uuid) {
+    #[cfg(feature = "network")]
+    fn as_network_module(&mut self) -> Option<&mut dyn crate::network::NetworkModule> {
         unimplemented!();
-    }
-
-    fn is_replicated(&self) -> bool {
-        unimplemented!();
-    }
-
-    fn set_replicated(&mut self, _: bool) {
-        unimplemented!();
-    }
-
-    fn sync_with_server(&mut self, _: bool) {
-        unimplemented!();
-    }
-
-    fn is_sync_with_server(&self) -> bool {
-        unimplemented!();
-    }
-}
-
-#[cfg(feature = "network")]
-impl crate::network::NetworkModule for dyn Plugin {
-    fn on_new_connections(&mut self, connections: &[rs_network::server::Connection]) {
-        let _ = connections;
     }
 }
