@@ -1,6 +1,5 @@
 use rs_reflection_core::*;
 
-#[derive(Clone)]
 pub struct ReflectionSystem {
     struct_meta_containers: Vec<Box<dyn StructMetaContainer>>,
 }

@@ -3,11 +3,18 @@ use std::path::{Path, PathBuf};
 
 #[cfg(feature = "editor")]
 pub fn get_engine_root_dir() -> PathBuf {
-    let path: PathBuf;
+    let mut path: PathBuf;
     if is_dev_mode() {
         path = Path::new(file!()).join("../../../").to_path_buf();
     } else {
         path = Path::new("../../../").to_path_buf();
+        if let Ok(current_exe) = std::env::current_exe() {
+            if let Some(current_dir) = current_exe.parent() {
+                if current_dir.join(".cargo-lock").exists() {
+                    path = Path::new(file!()).join("../../../").to_path_buf();
+                }
+            }
+        }
     }
     path
 }

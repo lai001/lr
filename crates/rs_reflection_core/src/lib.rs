@@ -1,5 +1,7 @@
+pub mod error;
+
 use downcast_rs::Downcast;
-use dyn_clone::DynClone;
+use std::any::{Any, TypeId};
 
 #[derive(Clone)]
 pub struct TypeMeta {
@@ -25,34 +27,77 @@ pub struct StructFieldMeta {
     pub type_meta: TypeMeta,
 }
 
-#[derive(Clone)]
+pub enum ReflectArg<'a> {
+    Owned(Box<dyn Any>),
+    Ref(&'a dyn Any),
+    MutRef(&'a mut dyn Any),
+    OptionRef(Option<&'a dyn Any>),
+    OptionMutRef(Option<&'a mut dyn Any>),
+}
+
+pub enum FunctionExecType {
+    Exec(
+        Box<
+            dyn for<'a> Fn(
+                &'a dyn Any,
+                &'a mut Vec<ReflectArg<'a>>,
+            ) -> crate::error::Result<Option<ReflectArg<'a>>>,
+        >,
+    ),
+    ExecMut(
+        Box<
+            dyn for<'a> Fn(
+                &'a mut dyn Any,
+                &'a mut Vec<ReflectArg<'a>>,
+            ) -> crate::error::Result<Option<ReflectArg<'a>>>,
+        >,
+    ),
+    StaticExec(
+        Box<dyn Fn(&mut Vec<ReflectArg>) -> crate::error::Result<Option<ReflectArg<'static>>>>,
+    ),
+}
+
+pub struct Function {
+    pub meta: FunctionMeta,
+    pub exec_type: FunctionExecType,
+}
+
 pub struct StructMeta {
     pub name: String,
     pub fields: Vec<StructFieldMeta>,
-    pub functions: Vec<FunctionMeta>,
+    pub functions: Vec<Function>,
 }
 
-pub trait StructMetaContainer: DynClone + Downcast {
-    fn exec_without_self(
-        &mut self,
-        name: &str,
-        params: Vec<Box<dyn std::any::Any>>,
-    ) -> Option<Box<dyn std::any::Any>>;
+impl StructMeta {
+    pub fn new(name: String, fields: Vec<StructFieldMeta>, functions: Vec<Function>) -> StructMeta {
+        StructMeta {
+            name,
+            fields,
+            functions,
+        }
+    }
 
-    fn exec_with_mut_self(
-        &mut self,
-        name: &str,
-        self_param: &mut dyn std::any::Any,
-        params: Vec<Box<dyn std::any::Any>>,
-    ) -> Option<Box<dyn std::any::Any>>;
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 
-    fn exec_with_self(
-        &mut self,
-        name: &str,
-        self_param: &dyn std::any::Any,
-        params: Vec<Box<dyn std::any::Any>>,
-    ) -> Option<Box<dyn std::any::Any>>;
+    pub fn fields(&self) -> &[StructFieldMeta] {
+        &self.fields
+    }
 
+    pub fn functions(&self) -> &Vec<Function> {
+        &self.functions
+    }
+
+    pub fn find_function_by_name(&self, name: &str) -> Option<&Function> {
+        self.functions.iter().find(|x| x.meta.name == name)
+    }
+}
+
+pub fn get_type_id(this: &(dyn Any + 'static)) -> TypeId {
+    this.type_id()
+}
+
+pub trait StructMetaContainer: Downcast {
     fn get_struct_meta(&self) -> &StructMeta;
 }
-dyn_clone::clone_trait_object!(StructMetaContainer);
