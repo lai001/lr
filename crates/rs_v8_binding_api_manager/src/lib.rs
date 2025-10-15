@@ -1,20 +1,9 @@
-pub struct BindingApiManager {
-    pub engine_api: rs_v8_engine_binding_api::native_engine::EngineBindingApi,
-    pub level_api: rs_v8_engine_binding_api::native_level::RcRefLevelBindingApi,
-    pub player_viewport_binding_api:
-        rs_v8_engine_binding_api::native_player_viewport::PlayerViewportBindingApi,
-}
+use rs_v8_host::v8_runtime::V8Runtime;
 
-impl BindingApiManager {
-    pub fn new(
-        engine_api: rs_v8_engine_binding_api::native_engine::EngineBindingApi,
-        level_api: rs_v8_engine_binding_api::native_level::RcRefLevelBindingApi,
-        player_viewport_binding_api: rs_v8_engine_binding_api::native_player_viewport::PlayerViewportBindingApi,
-    ) -> Self {
-        Self {
-            engine_api,
-            level_api,
-            player_viewport_binding_api,
-        }
+pub struct BindingApi {}
+
+impl BindingApi {
+    pub fn register(v8_runtime: &mut V8Runtime) {
+        rs_engine_v8_binding_api::register(v8_runtime);
     }
 }

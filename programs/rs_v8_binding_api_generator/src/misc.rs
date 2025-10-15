@@ -62,7 +62,7 @@ pub fn make_bind_function(
     if params_len == 0 {
         quote::quote! {
             pub fn #function_name(
-                scope: &mut v8::HandleScope,
+                scope: &mut v8::PinScope,
                 args: v8::FunctionCallbackArguments,
                 mut ret_val: v8::ReturnValue,
             ) {
@@ -72,7 +72,7 @@ pub fn make_bind_function(
     } else {
         quote::quote! {
             pub fn #function_name(
-                scope: &mut v8::HandleScope,
+                scope: &mut v8::PinScope,
                 args: v8::FunctionCallbackArguments,
                 mut ret_val: v8::ReturnValue,
             ) {
@@ -97,7 +97,7 @@ pub fn make_unwrap_object(native_struct_name: &str, wrap_type: EWrappedStructTyp
         let #name = unsafe {
             let #name = v8::Object::unwrap::<CPPGC_TAG, #native_struct_name>(scope, args.this())
                 .expect("Not null");
-            #name.as_ref().wrapped_value.as_ptr().as_mut().expect("Not null")
+            #name.as_ref().value.as_ptr().as_mut().expect("Not null")
         };
     }
 }
@@ -115,8 +115,8 @@ pub fn make_assign_function(
     let rust_function_name = rust_function_name.parse::<TokenStream>().unwrap();
     quote::quote! {
         {
-            let name = v8::String::new(&mut scope, #bind_function_name).ok_or(anyhow!("Failed to create string"))?;
-            let function = v8::FunctionTemplate::new(&mut scope, #native_struct_name::#rust_function_name);
+            let name = v8::String::new(scope, #bind_function_name).ok_or(Error::Other("Failed to create string".to_string()))?;
+            let function = v8::FunctionTemplate::new(scope, #native_struct_name::#rust_function_name);
             prototype_template.set(name.into(), function.into());
         }
     }
@@ -322,7 +322,7 @@ pub fn make_wrapped_struct(
             quote::quote! {
                 #[derive(Clone)]
                 pub struct #wrap_struct_name {
-                    pub wrapped_value: Rc<RefCell<#wrapped_value_type>>,
+                    pub value: Rc<RefCell<#wrapped_value_type>>,
                 }
                 unsafe impl v8::cppgc::GarbageCollected for #wrap_struct_name {
                     fn trace(&self, _visitor: &mut v8::cppgc::Visitor) {}
@@ -331,20 +331,33 @@ pub fn make_wrapped_struct(
                         #name
                     }
                 }
+                impl Newable for #wrap_struct_name {
+                    type AssociatedType = Rc<RefCell<#wrapped_value_type>>;
+
+                    fn new(value: Self::AssociatedType) -> Self {
+                        #wrap_struct_name { value }
+                    }
+                }
             }
         }
         EWrappedStructType::StaticLifeTimeNotNullPtr => {
             quote::quote! {
                 #[derive(Clone)]
                 pub struct #wrap_struct_name {
-                    pub wrapped_value: std::ptr::NonNull<#wrapped_value_type>,
+                    pub value: std::ptr::NonNull<#wrapped_value_type>,
                 }
-
-                unsafe  impl v8::cppgc::GarbageCollected for #wrap_struct_name {
+                unsafe impl v8::cppgc::GarbageCollected for #wrap_struct_name {
                     fn trace(&self, _visitor: &mut v8::cppgc::Visitor) {}
 
                     fn get_name(&self) -> &'static std::ffi::CStr {
                         #name
+                    }
+                }
+                impl Newable for #wrap_struct_name {
+                    type AssociatedType = std::ptr::NonNull<#wrapped_value_type>;
+
+                    fn new(value: Self::AssociatedType) -> Self {
+                        #wrap_struct_name { value }
                     }
                 }
             }
@@ -359,6 +372,7 @@ pub fn make_api_code(
     wrap_type: EWrappedStructType,
     set_function_bindings: TokenStream,
     function_bindings: TokenStream,
+    out_binding_api_type_name: &mut TokenStream,
 ) -> TokenStream {
     let prefix = prefix(wrap_type);
     let wrapped_struct = make_wrapped_struct(wrap_struct_name, &wrapped_value_full_type, wrap_type);
@@ -368,6 +382,7 @@ pub fn make_api_code(
     let binding_api_type_name = format!("{}{}BindingApi", prefix, wrapped_value_type)
         .parse::<TokenStream>()
         .unwrap();
+    *out_binding_api_type_name = binding_api_type_name.clone();
     let export_wrap_struct_name = format!("{}{}", prefix, wrap_struct_name);
     match &wrap_type {
         EWrappedStructType::RcRefCell => {
@@ -376,76 +391,52 @@ pub fn make_api_code(
                     function_template: v8::Global<v8::FunctionTemplate>,
                 }
 
-                impl #binding_api_type_name {
-                    pub fn new(
-                        v8_runtime: &mut rs_v8_host::v8_runtime::V8Runtime,
-                    ) -> anyhow::Result<#binding_api_type_name> {
-                        let global_context = v8_runtime.global_context.clone();
-                        let mut handle_scope = v8::HandleScope::new(&mut v8_runtime.isolate);
-                        let global_context = v8::Local::new(&mut handle_scope, global_context.clone());
-                        let mut scope = v8::ContextScope::new(&mut handle_scope, global_context);
+                impl Constructible for #binding_api_type_name {
+                    type AssociatedType = #wrap_struct_name_token_stream;
 
+                    fn construct(v8_runtime: &mut rs_v8_host::v8_runtime::V8Runtime) -> Result<Constructor, Error> {
+                        let main_context = v8_runtime.global_context.clone();
+                        let isolate = &mut v8_runtime.isolate;
+                        v8::scope_with_context!(context_scope, isolate, &main_context);
+                        let scope = context_scope;
                         let native_class_function_template =
-                            v8::FunctionTemplate::new(&mut scope, #wrap_struct_name_token_stream::constructor_function);
+                            v8::FunctionTemplate::new(scope, #wrap_struct_name_token_stream::constructor_function);
 
                         native_class_function_template.set_class_name(
-                            v8::String::new(&mut scope, #export_wrap_struct_name)
-                                .ok_or(anyhow!("Failed to create string"))?,
+                            v8::String::new(scope, #export_wrap_struct_name)
+                                .ok_or(Error::Other("Failed to create string".to_string()))?,
                         );
-                        let prototype_template = native_class_function_template.prototype_template(&mut scope);
+                        let prototype_template = native_class_function_template.prototype_template(scope);
 
                         #set_function_bindings
 
-                        let function_template = v8::Global::new(&mut scope, native_class_function_template);
+                        let function = native_class_function_template
+                            .get_function(scope)
+                            .ok_or(Error::Other("Function is null".to_string()))?;
+                        let context = v8::Local::new(scope, main_context.clone());
+                        let global_this = context.global(scope);
+                        let name = v8::String::new(scope, #export_wrap_struct_name)
+                            .ok_or(Error::Other("Failed to create string".to_string()))?;
+                        global_this.set(scope, name.into(), function.into());
 
-                        Ok(#binding_api_type_name {
+                        let function_template = v8::Global::new(scope, native_class_function_template);
+
+                        Ok(Constructor {
+                            name: #export_wrap_struct_name.to_string(),
                             function_template,
                         })
-                    }
-
-                    pub fn make_wrapped_value(
-                        &mut self,
-                        v8_runtime: &mut rs_v8_host::v8_runtime::V8Runtime,
-                        wrapped_value: Rc<RefCell<#wrapped_value_full_type>>,
-                    ) -> anyhow::Result<v8::Global<v8::Object>> {
-                        let global_context = v8_runtime.global_context.clone();
-                        let mut handle_scope = v8::HandleScope::new(&mut v8_runtime.isolate);
-                        let global_context = v8::Local::new(&mut handle_scope, global_context.clone());
-                        let mut scope = &mut v8::ContextScope::new(&mut handle_scope, global_context);
-
-                        let local_function = v8::Local::new(scope, self.function_template.clone());
-                        let function = local_function
-                            .get_function(scope)
-                            .ok_or(anyhow!("Not null"))?;
-                        let obj = function.new_instance(scope, &[]).expect("Not null");
-
-                        unsafe {
-                            let native_value = #wrap_struct_name_token_stream::new(wrapped_value);
-                            let member = v8::cppgc::make_garbage_collected(
-                                scope.get_cpp_heap().expect("Not null"),
-                                native_value,
-                            );
-                            v8::Object::wrap::<CPPGC_TAG, #wrap_struct_name_token_stream>(scope, obj, &member);
-                        }
-
-                        Ok(v8::Global::new(scope, obj))
                     }
                 }
 
                 #wrapped_struct
 
                 impl #wrap_struct_name_token_stream {
-                    pub fn new(wrapped_value: Rc<RefCell<#wrapped_value_full_type>>) -> #wrap_struct_name_token_stream {
-                        #wrap_struct_name_token_stream {
-                            wrapped_value,
-                        }
-                    }
-
                     pub fn constructor_function(
-                        scope: &mut v8::HandleScope,
+                        scope: &mut v8::PinScope,
                         args: v8::FunctionCallbackArguments,
-                        ret_val: v8::ReturnValue,
+                        mut ret_val: v8::ReturnValue,
                     ) {
+
                     }
 
                     #function_bindings
@@ -455,83 +446,55 @@ pub fn make_api_code(
         EWrappedStructType::StaticLifeTimeNotNullPtr => {
             quote::quote! {
                 pub struct #binding_api_type_name {
-                    _function_template: v8::Global<v8::FunctionTemplate>,
-                    wrapped_value: v8::Global<v8::Object>,
+                    function_template: v8::Global<v8::FunctionTemplate>,
                 }
 
-                impl #binding_api_type_name {
-                    pub fn new(
-                        v8_runtime: &mut rs_v8_host::v8_runtime::V8Runtime,
-                        wrapped_value: &mut #wrapped_value_full_type,
-                    ) -> anyhow::Result<#binding_api_type_name> {
-                        let global_context = v8_runtime.global_context.clone();
-                        let mut handle_scope = v8::HandleScope::new(&mut v8_runtime.isolate);
-                        let global_context = v8::Local::new(&mut handle_scope, global_context.clone());
-                        let mut scope = v8::ContextScope::new(&mut handle_scope, global_context);
+                impl Constructible for #binding_api_type_name {
+                    type AssociatedType = #wrap_struct_name_token_stream;
 
+                    fn construct(v8_runtime: &mut rs_v8_host::v8_runtime::V8Runtime) -> Result<Constructor, Error> {
+                        let main_context = v8_runtime.global_context.clone();
+                        let isolate = &mut v8_runtime.isolate;
+                        v8::scope_with_context!(context_scope, isolate, &main_context);
+                        let scope = context_scope;
                         let native_class_function_template =
-                            v8::FunctionTemplate::new(&mut scope, #wrap_struct_name_token_stream::constructor_function);
+                            v8::FunctionTemplate::new(scope, #wrap_struct_name_token_stream::constructor_function);
 
                         native_class_function_template.set_class_name(
-                            v8::String::new(&mut scope, #export_wrap_struct_name)
-                                .ok_or(anyhow!("Failed to create string"))?,
+                            v8::String::new(scope, #export_wrap_struct_name)
+                                .ok_or(Error::Other("Failed to create string".to_string()))?,
                         );
-                        let prototype_template = native_class_function_template.prototype_template(&mut scope);
+                        let prototype_template = native_class_function_template.prototype_template(scope);
 
                         #set_function_bindings
 
-                        let function_template = v8::Global::new(&mut scope, native_class_function_template);
-                        let wrapped_value =
-                            Self::make_wrapped_value(&mut scope, function_template.clone(), wrapped_value)?;
-
-                        Ok(#binding_api_type_name {
-                            _function_template: function_template,
-                            wrapped_value,
-                        })
-                    }
-
-                    fn make_wrapped_value(
-                        scope: &mut v8::ContextScope<'_, v8::HandleScope<'_>>,
-                        function_template: v8::Global<v8::FunctionTemplate>,
-                        wrapped_value: &mut #wrapped_value_full_type,
-                    ) -> anyhow::Result<v8::Global<v8::Object>> {
-                        let local_function = v8::Local::new(scope, function_template);
-                        let function = local_function
+                        let function = native_class_function_template
                             .get_function(scope)
-                            .ok_or(anyhow!("Not null"))?;
-                        let obj = function.new_instance(scope, &[]).expect("Not null");
+                            .ok_or(Error::Other("Function is null".to_string()))?;
+                        let context = v8::Local::new(scope, main_context.clone());
+                        let global_this = context.global(scope);
+                        let name = v8::String::new(scope, #export_wrap_struct_name)
+                            .ok_or(Error::Other("Failed to create string".to_string()))?;
+                        global_this.set(scope, name.into(), function.into());
 
-                        unsafe {
-                            let native_value = #wrap_struct_name_token_stream::new(wrapped_value);
-                            let member = v8::cppgc::make_garbage_collected(
-                                scope.get_cpp_heap().expect("Not null"),
-                                native_value,
-                            );
-                            v8::Object::wrap::<CPPGC_TAG, #wrap_struct_name_token_stream>(scope, obj, &member);
-                        }
+                        let function_template = v8::Global::new(scope, native_class_function_template);
 
-                        Ok(v8::Global::new(scope, obj))
-                    }
-
-                    pub fn get_wrapped_value(&self) -> v8::Global<v8::Object> {
-                        self.wrapped_value.clone()
+                        Ok(Constructor {
+                            name: #export_wrap_struct_name.to_string(),
+                            function_template,
+                        })
                     }
                 }
 
                 #wrapped_struct
 
                 impl #wrap_struct_name_token_stream {
-                    pub fn new(wrapped_value: &mut #wrapped_value_full_type) -> #wrap_struct_name_token_stream {
-                        #wrap_struct_name_token_stream {
-                            wrapped_value: wrapped_value.into(),
-                        }
-                    }
-
                     pub fn constructor_function(
-                        scope: &mut v8::HandleScope,
+                        scope: &mut v8::PinScope,
                         args: v8::FunctionCallbackArguments,
-                        ret_val: v8::ReturnValue,
+                        mut ret_val: v8::ReturnValue,
                     ) {
+
                     }
 
                     #function_bindings

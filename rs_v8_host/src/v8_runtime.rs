@@ -1,8 +1,10 @@
-use crate::{platform_wrapper::PlatformWrapper, util::println_callback};
+use crate::{platform_wrapper::PlatformWrapper, util::log_callback, util::println_callback};
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::DebouncedEvent;
 use notify_debouncer_mini::Debouncer;
+use std::any::TypeId;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
@@ -10,20 +12,37 @@ use v8::Context;
 use v8::Global;
 use v8::OwnedIsolate;
 
+pub struct Constructor {
+    pub name: String,
+    pub function_template: v8::Global<v8::FunctionTemplate>,
+}
+
+pub trait Newable: v8::cppgc::GarbageCollected + 'static {
+    type AssociatedType;
+
+    fn new(value: Self::AssociatedType) -> Self;
+}
+
+pub trait Constructible {
+    type AssociatedType;
+
+    fn construct(v8_runtime: &mut V8Runtime) -> crate::error::Result<Constructor>;
+}
+
 // const CPPGC_TAG: u16 = 1;
 // const INNER_KEY: &'static str = "__inner__";
 pub const V8_RUNTIME_DATA_OFFSET: u32 = 0;
 pub const CPPGC_TAG: u16 = 1;
 
 pub(crate) fn cppgc_template_constructor(
-    _scope: &mut v8::HandleScope,
+    _scope: &mut v8::PinScope,
     _args: v8::FunctionCallbackArguments,
     _rv: v8::ReturnValue,
 ) {
 }
 
-pub(crate) fn make_cppgc_template<'s>(
-    scope: &mut v8::HandleScope<'s, ()>,
+pub(crate) fn make_cppgc_template<'s, 'i>(
+    scope: &mut v8::PinScope<'s, 'i, ()>,
 ) -> v8::Local<'s, v8::FunctionTemplate> {
     v8::FunctionTemplate::new(scope, cppgc_template_constructor)
 }
@@ -42,6 +61,7 @@ pub struct V8Runtime {
     pub global_context: Global<Context>,
     pub gc_template: RefCell<v8::Global<v8::FunctionTemplate>>,
     pub plugins: Vec<v8::Global<v8::Object>>, // pub isolate: ManuallyDrop<OwnedIsolate>,
+    constructors: HashMap<TypeId, Constructor>,
 }
 
 impl V8Runtime {
@@ -57,17 +77,16 @@ impl V8Runtime {
         //     ManuallyDrop::new(v8::Isolate::new(v8::CreateParams::default().cpp_heap(heap)));
 
         let global_context = {
-            let isolate = &mut isolate;
-            let mut handle_scope = v8::HandleScope::new(isolate);
-            let local_context = v8::Context::new(&mut handle_scope, v8::ContextOptions::default());
-            let mut context_scope = v8::ContextScope::new(&mut handle_scope, local_context);
+            v8::scope!(let handle_scope, &mut isolate);
+            let local_context = v8::Context::new(handle_scope, v8::ContextOptions::default());
+            let mut context_scope = v8::ContextScope::new(handle_scope, local_context);
             Global::new(&mut context_scope, local_context)
         };
 
         let cppgc_template = {
-            let mut handle_scope = v8::HandleScope::new(&mut isolate);
-            let cppgc_template = make_cppgc_template(&mut handle_scope);
-            let cppgc_template = RefCell::new(v8::Global::new(&mut handle_scope, cppgc_template));
+            v8::scope!(let handle_scope, &mut isolate);
+            let cppgc_template = make_cppgc_template(handle_scope);
+            let cppgc_template = RefCell::new(v8::Global::new(handle_scope, cppgc_template));
             cppgc_template
         };
         let runtime = V8Runtime {
@@ -77,20 +96,19 @@ impl V8Runtime {
             global_context,
             gc_template: cppgc_template,
             plugins: vec![],
+            constructors: HashMap::new(),
         };
         runtime
     }
 
     pub fn associate_embedder_specific_data(&mut self) {
         let raw_ptr: *mut V8Runtime = self as *mut _;
-        let mut context_scope: v8::HandleScope =
-            v8::HandleScope::with_context(&mut self.isolate, &self.global_context);
-        let scope = &mut context_scope;
-        scope.set_data(V8_RUNTIME_DATA_OFFSET, raw_ptr as *mut std::ffi::c_void);
+        self.isolate
+            .set_data(V8_RUNTIME_DATA_OFFSET, raw_ptr as *mut std::ffi::c_void);
     }
 
     fn create_plugin(&mut self) -> crate::error::Result<v8::Global<v8::Object>> {
-        let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
+        v8::scope!(let handle_scope, &mut self.isolate);
         let context = v8::Local::new(handle_scope, self.global_context.clone());
         let scope = &mut v8::ContextScope::new(handle_scope, context);
         let global_this = context.global(scope);
@@ -119,7 +137,7 @@ impl V8Runtime {
     }
 
     pub fn register_func_global(&mut self) -> crate::error::Result<()> {
-        let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
+        v8::scope!(let handle_scope, &mut self.isolate);
         let context = v8::Local::new(handle_scope, self.global_context.clone());
         let scope = &mut v8::ContextScope::new(handle_scope, context);
         let function = v8::Function::new(scope, println_callback).ok_or(
@@ -130,6 +148,18 @@ impl V8Runtime {
             "Failed to create string"
         )))?;
         global_this.set(scope, name.into(), function.into());
+        let function = v8::Function::new(scope, log_callback).ok_or(crate::error::Error::Null(
+            format!("Failed to create println function"),
+        ))?;
+        let name = v8::String::new(scope, "log").ok_or(crate::error::Error::Null(format!(
+            "Failed to create string"
+        )))?;
+        let console = v8::Object::new(scope);
+        console.set(scope, name.into(), function.into());
+        let name = v8::String::new(scope, "console").ok_or(crate::error::Error::Null(format!(
+            "Failed to create string"
+        )))?;
+        global_this.set(scope, name.into(), console.into());
         Ok(())
     }
 
@@ -165,7 +195,7 @@ impl V8Runtime {
     }
 
     pub fn execute_script_code(&mut self, source: String) -> crate::error::Result<()> {
-        let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
+        v8::scope!(let handle_scope, &mut self.isolate);
         let global_context = v8::Local::new(handle_scope, self.global_context.clone());
         let scope = &mut v8::ContextScope::new(handle_scope, global_context);
         let source = v8::String::new(scope, &source).ok_or(crate::error::Error::Null(format!(
@@ -178,8 +208,7 @@ impl V8Runtime {
         context_scope: &mut v8::ContextScope<v8::HandleScope>,
         script: v8::Local<v8::String>,
     ) -> crate::error::Result<()> {
-        let mut scope = v8::HandleScope::new(context_scope);
-        let try_catch = &mut v8::TryCatch::new(&mut scope);
+        v8::tc_scope!(let try_catch, context_scope);
 
         let script = v8::Script::compile(try_catch, script, None).ok_or(
             crate::error::Error::Other(format!("Failed to compile script")),
@@ -250,14 +279,14 @@ impl V8Runtime {
 
     pub fn tick(
         &mut self,
-        engine: v8::Global<v8::Object>,
-        level: v8::Global<v8::Object>,
-        player_viewport: v8::Global<v8::Object>,
+        engine: &v8::Global<v8::Object>,
+        level: &v8::Global<v8::Object>,
+        player_viewport: &v8::Global<v8::Object>,
     ) -> crate::error::Result<()> {
         let plugin = self
             .get_plugin()
             .ok_or(crate::error::Error::Null(format!("No plugin")))?;
-        let handle_scope = &mut v8::HandleScope::new(&mut self.isolate);
+        v8::scope!(let handle_scope, &mut self.isolate);
         let context = v8::Local::new(handle_scope, self.global_context.clone());
         let scope = &mut v8::ContextScope::new(handle_scope, context);
         let global_this = context.global(scope);
@@ -277,6 +306,65 @@ impl V8Runtime {
         ];
         tick.call(scope, global_this.into(), &parameters);
         Ok(())
+    }
+
+    pub fn make_wrapped_value<T>(
+        &mut self,
+        wrapped_value: T::AssociatedType,
+    ) -> crate::error::Result<v8::Global<v8::Object>>
+    where
+        T: Newable,
+    {
+        let type_name = std::any::type_name::<T>();
+        let type_id = std::any::TypeId::of::<T>();
+        let function_template = &self
+            .constructors
+            .get(&type_id)
+            .expect(&format!(
+                "{} constructor missing. Register it before use.",
+                type_name
+            ))
+            .function_template;
+        let main_context = self.global_context.clone();
+        let isolate = &mut self.isolate;
+        v8::scope_with_context!(context_scope, isolate, &main_context);
+        let scope = context_scope;
+        let local_function = v8::Local::new(scope, function_template);
+        let function = local_function
+            .get_function(scope)
+            .ok_or(crate::error::Error::Null(format!("Function is null")))?;
+        let obj = function.new_instance(scope, &[]).expect("Not null");
+        unsafe {
+            let native_value: T = T::new(wrapped_value.into());
+            let member: v8::cppgc::UnsafePtr<T> = v8::cppgc::make_garbage_collected::<T>(
+                scope.get_cpp_heap().expect("Not null"),
+                native_value,
+            );
+            v8::Object::wrap::<{ CPPGC_TAG }, T>(scope, obj, &member);
+        }
+        Ok(v8::Global::new(scope, obj))
+    }
+
+    pub fn register_constructors(&mut self, constructors: HashMap<TypeId, Constructor>) {
+        self.constructors.extend(constructors);
+    }
+
+    pub fn register_constructor<T: Constructible + 'static>(&mut self) {
+        let k = std::any::TypeId::of::<T::AssociatedType>();
+        match T::construct(self) {
+            Ok(constructor) => {
+                self.constructors.insert(k, constructor);
+            }
+            Err(err) => {
+                let name = std::any::type_name::<T::AssociatedType>();
+                log::warn!("{}, failed to create constructor, {err}", name);
+            }
+        }
+    }
+
+    pub fn register_constructor2<T: 'static>(&mut self, constructor: Constructor) {
+        let k = std::any::TypeId::of::<T>();
+        self.constructors.insert(k, constructor);
     }
 }
 

@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rs_v8_engine_binding_api = { path = "../../build/target/generated/rs_v8_engine_binding_api" }
+rs_v8_host = { path = "../../rs_v8_host" }
+rs_engine_v8_binding_api = { path = "../../build/target/generated/v8_binding_api/rs_engine" }

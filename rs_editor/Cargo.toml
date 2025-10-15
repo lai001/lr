@@ -30,9 +30,10 @@ profiler = [
 plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 plugin_dotnet = ["dep:rs_dotnet", "dep:rs_dotnet_host"]
 plugin_v8 = [
+    "dep:v8",
     "dep:rs_v8_host",
-    "dep:rs_v8_engine_binding_api",
     "dep:rs_v8_binding_api_manager",
+    "dep:rs_engine_v8_binding_api",
 ]
 exit_check = []
 network_debug_trace = ["rs_engine/network_debug_trace"]
@@ -88,6 +89,7 @@ mp4 = { version = "0.14.0" }
 tracy-client = { version = "0.18.2", default-features = false }
 rapier3d = { version = "0.29.0", features = ["simd-stable", "serde-serialize"] }
 meshopt = "0.5.0"
+v8 = { version = "140.2.0", optional = true }
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
 rs_render = { path = "../rs_render" }
 rs_render_types = { path = "../rs_render_types" }
@@ -104,7 +106,7 @@ rs_media = { path = "../rs_media" }
 rs_audio = { path = "../rs_audio" }
 rs_mesh_optimization = { path = "../crates/rs_mesh_optimization" }
 rs_v8_host = { path = "../rs_v8_host", optional = true }
-rs_v8_engine_binding_api = { path = "../build/target/generated/rs_v8_engine_binding_api", optional = true }
+rs_engine_v8_binding_api = { path = "../build/target/generated/v8_binding_api/rs_engine", optional = true }
 rs_v8_binding_api_manager = { path = "../crates/rs_v8_binding_api_manager", optional = true }
 rs_reflection_system = { path = "../crates/rs_reflection_system", optional = true }
 rs_reflection_core = { path = "../crates/rs_reflection_core", optional = true }

@@ -1,11 +1,14 @@
 use crate::{
     analyzer,
+    generated_module_partion::GeneratedModulePartion,
     misc::{
         make_api_code, make_assign_function, make_bind_function, make_param, make_param_list,
         make_return_value_expr, make_unwrap_object, resolve_struct_import_path_ident,
         EWrappedStructType,
     },
+    register_function_maker::RegisterFunctionMaker,
 };
+use anyhow::anyhow;
 use convert_case::Casing;
 use proc_macro2::TokenStream;
 use ra_ap_hir::{HasVisibility, Semantics, Visibility};
@@ -14,16 +17,16 @@ use ra_ap_syntax::{
     ast::{self, HasModuleItem},
     SourceFile,
 };
+use ra_ap_vfs::AbsPathBuf;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::Path};
+use std::{io::Write, path::PathBuf, str::FromStr};
 
-pub struct EngineApiGenerator {
-    pub output_dir: PathBuf,
-}
+pub struct EngineApiGenerator {}
 
 impl EngineApiGenerator {
-    pub fn new(output_dir: PathBuf) -> Self {
-        Self { output_dir }
+    pub fn new() -> EngineApiGenerator {
+        EngineApiGenerator {}
     }
 
     pub fn run(&mut self, analyzer: &analyzer::Analyzer) -> anyhow::Result<()> {
@@ -34,116 +37,188 @@ impl EngineApiGenerator {
         //     std::io::ErrorKind::AlreadyExists
         // ));
         // }
-        let _ = std::fs::create_dir_all(&self.output_dir);
-        let _ = std::fs::create_dir_all(&self.output_dir.join("src"));
-        std::fs::write(
-            &self.output_dir.join("Cargo.toml"),
-            Self::manifest_content(),
-        )?;
-        std::fs::write(
-            &self.output_dir.join("src/lib.rs"),
-            Self::lib_file_content(),
-        )?;
+        let output_root_dir =
+            rs_core_minimal::file_manager::get_engine_generated_dir().join("v8_binding_api");
+        if !output_root_dir.exists() {
+            std::fs::create_dir_all(&output_root_dir)?;
+        }
 
         let crates = analyzer.root_database.all_crates().clone();
-        for krate in crates.iter() {
+        log::trace!("Num of crates: {}", crates.len());
+        for db_krate in crates.iter() {
             let db = &analyzer.root_database;
             let sema: Semantics<'_, ra_ap_ide::RootDatabase> = Semantics::new(db);
-            let krate_data = krate.data(db);
-            match &krate_data.origin {
-                ra_ap_ide_db::base_db::CrateOrigin::Local { name, .. } => {
+            let db_krate_data = db_krate.data(db);
+            let krate: ra_ap_hir::Crate = (*db_krate).into();
+            let Some(crate_name) = krate.display_name(db).map(|x| x.canonical_name().clone())
+            else {
+                continue;
+            };
+
+            let env = db_krate.env(db);
+            let Some(crate_cargo_manifest_dir) = env
+                .get("CARGO_MANIFEST_DIR")
+                .map(|x| AbsPathBuf::assert_utf8(Path::new(&x).to_path_buf()))
+            else {
+                continue;
+            };
+            let Some(_) = crate_cargo_manifest_dir.file_name() else {
+                continue;
+            };
+
+            match &db_krate_data.origin {
+                ra_ap_ide_db::base_db::CrateOrigin::Local { repo, name } => {
+                    let _ = repo;
                     let Some(display_name) = name else {
                         continue;
                     };
                     let display_name = display_name.as_str();
-                    if !display_name.starts_with("rs_") {
+                    if !display_name.starts_with("rs_")
+                        || display_name.eq_ignore_ascii_case("rs_reflection_core")
+                    {
                         continue;
-                    }
-                    let krate: ra_ap_hir::Crate = (*krate).into();
-                    let modules = krate.modules(db);
-                    for module_data in modules {
-                        let definition_source_file_id = module_data.definition_source_file_id(db);
-                        let Some(editioned_file_id) = definition_source_file_id.file_id() else {
-                            continue;
-                        };
-                        let source_file: SourceFile = sema.parse(editioned_file_id);
-                        let vfs = &analyzer.vfs;
-                        let file_path = vfs
-                            .file_path(editioned_file_id.file_id(db))
-                            .as_path()
-                            .expect("Not null");
-                        let components: Vec<String> =
-                            file_path.components().map(|x| x.to_string()).collect();
-                        if components.contains(&"ffi".to_string()) {
-                            continue;
-                        }
-                        let mut find_rs_structs = vec![];
-                        let mut find_rs_struct_impls = vec![];
-                        let mut struct_map: HashMap<ra_ap_hir::Struct, Vec<ra_ap_hir::Impl>> =
-                            HashMap::new();
-                        for item in source_file.items() {
-                            match item {
-                                ast::Item::Impl(rs_impl) => {
-                                    if let Some(rs_impl) = sema.to_impl_def(&rs_impl) {
-                                        find_rs_struct_impls.push(rs_impl);
-                                    }
-                                }
-                                ast::Item::Struct(rs_struct) => {
-                                    if let Some(rs_struct) = sema.to_struct_def(&rs_struct) {
-                                        find_rs_structs.push(rs_struct);
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-
-                        for find_rs_struct in find_rs_structs {
-                            for find_rs_struct_impl in find_rs_struct_impls.clone() {
-                                if find_rs_struct_impl.self_ty(db) == find_rs_struct.ty(db) {
-                                    struct_map
-                                        .entry(find_rs_struct)
-                                        .or_default()
-                                        .push(find_rs_struct_impl);
-                                }
-                            }
-                        }
-
-                        let mut content = quote::quote! {
-                            #![allow(warnings)]
-                            use std::{cell::RefCell, rc::Rc};
-                            use anyhow::anyhow;
-                            use rs_engine::input_mode::EInputMode;
-                            use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
-                            use rs_v8_host::{util::return_exception, v8_runtime::CPPGC_TAG};
-                        };
-                        let mut is_write = false;
-                        for (rs_struct, rs_struct_impls) in struct_map {
-                            for wrap_type in EWrappedStructType::all() {
-                                if let Ok(token_stream) = Self::code_gen(
-                                    rs_struct,
-                                    rs_struct_impls.clone(),
-                                    analyzer,
-                                    wrap_type,
-                                ) {
-                                    content.extend(token_stream);
-                                    is_write = true;
-                                }
-                            }
-                        }
-                        if is_write {
-                            let output_file_name = format!(
-                                "src/native_{}.rs",
-                                file_path.file_stem().expect("Not null")
-                            );
-                            std::fs::write(
-                                &self.output_dir.join(output_file_name),
-                                content.to_string(),
-                            )?;
-                        }
                     }
                 }
                 _ => {
                     continue;
+                }
+            }
+
+            let generated_crate_dir = output_root_dir.join(crate_name.as_str());
+            if !generated_crate_dir.exists() {
+                std::fs::create_dir_all(&generated_crate_dir)?;
+            }
+
+            let modules = krate.modules(db);
+            if modules.is_empty() {
+                continue;
+            } else {
+                log::trace!("Crate name: {}", crate_name);
+            }
+
+            let mut register_function_maker = RegisterFunctionMaker::new();
+            for module_data in modules {
+                let module_visibility = module_data.visibility(db);
+                if module_visibility != Visibility::Public {
+                    continue;
+                }
+                let definition_source_file_id = module_data.definition_source_file_id(db);
+                let Some(editioned_file_id) = definition_source_file_id.file_id() else {
+                    continue;
+                };
+                let source_file: SourceFile = sema.parse(editioned_file_id);
+                let vfs = &analyzer.vfs;
+                let file_path = vfs
+                    .file_path(editioned_file_id.file_id(db))
+                    .as_path()
+                    .expect("Not null");
+                let Some(relative_path) = file_path.strip_prefix(&crate_cargo_manifest_dir) else {
+                    continue;
+                };
+                let target_output_suffix = Path::new(crate_name.as_str()).join(relative_path);
+
+                let components: Vec<String> =
+                    file_path.components().map(|x| x.to_string()).collect();
+                if components.contains(&"ffi".to_string()) {
+                    continue;
+                }
+                let mut find_rs_structs = vec![];
+                let mut find_rs_struct_impls = vec![];
+                let mut struct_map: HashMap<ra_ap_hir::Struct, Vec<ra_ap_hir::Impl>> =
+                    HashMap::new();
+                for item in source_file.items() {
+                    match item {
+                        ast::Item::Impl(rs_impl) => {
+                            if let Some(rs_impl) = sema.to_impl_def(&rs_impl) {
+                                find_rs_struct_impls.push(rs_impl);
+                            }
+                        }
+                        ast::Item::Struct(rs_struct) => {
+                            if let Some(rs_struct) = sema.to_struct_def(&rs_struct) {
+                                let struct_visibility = rs_struct.visibility(db);
+                                if struct_visibility != Visibility::Public {
+                                    continue;
+                                }
+                                find_rs_structs.push(rs_struct);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                for find_rs_struct in find_rs_structs {
+                    for find_rs_struct_impl in find_rs_struct_impls.clone() {
+                        let lhs = find_rs_struct_impl.self_ty(db).as_adt();
+                        let rhs = find_rs_struct.ty(db).as_adt();
+                        if lhs == rhs {
+                            struct_map
+                                .entry(find_rs_struct)
+                                .or_default()
+                                .push(find_rs_struct_impl);
+                        }
+                    }
+                }
+
+                let mut contents = quote::quote! {
+                    /// THIS IS AN AUTOGENERATED FILE. DO NOT EDIT THIS FILE DIRECTLY.
+                    #[allow(warnings)]
+                    use std::{cell::RefCell, rc::Rc};
+                    use anyhow::anyhow;
+                    use rs_engine::input_mode::EInputMode;
+                    use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
+                    use rs_v8_host::{error::Error, util::return_exception, v8_runtime::{Constructible, Constructor, Newable, CPPGC_TAG}};
+                    use winit::{event::ElementState, keyboard::KeyCode};
+                };
+                let mut is_write = false;
+                for (rs_struct, rs_struct_impls) in struct_map {
+                    for wrap_type in EWrappedStructType::all() {
+                        if let Ok(GeneratedModulePartion {
+                            code,
+                            mut binding_api_types,
+                        }) =
+                            Self::code_gen(rs_struct, rs_struct_impls.clone(), analyzer, wrap_type)
+                        {
+                            contents.extend(code);
+                            is_write = true;
+
+                            let key = PathBuf::from_str(
+                                relative_path
+                                    .as_str()
+                                    .strip_prefix("src")
+                                    .unwrap_or(relative_path.as_str()),
+                            )?;
+                            register_function_maker
+                                .type_map_mut()
+                                .entry(key)
+                                .or_default()
+                                .append(&mut binding_api_types);
+                        }
+                    }
+                }
+                if is_write {
+                    let output_path = output_root_dir.join(target_output_suffix);
+                    let parent_dir = output_path.parent().expect("A valid path");
+                    if !parent_dir.exists() {
+                        let _ = std::fs::create_dir_all(&parent_dir);
+                    }
+                    log::debug!("{:?}", &output_path);
+                    std::fs::write(&output_path, contents.to_string())?;
+                }
+            }
+
+            let generated_manifest_file_path = generated_crate_dir.join("Cargo.toml");
+            std::fs::write(
+                &generated_manifest_file_path,
+                Self::manifest_content(&format!("{}_v8_binding_api", crate_name.as_str())),
+            )?;
+            if generated_crate_dir.join("src").exists() {
+                EngineApiGenerator::create_module_files(&generated_crate_dir)?;
+                if generated_crate_dir.join("src/lib.rs").exists() {
+                    let register_function_code = register_function_maker.make().to_string();
+                    let mut file = std::fs::OpenOptions::new()
+                        .append(true)
+                        .open(generated_crate_dir.join("src/lib.rs"))?;
+                    writeln!(&mut file, "{}", register_function_code)?;
                 }
             }
         }
@@ -151,7 +226,41 @@ impl EngineApiGenerator {
         Ok(())
     }
 
-    pub fn manifest_content() -> String {
+    fn create_module_files(generated_crate_dir: &Path) -> anyhow::Result<()> {
+        let src_dir = generated_crate_dir.join("src");
+        if !src_dir.is_dir() {
+            return Err(anyhow!("src folder is not exists"));
+        }
+        for entry in walkdir::WalkDir::new(src_dir) {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                let mut contents = String::new();
+                for entry in std::fs::read_dir(path)? {
+                    let entry = entry?;
+                    let file_stem = entry
+                        .path()
+                        .file_stem()
+                        .ok_or(anyhow!(""))?
+                        .to_string_lossy()
+                        .to_string();
+                    if !(file_stem == "main" || file_stem == "lib" || file_stem == "mod") {
+                        contents += &format!("#[allow(warnings)]\npub mod {};\n", file_stem);
+                    }
+                }
+                let filename = if path.file_name() == Some(std::ffi::OsStr::new("src")) {
+                    "lib.rs"
+                } else {
+                    "mod.rs"
+                };
+                log::debug!("{:?}", &path.join(filename));
+                std::fs::write(&path.join(filename), contents)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn manifest_content(crate_name: &str) -> String {
         let v8_version = {
             let mut cargo_manifest = rs_manifest::CargoManifest::new(
                 rs_core_minimal::file_manager::get_engine_root_dir().join("rs_v8_host/Cargo.toml"),
@@ -173,11 +282,21 @@ impl EngineApiGenerator {
             (versions["log"].clone(), versions["anyhow"].clone())
         };
 
+        let winit_version = {
+            let mut cargo_manifest = rs_manifest::CargoManifest::new(
+                rs_core_minimal::file_manager::get_engine_root_dir().join("rs_engine/Cargo.toml"),
+            )
+            .unwrap();
+            let mut versions = HashMap::from([("winit", "".to_string())]);
+            cargo_manifest.read_create_version(&mut versions);
+            versions["winit"].clone()
+        };
+
         let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir()
             .canonicalize_slash()
             .expect("Success");
         let mut template = r#"[package]
-name = "rs_v8_engine_binding_api"
+name = "@crate_name@"
 version = "0.1.0"
 edition = "2021"
 
@@ -185,25 +304,19 @@ edition = "2021"
 v8 = "@v8_version@"
 log = "@log_version@"
 anyhow = { version = "@anyhow_version@" }
+winit = { version = "@winit_version@" }
 rs_engine = { path = "@engine_dir@/rs_engine" }
 rs_render = { path = "@engine_dir@/rs_render" }
-rs_v8_host = { path = "@engine_dir@/rs_v8_host" }        
+rs_v8_host = { path = "@engine_dir@/rs_v8_host" }
+rs_core_minimal = { path = "@engine_dir@/rs_core_minimal" }
 "#
         .to_string();
         template = template.replace("@engine_dir@", engine_root_dir.to_str().expect("Success"));
         template = template.replace("@v8_version@", &v8_version);
         template = template.replace("@log_version@", &log_version);
         template = template.replace("@anyhow_version@", &anyhow_version);
-        template
-    }
-
-    pub fn lib_file_content() -> String {
-        let template = r#"
-pub mod native_engine;
-pub mod native_level;
-pub mod native_player_viewport;
-        "#
-        .to_string();
+        template = template.replace("@crate_name@", &crate_name);
+        template = template.replace("@winit_version@", &winit_version);
         template
     }
 
@@ -212,7 +325,7 @@ pub mod native_player_viewport;
         rs_struct_impls: Vec<ra_ap_hir::Impl>,
         analyzer: &analyzer::Analyzer,
         wrap_type: EWrappedStructType,
-    ) -> anyhow::Result<TokenStream> {
+    ) -> anyhow::Result<GeneratedModulePartion> {
         let db = &analyzer.root_database;
         // let sema: Semantics<'_, ra_ap_ide::RootDatabase> = Semantics::new(db);
         let struct_import_path = resolve_struct_import_path_ident(db, &rs_struct);
@@ -287,6 +400,7 @@ pub mod native_player_viewport;
             }
         }
 
+        let mut binding_api_type_name = TokenStream::new();
         let code = make_api_code(
             &wrapped_struct_name,
             rs_struct.name(db).as_str(),
@@ -294,7 +408,12 @@ pub mod native_player_viewport;
             wrap_type,
             set_function_bindings,
             function_bindings,
+            &mut binding_api_type_name,
         );
-        Ok(code)
+
+        Ok(GeneratedModulePartion {
+            code,
+            binding_api_types: vec![binding_api_type_name],
+        })
     }
 }

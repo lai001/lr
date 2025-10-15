@@ -146,7 +146,9 @@ struct MouseState {
 #[cfg(feature = "plugin_v8")]
 struct V8Plugin {
     runtime: rs_v8_host::v8_runtime::V8Runtime,
-    binding_api_manager: rs_v8_binding_api_manager::BindingApiManager,
+    engine: Option<v8::Global<v8::Object>>,
+    level: Option<v8::Global<v8::Object>>,
+    player_viewport: Option<v8::Global<v8::Object>>,
 }
 
 pub struct EditorContext {
@@ -339,21 +341,13 @@ impl EditorContext {
         #[cfg(feature = "plugin_v8")]
         {
             let mut v8_runtime = rs_v8_host::v8_runtime::V8Runtime::new();
-            let manager = rs_v8_binding_api_manager::BindingApiManager::new(
-                rs_v8_engine_binding_api::native_engine::EngineBindingApi::new(
-                    &mut v8_runtime,
-                    &mut self.engine,
-                )?,
-                rs_v8_engine_binding_api::native_level::RcRefLevelBindingApi::new(&mut v8_runtime)?,
-                rs_v8_engine_binding_api::native_player_viewport::PlayerViewportBindingApi::new(
-                    &mut v8_runtime,
-                    &mut self.player_viewport,
-                )?,
-            );
+            rs_v8_binding_api_manager::BindingApi::register(&mut v8_runtime);
             v8_runtime.register_func_global()?;
             self.v8_plugin = Some(V8Plugin {
                 runtime: v8_runtime,
-                binding_api_manager: manager,
+                engine: None,
+                level: None,
+                player_viewport: None,
             });
             self.v8_plugin
                 .as_mut()
@@ -1572,21 +1566,35 @@ impl EditorContext {
         if let (Some(v8_plugin), Some(level)) =
             (self.v8_plugin.as_mut(), self.data_source.level.as_mut())
         {
+            use rs_engine_v8_binding_api::*;
             let v8_runtime = &mut v8_plugin.runtime;
-            let v8_register_manager = &mut v8_plugin.binding_api_manager;
-            let wrapped_engine = v8_register_manager.engine_api.get_wrapped_value();
-            let wrapped_level = v8_register_manager
-                .level_api
-                .make_wrapped_value(v8_runtime, level.clone())?;
-
-            let wrapped_player_viewport = v8_register_manager
-                .player_viewport_binding_api
-                .get_wrapped_value();
-
-            let result = v8_runtime
-                .tick(wrapped_engine, wrapped_level, wrapped_player_viewport)
-                .map_err(|err| anyhow!("{err}"));
-            return result;
+            if v8_plugin.engine.is_none() {
+                v8_plugin.engine = v8_runtime
+                    .make_wrapped_value::<engine::NativeEngine>((&mut self.engine).into())
+                    .ok();
+            }
+            if v8_plugin.level.is_none() {
+                v8_plugin.level = v8_runtime
+                    .make_wrapped_value::<content::level::RcRefNativeLevel>(level.clone())
+                    .ok();
+            }
+            if v8_plugin.player_viewport.is_none() {
+                v8_plugin.player_viewport = v8_runtime
+                    .make_wrapped_value::<player_viewport::NativePlayerViewport>(
+                        (&mut self.player_viewport).into(),
+                    )
+                    .ok();
+            }
+            if let (Some(engine), Some(level), Some(player_viewport)) = (
+                &v8_plugin.engine,
+                &v8_plugin.level,
+                &v8_plugin.player_viewport,
+            ) {
+                let result = v8_runtime
+                    .tick(engine, level, player_viewport)
+                    .map_err(|err| anyhow!("{err}"));
+                return result;
+            }
         }
         Ok(())
     }
