@@ -422,6 +422,7 @@ impl Reflection {
                             format: Self::storage_format2texture_format(format),
                             view_dimension: Self::image_dimension2texture_dimension(*dim, *arrayed),
                         },
+                        ImageClass::External => todo!(),
                     };
 
                     let bind_group_layout_entry = BindGroupLayoutEntry {

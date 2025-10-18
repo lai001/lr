@@ -1,3 +1,5 @@
+use wgpu::ExperimentalFeatures;
+
 use crate::error::Result;
 use std::collections::HashMap;
 
@@ -107,13 +109,18 @@ impl WGPUContext {
             force_fallback_adapter: false,
         }))
         .map_err(|err| crate::error::Error::RequestAdapterError(err))?;
-
+        let mut required_features = adapter.features();
+        let experimental_features: ExperimentalFeatures = Self::experimental_features();
+        if !experimental_features.is_enabled() {
+            required_features.remove(wgpu::Features::all_experimental_mask());
+        }
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            required_features: adapter.features(),
+            required_features,
             required_limits: adapter.limits(),
             label: Some("Engine"),
             memory_hints: wgpu::MemoryHints::MemoryUsage,
             trace: wgpu::Trace::Off,
+            experimental_features,
         }))
         .map_err(|err| crate::error::Error::RequestDeviceError(err))?;
 
@@ -152,13 +159,18 @@ impl WGPUContext {
             force_fallback_adapter: false,
         }))
         .map_err(|err| crate::error::Error::RequestAdapterError(err))?;
-
+        let mut required_features = adapter.features();
+        let experimental_features: ExperimentalFeatures = Self::experimental_features();
+        if !experimental_features.is_enabled() {
+            required_features.remove(wgpu::Features::all_experimental_mask());
+        }
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            required_features: adapter.features(),
+            required_features,
             required_limits: adapter.limits(),
             label: Some("Engine"),
             memory_hints: wgpu::MemoryHints::MemoryUsage,
             trace: wgpu::Trace::Off,
+            experimental_features,
         }))
         .map_err(|err| crate::error::Error::RequestDeviceError(err))?;
 
@@ -171,6 +183,10 @@ impl WGPUContext {
             queue,
             surfaces: HashMap::new(),
         })
+    }
+
+    fn experimental_features() -> ExperimentalFeatures {
+        ExperimentalFeatures::disabled()
     }
 
     fn dump(adapter: &wgpu::Adapter) {

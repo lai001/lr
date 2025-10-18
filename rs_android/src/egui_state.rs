@@ -601,13 +601,11 @@ impl State {
         let egui::PlatformOutput {
             commands,
             cursor_icon: _,
-            #[allow(deprecated)]
-            open_url,
-            #[allow(deprecated)]
-                copied_text: _,
             events: _,
             mutable_text_under_cursor: _,
             ime,
+            #[cfg(feature = "accesskit")]
+            accesskit_update,
             num_completed_passes: _,
             request_discard_reasons: _,
         } = platform_output;
@@ -619,10 +617,6 @@ impl State {
                 }
                 _ => {}
             }
-        }
-
-        if let Some(open_url) = open_url {
-            open_url_in_browser(&open_url.url);
         }
 
         let allow_ime = ime.is_some();

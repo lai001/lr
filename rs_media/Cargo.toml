@@ -12,8 +12,8 @@ image = "0.25.8"
 bitflags = "2.9.4"
 num-complex = "0.4.6"
 log = "0.4.28"
-rustfft = "6.4.0"
-glam = { version = "0.30.5", features = ["mint"] }
+rustfft = "6.4.1"
+glam = { version = "0.30.8", features = ["mint"] }
 mp4 = { version = "0.14.0" }
 rs_foundation = { path = "../rs_foundation" }
 rs_core_audio = { path = "../rs_core_audio" }

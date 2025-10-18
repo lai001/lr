@@ -144,7 +144,7 @@ impl Renderer {
         let egui_render_pass = EGUIRenderer::new(
             wgpu_context.get_device(),
             current_swapchain_format,
-            1,
+            egui_wgpu::RendererOptions::PREDICTABLE,
             HashMap::from([(main_window_id, screen_descriptor)]),
         );
 
@@ -335,11 +335,10 @@ impl Renderer {
                         gles_minor_version: Gles3MinorVersion::Automatic,
                         fence_behavior: GlFenceBehavior::Normal,
                     },
-                    dx12: Dx12BackendOptions {
-                        shader_compiler: Dx12Compiler::Fxc,
-                    },
+                    dx12: Dx12BackendOptions::default(),
                     noop: NoopBackendOptions::default(),
                 },
+                memory_budget_thresholds: MemoryBudgetThresholds::default(),
             }),
         )?;
 
@@ -956,7 +955,7 @@ impl Renderer {
                         .insert(create_uitexture_command.handle, ui_texture_id);
                 }
             }
-            RenderCommand::CreateBuffer(create_buffer_command) => {
+            RenderCommand::CreateBuffer(mut create_buffer_command) => {
                 let span = tracy_client::span!("create_buffer_command");
                 span.emit_text(
                     &create_buffer_command
@@ -966,10 +965,22 @@ impl Renderer {
                         .unwrap_or_default(),
                 );
                 let device = self.wgpu_context.get_device();
+                let label = create_buffer_command.buffer_create_info.label.as_deref();
+                let buffer_usages = &mut create_buffer_command.buffer_create_info.usage;
+                let unsupported_usages = BufferUsages::BLAS_INPUT | BufferUsages::TLAS_INPUT;
+                if !device.features().contains(Features::EXPERIMENTAL_RAY_QUERY)
+                    && buffer_usages.contains(unsupported_usages)
+                {
+                    log::warn!(
+                        "Using unsupported buffer usages, {}",
+                        label.as_deref().unwrap_or_default()
+                    );
+                    buffer_usages.remove(unsupported_usages);
+                }
                 let descriptor = BufferInitDescriptor {
-                    label: create_buffer_command.buffer_create_info.label.as_deref(),
+                    label,
                     contents: &create_buffer_command.buffer_create_info.contents,
-                    usage: create_buffer_command.buffer_create_info.usage,
+                    usage: *buffer_usages,
                 };
                 let new_buffer = device.create_buffer_init(&descriptor);
                 let handle = create_buffer_command.handle;
@@ -1001,7 +1012,7 @@ impl Renderer {
                             sender.send(result).unwrap();
                         }
                     });
-                    let _ = device.poll(wgpu::PollType::Wait);
+                    let _ = device.poll(wgpu::PollType::wait_indefinitely());
                     if let Ok(Ok(_)) = receiver.recv() {
                         let mut padded_buffer_view = buffer.slice(..).get_mapped_range_mut();
                         let padded_buffer = padded_buffer_view.as_mut();
@@ -1804,6 +1815,7 @@ impl Renderer {
             } else {
                 Some(surface_texture_view)
             },
+            depth_slice: None,
         })];
 
         let mut all_bind_groups: Vec<u64> = vec![];

@@ -7,6 +7,12 @@ task("build_android_target")
         import("core.base.option")
         import("core.project.task")
         config.load()
+        local ndk_path = (get_config("ndk") and { get_config("ndk") } or { os.getenv("NDK_HOME") })[1]
+        ndk_path = (ndk_path and { ndk_path } or { os.getenv("NDK_ROOT") })[1]
+        if ndk_path == nil then
+            os.raise("NDK not found")
+        end
+        local host = (get_config("host") and { get_config("host") } or { "windows" })[1]
         local target_map = {}
         target_map["aarch64-linux-android"] = "arm64-v8a"
         target_map["armv7-linux-androideabi"] = "armeabi-v7a"
@@ -44,7 +50,10 @@ task("build_android_target")
             ["FFMPEG_DIR"] = ffmpeg_dir,
             ["TRACY_CLIENT_LIB_PATH"] = path.join(engine_root_dir, format("build/android/%s/%s", arch, mode)),
             ["TRACY_CLIENT_LIB"] = "tracy-client",
-            ["TRACY_CLIENT_STATIC"] = 1
+            ["TRACY_CLIENT_STATIC"] = 1,
+            ["CLANG_PATH"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/clang.exe", host)),
+            ["TARGET_CC"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/%s30-clang.cmd", host, target)),
+            ["TARGET_CXX"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/%s30-clang++.cmd", host, target))
         }
         local project_name = "rs_android"
         local old = os.cd(path.join(engine_root_dir, project_name))

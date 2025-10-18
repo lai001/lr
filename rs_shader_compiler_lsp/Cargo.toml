@@ -6,14 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { version = "1.0.99" }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.143"
+anyhow = { version = "1.0.100" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
 lsp-server = "0.7.9"
 lsp-types = "0.97.0"
 crossbeam-channel = "0.5.15"
-naga = "25.0.0"
-wgpu = "25.0.0"
+naga = "27.0.0"
+wgpu = "27.0.1"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 log = "0.4.28"

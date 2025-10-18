@@ -16,6 +16,7 @@ task("gen_config")
         if ndk_path == nil then
             os.raise("NDK not found")
         end
+        local host = (get_config("host") and { get_config("host") } or { "windows" })[1]
 
         local target_template = [[
 [target.@target@]
@@ -33,7 +34,7 @@ rustflags = ["-Clink-args=--target=@target@@api@"]
             t = t:gsub("@api@", "30")
             t = t:gsub("@ndk@", ndk_path)
             -- t = t:gsub("@host@", get_config("plat"))
-            t = t:gsub("@host@", "windows")
+            t = t:gsub("@host@", host)
             content = content .. "\n" .. t
         end
         content = content .. "\n" .. [[
@@ -42,22 +43,35 @@ rustflags = ["-Clink-args=--target=@target@@api@"]
 rustflags = ["-C", "rpath"]
 target-dir = "./build/target"
         ]]
-        local ffmpeg_block = [[
+        local extra_envs = [[
 [env]
 FFMPEG_DIR = "%s"
 
 [target.aarch64-linux-android.env]
 FFMPEG_DIR = "%s"
+TARGET_CC = "%s"
+TARGET_CXX = "%s"
 
 [target.x86_64-linux-android.env]
 FFMPEG_DIR = "%s"
+TARGET_CC = "%s"
+TARGET_CXX = "%s"
         ]]
-        ffmpeg_block = format(ffmpeg_block, ffmpeg_dir, path.join(deps_dir, "ffmpeg_android/arm64-v8a"), path.join(deps_dir, "ffmpeg_android/x86_64"))
+        extra_envs = format(extra_envs,
+            ffmpeg_dir,
+            path.join(deps_dir, "ffmpeg_android/arm64-v8a"),
+            path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android30-clang.cmd", host)),
+            path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android30-clang++.cmd", host)),
+            path.join(deps_dir, "ffmpeg_android/x86_64"),
+            path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/x86_64-linux-android30-clang.cmd", host)),
+            path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/x86_64-linux-android30-clang++.cmd", host))
+        )
         local fix_conflict_library = [[
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "link-arg=/FORCE:MULTIPLE"]
+# rustflags = ["-C", "link-arg=/FORCE:MULTIPLE"]
+rustflags = ["-C", "link-arg=/NODEFAULTLIB:libcmt", "-C", "link-arg=/NODEFAULTLIB:MSVCRTD", "-C", "linker=lld-link"]
         ]]
-        content = content .. "\n" .. ffmpeg_block
+        content = content .. "\n" .. extra_envs
         content = content .. "\n" .. fix_conflict_library
         content = content:gsub("\\", "/")
         if is_dry then

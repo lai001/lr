@@ -2,7 +2,7 @@ use super::{misc::update_window_with_input_mode, ui_window::UIWindow};
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
-use rs_core_minimal::primitive_data::PrimitiveData;
+use rs_core_minimal::{primitive_data::PrimitiveData, settings::Backends};
 use rs_engine::{
     camera::Camera,
     camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
@@ -266,6 +266,11 @@ impl MultipleDrawUiWindow {
     }
 
     pub fn update(&mut self, engine: &mut Engine) {
+        // https://github.com/gfx-rs/wgpu/issues/7955
+        if cfg!(debug_assertions) && engine.get_settings().render_setting.backends == Backends::DX12
+        {
+            return;
+        }
         let resource_manager = ResourceManager::default();
 
         const REPEAT_SIZE: usize = 5000;

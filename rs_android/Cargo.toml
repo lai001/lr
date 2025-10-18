@@ -16,12 +16,13 @@ android-native-activity = [
     "winit/android-native-activity",
     "rs_engine/android-native-activity",
 ]
+accesskit = ["egui/accesskit"]
 
 [dependencies]
-glam = { version = "0.30.5", features = ["mint", "serde"] }
+glam = { version = "0.30.8", features = ["mint", "serde"] }
 log = "0.4.28"
 env_logger = "0.11.8"
-egui = "0.32.2"
+egui = "0.33.0"
 url = { version = "2.5.7", features = ["serde"] }
 jni = "0.21.1"
 jni_fn = "0.1.2"

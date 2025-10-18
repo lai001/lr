@@ -9,7 +9,9 @@ pub fn get_engine_root_dir() -> PathBuf {
     } else {
         path = Path::new("../../../").to_path_buf();
         if let Ok(current_exe) = std::env::current_exe() {
-            if let Some(current_dir) = current_exe.parent() {
+            if current_exe.file_stem() == Some(std::ffi::OsStr::new("build-script-build")) {
+                path = Path::new(file!()).join("../../../").to_path_buf();
+            } else if let Some(current_dir) = current_exe.parent() {
                 if current_dir.join(".cargo-lock").exists() {
                     path = Path::new(file!()).join("../../../").to_path_buf();
                 }

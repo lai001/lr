@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-toml_edit = "0.23.4"
+toml_edit = "0.23.7"

@@ -153,7 +153,10 @@ pub fn map_texture_options2(
     let buffer_slice = output_buffer.slice(..);
     let (sender, receiver) = std::sync::mpsc::channel();
     buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
-    let _ = device.poll(wgpu::PollType::WaitForSubmissionIndex(submission_index));
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: Some(submission_index),
+        timeout: None,
+    });
 
     receiver
         .recv()

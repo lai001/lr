@@ -1,3 +1,4 @@
+use egui_wgpu::RendererOptions;
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -16,11 +17,11 @@ impl EGUIRenderer {
     pub fn new(
         device: &wgpu::Device,
         output_format: wgpu::TextureFormat,
-        msaa_samples: u32,
+        // msaa_samples: u32,
+        renderer_options: RendererOptions,
         screen_descriptors: HashMap<isize, egui_wgpu::ScreenDescriptor>,
     ) -> EGUIRenderer {
-        let egui_wgpu_renderer =
-            egui_wgpu::Renderer::new(device, output_format, None, msaa_samples, false);
+        let egui_wgpu_renderer = egui_wgpu::Renderer::new(device, output_format, renderer_options);
 
         EGUIRenderer {
             egui_wgpu_renderer,
@@ -103,6 +104,7 @@ impl EGUIRenderer {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,

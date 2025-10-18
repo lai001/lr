@@ -6,10 +6,10 @@ local russimp_prebuild_dir = russimp_prebuild_dir
 local function v8_binding_api_generator_workspace_file(json)
     local extraArgs = { "--release" }
     local media_cmd = {
-        ["folders"] = { 
+        ["folders"] = {
             {
                 ["path"] = path.absolute("./")
-            } 
+            }
         },
         ["settings"] = {
             ["rust-analyzer.linkedProjects"] = {
@@ -167,6 +167,16 @@ task("code_workspace") do
             ["FFMPEG_DIR"] = ffmpeg_dir,
             ["RUSSIMP_PACKAGE_DIR"] = russimp_prebuild_dir
         }
+        if launch_type == "standalone" and plat == "android" then
+            local ndk_path = (get_config("ndk") and { get_config("ndk") } or { os.getenv("NDK_HOME") })[1]
+            ndk_path = (ndk_path and { ndk_path } or { os.getenv("NDK_ROOT") })[1]
+            if ndk_path == nil then
+                os.raise("NDK not found")
+            end
+            local host = (get_config("host") and { get_config("host") } or { "windows" })[1]
+            extraEnv["TARGET_CC"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android30-clang.cmd", host))
+            extraEnv["TARGET_CXX"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android30-clang++.cmd", host))
+        end
 
         if launch_type == "editor" then
             table.join2(features, launch_type)

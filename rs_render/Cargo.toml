@@ -15,24 +15,24 @@ profiler = ["tracy-client/enable", "rs_metis/profiler"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-serde = { version = "1.0.219", features = ["derive", "rc"] }
-wgpu = { version = "25.0.0", features = ["spirv", "naga-ir"] }
-naga = { version = "25.0.0" }
+serde = { version = "1.0.228", features = ["derive", "rc"] }
+wgpu = { version = "27.0.1", features = ["spirv", "naga-ir"] }
+naga = { version = "27.0.0" }
 log = "0.4.28"
 pollster = "0.4.0"
 raw-window-handle = "0.6.2"
 type-layout = "0.2.0"
-glam = { version = "0.30.5", features = ["mint", "serde"] }
-egui = { version = "0.32.2" }
-egui-wgpu = { version = "0.32.2" }
+glam = { version = "0.30.8", features = ["mint", "serde"] }
+egui = { version = "0.33.0" }
+egui-wgpu = { version = "0.33.0" }
 image = "0.25.8"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 ddsfile = "0.5.2"
 tracy-client = { version = "0.18.2", default-features = false }
 bitflags = "2.9.4"
-moka = { version = "0.12.10", default-features = false, features = ["sync"] }
-rapier3d = { version = "0.29.0", features = ["simd-stable", "serde-serialize"] }
+moka = { version = "0.12.11", default-features = false, features = ["sync"] }
+rapier3d = { version = "0.30.0", features = ["simd-stable", "serde-serialize"] }
 rs_foundation = { path = "../rs_foundation" }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
 rs_core_minimal = { path = "../rs_core_minimal" }

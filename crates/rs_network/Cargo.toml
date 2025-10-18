@@ -14,7 +14,7 @@ uuid = { version = "1.18.1", features = [
     "macro-diagnostics",
     "serde",
 ] }
-serde = { version = "1.0.219", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 rs_artifact = { path = "../../rs_artifact" }
 rs_core_minimal = { path = "../../rs_core_minimal" }
 

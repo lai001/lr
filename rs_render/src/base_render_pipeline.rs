@@ -269,6 +269,7 @@ impl BaseRenderPipeline {
                     }),
                     view: x.view,
                     resolve_target: x.resolve_target,
+                    depth_slice: None,
                 }));
             }
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -468,6 +469,7 @@ impl BaseRenderPipeline {
                     }),
                     view: x.view,
                     resolve_target: x.resolve_target,
+                    depth_slice: None,
                 }));
             }
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
