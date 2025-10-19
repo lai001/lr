@@ -1,4 +1,4 @@
-set_xmakever("2.9.8")
+set_xmakever("3.0.1")
 
 deps_dir = path.absolute(".xmake/deps/")
 rs_project_name = "rs_computer_graphics"

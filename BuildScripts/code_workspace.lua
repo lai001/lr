@@ -3,117 +3,59 @@ local rs_project_name = rs_project_name
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
 
-local function v8_binding_api_generator_workspace_file(json)
-    local extraArgs = { "--release" }
-    local media_cmd = {
-        ["folders"] = {
-            {
-                ["path"] = path.absolute("./")
-            }
-        },
-        ["settings"] = {
-            ["rust-analyzer.linkedProjects"] = {
-                path.absolute("./programs/rs_v8_binding_api_generator/Cargo.toml"),
-            },
-            ["rust-analyzer.runnables.extraArgs"] = extraArgs
-        }
-    }
-    json.savefile(path.join(path.absolute("./"), "rs_v8_binding_api_generator.code-workspace"), media_cmd)
+local function is_valid_table(t)
+    if t == nil then
+        return false
+    end
+    for _, _ in pairs(t) do
+        return true
+    end
+    return false
 end
 
-local function reflection_generator_workspace_file(json)
-    local extraArgs = { "--release" }
-    local media_cmd = {
-        ["folders"] = { {
-            ["path"] = path.absolute("./")
-        } },
-        ["settings"] = {
-            ["rust-analyzer.linkedProjects"] = {
-                path.absolute("./programs/rs_reflection_generator/Cargo.toml"),
-            },
-            ["rust-analyzer.runnables.extraArgs"] = extraArgs
-        }
-    }
-    json.savefile(path.join(path.absolute("./"), "reflection_generator.code-workspace"), media_cmd)
+local function write_workspace_file(json, context)
+    local contents = {}
+    if is_valid_table(context.folders) then
+        contents["folders"] = {}
+        for _, folder in ipairs(context.folders) do
+            table.join2(contents["folders"], {{["path"] = folder}})
+        end
+    end
+    contents["settings"] = {}
+    if is_valid_table(context.linked_projects) then
+        local linked_projects = {}
+        for i, linked_project in ipairs(context.linked_projects) do
+            linked_projects[i] = path.join(linked_project, "Cargo.toml")
+        end
+        contents["settings"]["rust-analyzer.linkedProjects"] = linked_projects
+    end
+    if is_valid_table(context.features) then
+        contents["settings"]["rust-analyzer.cargo.features"] = context.features
+    end
+    if context.target ~= nil and #context.target ~= 0 then
+        contents["settings"]["rust-analyzer.cargo.target"] = context.target
+    end
+    if is_valid_table(context.runnables_extra_args) then
+        contents["settings"]["rust-analyzer.runnables.extraArgs"] = context.runnables_extra_args
+    end
+    if is_valid_table(context.extra_env) then
+        contents["settings"]["rust-analyzer.cargo.extraEnv"] = context.extra_env
+        contents["settings"]["rust-analyzer.server.extraEnv"] = context.extra_env
+        contents["settings"]["rust-analyzer.check.extraEnv"] = context.extra_env
+        contents["settings"]["rust-analyzer.runnables.extraEnv"] = context.extra_env
+    end
+    if is_valid_table(context.extra_test_binary_args) then
+        contents["settings"]["rust-analyzer.runnables.extraTestBinaryArgs"] = context.extra_test_binary_args
+    end
+    contents["settings"]["rust-analyzer.checkOnSave"] = false
+    contents["settings"]["rust-analyzer.showSyntaxTree"] = false
+    if context.file_stem ~= nil then
+        local output_path = path.join(path.absolute("./build"), context.file_stem .. ".code-workspace")
+        json.savefile(output_path, contents)
+    end
 end
 
-local function media_cmd_workspace_file(json)
-    local extraEnv = {
-        ["FFMPEG_DIR"] = ffmpeg_dir,
-    }
-    local media_cmd = {
-        ["folders"] = { {
-            ["path"] = path.absolute("./")
-        } },
-        ["settings"] = {
-            ["rust-analyzer.linkedProjects"] = {
-                path.absolute("./rs_media/Cargo.toml"),
-                path.absolute("./rs_media_cmd/Cargo.toml")
-            },
-            ["rust-analyzer.cargo.extraEnv"] = extraEnv,
-            ["rust-analyzer.server.extraEnv"] = extraEnv,
-            ["rust-analyzer.check.extraEnv"] = extraEnv,
-            ["rust-analyzer.runnables.extraEnv"] = extraEnv
-        }
-    }
-    json.savefile(path.join(path.absolute("./"), "media_cmd.code-workspace"), media_cmd)
-end
-
-local function proc_macros_test_workspace_file(json)
-    local proc_macros_test = {
-        ["folders"] = { {
-            ["path"] = path.absolute("./")
-        } },
-        ["settings"] = {
-            ["rust-analyzer.linkedProjects"] = {
-                path.absolute("./rs_proc_macros/Cargo.toml"),
-                path.absolute("./rs_proc_macros_test/Cargo.toml")
-            },
-        }
-    }
-    json.savefile(path.join(path.absolute("./"), "proc_macros_test.code-workspace"), proc_macros_test)
-end
-
-local function audio_workspace_file(json)
-    local extraEnv = {
-        ["FFMPEG_DIR"] = ffmpeg_dir,
-    }
-    local audio = {
-        ["folders"] = { {
-            ["path"] = path.absolute("./")
-        } },
-        ["settings"] = {
-            ["rust-analyzer.linkedProjects"] = {
-                path.absolute("./rs_audio/Cargo.toml"),
-            },
-            ["rust-analyzer.cargo.extraEnv"] = extraEnv,
-            ["rust-analyzer.server.extraEnv"] = extraEnv,
-            ["rust-analyzer.check.extraEnv"] = extraEnv,
-            ["rust-analyzer.runnables.extraEnv"] = extraEnv,
-            ["rust-analyzer.runnables.extraTestBinaryArgs"] = {
-                "--show-output",
-                "--nocapture"
-            },
-        }
-    }
-    json.savefile(path.join(path.absolute("./"), "audio.code-workspace"), audio)
-end
-
-local function build_tool_workspace_file(json)
-    local audio = {
-        ["folders"] = { {
-            ["path"] = path.absolute("./")
-        } },
-        ["settings"] = {
-            ["rust-analyzer.linkedProjects"] = {
-                path.absolute("./rs_build_tool/Cargo.toml"),
-            },
-        }
-    }
-    json.savefile(path.join(path.absolute("./"), "build_tool.code-workspace"), audio)
-end
-
-task("code_workspace") do
+task("code_workspace")
     on_run(function(in_plat, in_target, in_mode, in_launch)
         import("core.project.config")
         import("core.base.option")
@@ -130,7 +72,7 @@ task("code_workspace") do
         plat = (plat and {plat} or {"windows"})[1]
 
         local target = (in_target and {in_target} or {option.get("target")})[1]
-        target = (target and {target} or {})[1]
+        target = (target and {target} or {""})[1]
 
         local mode = (in_mode and {in_mode} or {option.get("mode")})[1]
         mode = (mode and {mode} or {"debug"})[1]
@@ -154,15 +96,15 @@ task("code_workspace") do
         local linkedProjects = {}
 
         if plat == "android" then
-            table.join2(linkedProjects, path.absolute("./rs_android/Cargo.toml"))
+            table.join2(linkedProjects, path.absolute("./rs_android"))
         elseif plat == "windows" then
             if launch_type == "editor" then
-                table.join2(linkedProjects, path.absolute("./rs_editor/Cargo.toml"))
+                table.join2(linkedProjects, path.absolute("./rs_editor"))
             elseif launch_type == "standalone" then
-                table.join2(linkedProjects, path.absolute("./rs_desktop_standalone/Cargo.toml"))
+                table.join2(linkedProjects, path.absolute("./rs_desktop_standalone"))
             end
         end
-        local associations = {}
+
         local extraEnv = {
             ["FFMPEG_DIR"] = ffmpeg_dir,
             ["RUSSIMP_PACKAGE_DIR"] = russimp_prebuild_dir
@@ -195,40 +137,61 @@ task("code_workspace") do
         -- table.join2(features, "plugin_dotnet")
         -- table.join2(features, "plugin_v8")
 
-        if #features == 0 then
-            features = nil
-        end
-        if #extraArgs == 0 then
-            extraArgs = nil
-        end
-        local code_workspace = {
-            ["folders"] = { {
-                ["path"] = path.absolute("./")
-            } },
-            ["settings"] = {
-                ["rust-analyzer.cargo.features"] = features,
-                ["rust-analyzer.linkedProjects"] = linkedProjects,
-                ["rust-analyzer.cargo.target"] = target,
-                ["rust-analyzer.runnables.extraArgs"] = extraArgs,
-                ["files.associations"] = associations,
-                ["rust-analyzer.cargo.extraEnv"] = extraEnv,
-                ["rust-analyzer.server.extraEnv"] = extraEnv,
-                ["rust-analyzer.check.extraEnv"] = extraEnv,
-                ["rust-analyzer.runnables.extraEnv"] = extraEnv,
-                ["rust-analyzer.checkOnSave"] = false
-            }
-        }
-        local file_name = format("%s_%s_%s.code-workspace", launch_type, plat, target)
-        local save_path = path.join(path.absolute("./"), file_name)
-        print(save_path)
-        json.savefile(save_path, code_workspace)
-
-        proc_macros_test_workspace_file(json)
-        media_cmd_workspace_file(json)
-        audio_workspace_file(json)
-        build_tool_workspace_file(json)
-        reflection_generator_workspace_file(json)
-        v8_binding_api_generator_workspace_file(json)
+        write_workspace_file(json, {
+            file_stem = format("%s_%s_%s", launch_type, plat, target),
+            folders = {path.absolute("./")},
+            linked_projects = linkedProjects,
+            runnables_extra_args = extraArgs,
+            features = features,
+            target = target,
+            extra_env = extraEnv
+        })
+        write_workspace_file(json, {
+            file_stem = "rs_v8_binding_api_generator",
+            folders = {path.absolute("./")},
+            linked_projects = {path.absolute("./programs/rs_v8_binding_api_generator")},
+            runnables_extra_args = {"--release"}
+        })
+        write_workspace_file(json, {
+            file_stem = "reflection_generator",
+            folders = {path.absolute("./")},
+            linked_projects = {path.absolute("./programs/rs_reflection_generator")},
+            runnables_extra_args = {"--release"}
+        })
+        write_workspace_file(json, {
+            file_stem = "build_tool",
+            folders = {path.absolute("./")},
+            linked_projects = {path.absolute("./rs_build_tool")}
+        })
+        write_workspace_file(json, {
+            file_stem = "audio",
+            folders = {path.absolute("./")},
+            linked_projects = {path.absolute("./rs_audio")},
+            extra_env = {["FFMPEG_DIR"] = ffmpeg_dir},
+            extra_test_binary_args = {"--show-output", "--nocapture"}
+        })
+        write_workspace_file(json, {
+            file_stem = "proc_macros",
+            folders = {path.absolute("./")},
+            linked_projects = {path.absolute("./rs_proc_macros"), path.absolute("./rs_proc_macros_test")}
+        })
+        write_workspace_file(json, {
+            file_stem = "media_cmd",
+            folders = {path.absolute("./")},
+            linked_projects = {path.absolute("./rs_media"), path.absolute("./rs_media_cmd")},
+            extra_env = {["FFMPEG_DIR"] = ffmpeg_dir}
+        })
+        write_workspace_file(json, {
+            file_stem = "rs_shader_compiler",
+            folders = {path.absolute("./"), path.absolute("./rs_render/shaders")},
+            linked_projects = {path.absolute("./rs_shader_compiler")}
+        })
+        write_workspace_file(json, {
+            file_stem = "network",
+            folders = {path.absolute("./")},
+            linked_projects = {path.absolute("./crates/rs_network")},
+            extra_test_binary_args = {"--show-output", "--nocapture"}
+        })
     end)
     set_menu {
         usage = "xmake code_workspace",
@@ -253,4 +216,3 @@ task("code_workspace") do
             { nil, "renderdoc", "k", nil, "Enable renderdoc feature." }
         }
     }
-end
