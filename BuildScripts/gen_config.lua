@@ -46,6 +46,7 @@ target-dir = "./build/target"
         local extra_envs = [[
 [env]
 FFMPEG_DIR = "%s"
+RUSSIMP_PACKAGE_DIR = "%s"
 
 [target.aarch64-linux-android.env]
 FFMPEG_DIR = "%s"
@@ -59,6 +60,7 @@ TARGET_CXX = "%s"
         ]]
         extra_envs = format(extra_envs,
             ffmpeg_dir,
+            deps_dir,
             path.join(deps_dir, "ffmpeg_android/arm64-v8a"),
             path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android30-clang.cmd", host)),
             path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android30-clang++.cmd", host)),
