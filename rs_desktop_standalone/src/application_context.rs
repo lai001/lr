@@ -174,7 +174,12 @@ impl ApplicationContext {
                         let window_id = u64::from(window.id()) as isize;
                         self.engine.window_redraw_requested_begin(window_id);
                         self.ui_begin(window);
-
+                        egui::TopBottomPanel::top("my_top_panel")
+                            .exact_height(0.01)
+                            .frame(egui::Frame::new().fill(egui::Color32::BLACK))
+                            .show(self.egui_winit_state.egui_ctx(), |ui| {
+                                let _ = ui;
+                            });
                         self.engine.tick();
 
                         self.app.on_redraw_requested(

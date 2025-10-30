@@ -256,24 +256,10 @@ impl Engine {
     }
 
     pub fn new_main_level(&self) -> Option<crate::content::level::Level> {
-        let mut level: Option<crate::content::level::Level> = None;
-        (|| {
-            let mut resource_manager = ResourceManager::default();
-            let Some(url) = Self::find_first_level(&mut resource_manager) else {
-                log::error!("Can not find a valid url");
-                return;
-            };
-            let _level = match resource_manager.get_level(&url) {
-                Ok(_level) => _level,
-                Err(err) => {
-                    log::error!("{}", err);
-                    return;
-                }
-            };
-            log::trace!("Load level: {}", _level.url.to_string());
-            level = Some(_level);
-        })();
-        level
+        let default_level = self.settings.engine_settings.default_level.clone();
+        let mut resource_manager = ResourceManager::default();
+        let level = Self::find_first_level(&mut resource_manager, default_level)?;
+        Some(level)
     }
 
     #[cfg(feature = "editor")]
@@ -328,7 +314,21 @@ impl Engine {
                         }
                     }
                     EContentType::Texture => {}
-                    EContentType::Level => {}
+                    EContentType::Level => {
+                         match resource_manager
+                            .get_resource::<crate::content::level::Level>(url, None)
+                        {
+                            Ok(f) => {
+                                files.insert(
+                                    url.clone(),
+                                    EContentFileType::Level(SingleThreadMut::new(f)),
+                                );
+                            }
+                            Err(err) => {
+                                log::warn!("{}", err);
+                            }
+                        }
+                    }
                     EContentType::Material => {
                         match resource_manager
                             .get_resource::<crate::content::material::Material>(url, None)
@@ -605,15 +605,24 @@ impl Engine {
         }
     }
 
-    fn find_first_level(resource_manager: &mut ResourceManager) -> Option<url::Url> {
+    fn find_first_level(
+        resource_manager: &mut ResourceManager,
+        default_level: Option<url::Url>,
+    ) -> Option<crate::content::level::Level> {
         let Ok(resource_map) = resource_manager.get_resource_map() else {
             return None;
         };
+        let mut fallback: Option<url::Url> = None;
+        let mut find: Option<url::Url> = None;
         for (_, v) in resource_map {
             match v.resource_type {
                 EResourceType::Content(content_type) => match content_type {
                     EContentType::Level => {
-                        return Some(v.url);
+                        fallback = Some(v.url);
+                        if fallback == default_level {
+                            find = fallback.clone();
+                        }
+                        // return Some(v.url);
                     }
                     _ => {
                         continue;
@@ -624,7 +633,10 @@ impl Engine {
                 }
             }
         }
-        return None;
+
+        let url = find.or(fallback)?;
+        let level = resource_manager.get_level(&url);
+        return level.ok();
     }
 
     pub fn get_resource_map(&self) -> Result<HashMap<url::Url, ResourceInfo>> {

@@ -819,7 +819,11 @@ impl Application {
         }
     }
 
-    pub fn open_server_level(&mut self, engine: &mut Engine, url: url::Url) -> Option<()> {
+    pub fn open_server_level(
+        &mut self,
+        engine: &mut Engine,
+        url: url::Url,
+    ) -> crate::error::Result<()> {
         let mut find_level = self
             ._contents
             .iter()
@@ -834,13 +838,17 @@ impl Application {
                     &mut self.player_view_port,
                 )),
                 _ => None,
-            })?;
+            })
+            .ok_or(crate::error::Error::Other(Some(format!(
+                "Can't find level: {}",
+                url
+            ))))?;
 
         if !self.net_module.is_authority {
-            return None;
+            return Err(crate::error::Error::Other(Some(format!("Not authority"))));
         }
         let Some(server) = &mut self.net_module.server else {
-            return None;
+            return Err(crate::error::Error::Other(Some(format!("Not server"))));
         };
         find_level.initialize(engine, &self._contents, &mut self.player_view_port);
         find_level.set_physics_simulate(true);
@@ -849,13 +857,17 @@ impl Application {
             client_net_datas: vec![],
             level_net_data: vec![],
         };
-        server_net_data.serialize_level(&find_level).ok()?;
-        let data = server_net_data.serialize().ok()?;
+        server_net_data
+            .serialize_level(&find_level)
+            .map_err(|err| crate::error::Error::Artifact(err, None))?;
+        let data = server_net_data
+            .serialize()
+            .map_err(|err| crate::error::Error::Artifact(err, None))?;
         server.broadcast(&data);
         self.current_active_level = SingleThreadMut::new(find_level);
         self.server_pending_open_level = Some(url);
         self.on_network_changed();
-        return Some(());
+        return Ok(());
     }
 
     fn notify_level_opend<'a>(
