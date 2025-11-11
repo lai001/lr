@@ -67,6 +67,7 @@ rs_core_minimal = { path = "../rs_core_minimal" }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
 rs_proc_macros = { path = "../rs_proc_macros" }
 rs_render_types = { path = "../rs_render_types" }
+rs_render_core = { path = "../crates/rs_render_core" }
 rs_network = { path = "../crates/rs_network", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]

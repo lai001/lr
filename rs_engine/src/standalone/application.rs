@@ -193,7 +193,7 @@ impl Application {
 
         current_active_level.initialize(engine, &contents, &mut player_view_port);
         current_active_level.set_physics_simulate(true);
-
+        #[allow(unused_mut)]
         let mut app = Application {
             _window_id: window_id,
             player_view_port,
@@ -208,25 +208,27 @@ impl Application {
             server_pending_open_level: None,
         };
 
-        let plugins = app.plugins.clone();
-        let mut plugins = plugins.borrow_mut();
-        let current_active_level = app.current_active_level.clone();
         #[cfg(feature = "plugin_shared_crate")]
-        for plugin in plugins.iter_mut() {
-            {
-                plugin.on_init(
+        {
+            let plugins = app.plugins.clone();
+            let mut plugins = plugins.borrow_mut();
+            let current_active_level = app.current_active_level.clone();
+            for plugin in plugins.iter_mut() {
+                {
+                    plugin.on_init(
+                        engine,
+                        &mut current_active_level.borrow_mut(),
+                        &mut app,
+                        &contents,
+                    );
+                }
+                plugin.on_open_level(
                     engine,
                     &mut current_active_level.borrow_mut(),
                     &mut app,
                     &contents,
                 );
             }
-            plugin.on_open_level(
-                engine,
-                &mut current_active_level.borrow_mut(),
-                &mut app,
-                &contents,
-            );
         }
         app
     }
@@ -249,6 +251,7 @@ impl Application {
         ctx: &egui::Context,
         ty: crate::input_type::EInputType,
     ) -> Vec<winit::keyboard::KeyCode> {
+        let _ = ctx;
         #[cfg(not(target_os = "android"))]
         let _ = window;
         self.player_view_port.on_window_input(ty.clone());

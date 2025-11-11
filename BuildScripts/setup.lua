@@ -1,9 +1,9 @@
 local rs_target_dir = rs_target_dir
 local deps_dir = deps_dir
+local engine_root_dir = engine_root_dir
 task("copy_shared_libs")
 do
     local ffmpeg_dir = ffmpeg_dir
-    local engine_root_dir = engine_root_dir
     local dotnet_sdk_dir = dotnet_sdk_dir
     on_run(function()
         import("core.project.config")
@@ -57,12 +57,23 @@ do
     }
 end
 
+task("generate_v8_api")
+    on_run(function()
+        local exe = path.join(rs_target_dir, "release/rs_v8_binding_api_generator")
+        local path = path.join(engine_root_dir, "rs_engine/Cargo.toml")
+        os.exec(format("%s generator --manifest-file %s", exe, path))
+    end)
+    set_menu {
+        usage = "xmake generate_v8_api"
+    }
+
 task("setup")
 do
     on_run(function()
         os.exec("xmake download_deps")
         os.exec("xmake build_3rdparty")
         os.exec("xmake compile_tool")
+        os.exec("xmake generate_v8_api")
         os.exec("xmake copy_shared_libs")
         os.exec("xmake gen_config")
         os.exec("xmake create_default_load_plugins_file")

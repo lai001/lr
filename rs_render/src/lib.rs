@@ -6,7 +6,6 @@ pub mod base_compute_pipeline_pool;
 pub mod base_render_pipeline;
 pub mod base_render_pipeline_pool;
 pub mod bind_group_layout_entry_hook;
-pub mod buffer_dimensions;
 pub mod command;
 pub mod compute_pipeline;
 pub mod constants;
@@ -38,12 +37,13 @@ pub mod sdf2d_generator;
 pub mod shader_library;
 pub mod shadow_pass;
 pub mod texture_loader;
-pub mod texture_readback;
 pub mod vertex_data_type;
 pub mod view_mode;
 pub mod virtual_texture_pass;
 pub mod virtual_texture_source;
-pub mod wgpu_context;
+
+use rs_render_core::buffer_dimensions;
+use rs_render_core::texture_readback;
 
 pub fn get_buildin_shader_dir() -> std::path::PathBuf {
     let engine_root_dir = rs_core_minimal::file_manager::get_engine_root_dir();

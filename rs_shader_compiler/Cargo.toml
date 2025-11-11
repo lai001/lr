@@ -28,6 +28,7 @@ chardetng = { version = "0.1.17", optional = true }
 encoding_rs = { version = "0.8.35", optional = true }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
 rs_render = { path = "../rs_render" }
+rs_render_core = { path = "../crates/rs_render_core" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 rs_foundation = { path = "../rs_foundation" }
 rs_artifact = { path = "../rs_artifact" }

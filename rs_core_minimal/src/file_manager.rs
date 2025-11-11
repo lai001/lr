@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "editor")]
 pub fn get_engine_root_dir() -> PathBuf {
     let mut path: PathBuf;
-    if is_dev_mode() {
+    if is_dev_mode() || std::env::var("CARGO_PKG_NAME").is_ok() {
         path = Path::new(file!()).join("../../../").to_path_buf();
     } else {
         path = Path::new("../../../").to_path_buf();

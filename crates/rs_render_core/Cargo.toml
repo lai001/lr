@@ -1,0 +1,21 @@
+[package]
+name = "rs_render_core"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["wgpu_latest"]
+wgpu_latest = ["dep:wgpu"]
+wgpu26 = ["dep:wgpu26"]
+profiler = ["tracy-client/enable"]
+
+[dependencies]
+wgpu = { version = "27.0.1", features = ["spirv", "naga-ir"], optional = true }
+wgpu26 = { package = "wgpu", version = "=26.0.1", features = [
+    "spirv",
+    "naga-ir",
+], optional = true }
+raw-window-handle = "0.6.2"
+tracy-client = { version = "0.18.2", default-features = false }
+pollster = "0.4.0"
+log = "0.4.28"

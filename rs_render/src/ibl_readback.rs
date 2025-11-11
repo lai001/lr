@@ -28,8 +28,8 @@ impl IBLReadBack {
             ))));
         }
         let bake_info = baker.get_bake_info();
-        let image_data =
-            crate::texture_readback::map_texture_full(device, queue, &brdflut_texture)?;
+        let image_data = crate::texture_readback::map_texture_full(device, queue, &brdflut_texture)
+            .map_err(|err| crate::error::Error::RenderCore(err))?;
         let buffer = &image_data[0][0];
         let f32_data: &[f32] = rs_foundation::cast_to_type_buffer(&buffer);
         let image = image::Rgba32FImage::from_vec(
@@ -77,7 +77,8 @@ impl IBLReadBack {
                 texture.format()
             ))));
         }
-        let image_data = crate::texture_readback::map_texture_full(device, queue, texture)?;
+        let image_data = crate::texture_readback::map_texture_full(device, queue, texture)
+            .map_err(|err| crate::error::Error::RenderCore(err))?;
         let cube_map = CubeMap {
             negative_x: Self::build_image_buffer(&image_data[0][0], size)?,
             positive_x: Self::build_image_buffer(&image_data[0][1], size)?,

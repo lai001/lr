@@ -104,7 +104,8 @@ impl VirtualTexturePass {
             None,
             None,
             Some("output_feeb_back"),
-        )?;
+        )
+        .map_err(|err| crate::error::Error::RenderCore(err))?;
         let physical_texture_view = Self::create_physical_texture_view(&physical_texture);
         let indirect_table_view = Self::create_indirect_table_texture_view(&indirect_table);
         Ok(Self {
@@ -341,7 +342,8 @@ impl VirtualTexturePass {
             1,
             &self.output_feeb_back.1,
             &self.output_feeb_back.0,
-        )?;
+        )
+        .map_err(|err| crate::error::Error::RenderCore(err))?;
         let buffer = &image_data[0];
         let values = rs_foundation::cast_to_type_buffer::<Value>(buffer);
         let mut table: HashMap<u32, HashSet<glam::UVec3>> = HashMap::new();

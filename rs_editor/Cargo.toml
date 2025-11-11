@@ -91,6 +91,7 @@ rapier3d = { version = "0.30.0", features = ["simd-stable", "serde-serialize"] }
 meshopt = "0.6.2"
 v8 = { version = "140.2.0", optional = true }
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
+rs_render_core = { path = "../crates/rs_render_core" }
 rs_render = { path = "../rs_render" }
 rs_render_types = { path = "../rs_render_types" }
 rs_foundation = { path = "../rs_foundation" }

@@ -39,6 +39,7 @@ rs_core_minimal = { path = "../rs_core_minimal" }
 rs_render_types = { path = "../rs_render_types" }
 rs_metis = { path = "../rs_metis" }
 rs_artifact = { path = "../rs_artifact" }
+rs_render_core = { path = "../crates/rs_render_core" }
 
 [target.'cfg(all(target_os = "android", target_arch = "x86_64"))'.dependencies]
 image_dds = { version = "0.7.2", default-features = false, features = [

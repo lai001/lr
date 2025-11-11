@@ -20,14 +20,11 @@ use rs_media::{
     composition::{check_composition, CompositionInfo},
     video_frame_player::VideoFramePlayer,
 };
-use rs_render::{
-    buffer_dimensions::BufferDimensions,
-    command::{
-        CreateTexture, CreateUITexture, InitTextureData, RenderCommand::*,
-        TextureDescriptorCreateInfo, UpdateTexture,
-    },
-    texture_readback::get_bytes_per_pixel,
+use rs_render::command::{
+    CreateTexture, CreateUITexture, InitTextureData, RenderCommand::*, TextureDescriptorCreateInfo,
+    UpdateTexture,
 };
+use rs_render_core::{buffer_dimensions::BufferDimensions, texture_readback::get_bytes_per_pixel};
 use std::{collections::HashMap, iter::zip, path::Path};
 use wgpu::Extent3d;
 use winit::event::WindowEvent;

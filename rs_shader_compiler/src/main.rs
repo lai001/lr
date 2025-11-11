@@ -84,7 +84,7 @@ fn prepreocess_builtin_shader() -> anyhow::Result<()> {
 }
 
 fn verify_shaders() -> anyhow::Result<()> {
-    let ctx = rs_render::wgpu_context::WGPUContext::windowless(None, None)?;
+    let ctx = rs_render_core::wgpu_context::WGPUContext::windowless(None, None, None)?;
 
     let output_path = rs_core_minimal::file_manager::get_engine_output_target_dir().join("shaders");
     for entry in walkdir::WalkDir::new(output_path) {

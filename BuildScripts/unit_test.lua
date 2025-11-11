@@ -18,7 +18,9 @@ do
             "rs_quickjs",
             "rs_shader_compiler_core",
             "rs_v8_host",
-            "crates/rs_network",
+            "crates/rs_render_core",
+            "crates/rs_pack",
+            "crates/rs_text",
         }
         for k, v in ipairs(folders) do
             os.cd(path.join(engine_root_dir, v))

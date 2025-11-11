@@ -4,6 +4,7 @@ use crate::base_compute_pipeline_pool::BaseComputePipelinePool;
 use crate::base_render_pipeline_pool::BaseRenderPipelinePool;
 use crate::compute_pipeline::light_culling::LightCullingComputePipeline;
 use crate::depth_texture::DepthTexture;
+use crate::egui_render::EGUIRenderer;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::light_culling::LightCulling;
@@ -25,9 +26,9 @@ use crate::shadow_pass::ShadowPipelines;
 use crate::virtual_texture_pass::VirtualTexturePass;
 use crate::virtual_texture_source::VirtualTextureSource;
 use crate::{command::*, shadow_pass};
-use crate::{egui_render::EGUIRenderer, wgpu_context::WGPUContext};
 use rs_core_minimal::settings::{self, RenderSettings};
 use rs_core_minimal::thread_pool::ThreadPool;
+use rs_render_core::wgpu_context::{WGPUContext, WindowTarget};
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -309,11 +310,16 @@ impl Renderer {
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         let _span = tracy_client::span!();
-        let wgpu_context = WGPUContext::new(
+        let window_targets = HashMap::from([(
             window_id,
-            window,
-            surface_width,
-            surface_height,
+            WindowTarget {
+                window,
+                surface_width,
+                surface_height,
+            },
+        )]);
+        let wgpu_context = WGPUContext::new(
+            window_targets,
             Some(match settings.power_preference {
                 settings::PowerPreference::None => PowerPreference::None,
                 settings::PowerPreference::LowPower => PowerPreference::LowPower,
@@ -340,7 +346,9 @@ impl Renderer {
                 },
                 memory_budget_thresholds: MemoryBudgetThresholds::default(),
             }),
-        )?;
+            None,
+        )
+        .map_err(|err| crate::error::Error::RenderCore(err))?;
 
         Self::from_context(
             wgpu_context,
@@ -381,6 +389,7 @@ impl Renderer {
             .add_screen_descriptor(window_id, screen_descriptor);
         self.wgpu_context
             .set_new_window(window_id, window, surface_width, surface_height)
+            .map_err(|err| crate::error::Error::RenderCore(err))
     }
 
     pub fn renderdoc_start_capture(&mut self) {

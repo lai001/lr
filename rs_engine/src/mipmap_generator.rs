@@ -1,6 +1,6 @@
 use crate::error::Result;
 use image::{imageops, DynamicImage};
-use rs_render::buffer_dimensions::BufferDimensions;
+use rs_render_core::buffer_dimensions::BufferDimensions;
 use std::path::Path;
 use wgpu::*;
 

@@ -2,11 +2,6 @@ use std::sync::Mutex;
 
 #[derive(Debug)]
 pub enum Error {
-    RequestAdapterFailed,
-    CreateSurfaceError(wgpu::CreateSurfaceError),
-    RequestDeviceError(wgpu::RequestDeviceError),
-    RequestAdapterError(wgpu::RequestAdapterError),
-    SurfaceNotSupported,
     Sync(Option<String>),
     ShaderReflection(naga::front::wgsl::ParseError, Option<String>),
     ShaderNotSupported(Option<String>),
@@ -23,6 +18,7 @@ pub enum Error {
     Wgpu(Mutex<wgpu::Error>),
     ValidationError(naga::WithSpan<naga::valid::ValidationError>),
     NagaBackSpirVError(naga::back::spv::Error),
+    RenderCore(rs_render_core::error::Error),
     Other(Option<String>),
 }
 

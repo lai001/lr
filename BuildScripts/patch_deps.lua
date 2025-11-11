@@ -10,6 +10,8 @@ task("patch_deps")
         os.exec("cargo update timezone_provider --precise 0.0.14")
         os.cd(path.join(engine_root_dir, "rs_desktop_standalone"))
         os.exec("cargo update timezone_provider --precise 0.0.14")
+        os.cd(path.join(engine_root_dir, "rs_v8_host"))
+        os.exec("cargo update timezone_provider --precise 0.0.14")
     end)
     set_menu {
         usage = "xmake patch_deps",
