@@ -16,4 +16,5 @@ pub enum EContentType {
     Curve,
     BlendAnimations,
     MaterialParamentersCollection,
+    RenderTarget2D,
 }

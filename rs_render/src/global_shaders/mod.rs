@@ -1,4 +1,5 @@
 pub mod attachment;
+pub mod blit;
 pub mod box_culling;
 pub mod brdf_lut;
 pub mod depth;
@@ -24,33 +25,32 @@ pub mod virtual_texture_clean;
 pub mod virtual_texture_feed_back;
 
 use self::global_shader::GlobalShader;
-use crate::global_shaders::{
-    attachment::AttachmentShader,
-    brdf_lut::BrdfLutShader,
-    depth::{DepthShader, DepthSkinShader},
-    format_conversion::Depth32FloatConvertRGBA8UnormShader,
-    grid::GridShader,
-    irradiance_cube_map::IrradianceCubeMapShader,
-    jfa::JFAShader,
-    jfa_composition::JFACompositionShader,
-    mesh_view::MeshViewShader,
-    mesh_view_multiple_draw::MeshViewMultipleDrawShader,
-    panorama_to_cube::PanoramaToCubeShader,
-    pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader,
-    sdf2d_preprocess::Sdf2dPreprocessShader,
-    shading::ShadingShader,
-    skeleton_shading::SkeletonShadingShader,
-    virtual_texture_clean::VirtualTextureCleanShader,
-    virtual_texture_feed_back::{
-        SkinMeshVirtualTextureFeedBackShader, StaticMeshVirtualTextureFeedBackShader,
-    },
-};
+use attachment::AttachmentShader;
+use blit::BlitShader;
 use box_culling::BoxCullingShader;
+use brdf_lut::BrdfLutShader;
+use depth::{DepthShader, DepthSkinShader};
+use format_conversion::Depth32FloatConvertRGBA8UnormShader;
 use fxaa::FXAAShader;
+use grid::GridShader;
+use irradiance_cube_map::IrradianceCubeMapShader;
+use jfa::JFAShader;
+use jfa_composition::JFACompositionShader;
 use light_culling::LightCullingShader;
+use mesh_view::MeshViewShader;
+use mesh_view_multiple_draw::MeshViewMultipleDrawShader;
+use panorama_to_cube::PanoramaToCubeShader;
 use particle::ParticleShader;
+use pre_filter_environment_cube_map::PreFilterEnvironmentCubeMapShader;
 use primitive::PrimitiveShader;
+use sdf2d_preprocess::Sdf2dPreprocessShader;
+use shading::ShadingShader;
+use skeleton_shading::SkeletonShadingShader;
 use view_depth::ViewDepthShader;
+use virtual_texture_clean::VirtualTextureCleanShader;
+use virtual_texture_feed_back::{
+    SkinMeshVirtualTextureFeedBackShader, StaticMeshVirtualTextureFeedBackShader,
+};
 
 pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
     vec![
@@ -79,5 +79,6 @@ pub fn get_buildin_shaders() -> Vec<Box<dyn GlobalShader>> {
         Box::new(LightCullingShader {}),
         Box::new(ViewDepthShader {}),
         Box::new(BoxCullingShader {}),
+        Box::new(BlitShader {}),
     ]
 }

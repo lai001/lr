@@ -110,6 +110,10 @@ impl LoadContents {
                         let mut material_paramenters_collection = ref_cell.borrow_mut();
                         material_paramenters_collection.initialize(engine);
                     }
+                    EContentFileType::RenderTarget2D(render_target_2d) => {
+                        let mut render_target_2d = render_target_2d.borrow_mut();
+                        render_target_2d.init_resouce(engine);
+                    }
                 }
             }
             let rt = tokio::runtime::Builder::new_current_thread().build()?;

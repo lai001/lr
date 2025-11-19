@@ -37,7 +37,7 @@ use rs_core_minimal::{
 #[cfg(any(feature = "plugin_shared_crate"))]
 use rs_engine::plugin::plugin_crate::Plugin;
 use rs_engine::{
-    build_asset_url, build_built_in_resouce_url, build_content_file_url,
+    build_built_in_resouce_url, build_content_file_url,
     camera_component::CameraComponent,
     collision_componenet::CollisionComponent,
     components::{
@@ -1852,6 +1852,7 @@ impl EditorContext {
         .expect("Should be opened");
         if let Some(open_material) = open_material {
             let url = &open_material.borrow().asset_url;
+            log::trace!("open material: {}", url.to_string());
             if let Some(project_context) = &self.project_context {
                 if let Some(asset) = project_context
                     .project
@@ -1866,6 +1867,7 @@ impl EditorContext {
                 };
             }
         }
+        assert!(ui_window.data_source.current_open_material.is_some());
         ui_window.material_view.viewer.texture_urls = self.collect_textures();
         ui_window.material_view.viewer.virtual_texture_urls = self.collect_virtual_textures();
         ui_window.material_view.viewer.is_updated = true;
@@ -2001,6 +2003,7 @@ impl EditorContext {
             .iter()
             .filter_map(|x| match x {
                 EContentFileType::Texture(_) => Some(x.get_url()),
+                EContentFileType::RenderTarget2D(_) => Some(x.get_url()),
                 _ => None,
             })
             .collect()
@@ -2688,6 +2691,7 @@ impl EditorContext {
                         );
                     }
                     EContentFileType::MaterialParamentersCollection(_) => {}
+                    EContentFileType::RenderTarget2D(_) => {}
                 }
             }
             content_browser::EClickEventType::SingleClickFile(file) => {
@@ -2702,11 +2706,10 @@ impl EditorContext {
                 let Some(project_context) = &mut self.project_context else {
                     return;
                 };
-
-                let mut material = rs_engine::content::material::Material::new(
-                    build_content_file_url(&name).unwrap(),
-                    build_asset_url(format!("material/{}", &name)).unwrap(),
-                );
+                let content_url = build_content_file_url(&name).unwrap();
+                let asset_url = crate::material::Material::make_url(&content_url);
+                let mut material =
+                    rs_engine::content::material::Material::new(content_url, asset_url);
                 let resolve_result = material_view::MaterialView::default_resolve().unwrap();
                 {
                     let mut shader_code = HashMap::new();
@@ -2826,6 +2829,27 @@ impl EditorContext {
                     return;
                 }
                 content_file_type.set_name(new_name);
+
+                match content_file_type {
+                    EContentFileType::Material(material) => {
+                        let mut material = material.borrow_mut();
+                        if let Some(project_context) = self.project_context.as_mut() {
+                            let material_asset = project_context
+                                .project
+                                .materials
+                                .iter()
+                                .find(|x| x.borrow().url == material.asset_url);
+                            if let Some(material_asset) = material_asset.cloned() {
+                                let mut material_asset = material_asset.borrow_mut();
+                                crate::material::Material::on_url_changed(
+                                    &mut material,
+                                    &mut material_asset,
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
+                }
             }
             content_browser::EClickEventType::CreateBlendAnimations => {
                 let names = self.get_all_content_names();
@@ -2889,6 +2913,31 @@ impl EditorContext {
                     .borrow_mut()
                     .files
                     .push(EContentFileType::Level(SingleThreadMut::new(new_level)));
+            }
+            content_browser::EClickEventType::CreateRenderTarget2D => {
+                let names = self.get_all_content_names();
+                let Some(project_context) = &mut self.project_context else {
+                    return;
+                };
+                let name = make_unique_name(
+                    names,
+                    &self.data_source.content_data_source.new_content_name,
+                );
+                let Ok(content_url) = build_content_file_url(&name) else {
+                    return;
+                };
+                let length = rs_engine::content::render_target_2d::RenderTarget2D::default_length();
+                let mut render_target_2d =
+                    rs_engine::content::render_target_2d::RenderTarget2D::new(
+                        content_url,
+                        length,
+                        length,
+                        None,
+                    );
+                render_target_2d.init_resouce(&mut self.engine);
+                project_context.project.content.borrow_mut().files.push(
+                    EContentFileType::RenderTarget2D(SingleThreadMut::new(render_target_2d)),
+                );
             }
         }
     }
@@ -3111,6 +3160,10 @@ impl EditorContext {
                 {
                     log::warn!("{}", err);
                 }
+            }
+            content_item_property_view::EEventType::RenderTarget2D(render_target_2d, _) => {
+                let mut render_target_2d = render_target_2d.borrow_mut();
+                render_target_2d.init_resouce(&mut self.engine);
             }
         }
     }

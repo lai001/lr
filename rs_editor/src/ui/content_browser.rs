@@ -41,6 +41,7 @@ pub enum EClickEventType {
     CreateBlendAnimations,
     CreateLevel,
     CreateMaterialParametersCollection,
+    CreateRenderTarget2D,
     OpenFolder(Rc<RefCell<ContentFolder>>),
     OpenFile(EContentFileType),
     DeleteFile(EContentFileType),
@@ -143,6 +144,13 @@ pub fn draw(
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
+                        ui.menu_button("RenderTarget2D", |ui| {
+                            ui.text_edit_singleline(&mut data_source.new_level_name);
+                            if ui.button("Ok").clicked() {
+                                click = Some(EClickEventType::CreateRenderTarget2D);
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
+                        });
                     });
                 });
                 if let Some(current_folder) = current_folder {
@@ -220,6 +228,8 @@ fn draw_content(
                                             );
                                         }
                                     }
+                                    ui.set_min_width(50.0);
+                                    ui.set_min_height(50.0);
                                     render_thumbnail(
                                         file,
                                         project_folder_path,
@@ -352,6 +362,10 @@ fn render_thumbnail(
         }
         EContentFileType::MaterialParamentersCollection(_) => {
             ui.image(egui::include_image!("../../../Resource/Editor/file.svg"));
+        }
+        EContentFileType::RenderTarget2D(_) => {
+            let rect = ui.available_rect_before_wrap();
+            ui.painter().rect_filled(rect, 5.0, Color32::WHITE);
         }
     }
 }

@@ -256,12 +256,16 @@ network = ["dep:rs_network", "rs_engine/network"]
 egui = { version = "@egui_version@" }
 log = "@log_version@"
 winit = { version = "@winit_version@" }
+url = { version = "@url_version@", features = ["serde"] }
+glam = { version = "@glam_version@", features = ["mint", "serde"] }
+wgpu = { version = "@wgpu_version@", features = ["spirv", "naga-ir"] }
 rs_engine = { path = "@engine_path@/rs_engine" }
 rs_render = { path = "@engine_path@/rs_render" }
 rs_audio = { path = "@engine_path@/rs_audio" }
 rs_core_minimal = { path = "@engine_path@/rs_core_minimal" }
 rs_foundation = { path = "@engine_path@/rs_foundation" }
 rs_network = { path = "@engine_path@/crates/rs_network", optional = true }
+rs_artifact = { path = "@engine_path@/rs_artifact" }
 
 [lib]
 crate-type = ["dylib"]
@@ -314,6 +318,9 @@ fn fill_cargo_toml_template(name: &str, engine_path: &str) -> String {
         ("egui", "".to_string()),
         ("log", "".to_string()),
         ("winit", "".to_string()),
+        ("wgpu", "".to_string()),
+        ("glam", "".to_string()),
+        ("url", "".to_string()),
     ]);
     cargo_manifest.read_create_version(&mut versions);
     let mut template = get_cargo_toml_template().to_string();
@@ -322,6 +329,9 @@ fn fill_cargo_toml_template(name: &str, engine_path: &str) -> String {
     template = template.replace("@egui_version@", &versions["egui"]);
     template = template.replace("@log_version@", &versions["log"]);
     template = template.replace("@winit_version@", &versions["winit"]);
+    template = template.replace("@wgpu_version@", &versions["wgpu"]);
+    template = template.replace("@glam_version@", &versions["glam"]);
+    template = template.replace("@url_version@", &versions["url"]);
     template
 }
 

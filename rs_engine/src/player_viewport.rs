@@ -271,7 +271,7 @@ impl PlayerViewport {
         Self::new(
             ERenderTargetType::FrameBuffer(rs_render::command::FrameBufferOptions {
                 color: *color_texture_handle,
-                depth: *depth_texture_handle,
+                depth: Some(*depth_texture_handle),
             }),
             width,
             height,

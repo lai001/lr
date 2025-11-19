@@ -559,6 +559,7 @@ impl ProjectContext {
                         material_paramenters_collection.clone(),
                     );
                 }
+                EContentFileType::RenderTarget2D(_) => todo!(),
             }
         }
 

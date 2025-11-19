@@ -67,6 +67,15 @@ task("generate_v8_api")
         usage = "xmake generate_v8_api"
     }
 
+task("compile_shaders")
+    on_run(function()
+        os.cd(path.join(engine_root_dir, "build/target/release"))
+        os.exec("./rs_shader_compiler.exe")
+    end)
+    set_menu {
+        usage = "xmake compile_shaders"
+    }    
+
 task("setup")
 do
     on_run(function()

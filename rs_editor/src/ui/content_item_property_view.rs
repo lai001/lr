@@ -2,12 +2,20 @@ use rs_core_minimal::name_generator::NameGenerator;
 use rs_engine::{
     content::{
         content_file_type::EContentFileType, ibl::IBL,
-        material_paramenters_collection::MaterialParamentersCollection, texture::TextureFile,
+        material_paramenters_collection::MaterialParamentersCollection,
+        render_target_2d::RenderTarget2D, texture::TextureFile,
     },
     uniform_map::{BaseDataValueType, StructField},
 };
 use rs_foundation::new::SingleThreadMutType;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
+use crate::ui::misc::render_combo_box_not_null;
+
+pub enum RenderTarget2DPropertyType {
+    Width(u32),
+    Height(u32),
+    Format(wgpu::TextureFormat),
+}
 
 pub enum EEventType {
     IBL(Rc<RefCell<IBL>>, Option<PathBuf>, Option<PathBuf>),
@@ -23,6 +31,10 @@ pub enum EEventType {
         Rc<RefCell<rs_engine::content::static_mesh::StaticMesh>>,
         bool,
         bool,
+    ),
+    RenderTarget2D(
+        SingleThreadMutType<RenderTarget2D>,
+        RenderTarget2DPropertyType,
     ),
 }
 
@@ -338,6 +350,44 @@ impl ContentItemPropertyView {
                         material_paramenters_collection_response,
                         material_paramenters_collection,
                     )));
+                }
+            }
+            EContentFileType::RenderTarget2D(render_target_2d) => {
+                let object = render_target_2d.clone();
+                let mut render_target_2d = render_target_2d.borrow_mut();
+                let response = ui.add(
+                    egui::DragValue::new(&mut render_target_2d.width)
+                        .speed(1)
+                        .prefix("Width: ")
+                        .range(1..=4096 * 4)
+                        .update_while_editing(false),
+                );
+                if response.lost_focus() {
+                    self.click = Some(EEventType::RenderTarget2D(
+                        object.clone(),
+                        RenderTarget2DPropertyType::Width(render_target_2d.width),
+                    ))
+                }
+                let response = ui.add(
+                    egui::DragValue::new(&mut render_target_2d.height)
+                        .speed(1)
+                        .prefix("Height: ")
+                        .range(1..=4096 * 4)
+                        .update_while_editing(false),
+                );
+                if response.lost_focus() {
+                    self.click = Some(EEventType::RenderTarget2D(
+                        object.clone(),
+                        RenderTarget2DPropertyType::Height(render_target_2d.height),
+                    ))
+                }
+                let format = &mut render_target_2d.format;
+                let candidate_items = vec![wgpu::TextureFormat::Rgba8Unorm, wgpu::TextureFormat::R8Unorm];
+                if render_combo_box_not_null(ui, "Format", format, candidate_items) {
+                    self.click = Some(EEventType::RenderTarget2D(
+                        object.clone(),
+                        RenderTarget2DPropertyType::Format(render_target_2d.format),
+                    ))
                 }
             }
         }

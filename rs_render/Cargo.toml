@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["standalone"]
-renderdoc = ["dep:renderdoc"]
+default = ["standalone", "serde"]
+renderdoc = ["dep:renderdoc", "dep:windows", "dep:wgpu-hal"]
 editor = ["rs_shader_compiler_core/editor", "rs_core_minimal/editor"]
 standalone = [
     "rs_shader_compiler_core/standalone",
     "rs_core_minimal/standalone",
 ]
 profiler = ["tracy-client/enable", "rs_metis/profiler"]
+serde = ["wgpu/serde", "rs_render_core/serde"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
@@ -56,3 +57,5 @@ android_logger = "0.15.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 renderdoc = { version = "0.12.1", optional = true }
+windows = { version = "0.58.0", optional = true }
+wgpu-hal = { version = "27.0.2", optional = true }

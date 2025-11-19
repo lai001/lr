@@ -1,5 +1,6 @@
 use crate::{
-    bake_info::BakeInfo, egui_render::EGUIRenderOutput, misc::find_most_compatible_texture_usages,
+    bake_info::BakeInfo, base_render_pipeline_pool::BaseRenderPipelineBuilder,
+    egui_render::EGUIRenderOutput, misc::find_most_compatible_texture_usages,
     renderer::EPipelineType, scene_viewport::SceneViewport, view_mode::EViewModeType,
     virtual_texture_source::TVirtualTextureSource,
 };
@@ -22,7 +23,7 @@ pub type MaterialRenderPipelineHandle = u64;
 #[derive(Debug, Clone, Copy)]
 pub struct FrameBufferOptions {
     pub color: TextureHandle,
-    pub depth: TextureHandle,
+    pub depth: Option<TextureHandle>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -390,6 +391,8 @@ pub struct PresentInfo {
     pub scene_light: Option<SceneLight>,
     pub debug_label: Option<String>,
     pub global_constant_resources: Option<EBindingResource>,
+    #[cfg(feature = "renderdoc")]
+    is_capture_frame: bool,
 }
 
 impl PresentInfo {
@@ -407,7 +410,19 @@ impl PresentInfo {
             scene_light: None,
             debug_label: None,
             global_constant_resources: None,
+            #[cfg(feature = "renderdoc")]
+            is_capture_frame: false,
         }
+    }
+
+    #[cfg(feature = "renderdoc")]
+    pub fn capture(&mut self, is_enable: bool) {
+        self.is_capture_frame = is_enable;
+    }
+
+    #[cfg(feature = "renderdoc")]
+    pub fn is_capture_frame(&self) -> bool {
+        self.is_capture_frame
     }
 }
 
@@ -420,6 +435,17 @@ pub struct ClearDepthTexture {
 pub struct BuiltinShaderChanged {
     pub name: String,
     pub source: String,
+}
+
+#[derive(Clone)]
+pub struct CreateShader {
+    pub name: String,
+    pub source: String,
+}
+
+#[derive(Clone)]
+pub struct CreateRenderPipeline {
+    pub builder: BaseRenderPipelineBuilder,
 }
 
 #[derive(Clone)]
@@ -450,10 +476,12 @@ pub enum RenderCommand {
     BuiltinShaderChanged(BuiltinShaderChanged),
     DestroyTextures(Vec<TextureHandle>),
     #[cfg(feature = "renderdoc")]
-    CaptureFrame,
+    CaptureFrame(bool),
     WindowRedrawRequestedBegin(isize),
     WindowRedrawRequestedEnd(isize),
     CreateMultiResMesh(CreateMultipleResolutionMesh),
+    CreateShader(CreateShader),
+    CreateRenderPipeline(CreateRenderPipeline),
 }
 
 impl RenderCommand {

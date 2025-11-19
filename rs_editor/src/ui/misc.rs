@@ -208,6 +208,12 @@ pub trait ToUIString {
     fn to_ui_string(&self) -> String;
 }
 
+impl ToUIString for wgpu::TextureFormat {
+    fn to_ui_string(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
 impl ToUIString for RigidBodyType {
     fn to_ui_string(&self) -> String {
         match self {

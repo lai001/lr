@@ -450,6 +450,7 @@ impl Engine {
                             }
                         }
                     },
+                    EContentType::RenderTarget2D => todo!(),
                 },
                 _ => {}
             }
@@ -689,23 +690,23 @@ impl Engine {
         // }
 
         let virtual_texture_pass = player_viewport.virtual_pass_handle.clone().map(|x| x.key());
+        let mut present_info =
+            PresentInfo::new(*player_viewport.get_render_target_type(), draw_objects);
+        present_info.virtual_texture_pass = virtual_texture_pass;
+        present_info.scene_viewport = player_viewport.scene_viewport.clone();
+        present_info.depth_texture_handle = player_viewport
+            .shadow_depth_texture_handle
+            .as_deref()
+            .copied();
+        present_info.scene_light = player_viewport.get_scene_light().cloned();
+        present_info.h_z_texture_handle = player_viewport.h_z_texture_handle.clone().map(|x| *x);
+        present_info.debug_label = Some(player_viewport.get_name().to_string());
+        present_info.global_constant_resources = Some(EBindingResource::Constants(
+            *player_viewport.global_constants_handle,
+        ));
+
         self.render_thread_mode
-            .send_command(RenderCommand::Present(PresentInfo {
-                render_target_type: *player_viewport.get_render_target_type(),
-                draw_objects,
-                virtual_texture_pass,
-                scene_viewport: player_viewport.scene_viewport.clone(),
-                depth_texture_handle: player_viewport
-                    .shadow_depth_texture_handle
-                    .as_deref()
-                    .copied(),
-                scene_light: player_viewport.get_scene_light().cloned(),
-                h_z_texture_handle: player_viewport.h_z_texture_handle.clone().map(|x| *x),
-                debug_label: Some(player_viewport.get_name().to_string()),
-                global_constant_resources: Some(EBindingResource::Constants(
-                    *player_viewport.global_constants_handle,
-                )),
-            }));
+            .send_command(RenderCommand::Present(present_info));
 
         let pending_destroy_textures = ResourceManager::default().get_pending_destroy_textures();
         if !pending_destroy_textures.is_empty() {
@@ -1536,14 +1537,6 @@ impl Engine {
             irradiance_data: ibl_baking.irradiance_data,
         });
         self.render_thread_mode.send_command(render_command);
-    }
-
-    pub fn debug_capture_frame(&mut self) {
-        #[cfg(feature = "renderdoc")]
-        {
-            let render_command = RenderCommand::CaptureFrame;
-            self.render_thread_mode.send_command(render_command);
-        }
     }
 
     pub fn set_settings(&mut self, settings: Settings) {

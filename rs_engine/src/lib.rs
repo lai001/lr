@@ -51,14 +51,16 @@ pub use rs_core_minimal::thread_pool;
 
 pub const ASSET_SCHEME: &str = "asset";
 pub const CONTENT_SCHEME: &str = "content";
+pub const ASSET_ROOT: &str = "asset";
+pub const CONTENT_ROOT: &str = "Content";
 pub const BUILT_IN_RESOURCE: &str = "builtinresouce";
 
 pub fn build_asset_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
-    url::Url::parse(&format!("{}://asset/{}", ASSET_SCHEME, name.as_ref()))
+    url::Url::parse(&format!("{ASSET_SCHEME}://{ASSET_ROOT}/{}", name.as_ref()))
 }
 
 pub fn build_content_file_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
-    url::Url::parse(&format!("{}://Content/{}", CONTENT_SCHEME, name.as_ref()))
+    url::Url::parse(&format!("{CONTENT_SCHEME}://{CONTENT_ROOT}/{}", name.as_ref()))
 }
 
 pub fn build_built_in_resouce_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {

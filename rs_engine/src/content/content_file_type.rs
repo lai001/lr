@@ -4,7 +4,7 @@ use super::{
     particle_system::ParticleSystem, skeleton::Skeleton, skeleton_animation::SkeletonAnimation,
     skeleton_mesh::SkeletonMesh, sound::Sound, static_mesh::StaticMesh, texture::TextureFile,
 };
-use crate::url_extension::UrlExtension;
+use crate::{content::render_target_2d::RenderTarget2D, url_extension::UrlExtension};
 use rs_artifact::asset::Asset;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
@@ -24,6 +24,7 @@ pub enum EContentFileType {
     Curve(Rc<RefCell<Curve>>),
     BlendAnimations(Rc<RefCell<BlendAnimations>>),
     MaterialParamentersCollection(Rc<RefCell<MaterialParamentersCollection>>),
+    RenderTarget2D(Rc<RefCell<RenderTarget2D>>),
 }
 
 macro_rules! common_fn {
@@ -73,6 +74,7 @@ impl EContentFileType {
         Sound,
         Curve,
         BlendAnimations,
-        MaterialParamentersCollection
+        MaterialParamentersCollection,
+        RenderTarget2D
     );
 }

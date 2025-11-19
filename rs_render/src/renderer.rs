@@ -1,7 +1,8 @@
 use crate::acceleration_bake::AccelerationBaker;
 use crate::antialias_type::EAntialiasType;
 use crate::base_compute_pipeline_pool::BaseComputePipelinePool;
-use crate::base_render_pipeline_pool::BaseRenderPipelinePool;
+use crate::base_render_pipeline::BaseRenderPipeline;
+use crate::base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool};
 use crate::compute_pipeline::light_culling::LightCullingComputePipeline;
 use crate::depth_texture::DepthTexture;
 use crate::egui_render::EGUIRenderer;
@@ -406,6 +407,18 @@ impl Renderer {
         {
             let device = self.wgpu_context.get_device();
             if let Some(render_doc_context) = &mut self.render_doc_context {
+                let poll_status = device.poll(wgt::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                });
+                match poll_status {
+                    Ok(poll_status) => {
+                        log::trace!("renderdoc_stop_capture, {:?}", poll_status);
+                    }
+                    Err(err) => {
+                        log::warn!("{err}");
+                    }
+                }
                 render_doc_context.stop_capture(device);
             }
         }
@@ -567,21 +580,13 @@ impl Renderer {
     pub fn present(&mut self, present_info: PresentInfo) {
         let _span = tracy_client::span!();
         #[cfg(feature = "renderdoc")]
-        let mut is_capture_frame = false;
-        #[cfg(feature = "renderdoc")]
-        {
-            if let Some(render_doc_context) = &mut self.render_doc_context {
-                if render_doc_context.capture_commands.is_empty() == false {
-                    is_capture_frame = true;
-                }
-                render_doc_context.capture_commands.clear();
-            }
+        let is_capture_frame = {
+            let is_capture_frame = present_info.is_capture_frame();
             if is_capture_frame {
-                if let Some(render_doc_context) = &mut self.render_doc_context {
-                    render_doc_context.start_capture(self.wgpu_context.get_device());
-                }
+                self.renderdoc_start_capture();
             }
-        }
+            is_capture_frame
+        };
 
         let msaa_texture_view: Option<TextureView> = match &present_info.scene_viewport.anti_type {
             EAntialiasType::None => None,
@@ -643,18 +648,21 @@ impl Renderer {
             }
         };
 
-        let depth_texture = match present_info.render_target_type {
+        let depth_texture: Option<&Texture> = match present_info.render_target_type {
             ERenderTargetType::SurfaceTexture(window_id) => {
                 match self.depth_textures.get(&window_id) {
-                    Some(surface_texture) => &surface_texture.depth_texture,
+                    Some(surface_texture) => Some(&surface_texture.depth_texture),
                     None => return,
                 }
             }
             ERenderTargetType::FrameBuffer(options) => {
                 let FrameBufferOptions { depth, .. } = options;
-                match self.textures.get(&depth) {
-                    Some(texture) => texture,
-                    None => return,
+                match depth {
+                    Some(depth) => match self.textures.get(&depth) {
+                        Some(texture) => Some(texture),
+                        None => return,
+                    },
+                    None => None,
                 }
             }
         };
@@ -664,12 +672,14 @@ impl Renderer {
             des.usage = Some(TextureUsages::RENDER_ATTACHMENT);
             des
         });
-        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_texture_view = depth_texture.map(|depth_texture| {
+            depth_texture.create_view(&wgpu::TextureViewDescriptor::default())
+        });
 
         if self.is_enable_multiple_thread {
             self.draw_objects_multiple_thread(
                 color_texture,
-                depth_texture,
+                depth_texture_view.as_ref(),
                 &present_info.draw_objects,
             );
         } else if let Some(multiple_resolution_meshs_pass) =
@@ -808,7 +818,7 @@ impl Renderer {
                 color_texture.width(),
                 color_texture.height(),
                 &output_view,
-                &depth_texture_view,
+                depth_texture_view.as_ref(),
                 &present_info.draw_objects,
                 msaa_texture_view.as_ref(),
                 msaa_depth_texture_view.as_ref(),
@@ -855,13 +865,8 @@ impl Renderer {
         })();
 
         #[cfg(feature = "renderdoc")]
-        {
-            if is_capture_frame {
-                let device = self.wgpu_context.get_device();
-                if let Some(render_doc_context) = &mut self.render_doc_context {
-                    render_doc_context.stop_capture(device);
-                }
-            }
+        if is_capture_frame {
+            self.renderdoc_stop_capture();
         }
     }
 
@@ -1042,7 +1047,6 @@ impl Renderer {
                     );
                 }
             }
-
             RenderCommand::UiOutput(command) => {
                 let _span = tracy_client::span!("egui render");
                 let output_view = match self.surface_textures.get(&command.window_id) {
@@ -1069,7 +1073,6 @@ impl Renderer {
                     glam::uvec2(resize_command.width, resize_command.height),
                 );
             }
-
             RenderCommand::Present(present_info) => {
                 self.present(present_info);
             }
@@ -1078,9 +1081,11 @@ impl Renderer {
                 task(self);
             }
             #[cfg(feature = "renderdoc")]
-            RenderCommand::CaptureFrame => {
-                if let Some(render_doc_context) = &mut self.render_doc_context {
-                    render_doc_context.capture_commands.push_back(());
+            RenderCommand::CaptureFrame(is_start) => {
+                if is_start {
+                    self.renderdoc_start_capture();
+                } else {
+                    self.renderdoc_stop_capture();
                 }
             }
             RenderCommand::Settings(settings) => {
@@ -1386,6 +1391,27 @@ impl Renderer {
                         multiple_resolution_mesh,
                     );
                 }
+            }
+            RenderCommand::CreateShader(create_shader) => {
+                let CreateShader { name, source } = create_shader;
+                let device = self.wgpu_context.get_device();
+                match self
+                    .shader_library
+                    .load_shader_from(name.clone(), source, device)
+                {
+                    Ok(_) => {
+                        log::trace!("Create shader {}", &name);
+                    }
+                    Err(err) => log::warn!("Fail to create shader {err}"),
+                }
+            }
+            RenderCommand::CreateRenderPipeline(create_render_pipeline) => {
+                let CreateRenderPipeline { builder } = create_render_pipeline;
+                let device = self.wgpu_context.get_device();
+                let _ = self
+                    .base_render_pipeline_pool
+                    .get(device, &self.shader_library, &builder);
+                log::trace!("Create render pipeline {}", &builder.shader_name);
             }
         }
         return None;
@@ -1784,7 +1810,7 @@ impl Renderer {
         width: u32,
         height: u32,
         surface_texture_view: &wgpu::TextureView,
-        depth_texture_view: &TextureView,
+        depth_texture_view: Option<&TextureView>,
         draw_object_commands: &Vec<DrawObject>,
         resolve_target: Option<&TextureView>,
         resolve_depth_target: Option<&TextureView>,
@@ -1800,14 +1826,18 @@ impl Renderer {
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some(&format!("Render scene command encoder")),
         });
-        let depth_stencil_attachment = RenderPassDepthStencilAttachment {
-            view: resolve_depth_target.unwrap_or(depth_texture_view),
-            depth_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Clear(1.0),
-                store: StoreOp::Store,
-            }),
-            stencil_ops: None,
-        };
+        let depth_stencil_attachment = depth_texture_view.map(|depth_texture_view| {
+            let depth_stencil_attachment = RenderPassDepthStencilAttachment {
+                view: resolve_depth_target.unwrap_or(depth_texture_view),
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: StoreOp::Store,
+                }),
+                stencil_ops: None,
+            };
+            depth_stencil_attachment
+        });
+
         let color_attachments = vec![Some(RenderPassColorAttachment {
             ops: Operations {
                 load: LoadOp::Clear(Color {
@@ -1832,7 +1862,7 @@ impl Renderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some(&format!("Scene render pass")),
                 color_attachments: &color_attachments,
-                depth_stencil_attachment: Some(depth_stencil_attachment),
+                depth_stencil_attachment,
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
@@ -2155,7 +2185,7 @@ impl Renderer {
     fn draw_objects_multiple_thread(
         &self,
         surface_texture: &wgpu::Texture,
-        depth_texture: &wgpu::Texture,
+        depth_texture_view: Option<&TextureView>,
         draw_object_commands: &Vec<DrawObject>,
     ) {
         let span = tracy_client::span!();
@@ -2392,8 +2422,8 @@ impl Renderer {
                     resolve_target: None,
                 },
             ];
-            let depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
 
+            let depth_view = depth_texture_view.cloned();
             ThreadPool::multithreaded_rendering().spawn({
                 move || {
                     let mesh_buffer = GpuVertexBufferImp {
@@ -2431,7 +2461,7 @@ impl Renderer {
                             &color_attachments,
                             None,
                             None,
-                            Some(&depth_view),
+                            depth_view.as_ref(),
                             None,
                             None,
                         );
@@ -2777,5 +2807,18 @@ impl Renderer {
                 },
             }
         }
+    }
+
+    pub fn base_render_pipeline(
+        &mut self,
+        builder: &BaseRenderPipelineBuilder,
+    ) -> Arc<BaseRenderPipeline> {
+        let device = self.wgpu_context.get_device();
+        self.base_render_pipeline_pool
+            .get(device, &self.shader_library, builder)
+    }
+
+    pub fn buffer(&self, handle: &BufferHandle) -> Option<Arc<Buffer>> {
+        self.buffers.get(handle).cloned()
     }
 }
