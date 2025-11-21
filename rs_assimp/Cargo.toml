@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 log = "0.4.28"
 russimp-sys = { version = "2.0.2", features = ["prebuilt"] }
-bitflags = "2.9.4"
-glam = { version = "0.30.8", features = ["mint", "serde"] }
+bitflags = "2.10.0"
+glam = { version = "0.30.9", features = ["mint", "serde"] }
 strum = "0.27.2"
 strum_macros = "0.27.2"
 lazy_static = "1.5.0"

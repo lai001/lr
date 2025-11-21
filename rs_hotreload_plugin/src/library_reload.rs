@@ -25,10 +25,10 @@ impl LibraryReload {
         self.libraries.is_empty() == false
     }
 
-    pub fn load_symbol<Signature>(
-        &self,
+    pub fn load_symbol<'a, Signature>(
+        &'a self,
         symbol_name: &str,
-    ) -> Result<libloading::Symbol<Signature>> {
+    ) -> Result<libloading::Symbol<'a, Signature>> {
         let library = self.libraries.last().ok_or(crate::error::Error::IO(
             std::io::ErrorKind::NotFound.into(),
             None,

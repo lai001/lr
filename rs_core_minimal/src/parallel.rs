@@ -12,7 +12,7 @@ impl ComputeDispatcher {
     pub fn dispatch_workgroups(
         &self,
         num_work_groups: glam::UVec3,
-        work: (impl FnMut(glam::UVec3, glam::UVec3, glam::UVec3, u32) + Send + Clone + 'static),
+        work: impl FnMut(glam::UVec3, glam::UVec3, glam::UVec3, u32) + Send + Clone + 'static,
     ) {
         let (sender, receiver) = std::sync::mpsc::channel();
         let groups = num_work_groups.element_product();

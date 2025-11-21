@@ -105,6 +105,7 @@ macro_rules! impl_default_load_future {
 mod test {
     use std::marker::PhantomData;
 
+    #[allow(unused)]
     struct LoadA<'a> {
         receiver: std::sync::mpsc::Receiver<()>,
         resource: Option<()>,
@@ -112,12 +113,14 @@ mod test {
     }
     impl_default_load_future!(LoadA<'a>);
 
+    #[allow(unused)]
     struct LoadB {
         receiver: std::sync::mpsc::Receiver<()>,
         resource: Option<()>,
     }
     impl_default_load_future!(LoadB);
 
+    #[allow(unused)]
     struct LoadC<'a> {
         receiver: std::sync::mpsc::Receiver<()>,
         resource: Option<()>,
@@ -125,6 +128,7 @@ mod test {
     }
     impl_default_load_future!(LoadC<'a>, receiver, resource);
 
+    #[allow(unused)]
     struct LoadD {
         receiver: std::sync::mpsc::Receiver<()>,
         resource: Option<()>,

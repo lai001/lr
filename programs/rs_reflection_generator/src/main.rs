@@ -1,4 +1,5 @@
 use clap::{Args, Parser};
+use ra_ap_hir::attach_db;
 use ra_ap_vfs::*;
 use rs_reflection_generator::reflection_context::{ParseResult, ReflectionContext};
 use std::{collections::HashMap, path::PathBuf};
@@ -19,7 +20,7 @@ pub enum Cli {
 fn generate(generator_args: GeneratorArgs) -> anyhow::Result<()> {
     let GeneratorArgs { manifest_file } = generator_args;
     let reflection_context = ReflectionContext::new(AbsPathBuf::assert_utf8(manifest_file))?;
-    let parse_results = reflection_context.parse_crate();
+    let parse_results = attach_db(reflection_context.db(), || reflection_context.parse_crate());
     let mut parse_results_map: HashMap<PathBuf, Vec<ParseResult>> = HashMap::new();
     for parse_result in parse_results {
         let entry = parse_results_map.entry(parse_result.target_output_suffix.clone());
@@ -41,7 +42,9 @@ fn generate(generator_args: GeneratorArgs) -> anyhow::Result<()> {
             let _ = std::fs::create_dir_all(&dir);
         }
         for parse_result in parse_results {
-            token_stream.extend(parse_result.generate_reflection_token_stream()?);
+            token_stream.extend(attach_db(reflection_context.db(), || {
+                parse_result.generate_reflection_token_stream()
+            })?);
         }
         log::debug!("{:?}", &output_path);
         std::fs::write(&output_path, token_stream.to_string())?;

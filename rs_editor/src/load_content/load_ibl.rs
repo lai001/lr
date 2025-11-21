@@ -60,9 +60,12 @@ impl<'a> LoadIBL<'a> {
                     let brdf_data_path = ibl_bake_cache_dir.join("brdf.dds");
                     let pre_filter_data_path = ibl_bake_cache_dir.join("pre_filter.dds");
                     let irradiance_data_path = ibl_bake_cache_dir.join("irradiance.dds");
-                    let brdf_data = std::fs::read(&brdf_data_path).map_err(|err| anyhow!("{err}, {:?}", &brdf_data_path))?;
-                    let pre_filter_data = std::fs::read(&pre_filter_data_path).map_err(|err| anyhow!("{err}, {:?}", &pre_filter_data_path))?;
-                    let irradiance_data = std::fs::read(&irradiance_data_path).map_err(|err| anyhow!("{err}, {:?}", &irradiance_data_path))?;
+                    let brdf_data = std::fs::read(&brdf_data_path)
+                        .map_err(|err| anyhow!("{err}, {:?}", &brdf_data_path))?;
+                    let pre_filter_data = std::fs::read(&pre_filter_data_path)
+                        .map_err(|err| anyhow!("{err}, {:?}", &pre_filter_data_path))?;
+                    let irradiance_data = std::fs::read(&irradiance_data_path)
+                        .map_err(|err| anyhow!("{err}, {:?}", &irradiance_data_path))?;
                     let ibl_baking = rs_artifact::ibl_baking::IBLBaking {
                         name,
                         url,

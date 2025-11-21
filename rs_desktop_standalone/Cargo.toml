@@ -19,13 +19,13 @@ plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 network = ["dep:rs_network", "rs_engine/network"]
 
 [dependencies]
-clap = { version = "4.5.49", features = ["derive"] }
+clap = { version = "4.5.53", features = ["derive"] }
 log = "0.4.28"
 env_logger = "0.11.8"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 bincode = { version = "2.0.1", features = ["serde"] }
-glam = { version = "0.30.8" }
+glam = { version = "0.30.9" }
 uuid = { version = "1.18.1", features = [
     "v4",
     "fast-rng",
@@ -35,11 +35,11 @@ uuid = { version = "1.18.1", features = [
 url = { version = "2.5.7", features = ["serde"] }
 percent-encoding = "2.3.2"
 winit = { version = "0.30.12" }
-egui = { version = "0.33.0" }
-egui_extras = { version = "0.33.0", features = ["all_loaders"] }
-egui-winit = { version = "0.33.0" }
+egui = { version = "0.33.2" }
+egui_extras = { version = "0.33.2", features = ["all_loaders"] }
+egui-winit = { version = "0.33.2" }
 rfd = "0.15.4"
-image = "0.25.8"
+image = "0.25.9"
 regex = "1.12.2"
 notify = "8.2.0"
 notify-debouncer-mini = { version = "0.7.0" }
@@ -49,9 +49,9 @@ path-slash = "0.2.1"
 md-5 = { version = "0.10.6" }
 anyhow = { version = "1.0.100" }
 lazy_static = "1.5.0"
-naga = { version = "27.0.0" }
+naga = { version = "27.0.3" }
 wgpu = "27.0.1"
-tracy-client = { version = "0.18.2", default-features = false }
+tracy-client = { version = "0.18.3", default-features = false }
 rs_proc_macros = { path = "../rs_proc_macros" }
 rs_render = { path = "../rs_render" }
 rs_foundation = { path = "../rs_foundation" }

@@ -13,7 +13,7 @@ editor = []
 dunce = "1.0.5"
 path-slash = "0.2.1"
 serde = { version = "1.0.228", features = ["derive", "rc"] }
-glam = { version = "0.30.8", features = ["mint", "serde"] }
+glam = { version = "0.30.9", features = ["mint", "serde"] }
 md-5 = { version = "0.10.6" }
 rayon = "1.11.0"
 lazy_static = "1.5.0"
@@ -26,4 +26,4 @@ downcast-rs = "2.0.2"
 rs_foundation = { path = "../rs_foundation" }
 
 [dev-dependencies]
-image = "0.25.8"
+image = "0.25.9"

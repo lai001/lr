@@ -1,3 +1,4 @@
+use crate::ui::misc::render_combo_box_not_null;
 use rs_core_minimal::name_generator::NameGenerator;
 use rs_engine::{
     content::{
@@ -9,7 +10,6 @@ use rs_engine::{
 };
 use rs_foundation::new::SingleThreadMutType;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
-use crate::ui::misc::render_combo_box_not_null;
 
 pub enum RenderTarget2DPropertyType {
     Width(u32),
@@ -382,7 +382,10 @@ impl ContentItemPropertyView {
                     ))
                 }
                 let format = &mut render_target_2d.format;
-                let candidate_items = vec![wgpu::TextureFormat::Rgba8Unorm, wgpu::TextureFormat::R8Unorm];
+                let candidate_items = vec![
+                    wgpu::TextureFormat::Rgba8Unorm,
+                    wgpu::TextureFormat::R8Unorm,
+                ];
                 if render_combo_box_not_null(ui, "Format", format, candidate_items) {
                     self.click = Some(EEventType::RenderTarget2D(
                         object.clone(),

@@ -60,7 +60,10 @@ pub fn build_asset_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseErro
 }
 
 pub fn build_content_file_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
-    url::Url::parse(&format!("{CONTENT_SCHEME}://{CONTENT_ROOT}/{}", name.as_ref()))
+    url::Url::parse(&format!(
+        "{CONTENT_SCHEME}://{CONTENT_ROOT}/{}",
+        name.as_ref()
+    ))
 }
 
 pub fn build_built_in_resouce_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {

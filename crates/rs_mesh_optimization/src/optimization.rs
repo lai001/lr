@@ -7,7 +7,7 @@ pub struct MeshoptMesh {
 }
 
 impl MeshoptMesh {
-    pub fn vertex_adapter(&self) -> meshopt::VertexDataAdapter {
+    pub fn vertex_adapter<'a>(&'a self) -> meshopt::VertexDataAdapter<'a> {
         let position_offset = std::mem::offset_of!(meshopt::Vertex, p);
         let vertex_stride = std::mem::size_of::<meshopt::Vertex>();
         let vertex_data = meshopt::typed_to_bytes(&self.vertices);

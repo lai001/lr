@@ -328,6 +328,10 @@ impl ReflectionContext {
     pub fn project_workspace(&self) -> &ProjectWorkspace {
         &self._project_workspace
     }
+
+    pub fn db(&self) -> &RootDatabase {
+        &self.db
+    }
 }
 
 fn load_project_workspace_progress(message: String) -> () {

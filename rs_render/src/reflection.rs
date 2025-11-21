@@ -25,7 +25,7 @@ impl VertexBufferLayoutBuilder {
         }
     }
 
-    pub fn get_vertex_buffer_layout(&self) -> Vec<VertexBufferLayout> {
+    pub fn get_vertex_buffer_layout<'a>(&'a self) -> Vec<VertexBufferLayout<'a>> {
         match &self.vertex_buffer_type {
             VertexBufferType::Interleaved(verifications) => {
                 assert_eq!(verifications.len(), self.vertex_attributes.len());

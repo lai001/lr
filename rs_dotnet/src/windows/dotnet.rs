@@ -5,7 +5,7 @@ use crate::error::StatusCode;
 use crate::windows::global_context::GLOBAL_CONTEXT;
 
 #[link(name = "nethost")]
-extern "stdcall" {
+extern "system" {
     pub fn get_hostfxr_path(
         buffer: *mut u16,
         buffer_size: *mut std::os::raw::c_ulonglong,
@@ -13,22 +13,22 @@ extern "stdcall" {
     ) -> std::os::raw::c_int;
 }
 
-pub type HostfxrInitializeForRuntimeConfigFn = unsafe extern "stdcall" fn(
+pub type HostfxrInitializeForRuntimeConfigFn = unsafe extern "system" fn(
     runtime_config_path: *const u16,
     parameters: *const libc::c_void,
     host_context_handle: *mut *mut libc::c_void,
 ) -> std::ffi::c_int;
 
-pub type HostfxrGetRuntimeDelegateFn = unsafe extern "stdcall" fn(
+pub type HostfxrGetRuntimeDelegateFn = unsafe extern "system" fn(
     host_context_handle: *const libc::c_void,
     r#type: std::ffi::c_int,
     delegate: *mut *mut libc::c_void,
 ) -> std::ffi::c_int;
 
 pub type HostfxrCloseFn =
-    unsafe extern "stdcall" fn(host_context_handle: *const libc::c_void) -> std::ffi::c_int;
+    unsafe extern "system" fn(host_context_handle: *const libc::c_void) -> std::ffi::c_int;
 
-pub type LoadAssemblyAndGetFunctionPointerFn = unsafe extern "stdcall" fn(
+pub type LoadAssemblyAndGetFunctionPointerFn = unsafe extern "system" fn(
     assembly_path: *const u16,
     type_name: *const u16,
     method_name: *const u16,

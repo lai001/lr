@@ -96,7 +96,7 @@ impl TextureDescriptorCreateInfo {
         }
     }
 
-    pub fn get(&self) -> wgpu::TextureDescriptor {
+    pub fn get<'a>(&'a self) -> wgpu::TextureDescriptor<'a> {
         wgpu::TextureDescriptor {
             label: match &self.label {
                 Some(label) => Some(&label),

@@ -9,9 +9,9 @@ ab_glyph = "0.2.32"
 ab_glyph_rasterizer = "0.1.10"
 max_rects = "1.0.2"
 moka = { version = "0.12.11", default-features = false, features = ["sync"] }
-image = "0.25.8"
+image = "0.25.9"
 parley = "0.6.0"
-harfrust = "0.3.2"
+harfrust = "0.4.0"
 linebender_resource_handle = { version = "0.1.1", default-features = false }
 rs_core_minimal = { path = "../../rs_core_minimal" }
 rs_pack = { path = "../rs_pack" }

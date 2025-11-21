@@ -250,7 +250,9 @@ impl VideoFrameExtractor {
         scaler
     }
 
-    fn find_next_packet(&mut self) -> Option<(ffmpeg_next::Stream, ffmpeg_next::Packet)> {
+    fn find_next_packet<'a>(
+        &'a mut self,
+    ) -> Option<(ffmpeg_next::Stream<'a>, ffmpeg_next::Packet)> {
         let mut packet_iter = self.format_input.packets();
         loop {
             match packet_iter.next() {

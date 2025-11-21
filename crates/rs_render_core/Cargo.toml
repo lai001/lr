@@ -17,6 +17,6 @@ wgpu26 = { package = "wgpu", version = "=26.0.1", features = [
     "naga-ir",
 ], optional = true }
 raw-window-handle = "0.6.2"
-tracy-client = { version = "0.18.2", default-features = false }
+tracy-client = { version = "0.18.3", default-features = false }
 pollster = "0.4.0"
 log = "0.4.28"

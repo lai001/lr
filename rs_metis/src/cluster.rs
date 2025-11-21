@@ -558,7 +558,7 @@ fn indexed_vertices_to_aabb2(
     aabb
 }
 
-fn get_vertex_adapter(vertices: &[VertexPosition]) -> meshopt::VertexDataAdapter {
+fn get_vertex_adapter<'a>(vertices: &'a [VertexPosition]) -> meshopt::VertexDataAdapter<'a> {
     let position_offset = std::mem::offset_of!(VertexPosition, p);
     let vertex_stride = std::mem::size_of::<VertexPosition>();
     let vertex_data = meshopt::typed_to_bytes(&vertices);

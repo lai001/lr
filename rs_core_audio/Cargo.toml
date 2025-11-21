@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bitflags = "2.9.4"
+bitflags = "2.10.0"
 log = "0.4.28"
 dasp = { version = "0.11.0", features = ["all"] }
 

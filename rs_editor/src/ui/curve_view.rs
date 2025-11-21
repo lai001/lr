@@ -108,7 +108,11 @@ pub fn draw(opend_curve: &mut Curve, ui: &mut Ui, data_source: &mut CurveViewDat
     }
 }
 
-fn control_points_ui(control_points: &[ControlPoint], radius: f32, color: Color32) -> Vec<Points> {
+fn control_points_ui(
+    control_points: &[ControlPoint],
+    radius: f32,
+    color: Color32,
+) -> Vec<Points<'_>> {
     let mut points = Vec::with_capacity(control_points.len());
     for control_point in control_points {
         points.push(
@@ -125,7 +129,7 @@ fn control_points_ui(control_points: &[ControlPoint], radius: f32, color: Color3
     points
 }
 
-fn lines(control_points: &[ControlPoint], color: Color32, points: usize) -> Vec<Line> {
+fn lines(control_points: &[ControlPoint], color: Color32, points: usize) -> Vec<Line<'_>> {
     if control_points.len() >= 2 {
         let mut knot_spacing: Vec<f64> = Vec::with_capacity(2 + control_points.len());
         knot_spacing.push(control_points[0].position.x);

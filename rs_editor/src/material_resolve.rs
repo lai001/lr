@@ -42,7 +42,7 @@ struct ResolveContext<'a> {
 }
 
 impl<'a> ResolveContext<'a> {
-    fn from_snarl(snarl: &Snarl<MaterialNode>) -> ResolveContext {
+    fn from_snarl(snarl: &'a Snarl<MaterialNode>) -> ResolveContext<'a> {
         let mut node_io_infos: HashMap<NodeId, NodeIOInfo> = HashMap::new();
         for (out_pin_id, in_pin_id) in snarl.wires() {
             node_io_infos
