@@ -72,20 +72,20 @@ impl EGUIRenderer {
             clipped_primitives,
             window_id,
         } = gui_render_output;
-        if clipped_primitives.is_empty() {
-            return;
-        }
         for (id, image_delta) in &textures_delta.set {
             self.egui_wgpu_renderer
                 .update_texture(&device, &queue, *id, image_delta);
         }
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("EGUIRenderer.CommandEncoder"),
-        });
         let Some(screen_descriptor) = self.screen_descriptors.get(&window_id) else {
             return;
         };
+        if clipped_primitives.is_empty() {
+            return;
+        }
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("EGUIRenderer.CommandEncoder"),
+        });
         let mut command_buffers = self.egui_wgpu_renderer.update_buffers(
             &device,
             &queue,
