@@ -66,8 +66,11 @@ fn prepreocess_builtin_shader() -> anyhow::Result<()> {
         std::fs::write(&bin_filepath, bin_data)
             .context(anyhow!("Can not write to file {:?}", &bin_filepath))?;
 
-        let compile_command = buildin_shader.as_ref().to_compile_command();
-        compile_commands.push(compile_command);
+        #[cfg(feature = "editor")]
+        {
+            let compile_command = buildin_shader.as_ref().to_compile_command();
+            compile_commands.push(compile_command);
+        }
     }
     let output_path = rs_core_minimal::file_manager::get_engine_root_dir().join(".vscode");
     if !output_path.exists() {
