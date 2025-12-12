@@ -1,0 +1,68 @@
+grammar;
+
+use std::str::FromStr;
+
+pub PP: bool = {
+    <t:Expr> => if t == 0 {false} else {true}
+};
+
+Expr: i64 = {
+    #[precedence(level="0")]
+    Atom,
+    #[precedence(level="1")] #[assoc(side="right")]
+    "-" <t:Atom> => -t,
+    "+" <t:Atom> => t,
+    "!" <t:Atom> => if t == 0 {1} else {0},
+    "~" <t:Atom> => !(t as i64),
+
+    #[precedence(level="2")] #[assoc(side="left")]
+    <l:Expr> "*" <r:Expr> => l * r,
+    <l:Expr> "/" <r:Expr> => l / r,
+    <l:Expr> "%" <r:Expr> => l % r,
+
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:Expr> "+" <r:Expr> => l + r,
+    <l:Expr> "-" <r:Expr> => l - r,
+
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expr> "<<" <r:Expr> => l << r,
+    <l:Expr> ">>" <r:Expr> => l >> r,
+
+    #[precedence(level="5")] #[assoc(side="left")]
+    <l:Expr> "<" <r:Expr>  => if l <  r {1} else {0},
+    <l:Expr> "<=" <r:Expr> => if l <= r {1} else {0},
+    <l:Expr> ">" <r:Expr>  => if l >  r {1} else {0},
+    <l:Expr> ">=" <r:Expr> => if l >= r {1} else {0},
+
+    #[precedence(level="6")] #[assoc(side="left")]
+    <l:Expr> "==" <r:Expr> => if l == r {1} else {0},
+    <l:Expr> "!=" <r:Expr> => if l != r {1} else {0},
+
+    #[precedence(level="7")] #[assoc(side="left")]
+    <l:Expr> "&" <r:Expr>  => (l as i64) & (r as i64),
+
+    #[precedence(level="8")] #[assoc(side="left")]
+    <l:Expr> "^" <r:Expr>  => (l as i64) ^ (r as i64),
+
+    #[precedence(level="9")] #[assoc(side="left")]
+    <l:Expr> "|" <r:Expr>  => (l as i64) | (r as i64),
+
+    #[precedence(level="10")] #[assoc(side="left")]
+    <l:Expr> "&&" <r:Expr> => if l != 0 && r != 0 {1} else {0},
+
+    #[precedence(level="11")] #[assoc(side="left")]
+    <l:Expr> "||" <r:Expr> => if l != 0 || r != 0 {1} else {0},
+};
+
+Atom: i64 = {
+    <n:Num> => n,
+    <b:BoolValue> => b,
+    "(" <t:Expr> ")" => t,
+};
+
+Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
+
+BoolValue: i64 = {
+    "true" => 1 as i64,
+    "false" => 0 as i64,
+};

@@ -1,0 +1,16 @@
+[package]
+name = "rs_cprep"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# rowan = "0.16.1"
+# utf8path = "0.3"
+# path-absolutize = "3"
+# tera = "1.20.1"
+logos = "0.15.1"
+regex = "1.12.2"
+lalrpop-util = { version = "0.22.2", features = ["lexer", "unicode"] }
+
+[build-dependencies]
+lalrpop = "0.20"
