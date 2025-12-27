@@ -94,6 +94,7 @@ impl PointLightComponent {
             NonZeroUsize::new(16).unwrap(),
             NonZeroUsize::new(16).unwrap(),
             false,
+            None,
         );
 
         let vertexes: Vec<MeshVertex3> = sphere_data

@@ -5,6 +5,7 @@ use rs_engine::{
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
     input_type::EInputType,
+    keys_detector::KeysDetector,
     logger::{Logger, LoggerConfiguration, SlotFlags},
 };
 use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
@@ -16,7 +17,8 @@ pub struct ApplicationContext {
     egui_winit_state: egui_winit::State,
     frame_sync: FrameSync,
     app: rs_engine::standalone::application::Application,
-    virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
+    // virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
+    keys_detector: KeysDetector,
 }
 
 impl ApplicationContext {
@@ -100,7 +102,8 @@ impl ApplicationContext {
             egui_winit_state,
             frame_sync,
             app,
-            virtual_key_code_states: HashMap::new(),
+            // virtual_key_code_states: HashMap::new(),
+            keys_detector: KeysDetector::new(),
         };
 
         application_context
@@ -129,17 +132,17 @@ impl ApplicationContext {
                     }
                     WindowEvent::CursorEntered { .. } => {
                         self.app
-                            .on_window_input(window, egui_ctx, EInputType::CursorEntered);
+                            .on_window_input(window, egui_ctx, &mut EInputType::CursorEntered);
                     }
                     WindowEvent::CursorLeft { .. } => {
                         self.app
-                            .on_window_input(window, egui_ctx, EInputType::CursorLeft);
+                            .on_window_input(window, egui_ctx, &mut EInputType::CursorLeft);
                     }
                     WindowEvent::CursorMoved { position, .. } => {
                         self.app.on_window_input(
                             window,
                             egui_ctx,
-                            EInputType::CursorMoved(position),
+                            &mut EInputType::CursorMoved(position),
                         );
                     }
                     WindowEvent::KeyboardInput { event, .. } => {
@@ -148,26 +151,30 @@ impl ApplicationContext {
                         else {
                             return;
                         };
-                        self.virtual_key_code_states
-                            .insert(virtual_keycode, event.state);
+                        self.keys_detector.on_key(virtual_keycode, event.state);
+                        // self.virtual_key_code_states
+                        //     .insert(virtual_keycode, event.state);
                         let consume = self.app.on_window_input(
                             window,
                             egui_ctx,
-                            EInputType::KeyboardInput(&self.virtual_key_code_states),
+                            &mut EInputType::KeyboardInput(&mut self.keys_detector),
                         );
-                        for item in consume {
-                            let _ = self.virtual_key_code_states.remove(&item);
+                        for key in consume {
+                            self.keys_detector.consume_key(&key);
                         }
                     }
                     WindowEvent::MouseWheel { delta, .. } => {
-                        self.app
-                            .on_window_input(window, egui_ctx, EInputType::MouseWheel(delta));
+                        self.app.on_window_input(
+                            window,
+                            egui_ctx,
+                            &mut EInputType::MouseWheel(delta),
+                        );
                     }
                     WindowEvent::MouseInput { state, button, .. } => {
                         self.app.on_window_input(
                             window,
                             egui_ctx,
-                            EInputType::MouseInput(state, button),
+                            &mut EInputType::MouseInput(state, button),
                         );
                     }
                     WindowEvent::RedrawRequested => {
@@ -186,7 +193,7 @@ impl ApplicationContext {
                             &mut self.engine,
                             self.egui_winit_state.egui_ctx().clone(),
                             window,
-                            &self.virtual_key_code_states,
+                            &mut self.keys_detector,
                         );
 
                         let output = self.ui_end(window, window_id);

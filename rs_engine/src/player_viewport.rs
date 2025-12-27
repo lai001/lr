@@ -1265,6 +1265,7 @@ impl PlayerViewport {
         &mut self,
         engine: &mut Engine,
         primitive_datas: impl Iterator<Item = &'a rs_core_minimal::primitive_data::PrimitiveData>,
+        primitive_state: Option<wgpu::PrimitiveState>,
     ) {
         if !self.debug_flags.contains(DebugFlags::Primitive) {
             return;
@@ -1296,9 +1297,7 @@ impl PlayerViewport {
             0,
             vec![*vertex_handle],
             vertex_count as u32,
-            EPipelineType::Builtin(EBuiltinPipelineType::Primitive(Some(
-                wgpu::PrimitiveState::default(),
-            ))),
+            EPipelineType::Builtin(EBuiltinPipelineType::Primitive(primitive_state)),
             None,
             None,
             vec![
@@ -1354,7 +1353,7 @@ impl PlayerViewport {
         }
     }
 
-    pub fn on_window_input(&mut self, ty: crate::input_type::EInputType) {
+    pub fn on_window_input(&mut self, ty: &mut crate::input_type::EInputType) {
         use crate::{
             camera_input_event_handle::{CameraInputEventHandle, DefaultCameraInputEventHandle},
             input_type::EInputType,
@@ -1376,8 +1375,8 @@ impl PlayerViewport {
             }
 
             EInputType::MouseInput(_, _) => {}
-            EInputType::KeyboardInput(virtual_key_code_states) => {
-                for (virtual_key_code, element_state) in virtual_key_code_states {
+            EInputType::KeyboardInput(keys_detector) => {
+                for (virtual_key_code, element_state) in keys_detector.virtual_key_code_states() {
                     DefaultCameraInputEventHandle::keyboard_input_handle(
                         &mut self.camera,
                         virtual_key_code,
@@ -1526,12 +1525,20 @@ impl PlayerViewport {
         &self.render_target_type
     }
 
-    pub fn set_grid_visible(&mut self, is_visible: bool) {
+    pub fn set_grid_visible(&mut self, engine: &mut Engine, is_visible: bool) {
+        let _ = engine;
         self.is_grid_visible = is_visible;
+        #[cfg(feature = "editor")]
+        if self.is_grid_visible && self.grid_draw_object.is_none() {
+            {
+                self.grid_draw_object =
+                    Some(engine.create_grid_draw_object(self.global_constants_handle.clone()));
+            }
+        }
     }
 
-    pub fn toggle_grid_visible(&mut self) {
-        self.is_grid_visible = !self.is_grid_visible;
+    pub fn toggle_grid_visible(&mut self, engine: &mut Engine) {
+        self.set_grid_visible(engine, !self.is_grid_visible);
     }
 
     pub fn get_grid_draw_object(&self) -> Option<&DrawObject> {
@@ -1555,5 +1562,9 @@ impl PlayerViewport {
 
     pub fn get_name(&self) -> &str {
         &self.name
+    }
+
+    pub fn input_mode(&self) -> EInputMode {
+        self._input_mode
     }
 }

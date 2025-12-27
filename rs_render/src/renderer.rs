@@ -134,6 +134,7 @@ impl Renderer {
         settings: RenderSettings,
     ) -> Result<Renderer> {
         let _span = tracy_client::span!();
+        log::trace!("{:#?}", wgpu_context);
         let main_window_id = {
             let binding = wgpu_context.get_window_ids();
             *binding.first().expect("Not null")

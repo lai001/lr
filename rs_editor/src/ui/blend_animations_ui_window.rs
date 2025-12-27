@@ -11,12 +11,12 @@ use rs_engine::{
     engine::Engine,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
+    keys_detector::KeysDetector,
     player_viewport::PlayerViewport,
     skeleton_animation_provider::SkeletonAnimationBlendType,
     skeleton_mesh_component::SkeletonMeshComponent,
 };
 use rs_foundation::new::SingleThreadMutType;
-use std::collections::HashMap;
 
 enum EventType {
     PreviewSkeletonUrl(Option<url::Url>),
@@ -29,7 +29,7 @@ enum EventType {
 pub struct BlendAnimationUIWindow {
     pub egui_winit_state: State,
     frame_sync: FrameSync,
-    virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
+    keys_detector: KeysDetector,
     input_mode: EInputMode,
     player_view_port: PlayerViewport,
     blend_animation: SingleThreadMutType<BlendAnimations>,
@@ -96,7 +96,7 @@ impl BlendAnimationUIWindow {
         Ok(BlendAnimationUIWindow {
             egui_winit_state,
             frame_sync,
-            virtual_key_code_states: HashMap::new(),
+            keys_detector: KeysDetector::new(),
             input_mode,
             player_view_port,
             blend_animation,
@@ -309,14 +309,14 @@ impl UIWindow for BlendAnimationUIWindow {
                 let winit::keyboard::PhysicalKey::Code(key_code) = event.physical_key else {
                     return;
                 };
-                self.virtual_key_code_states.insert(key_code, event.state);
+                self.keys_detector.on_key(key_code, event.state);
                 self.player_view_port.on_window_input(
-                    rs_engine::input_type::EInputType::KeyboardInput(&self.virtual_key_code_states),
+                    &mut rs_engine::input_type::EInputType::KeyboardInput(&mut self.keys_detector),
                 );
             }
             winit::event::WindowEvent::MouseWheel { delta, .. } => {
                 self.player_view_port
-                    .on_window_input(rs_engine::input_type::EInputType::MouseWheel(delta));
+                    .on_window_input(&mut rs_engine::input_type::EInputType::MouseWheel(delta));
             }
             winit::event::WindowEvent::MouseInput { state, button, .. } => {
                 if *button == winit::event::MouseButton::Right {
@@ -337,7 +337,7 @@ impl UIWindow for BlendAnimationUIWindow {
                 self.frame_sync.sync();
                 engine.window_redraw_requested_begin(window_id);
                 self.player_view_port.on_window_input(
-                    rs_engine::input_type::EInputType::KeyboardInput(&self.virtual_key_code_states),
+                    &mut rs_engine::input_type::EInputType::KeyboardInput(&mut self.keys_detector),
                 );
                 self.player_view_port.update_global_constants(engine);
 

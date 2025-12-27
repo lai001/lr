@@ -51,6 +51,7 @@ use rs_engine::{
     directional_light::DirectionalLight,
     frame_sync::{EOptions, FrameSync},
     input_mode::EInputMode,
+    keys_detector::KeysDetector,
     logger::SlotFlags,
     player_viewport::PlayerViewport,
     scene_node::SceneNode,
@@ -82,7 +83,7 @@ use std::{
 };
 use transform_gizmo_egui::{GizmoMode, GizmoOrientation};
 use winit::{
-    event::{ElementState, Event, WindowEvent},
+    event::{Event, WindowEvent},
     keyboard::KeyCode,
 };
 
@@ -157,7 +158,7 @@ pub struct EditorContext {
     egui_winit_state: egui_winit::State,
     data_source: DataSource,
     project_context: Option<ProjectContext>,
-    virtual_key_code_states: HashMap<winit::keyboard::KeyCode, winit::event::ElementState>,
+    keys_detector: KeysDetector,
     editor_ui: EditorUI,
     // #[cfg(any(feature = "plugin_shared_crate"))]
     // plugins: Vec<Box<dyn Plugin>>,
@@ -302,7 +303,8 @@ impl EditorContext {
             egui_winit_state,
             data_source,
             project_context: None,
-            virtual_key_code_states: HashMap::new(),
+            keys_detector: KeysDetector::new(),
+            // virtual_key_code_states: HashMap::new(),
             editor_ui,
             // #[cfg(feature = "plugin_shared_crate")]
             // plugins: vec![],
@@ -415,7 +417,7 @@ impl EditorContext {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.player_viewport
-                    .on_window_input(rs_engine::input_type::EInputType::MouseWheel(delta));
+                    .on_window_input(&mut rs_engine::input_type::EInputType::MouseWheel(delta));
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if *button == winit::event::MouseButton::Right
@@ -552,7 +554,7 @@ impl EditorContext {
                 self.player_viewport
                     .set_debug_flags(self.data_source.debug_flags);
                 self.player_viewport.on_window_input(
-                    rs_engine::input_type::EInputType::KeyboardInput(&self.virtual_key_code_states),
+                    &mut rs_engine::input_type::EInputType::KeyboardInput(&mut self.keys_detector),
                 );
 
                 self.player_viewport
@@ -942,30 +944,27 @@ impl EditorContext {
         let winit::keyboard::PhysicalKey::Code(virtual_keycode) = event.physical_key else {
             return;
         };
+        self.keys_detector.on_key(virtual_keycode, event.state);
 
-        self.virtual_key_code_states
-            .insert(virtual_keycode, event.state);
-
-        if Self::is_keys_pressed(
-            &mut self.virtual_key_code_states,
-            &[KeyCode::Backquote],
-            true,
-        ) {
+        if self
+            .keys_detector
+            .is_keys_pressed(&[KeyCode::Backquote], true)
+        {
             self.data_source.is_console_cmds_view_open =
                 !self.data_source.is_console_cmds_view_open;
         }
 
         if self.data_source.input_mode == EInputMode::UI {
-            if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyR], true) {
+            if self.keys_detector.is_keys_pressed(&[KeyCode::KeyR], true) {
                 self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::all_scale();
             }
-            if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyW], true) {
+            if self.keys_detector.is_keys_pressed(&[KeyCode::KeyW], true) {
                 self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::all_translate();
             }
-            if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::KeyE], true) {
+            if self.keys_detector.is_keys_pressed(&[KeyCode::KeyE], true) {
                 self.editor_ui.gizmo_view.gizmo_mode = GizmoMode::all_rotate();
             }
-            if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::Space], true) {
+            if self.keys_detector.is_keys_pressed(&[KeyCode::Space], true) {
                 let old_gizmo_orientation = &mut self.editor_ui.gizmo_view.gizmo_orientation;
                 match old_gizmo_orientation {
                     GizmoOrientation::Global => {
@@ -1009,31 +1008,28 @@ impl EditorContext {
             ),
         ]);
         for (key_code, debug_shading_type) in shading_types {
-            if Self::is_keys_pressed(
-                &mut self.virtual_key_code_states,
-                &[KeyCode::AltLeft, key_code],
-                true,
-            ) {
+            if self
+                .keys_detector
+                .is_keys_pressed(&[KeyCode::AltLeft, key_code], true)
+            {
                 self.data_source.debug_shading_type = debug_shading_type;
                 self.player_viewport
                     .set_debug_shading(self.data_source.debug_shading_type);
             }
         }
 
-        if Self::is_keys_pressed(
-            &mut self.virtual_key_code_states,
-            &[KeyCode::AltLeft, KeyCode::F4],
-            true,
-        ) {
+        if self
+            .keys_detector
+            .is_keys_pressed(&[KeyCode::AltLeft, KeyCode::F4], true)
+        {
             event_loop_window_target.exit();
         }
 
-        if Self::is_keys_pressed(
-            &mut self.virtual_key_code_states,
-            &[KeyCode::ControlLeft, KeyCode::KeyG],
-            false,
-        ) {
-            self.player_viewport.toggle_grid_visible();
+        if self
+            .keys_detector
+            .is_keys_pressed(&[KeyCode::ControlLeft, KeyCode::KeyG], false)
+        {
+            self.player_viewport.toggle_grid_visible(&mut self.engine);
             let is_show_debug = !self.data_source.is_show_debug;
             if let Some(level) = &mut self.data_source.level {
                 let mut level = level.borrow_mut();
@@ -1046,48 +1042,19 @@ impl EditorContext {
             self.data_source.is_show_debug = is_show_debug;
         }
 
-        if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::Escape], true) {
+        if self.keys_detector.is_keys_pressed(&[KeyCode::Escape], true) {
             self.editor_ui.object_property_view.selected_object = None;
         }
 
-        if Self::is_keys_pressed(
-            &mut self.virtual_key_code_states,
-            &[KeyCode::ControlLeft, KeyCode::KeyS],
-            true,
-        ) {
+        if self
+            .keys_detector
+            .is_keys_pressed(&[KeyCode::ControlLeft, KeyCode::KeyS], true)
+        {
             self.save_current_project();
         }
 
-        if Self::is_keys_pressed(&mut self.virtual_key_code_states, &[KeyCode::F5], true) {
+        if self.keys_detector.is_keys_pressed(&[KeyCode::F5], true) {
             self.open_standalone_window(event_loop_window_target, StandaloneSimulationType::Single);
-        }
-    }
-
-    fn is_keys_pressed(
-        virtual_key_code_states: &mut HashMap<KeyCode, ElementState>,
-        keys: &[KeyCode],
-        is_consume: bool,
-    ) -> bool {
-        let mut states: HashMap<KeyCode, ElementState> = HashMap::new();
-        for key in keys {
-            if let Some(state) = virtual_key_code_states.get(key) {
-                states.insert(*key, *state);
-            }
-        }
-        if states.keys().len() == keys.len() {
-            for state in states.values() {
-                if *state == ElementState::Released {
-                    return false;
-                }
-            }
-            if is_consume {
-                for key in states.keys() {
-                    virtual_key_code_states.remove(key);
-                }
-            }
-            true
-        } else {
-            false
         }
     }
 

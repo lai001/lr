@@ -7,6 +7,7 @@ pub mod channel;
 pub mod id_generator;
 pub mod new;
 pub mod profiler;
+pub mod round_to_multiple;
 
 #[repr(C)]
 #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
@@ -204,6 +205,14 @@ pub fn is_program_in_path(program: &str) -> bool {
 
 pub fn size_padding_of(current_size: usize, align: usize) -> usize {
     (alignment(current_size as isize, align as isize) as usize) - current_size
+}
+
+pub fn round_down_to_multiple(value: f32, multiple: f32) -> f32 {
+    (value / multiple).floor() * multiple
+}
+
+pub fn round_up_to_multiple(value: f32, multiple: f32) -> f32 {
+    (value / multiple).ceil() * multiple
 }
 
 #[cfg(test)]

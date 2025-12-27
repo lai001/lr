@@ -1,6 +1,6 @@
 mod c_lexer;
-pub mod processor;
 pub mod error;
+pub mod processor;
 
 lalrpop_util::lalrpop_mod!(pub(crate) pp_expr);
 
@@ -10,7 +10,7 @@ mod test {
 
     #[test]
     fn pp_test() {
-        let  parser = pp_expr::PPParser::new();
+        let parser = pp_expr::PPParser::new();
         assert_eq!(parser.parse("22"), Ok(true));
         assert_eq!(parser.parse("(22)"), Ok(true));
         assert_eq!(parser.parse("((((22))))"), Ok(true));

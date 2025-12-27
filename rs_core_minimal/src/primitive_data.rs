@@ -108,7 +108,7 @@ impl PrimitiveData {
         ]
     }
 
-    pub fn cube_lines() -> PrimitiveData {
+    pub fn cube_lines(color: Option<glam::Vec4>) -> PrimitiveData {
         let front_top_left = glam::vec3(-1.0, 1.0, -1.0);
         let front_top_right = glam::vec3(1.0, 1.0, -1.0);
         let front_bottom_left = glam::vec3(-1.0, -1.0, -1.0);
@@ -146,8 +146,9 @@ impl PrimitiveData {
         .collect();
 
         let vertex_count = 8;
+        let color = color.unwrap_or_else(|| glam::vec4(0.0, 0.0, 0.0, 1.0));
         PrimitiveData {
-            vertex_colors: vec![glam::vec4(0.0, 0.0, 0.0, 1.0); vertex_count],
+            vertex_colors: vec![color; vertex_count],
             vertex_positions: vec![
                 front_top_left,
                 front_top_right,
@@ -180,6 +181,7 @@ impl PrimitiveData {
         h_subdivide: NonZeroUsize,
         v_subdivide: NonZeroUsize,
         is_cylinder: bool,
+        color: Option<glam::Vec4>,
     ) -> PrimitiveData {
         let h_subdivide = h_subdivide.get();
         let v_subdivide = v_subdivide.get();
@@ -260,9 +262,10 @@ impl PrimitiveData {
             *position = *position * radius;
         }
 
+        let color = color.unwrap_or_else(|| Default::default());
         primitive_data
             .vertex_colors
-            .resize(primitive_data.vertex_positions.len(), Default::default());
+            .resize(primitive_data.vertex_positions.len(), color);
         primitive_data
             .vertex_normals
             .resize(primitive_data.vertex_positions.len(), Default::default());

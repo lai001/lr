@@ -105,7 +105,7 @@ impl CollisionComponent {
         let _ = files;
         match self.collision_type {
             ECollisionType::Cube => {
-                let cube = PrimitiveData::cube_lines();
+                let cube = PrimitiveData::cube_lines(Some(rs_core_minimal::color::BLUE));
                 let mut vertex: Vec<MeshVertex3> = Vec::with_capacity(cube.into_iter().count());
 
                 for (_, vertex_position, ..) in cube.into_iter() {

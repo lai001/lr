@@ -67,21 +67,21 @@ impl UIWindow for StandaloneUiWindow {
                 self.application.on_window_input(
                     window,
                     self.egui_winit_state.egui_ctx(),
-                    EInputType::CursorEntered,
+                    &mut EInputType::CursorEntered,
                 );
             }
             WindowEvent::CursorLeft { .. } => {
                 self.application.on_window_input(
                     window,
                     self.egui_winit_state.egui_ctx(),
-                    EInputType::CursorLeft,
+                    &mut EInputType::CursorLeft,
                 );
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.application.on_window_input(
                     window,
                     self.egui_winit_state.egui_ctx(),
-                    EInputType::CursorMoved(position),
+                    &mut EInputType::CursorMoved(position),
                 );
             }
             WindowEvent::KeyboardInput { event, .. } => {
@@ -113,7 +113,7 @@ impl UIWindow for StandaloneUiWindow {
                 let consume = self.application.on_window_input(
                     window,
                     self.egui_winit_state.egui_ctx(),
-                    EInputType::KeyboardInput(&self.keys_detector.virtual_key_code_states()),
+                    &mut EInputType::KeyboardInput(&mut self.keys_detector),
                 );
                 self.keys_detector.consume_keys(&consume);
             }
@@ -121,14 +121,14 @@ impl UIWindow for StandaloneUiWindow {
                 self.application.on_window_input(
                     window,
                     self.egui_winit_state.egui_ctx(),
-                    EInputType::MouseWheel(delta),
+                    &mut EInputType::MouseWheel(delta),
                 );
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 self.application.on_window_input(
                     window,
                     self.egui_winit_state.egui_ctx(),
-                    EInputType::MouseInput(state, button),
+                    &mut EInputType::MouseInput(state, button),
                 );
             }
             WindowEvent::RedrawRequested => {
@@ -138,7 +138,7 @@ impl UIWindow for StandaloneUiWindow {
                     engine,
                     self.egui_winit_state.egui_ctx().clone(),
                     window,
-                    self.keys_detector.virtual_key_code_states(),
+                    &mut self.keys_detector,
                 );
                 engine.send_render_command(RenderCommand::UiOutput(super::misc::ui_end(
                     &mut self.egui_winit_state,

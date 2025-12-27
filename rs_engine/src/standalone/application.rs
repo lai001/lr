@@ -249,12 +249,12 @@ impl Application {
         &mut self,
         #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
         ctx: &egui::Context,
-        ty: crate::input_type::EInputType,
+        ty: &mut crate::input_type::EInputType,
     ) -> Vec<winit::keyboard::KeyCode> {
         let _ = ctx;
         #[cfg(not(target_os = "android"))]
         let _ = window;
-        self.player_view_port.on_window_input(ty.clone());
+        self.player_view_port.on_window_input(ty);
         #[cfg(feature = "plugin_shared_crate")]
         let mut consume = vec![];
         #[cfg(not(feature = "plugin_shared_crate"))]
@@ -264,9 +264,9 @@ impl Application {
             let mut plugins = self.plugins.borrow_mut();
             for plugin in plugins.iter_mut() {
                 #[cfg(not(target_os = "android"))]
-                let mut plugin_consume = plugin.on_window_input(window, ctx.clone(), ty.clone());
+                let mut plugin_consume = plugin.on_window_input(window, ctx.clone(), ty);
                 #[cfg(target_os = "android")]
-                let mut plugin_consume = plugin.on_window_input(ctx.clone(), ty.clone());
+                let mut plugin_consume = plugin.on_window_input(ctx.clone(), ty);
                 consume.append(&mut plugin_consume);
             }
         }
@@ -278,10 +278,7 @@ impl Application {
         engine: &mut Engine,
         ctx: egui::Context,
         #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
-        #[cfg(not(target_os = "android"))] virtual_key_code_states: &std::collections::HashMap<
-            winit::keyboard::KeyCode,
-            winit::event::ElementState,
-        >,
+        #[cfg(not(target_os = "android"))] keys_detector: &mut crate::keys_detector::KeysDetector,
     ) {
         let _ = ctx;
         #[cfg(not(target_os = "android"))]
@@ -292,8 +289,8 @@ impl Application {
 
         #[cfg(not(target_os = "android"))]
         self.player_view_port
-            .on_window_input(crate::input_type::EInputType::KeyboardInput(
-                virtual_key_code_states,
+            .on_window_input(&mut crate::input_type::EInputType::KeyboardInput(
+                keys_detector,
             ));
 
         let active_level = self.current_active_level.clone();
@@ -418,6 +415,8 @@ impl Application {
         player_viewport: &mut PlayerViewport,
         #[cfg(feature = "plugin_shared_crate")] plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
     ) -> Vec<rs_network::server::Connection> {
+        let _span = tracy_client::span!();
+
         use std::collections::HashMap;
 
         let mut endpoint_data: EndpointData = EndpointData::default();
@@ -592,6 +591,7 @@ impl Application {
         client: &mut rs_network::client::Client,
         #[cfg(feature = "plugin_shared_crate")] plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
     ) -> ClientTickResultType {
+        let _span = tracy_client::span!();
         let mut result = ClientTickResultType::None;
         let mut endpoint_data: EndpointData = EndpointData::default();
         {
@@ -730,6 +730,7 @@ impl Application {
     }
 
     fn net_tick(&mut self, engine: &mut Engine) {
+        let _span = tracy_client::span!();
         if self.net_module.is_authority {
             if let Some(server) = &mut self.net_module.server {
                 let mut active_level = self.current_active_level.borrow_mut();

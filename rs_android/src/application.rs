@@ -178,9 +178,7 @@ impl ApplicationContext {
         self.keys_detector.on_key(key_code, element_state);
         self.app.on_window_input(
             self.gui.egui_context(),
-            rs_engine::input_type::EInputType::KeyboardInput(
-                self.keys_detector.virtual_key_code_states(),
-            ),
+            &mut rs_engine::input_type::EInputType::KeyboardInput(&mut self.keys_detector),
         );
     }
 
@@ -194,9 +192,7 @@ impl ApplicationContext {
         self.keys_detector.on_key(key_code, element_state);
         self.app.on_window_input(
             self.gui.egui_context(),
-            rs_engine::input_type::EInputType::KeyboardInput(
-                self.keys_detector.virtual_key_code_states(),
-            ),
+            &mut rs_engine::input_type::EInputType::KeyboardInput(&mut self.keys_detector),
         );
     }
 }

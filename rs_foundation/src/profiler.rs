@@ -4,8 +4,8 @@ use std::{collections::HashMap, sync::Arc};
 
 struct STTimeTrace {
     label: String,
-    start: std::time::Instant,
-    end: Option<std::time::Instant>,
+    begin: std::time::Instant,
+    end: std::time::Instant,
 }
 
 pub struct TimeTrace {
@@ -14,51 +14,24 @@ pub struct TimeTrace {
 
 impl TimeTrace {
     pub fn begin(label: String) -> TimeTrace {
+        let now = std::time::Instant::now();
         let inner = STTimeTrace {
             label,
-            start: std::time::Instant::now(),
-            end: None,
+            begin: now,
+            end: now,
         };
         TimeTrace {
             inner: Mutex::new(inner),
         }
     }
 
-    pub fn end(&self) -> String {
-        self.inner.lock().unwrap().end = Some(std::time::Instant::now());
-        self.to_string()
-    }
-
-    // pub fn dump_end(mut self) {
-    //     self.end = Some(std::time::Instant::now());
-    //     println!("{}", self.to_string());
-    // }
-
-    pub fn get_duration(&self) -> std::time::Duration {
+    pub fn delta_duration(&self) -> std::time::Duration {
+        let now = std::time::Instant::now();
         let mut inner = self.inner.lock().unwrap();
-        if inner.end.is_none() {
-            inner.end = Some(std::time::Instant::now());
-        }
-        let duration = inner.end.unwrap() - inner.start;
+        inner.end = now;
+        let duration = inner.end - inner.begin;
+        inner.begin = now;
         duration
-    }
-
-    pub fn get_duration_seconds(&self) -> f32 {
-        let mut inner = self.inner.lock().unwrap();
-        if inner.end.is_none() {
-            inner.end = Some(std::time::Instant::now());
-        }
-        let duration = inner.end.unwrap() - inner.start;
-        duration.as_secs_f32()
-    }
-
-    pub fn get_duration_millis(&self) -> u128 {
-        let mut inner = self.inner.lock().unwrap();
-        if inner.end.is_none() {
-            inner.end = Some(std::time::Instant::now());
-        }
-        let duration = inner.end.unwrap() - inner.start;
-        duration.as_millis()
     }
 
     pub fn get_label(&self) -> String {
@@ -69,12 +42,8 @@ impl TimeTrace {
 
 impl Display for TimeTrace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let duration = self.get_duration_seconds();
-        write!(
-            f,
-            "{}",
-            format!("[{}] {}s", self.inner.lock().unwrap().label, duration)
-        )
+        let duration = self.delta_duration();
+        write!(f, "{}", format!("{}s", duration.as_secs_f32()))
     }
 }
 

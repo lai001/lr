@@ -267,11 +267,11 @@ rs_foundation = { path = "@engine_path@/rs_foundation" }
 rs_network = { path = "@engine_path@/crates/rs_network", optional = true }
 rs_artifact = { path = "@engine_path@/rs_artifact" }
 
-[lib]
-crate-type = ["dylib"]
+# [lib]
+# crate-type = ["dylib"]
 
-[profile.dev.package."*"]
-opt-level = 2
+# [profile.dev.package."*"]
+# opt-level = 2
     "#;
 }
 
