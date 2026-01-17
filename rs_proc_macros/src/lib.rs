@@ -1,11 +1,15 @@
 mod load_plugin;
 mod multiple_thread_functions_generator;
+mod plugin_project_file_path;
 mod shader;
 mod string_extension;
 mod token_stream_extension;
 mod uniform;
 
-use crate::load_plugin::load_static_plugins_macro_impl;
+use crate::{
+    load_plugin::load_static_plugins_macro_impl,
+    plugin_project_file_path::plugin_project_file_path_macro_impl,
+};
 use multiple_thread_functions_generator::multiple_thread_functions_generator_macro_derive_impl;
 use proc_macro::TokenStream;
 use shader::global_shader_macro_derive_impl;
@@ -53,4 +57,9 @@ pub fn shader_uniform(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn load_static_plugins(input: TokenStream) -> TokenStream {
     load_static_plugins_macro_impl(input)
+}
+
+#[proc_macro]
+pub fn plugin_project_file_path(input: TokenStream) -> TokenStream {
+    plugin_project_file_path_macro_impl(input)
 }

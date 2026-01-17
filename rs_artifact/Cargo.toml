@@ -25,6 +25,9 @@ uuid = { version = "1.18.1", features = [
 rs_foundation = { path = "../rs_foundation" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 rs_render_types = { path = "../rs_render_types" }
+rs_texpress = { path = "../crates/rs_texpress", default-features = false, features = [
+    "standalone",
+] }
 
 [dev-dependencies]
 serde_json = "1.0.145"

@@ -1,6 +1,7 @@
 pub mod color;
 pub mod error;
 pub mod file_manager;
+pub mod file_type;
 pub mod frustum;
 pub mod line_3d;
 pub mod misc;

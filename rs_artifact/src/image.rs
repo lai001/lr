@@ -20,6 +20,7 @@ pub enum ImageFormat {
     Farbfeld,
     Avif,
     Qoi,
+    Ktx2,
 }
 
 impl ImageFormat {
@@ -40,7 +41,7 @@ impl ImageFormat {
             image::ImageFormat::Farbfeld => ImageFormat::Farbfeld,
             image::ImageFormat::Avif => ImageFormat::Avif,
             image::ImageFormat::Qoi => ImageFormat::Qoi,
-            _ => todo!(),
+            _ => panic!("Not Supported"),
         }
     }
 
@@ -61,6 +62,7 @@ impl ImageFormat {
             ImageFormat::Farbfeld => image::ImageFormat::Farbfeld,
             ImageFormat::Avif => image::ImageFormat::Avif,
             ImageFormat::Qoi => image::ImageFormat::Qoi,
+            ImageFormat::Ktx2 => panic!("Not Supported"),
         }
     }
 }

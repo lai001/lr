@@ -3,7 +3,12 @@ use quote::quote;
 use std::path::Path;
 use toml_edit::DocumentMut;
 
-fn is_plugin(doc: &DocumentMut) -> bool {
+pub struct PluginInfo {
+    pub name: String,
+    pub project_path: std::path::PathBuf,
+}
+
+pub fn is_plugin(doc: &DocumentMut) -> bool {
     let is_plugin = doc
         .get("package")
         .and_then(|pkg| pkg.as_table_like())
@@ -16,43 +21,61 @@ fn is_plugin(doc: &DocumentMut) -> bool {
     is_plugin.unwrap_or(false)
 }
 
+pub fn fetch_plugin_info(program_name: &str) -> Vec<PluginInfo> {
+    let mut plugin_infos: Vec<PluginInfo> = vec![];
+    let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join(program_name)
+        .join("Cargo.toml");
+    let contents = std::fs::read_to_string(manifest_path).unwrap();
+    let doc = contents.parse::<DocumentMut>().unwrap();
+    let table = doc["dependencies"].as_table().unwrap();
+    for (crate_name, crate_properties) in table.iter() {
+        let Some(crate_properties) = crate_properties.as_value() else {
+            continue;
+        };
+        let Some(inline_table) = crate_properties.as_inline_table() else {
+            continue;
+        };
+        let Some((_, path)) = inline_table.get_key_value("path") else {
+            continue;
+        };
+        let Some(Ok(path)) = path.as_str().map(|x| Path::new(x).canonicalize()) else {
+            continue;
+        };
+        let crate_manifest_path = path.join("Cargo.toml");
+        let Ok(Ok(doc)) =
+            std::fs::read_to_string(&crate_manifest_path).map(|x| x.parse::<DocumentMut>())
+        else {
+            continue;
+        };
+        let is_plugin = is_plugin(&doc);
+        if is_plugin {
+            let project_file_path = path
+                .join(format!("{}.rsproject", crate_name))
+                .canonicalize();
+            if let Ok(project_file_path) = project_file_path {
+                let info = PluginInfo {
+                    name: crate_name.to_string(),
+                    project_path: project_file_path,
+                };
+                plugin_infos.push(info);
+            }
+        }
+    }
+    plugin_infos
+}
+
 pub fn load_static_plugins_macro_impl(input: TokenStream) -> TokenStream {
     let mut create_plugins = String::new();
     let program = input.to_string();
     match program.as_str() {
         "rs_editor" | "rs_desktop_standalone" | "rs_android" => {
-            let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("..")
-                .join(program.as_str())
-                .join("Cargo.toml");
-            let contents = std::fs::read_to_string(manifest_path).unwrap();
-            let doc = contents.parse::<DocumentMut>().unwrap();
-            let table = doc["dependencies"].as_table().unwrap();
-            for (crate_name, crate_properties) in table.iter() {
-                let Some(crate_properties) = crate_properties.as_value() else {
-                    continue;
-                };
-                let Some(inline_table) = crate_properties.as_inline_table() else {
-                    continue;
-                };
-                let Some((_, path)) = inline_table.get_key_value("path") else {
-                    continue;
-                };
-                let Some(Ok(path)) = path.as_str().map(|x| Path::new(x).canonicalize()) else {
-                    continue;
-                };
-                let crate_manifest_path = path.join("Cargo.toml");
-                let Ok(Ok(doc)) =
-                    std::fs::read_to_string(&crate_manifest_path).map(|x| x.parse::<DocumentMut>())
-                else {
-                    continue;
-                };
-                let is_plugin = is_plugin(&doc);
-                if is_plugin {
-                    let crate_name = quote::format_ident!("{}", crate_name);
-                    let stream = quote! { #crate_name::create_plugin(), };
-                    create_plugins += &stream.to_string();
-                }
+            let plugin_infos = fetch_plugin_info(&program);
+            for plugin_info in plugin_infos {
+                let crate_name = quote::format_ident!("{}", plugin_info.name);
+                let stream = quote! { #crate_name::create_plugin(), };
+                create_plugins += &stream.to_string();
             }
         }
         _ => {}

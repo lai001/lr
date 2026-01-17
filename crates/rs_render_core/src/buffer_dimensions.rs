@@ -28,6 +28,26 @@ impl BufferDimensions {
         }
     }
 
+    pub fn from_texture_format(
+        width: usize,
+        height: usize,
+        texture_format: &wgpu::TextureFormat,
+    ) -> Option<BufferDimensions> {
+        let not_supported = vec![
+            wgpu::TextureFormat::Depth24PlusStencil8,
+            wgpu::TextureFormat::Depth32FloatStencil8,
+            wgpu::TextureFormat::NV12,
+            wgpu::TextureFormat::P010,
+        ];
+        if not_supported.contains(texture_format) {
+            return None;
+        }
+        let block_copy_size = texture_format.block_copy_size(None)? as usize;
+        let components = texture_format.components_with_aspect(wgpu::TextureAspect::All) as usize;
+        let bytes_per_pixel = block_copy_size / components;
+        Some(Self::new(width, height, bytes_per_pixel))
+    }
+
     pub fn get_padded_width(&self) -> usize {
         self.padded_width
     }

@@ -110,14 +110,15 @@ task("code_workspace")
             ["RUSSIMP_PACKAGE_DIR"] = russimp_prebuild_dir
         }
         if launch_type == "standalone" and plat == "android" then
+            local android_platform = 30
             local ndk_path = (get_config("ndk") and { get_config("ndk") } or { os.getenv("NDK_HOME") })[1]
             ndk_path = (ndk_path and { ndk_path } or { os.getenv("NDK_ROOT") })[1]
             if ndk_path == nil then
                 os.raise("NDK not found")
             end
             local host = (get_config("host") and { get_config("host") } or { "windows" })[1]
-            extraEnv["TARGET_CC"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android30-clang.cmd", host))
-            extraEnv["TARGET_CXX"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android30-clang++.cmd", host))
+            extraEnv["TARGET_CC"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android%d-clang.cmd", host, android_platform))
+            extraEnv["TARGET_CXX"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android%d-clang++.cmd", host, android_platform))
         end
 
         if launch_type == "editor" then

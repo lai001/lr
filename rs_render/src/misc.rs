@@ -74,11 +74,24 @@ pub(crate) fn find_or_insert_bind_groups(
 }
 
 pub fn find_most_compatible_texture_usages(format: wgpu::TextureFormat) -> wgpu::TextureUsages {
-    let _ = format;
-    return wgpu::TextureUsages::all() - wgpu::TextureUsages::STORAGE_ATOMIC;
+    if format.is_compressed() {
+        return wgpu::TextureUsages::all()
+            - wgpu::TextureUsages::STORAGE_ATOMIC
+            - wgpu::TextureUsages::STORAGE_BINDING
+            - wgpu::TextureUsages::RENDER_ATTACHMENT;
+    } else {
+        return wgpu::TextureUsages::all() - wgpu::TextureUsages::STORAGE_ATOMIC;
+    }
 }
 
 pub fn is_compatible(format: wgpu::TextureFormat, usages: wgpu::TextureUsages) -> bool {
+    if format.is_compressed() {
+        if usages.contains(wgpu::TextureUsages::STORAGE_BINDING)
+            || usages.contains(wgpu::TextureUsages::RENDER_ATTACHMENT)
+        {
+            return false;
+        }
+    }
     if format == wgpu::TextureFormat::Rgba8Unorm {
         if usages.contains(wgpu::TextureUsages::STORAGE_ATOMIC) {
             return false;

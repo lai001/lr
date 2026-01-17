@@ -14,6 +14,10 @@ pub struct TextureFile {
     pub image_reference: Option<url::Url>,
     pub is_virtual_texture: bool,
     pub virtual_image_reference: Option<String>,
+    #[serde(default = "bool::default")]
+    pub is_compressed: bool,
+    #[serde(default)]
+    pub compressed_texture_url: Option<url::Url>,
 }
 
 impl Asset for TextureFile {
@@ -33,6 +37,8 @@ impl TextureFile {
             image_reference: None,
             is_virtual_texture: false,
             virtual_image_reference: None,
+            is_compressed: false,
+            compressed_texture_url: None,
         }
     }
 

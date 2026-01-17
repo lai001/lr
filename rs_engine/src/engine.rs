@@ -1424,6 +1424,23 @@ impl Engine {
         &mut self.resource_manager
     }
 
+    pub fn create_texture_from_data(
+        &mut self,
+        url: &url::Url,
+        info: TextureDescriptorCreateInfo,
+        data: InitTextureData,
+    ) -> crate::handle::TextureHandle {
+        let handle = self.resource_manager.next_texture(url.clone());
+        let create_texture = CreateTexture {
+            handle: *handle,
+            texture_descriptor_create_info: info,
+            init_data: Some(data),
+        };
+        let render_command = RenderCommand::CreateTexture(create_texture);
+        self.render_thread_mode.send_command(render_command);
+        handle
+    }
+
     pub fn create_texture(
         &mut self,
         url: &url::Url,

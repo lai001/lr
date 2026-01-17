@@ -2,6 +2,7 @@ pub mod artifact;
 pub mod asset;
 pub mod bincode_legacy;
 pub mod content_type;
+pub mod derive_data;
 pub mod endian;
 pub mod error;
 pub mod file_header;

@@ -185,6 +185,7 @@ fn draw_content(
                                             }
                                         });
                                     }
+                                    EFileType::Texture(_) => unimplemented!(),
                                 }
                             });
                         });
@@ -230,5 +231,6 @@ fn render_thumbnail(file: &AssetFile, thumbnail_cache: &mut ThumbnailCache, ui: 
         EFileType::WAV | EFileType::MP3 => {
             ui.image(egui::include_image!("../../../Resource/Editor/sound.svg"));
         }
+        EFileType::Texture(_) => unimplemented!(),
     }
 }

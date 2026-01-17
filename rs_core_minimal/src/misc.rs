@@ -49,6 +49,42 @@ pub fn get_md5_from_string(text: &str) -> String {
     result
 }
 
+pub fn get_md5_from_reader<R: std::io::Read>(reader: &mut R) -> String {
+    let mut buf: Vec<u8> = vec![];
+    let _ = reader.read_to_end(&mut buf);
+    let mut hasher = <md5::Md5 as md5::Digest>::new();
+    md5::Digest::update(&mut hasher, buf);
+    let result = md5::Digest::finalize(hasher);
+    let result = result.to_ascii_lowercase();
+    let result = result
+        .iter()
+        .fold("".to_string(), |acc, x| format!("{acc}{:x?}", x));
+    result
+}
+
+pub fn get_md5_from_buf(buf: &Vec<u8>) -> String {
+    let mut cursor = std::io::Cursor::new(buf);
+    get_md5_from_reader(&mut cursor)
+}
+
+pub fn get_sha256_from_reader<R: std::io::Read>(reader: &mut R) -> String {
+    let mut buf: Vec<u8> = vec![];
+    let _ = reader.read_to_end(&mut buf);
+    let mut hasher = <sha2::Sha256 as sha2::Digest>::new();
+    sha2::Digest::update(&mut hasher, buf);
+    let result = sha2::Digest::finalize(hasher);
+    let result = result.to_ascii_lowercase();
+    let result = result
+        .iter()
+        .fold("".to_string(), |acc, x| format!("{acc}{:x?}", x));
+    result
+}
+
+pub fn get_sha256_from_buf(buf: &Vec<u8>) -> String {
+    let mut cursor = std::io::Cursor::new(buf);
+    get_sha256_from_reader(&mut cursor)
+}
+
 // fn transform_coordinates(p: glam::Vec3, m: glam::Mat4) -> glam::Vec3 {
 //     let p = glam::vec4(p.x, p.y, p.z, 1.0);
 //     (m * p).xyz()
@@ -448,13 +484,15 @@ pub fn get_git_hash() -> String {
 
 #[cfg(test)]
 mod test {
+    use std::io::Cursor;
+
     use super::{
         distance_from_point_to_segment, frustum_from_perspective, generate_circle_points,
         is_sphere_visible_to_frustum, point_light_radius, split_frustum, subdivide_four_points,
         subdivide_two_points,
     };
     use crate::{
-        misc::{is_point_in_polygon, is_valid_name},
+        misc::{get_sha256_from_reader, is_point_in_polygon, is_valid_name},
         sphere_3d::Sphere3D,
     };
 
@@ -665,6 +703,16 @@ mod test {
                 glam::vec2(-1.0, 1.0)
             ),
             glam::vec2(0.0, 0.0).distance(glam::vec2(-1.0, 1.0))
+        );
+    }
+
+    #[test]
+    fn get_sha256_from_reader_test() {
+        let data: Vec<u8> = vec![1, 2, 3, 4];
+        let sha256 = get_sha256_from_reader(&mut Cursor::new(data));
+        assert_eq!(
+            "9f64a767e1b97f131fabb6b467296c9b6f21e79fb3c5356e6c77e89b6a806a",
+            sha256
         );
     }
 }

@@ -1,0 +1,33 @@
+[package]
+name = "rs_texpress"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["editor"]
+editor = []
+standalone = []
+
+[dependencies]
+strum = "0.27.2"
+strum_macros = "0.27"
+glob = "0.3.3"
+rs_core_minimal = { path = "../../rs_core_minimal" }
+rs_foundation = { path = "../../rs_foundation" }
+
+[dev-dependencies]
+image = "0.25.9"
+
+[target.'cfg(not(all(target_os = "android", target_arch = "x86_64")))'.dependencies]
+ktx2-rw = { git = "https://github.com/AllenDang/ktx2-rw", rev = "1dfa70d", version = "0.2.4" }
+image_dds = { version = "0.7.2" }
+
+[target.'cfg(not(all(target_os="android", target_arch="x86_64")))'.features] 
+support_ktx2_rw = []
+
+[target.'cfg(all(target_os = "android", target_arch = "x86_64"))'.dependencies]
+image_dds = { version = "0.7.2", default-features = false, features = [
+    "ddsfile",
+    "image",
+    "strum",
+] }

@@ -89,3 +89,8 @@ pub fn get_current_exe_dir() -> crate::error::Result<PathBuf> {
         .ok_or(crate::error::Error::IO(std::io::ErrorKind::NotFound.into()))?;
     Ok(parent.to_path_buf())
 }
+
+#[cfg(feature = "editor")]
+pub fn get_deps_dir() -> PathBuf {
+    get_engine_root_dir().join(".xmake/deps")
+}

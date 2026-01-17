@@ -14,7 +14,6 @@ pub mod drawable;
 pub mod engine;
 pub mod error;
 pub mod ffi;
-pub mod file_type;
 pub mod frame_sync;
 pub mod handle;
 pub mod input_mode;
@@ -47,10 +46,12 @@ pub mod sync;
 pub mod uniform_map;
 pub mod url_extension;
 
+pub use rs_core_minimal::file_type;
 pub use rs_core_minimal::thread_pool;
 
 pub const ASSET_SCHEME: &str = "asset";
 pub const CONTENT_SCHEME: &str = "content";
+pub const DERIVE_DATA_SCHEME: &str = "derivedata";
 pub const ASSET_ROOT: &str = "asset";
 pub const CONTENT_ROOT: &str = "Content";
 pub const BUILT_IN_RESOURCE: &str = "builtinresouce";
@@ -68,6 +69,10 @@ pub fn build_content_file_url(name: impl AsRef<str>) -> Result<url::Url, url::Pa
 
 pub fn build_built_in_resouce_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
     url::Url::parse(&format!("{}://{}", BUILT_IN_RESOURCE, name.as_ref()))
+}
+
+pub fn build_derive_data_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
+    url::Url::parse(&format!("{}://{}", DERIVE_DATA_SCHEME, name.as_ref()))
 }
 
 #[global_allocator]

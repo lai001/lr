@@ -1,4 +1,20 @@
+use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq, Serialize, Deserialize)]
+pub enum TextureFileType {
+    Dds,
+    Ktx,
+}
+
+impl TextureFileType {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            TextureFileType::Dds => "dds",
+            TextureFileType::Ktx => "ktx",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 pub enum EFileType {
@@ -14,6 +30,7 @@ pub enum EFileType {
     Mp4,
     WAV,
     MP3,
+    Texture(TextureFileType),
 }
 
 impl ToString for EFileType {
@@ -49,6 +66,8 @@ impl EFileType {
             "mp4" => Some(EFileType::Mp4),
             "wav" => Some(EFileType::WAV),
             "mp3" => Some(EFileType::MP3),
+            "ktx" => Some(EFileType::Texture(TextureFileType::Ktx)),
+            "dds" => Some(EFileType::Texture(TextureFileType::Dds)),
             _ => None,
         }
     }
@@ -67,6 +86,7 @@ impl EFileType {
             EFileType::Mp4 => "mp4",
             EFileType::WAV => "wav",
             EFileType::MP3 => "mp3",
+            EFileType::Texture(texture_file_type) => texture_file_type.to_str(),
         }
     }
 

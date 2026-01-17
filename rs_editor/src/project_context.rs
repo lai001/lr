@@ -254,6 +254,26 @@ impl ProjectContext {
         self.project_folder_path.join("build/cache/virtual_texture")
     }
 
+    pub fn get_derive_data_dir(&self) -> PathBuf {
+        self.project_folder_path.join("build/cache/derivedata")
+    }
+
+    pub fn try_create_derive_data_dir(&self) -> anyhow::Result<PathBuf> {
+        let path = self.get_derive_data_dir();
+        let _ = std::fs::create_dir_all(path.clone())?;
+        Ok(path)
+    }
+
+    pub fn get_tmp_dir(&self) -> PathBuf {
+        self.project_folder_path.join("build/tmp")
+    }
+
+    pub fn try_create_tmp_dir(&self) -> anyhow::Result<PathBuf> {
+        let path = self.get_tmp_dir();
+        let _ = std::fs::create_dir_all(path.clone())?;
+        Ok(path)
+    }
+
     pub fn get_ibl_bake_cache_dir(&self, sub_folder: &Path) -> PathBuf {
         Self::make_ibl_bake_cache_dir(&self.project_folder_path, sub_folder)
     }

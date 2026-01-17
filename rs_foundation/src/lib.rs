@@ -215,6 +215,19 @@ pub fn round_up_to_multiple(value: f32, multiple: f32) -> f32 {
     (value / multiple).ceil() * multiple
 }
 
+pub fn full_cmd_from_command(command: &std::process::Command) -> String {
+    let program = command.get_program().to_string_lossy();
+    let args = command
+        .get_args()
+        .map(|a| a.to_string_lossy())
+        .collect::<Vec<_>>();
+    let full_cmd = std::iter::once(program)
+        .chain(args)
+        .collect::<Vec<_>>()
+        .join(" ");
+    full_cmd
+}
+
 #[cfg(test)]
 pub mod test {
     use crate::{alignment, math_remap_value_range, next_highest_power_of_two};

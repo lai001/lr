@@ -145,6 +145,30 @@ do
             git.clone("https://github.com/skywind3000/kcp.git", { outputdir = kcp_root_dir })
             git.checkout("f4f3a89cc632647dabdcb146932d2afd5591e62e", { repodir = kcp_root_dir })
         end
+
+        local ktx_software_file = path.join(deps_dir, "KTX-Software-4.4.2-Windows-x64.zip")
+        local ktx_software = path.join(deps_dir, "KTX-Software-4.4.2-Windows-x64")
+        if os.exists(ktx_software_file) == false then
+            local link = "https://github.com/KhronosGroup/KTX-Software/releases/download/v4.4.2/KTX-Software-4.4.2-Windows-x64.exe"
+            print(format("Download %s", link))
+            http.download(link, ktx_software_file)
+        end
+        if os.exists(ktx_software) == false and os.exists(ktx_software_file) then
+            print(format("Extract %s to %s", ktx_software_file, ktx_software))
+            archive.extract(ktx_software_file, ktx_software)
+        end
+
+        local compressonatorcli_file = path.join(deps_dir, "compressonatorcli-4.5.52-win64.zip")
+        local compressonatorcli = path.join(deps_dir, "compressonatorcli-4.5.52-win64")
+        if os.exists(compressonatorcli_file) == false then
+            local link = "https://github.com/GPUOpen-Tools/compressonator/releases/download/V4.5.52/compressonatorcli-4.5.52-win64.zip"
+            print(format("Download %s", link))
+            http.download(link, compressonatorcli_file)
+        end
+        if os.exists(compressonatorcli) == false and os.exists(compressonatorcli_file) then
+            print(format("Extract %s to %s", compressonatorcli_file, compressonatorcli))
+            archive.extract(compressonatorcli_file, compressonatorcli)
+        end
     end)
     set_menu {
         usage = "xmake download_deps",

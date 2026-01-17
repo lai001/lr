@@ -17,6 +17,10 @@ pub enum RenderTarget2DPropertyType {
     Format(wgpu::TextureFormat),
 }
 
+pub enum TextureFilePropertyType {
+    IsCompressed(bool),
+}
+
 pub enum EEventType {
     IBL(Rc<RefCell<IBL>>, Option<PathBuf>, Option<PathBuf>),
     IsVirtualTexture(Rc<RefCell<TextureFile>>, bool),
@@ -36,6 +40,7 @@ pub enum EEventType {
         SingleThreadMutType<RenderTarget2D>,
         RenderTarget2DPropertyType,
     ),
+    TextureFile(SingleThreadMutType<TextureFile>, TextureFilePropertyType),
 }
 
 pub struct ContentItemPropertyView {
@@ -103,7 +108,15 @@ impl ContentItemPropertyView {
                     ));
                 }
                 if ui.button("SDF 2D").clicked() {
-                    self.click = Some(EEventType::SDF2D(texture_file_clone));
+                    self.click = Some(EEventType::SDF2D(texture_file_clone.clone()));
+                }
+
+                let mut is_compressed = texture_file.is_compressed;
+                if ui.checkbox(&mut is_compressed, "Is compressed").changed() {
+                    self.click = Some(EEventType::TextureFile(
+                        texture_file_clone,
+                        TextureFilePropertyType::IsCompressed(is_compressed),
+                    ));
                 }
             }
             EContentFileType::Level(_) => {}

@@ -2,6 +2,7 @@ local deps_dir = deps_dir
 local engine_root_dir = engine_root_dir
 task("build_android_target")
     on_run(function()
+        import("lib.detect.find_program")
         import("core.project.config")
         import("core.base.json")
         import("core.base.option")
@@ -12,6 +13,9 @@ task("build_android_target")
         if ndk_path == nil then
             os.raise("NDK not found")
         end
+        local ninja_program = find_program("ninja")
+        local is_use_ninja = ninja_program ~= nil
+        local android_platform = 30
         local host = (get_config("host") and { get_config("host") } or { "windows" })[1]
         local target_map = {}
         target_map["aarch64-linux-android"] = "arm64-v8a"
@@ -52,12 +56,19 @@ task("build_android_target")
             ["TRACY_CLIENT_LIB"] = "tracy-client",
             ["TRACY_CLIENT_STATIC"] = 1,
             ["CLANG_PATH"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/clang.exe", host)),
-            ["TARGET_CC"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/%s30-clang.cmd", host, target)),
-            ["TARGET_CXX"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/%s30-clang++.cmd", host, target))
+            ["TARGET_CC"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/%s%d-clang.cmd", host, target, android_platform)),
+            ["TARGET_CXX"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/%s%d-clang++.cmd", host, target, android_platform)),
+            ["ANDROID_NDK_ROOT"] = ndk_path
         }
         local project_name = "rs_android"
         local old = os.cd(path.join(engine_root_dir, project_name))
         os.addenvs(extra_envs)
+        if is_use_ninja then
+            os.addenv("CMAKE_GENERATOR", "Ninja")
+        else
+            os.addenv("PATH", path.join(ndk_path, "prebuilt/windows-x86_64/bin"))
+            os.addenv("CMAKE_GENERATOR", "Unix Makefiles")
+        end
         if mode == "debug" then
             os.exec("cargo build --features %s --target %s -j %d", features_arg, target, jobs)
         else

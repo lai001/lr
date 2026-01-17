@@ -13,6 +13,7 @@ editor = [
     "rs_core_minimal/editor",
     "rs_engine/editor",
     "rs_model_loader/editor",
+    "rs_texpress/editor",
 ]
 standalone = [
     "rs_shader_compiler_core/standalone",
@@ -20,6 +21,7 @@ standalone = [
     "rs_core_minimal/standalone",
     "rs_engine/standalone",
     "rs_model_loader/standalone",
+    "rs_texpress/standalone",
 ]
 profiler = [
     "tracy-client/enable",
@@ -114,6 +116,7 @@ rs_reflection_core = { path = "../crates/rs_reflection_core", optional = true }
 rs_model_loader = { path = "../crates/rs_model_loader" }
 rs_network = { path = "../crates/rs_network", optional = true }
 rs_manifest = { path = "../crates/rs_manifest" }
+rs_texpress = { path = "../crates/rs_texpress" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rs_dotnet = { path = "../rs_dotnet", optional = true }

@@ -14,4 +14,5 @@ pub enum EResourceType {
     Material,
     Sound,
     Content(EContentType),
+    DeriveData,
 }

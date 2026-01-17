@@ -31,6 +31,7 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
+use rs_artifact::derive_data::compressed_texture::CompressedTexture;
 use rs_core_minimal::{
     file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
 };
@@ -66,10 +67,12 @@ use rs_engine::{
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_metis::{cluster::ClusterCollection, vertex_position::VertexPosition};
 use rs_model_loader::model_loader::ModelLoader;
+use rs_proc_macros::plugin_project_file_path;
 use rs_render::{
-    command::{RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
+    command::{InitTextureData, RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
     get_buildin_shader_dir,
 };
+use rs_render_core::buffer_dimensions::BufferDimensions;
 use rs_render_types::MaterialOptions;
 use std::{
     cell::RefCell,
@@ -287,7 +290,7 @@ impl EditorContext {
         );
         player_viewport.set_name("EditorPlayerViewport".to_string());
 
-        let last_project_path = if engine
+        let mut last_project_path = if engine
             .get_settings()
             .editor_settings
             .is_auto_open_last_project
@@ -296,6 +299,16 @@ impl EditorContext {
         } else {
             None
         };
+
+        let plugin_project_file_path: Option<String> = plugin_project_file_path!(rs_editor);
+        match plugin_project_file_path {
+            Some(plugin_project_file_path) => {
+                let associated = std::path::Path::new(&plugin_project_file_path).to_path_buf();
+                log::trace!("Open associated project: {}", associated.to_string_lossy());
+                last_project_path = Some(associated);
+            }
+            None => {}
+        }
 
         let mut editor_context = EditorContext {
             event_loop_proxy,
@@ -3024,7 +3037,7 @@ impl EditorContext {
     }
 
     fn process_content_item_property_view_event(&mut self) {
-        let Some(event) = &self.editor_ui.content_item_property_view.click else {
+        let Some(event) = self.editor_ui.content_item_property_view.click.take() else {
             return;
         };
         match event {
@@ -3119,7 +3132,7 @@ impl EditorContext {
                 new_value,
             ) => {
                 let mut static_mesh = static_mesh.borrow_mut();
-                static_mesh.is_enable_multiresolution = *new_value;
+                static_mesh.is_enable_multiresolution = new_value;
                 let project_context = self.project_context.as_ref().unwrap();
 
                 if let Err(err) =
@@ -3132,7 +3145,145 @@ impl EditorContext {
                 let mut render_target_2d = render_target_2d.borrow_mut();
                 render_target_2d.init_resouce(&mut self.engine);
             }
+            content_item_property_view::EEventType::TextureFile(
+                texture_file,
+                texture_file_property_type,
+            ) => match texture_file_property_type {
+                content_item_property_view::TextureFilePropertyType::IsCompressed(
+                    is_compressed,
+                ) => {
+                    if let Some(project_context) = &self.project_context {
+                        if is_compressed {
+                            let mut texture_file = texture_file.borrow_mut();
+                            match Self::create_compressed_texture(project_context, &texture_file) {
+                                Ok(compressed_texture) => {
+                                    if let Ok(dir) = project_context.try_create_derive_data_dir() {
+                                        let apply_result = self.apply_compressed_texture(
+                                            &mut texture_file,
+                                            compressed_texture,
+                                            &dir,
+                                        );
+                                        if let Err(err) = apply_result {
+                                            log::warn!("{}", err);
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    log::warn!("{}", err)
+                                }
+                            };
+                        }
+                    }
+                }
+            },
         }
+    }
+
+    fn apply_compressed_texture(
+        &mut self,
+        texture_file: &mut TextureFile,
+        compressed_texture: CompressedTexture,
+        derive_data_dir: &Path,
+    ) -> anyhow::Result<()> {
+        assert_eq!(
+            compressed_texture.ty,
+            rs_core_minimal::file_type::TextureFileType::Dds
+        );
+        log::trace!(
+            "{}, {}, {}",
+            compressed_texture.url.to_string(),
+            compressed_texture.source_url.to_string(),
+            compressed_texture.data.len()
+        );
+        let filename = compressed_texture.url.get_name_in_editor();
+        let save_path = derive_data_dir.join(filename);
+        let _ = std::fs::write(&save_path, &compressed_texture.data)?;
+        let reader = std::io::Cursor::new(&compressed_texture.data);
+        let dds = image_dds::ddsfile::Dds::read(reader)?;
+        let surface = image_dds::Surface::from_dds(&dds)?;
+        let subsurface_data = surface.get(0, 0, 0).ok_or(anyhow!(
+            "No data corresponding to the specified layer: 0, depth_level: 0, mipmap: 0"
+        ))?;
+        log::trace!(
+            "width: {}, height: {}, layers: {}, depth: {}, format: {:?}",
+            surface.width,
+            surface.height,
+            surface.layers,
+            surface.depth,
+            surface.image_format
+        );
+        let texture_format: Option<wgpu::TextureFormat> = match surface.image_format {
+            image_dds::ImageFormat::BC7RgbaUnorm => Some(wgpu::TextureFormat::Bc7RgbaUnorm),
+            _ => None,
+        };
+        let texture_format = texture_format.ok_or(anyhow!("Not support format"))?;
+        texture_file.is_compressed = true;
+        texture_file.compressed_texture_url = Some(compressed_texture.url.clone());
+        let bd = BufferDimensions::from_texture_format(
+            surface.width as usize,
+            surface.height as usize,
+            &texture_format,
+        )
+        .ok_or(anyhow!("Not support format"))?;
+        let init_texture_data = InitTextureData {
+            data: subsurface_data.to_vec(),
+            data_layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bd.unpadded_bytes_per_row as u32),
+                rows_per_image: None,
+            },
+        };
+        self.engine.create_texture_from_data(
+            &texture_file.url,
+            TextureDescriptorCreateInfo::d2(
+                Some(texture_file.url.to_string()),
+                surface.width,
+                surface.height,
+                Some(texture_format),
+            ),
+            init_texture_data,
+        );
+        return Ok(());
+    }
+
+    fn create_compressed_texture(
+        project_context: &ProjectContext,
+        texture: &TextureFile,
+    ) -> Result<CompressedTexture, anyhow::Error> {
+        let image_reference = texture.image_reference.as_ref().ok_or(anyhow!(""))?;
+        let path = project_context
+            .get_asset_path_by_url(image_reference)
+            .canonicalize_slash()?;
+        #[cfg(target_os = "windows")]
+        let tmp_file = project_context
+            .try_create_tmp_dir()?
+            .join("compressed_texture.dds");
+        #[cfg(not(target_os = "windows"))]
+        unimplemented!();
+        assert!(path.is_file());
+        let compressed_texture_file_data = rs_texpress::env::TexpressEnv::global_mut(|env| {
+            let _ = env.convert(
+                rs_texpress::TextureFormatType::BC7,
+                &path,
+                &tmp_file,
+                None::<&Path>,
+            )?;
+            let data = std::fs::read(&tmp_file)?;
+            Result::<Vec<u8>, anyhow::Error>::Ok(data)
+        })?;
+        let key = rs_core_minimal::misc::get_sha256_from_buf(&compressed_texture_file_data);
+        let derive_data_url = rs_engine::build_derive_data_url(key)?;
+        let derive_data_source_url = image_reference.clone();
+        let compressed_texture = CompressedTexture {
+            url: derive_data_url,
+            source_url: derive_data_source_url,
+            data: compressed_texture_file_data,
+            ty: rs_core_minimal::file_type::TextureFileType::Dds,
+        };
+        if tmp_file.exists() {
+            let _ = std::fs::remove_file(&tmp_file);
+        }
+        Ok(compressed_texture)
     }
 
     fn process_object_property_view_event(
