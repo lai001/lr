@@ -1,5 +1,5 @@
 use crate::content::level;
-use rapier3d::{control::KinematicCharacterController, math::Vector, na::Vector3, prelude::*};
+use rapier3d::{control::KinematicCharacterController, prelude::*};
 
 pub struct KinematicComponent {
     pub character_body: RigidBodyHandle,
@@ -33,11 +33,10 @@ impl KinematicComponent {
 
     pub fn update(&mut self, desired_movement: &glam::Vec3, physics: &mut level::LevelPhysics) {
         let character_handle = self.character_body;
-        let mut desired_movement =
-            Vector3::new(desired_movement.x, desired_movement.y, desired_movement.z);
+        let mut desired_movement = *desired_movement;
 
         desired_movement *= self.speed;
-        desired_movement -= Vector::y() * self.speed;
+        desired_movement -= glam::Vec3::Y * self.speed;
 
         let controller = KinematicCharacterController::default();
         let character_body = &physics.rigid_body_set[character_handle];
@@ -52,7 +51,7 @@ impl KinematicComponent {
             )),
             character_collider.shape(),
             character_collider.position(),
-            desired_movement.cast::<f32>(),
+            desired_movement,
             |c| collisions.push(c),
         );
         controller.solve_character_collision_impulses(
@@ -66,6 +65,6 @@ impl KinematicComponent {
         );
         let character_body = &mut physics.rigid_body_set[character_handle];
         let pos = character_body.position();
-        character_body.set_next_kinematic_translation(pos.translation.vector + mvt.translation);
+        character_body.set_next_kinematic_translation(pos.translation + mvt.translation);
     }
 }

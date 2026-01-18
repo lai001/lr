@@ -23,7 +23,7 @@ use std::rc::Rc;
 pub struct LevelPhysics {
     pub rigid_body_set: RigidBodySet,
     pub collider_set: ColliderSet,
-    pub gravity: nalgebra::Vector3<f32>,
+    pub gravity: glam::Vec3,
     pub integration_parameters: IntegrationParameters,
     pub physics_pipeline: PhysicsPipeline,
     pub island_manager: IslandManager,
@@ -49,7 +49,7 @@ impl LevelPhysics {
             self.rigid_body_set.len()
         ));
         self.physics_pipeline.step(
-            &self.gravity,
+            self.gravity,
             &self.integration_parameters,
             &mut self.island_manager,
             &mut self.broad_phase,
@@ -401,7 +401,7 @@ impl Level {
         let rigid_body_set: RigidBodySet = RigidBodySet::new();
         let collider_set: ColliderSet = ColliderSet::new();
 
-        let gravity: nalgebra::Vector3<f32> = vector![0.0, -9.81, 0.0];
+        let gravity: glam::Vec3 = glam::vec3(0.0, -9.81, 0.0);
         let integration_parameters: IntegrationParameters = IntegrationParameters::default();
         let physics_pipeline: PhysicsPipeline = PhysicsPipeline::new();
         let island_manager: IslandManager = IslandManager::new();
@@ -665,8 +665,8 @@ impl Level {
         let ray_pt1 = ndc_to_world.project_point3(glam::vec3(ndc_cursor.x, ndc_cursor.y, 0.0));
         let ray_pt2 = ndc_to_world.project_point3(glam::vec3(ndc_cursor.x, ndc_cursor.y, 1.0));
         let ray_dir = ray_pt2 - ray_pt1;
-        let ray_origin = rapier3d::na::Point3::new(ray_pt1.x, ray_pt1.y, ray_pt1.z);
-        let ray_dir = rapier3d::na::Vector3::new(ray_dir.x, ray_dir.y, ray_dir.z);
+        let ray_origin = ray_pt1;
+        let ray_dir = ray_dir;
         let ray = rapier3d::prelude::Ray::new(ray_origin, ray_dir);
         let hit = physics.query_pipeline(None).cast_ray(&ray, f32::MAX, true);
         if let Some((handle, _)) = hit {

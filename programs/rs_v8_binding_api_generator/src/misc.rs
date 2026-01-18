@@ -507,7 +507,7 @@ pub fn make_api_code(
 pub fn resolve_struct_import_path(db: &RootDatabase, rs_struct: &ra_ap_hir::Struct) -> String {
     let name = rs_struct.name(db);
     let module = rs_struct.module(db);
-    let krate = module.krate();
+    let krate = module.krate(db);
     let mut modules = vec![];
     let mut current_module = Some(module.clone());
     while let Some(module) = current_module {
@@ -601,9 +601,8 @@ pub fn make_return_value_expr(
 
 pub fn is_impl_clone(ty: &ra_ap_hir::Type, db: &dyn ra_ap_hir::db::HirDatabase) -> bool {
     let krate = ty.krate(db);
-    let clone_trait = ra_ap_hir::LangItem::Clone
-        .resolve_trait(db, krate.into())
-        .expect("A valid TraitId");
+    let interner = ra_ap_hir::next_solver::DbInterner::new_with(db, krate.into());
+    let clone_trait = interner.lang_items().Clone.expect("A valid TraitId");
     // let lang_item = db.lang_item(krate.into(), ra_ap_hir::LangItem::Clone);
     // let clone_trait = match lang_item {
     //     Some(ra_ap_hir_def::lang_item::LangItemTarget::Trait(it)) => it,

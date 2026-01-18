@@ -533,11 +533,6 @@ fn indexed_vertices_to_aabb(indices: &[u32], vertices: &[glam::Vec3]) -> rapier3
     let _ = tracy_client::span!();
     let points: Vec<glam::Vec3> = indices.iter().map(|x| vertices[*x as usize]).collect();
 
-    let points: Vec<rapier3d::math::Point<f32>> = points
-        .iter()
-        .map(|x| rapier3d::math::Point::<f32>::from_slice(&x.to_array()))
-        .collect();
-
     let aabb = rapier3d::prelude::Aabb::from_points(points);
     aabb
 }
@@ -548,11 +543,6 @@ fn indexed_vertices_to_aabb2(
 ) -> rapier3d::prelude::Aabb {
     let _ = tracy_client::span!();
     let points: Vec<glam::Vec3> = indices.iter().map(|x| vertices[*x as usize].p).collect();
-
-    let points: Vec<rapier3d::math::Point<f32>> = points
-        .iter()
-        .map(|x| rapier3d::math::Point::<f32>::from_slice(&x.to_array()))
-        .collect();
 
     let aabb = rapier3d::prelude::Aabb::from_points(points);
     aabb

@@ -19,21 +19,21 @@ serde = ["wgpu/serde", "rs_render_core/serde"]
 serde = { version = "1.0.228", features = ["derive", "rc"] }
 wgpu = { version = "27.0.1", features = ["spirv", "naga-ir"] }
 naga = { version = "27.0.3" }
-log = "0.4.28"
+log = "0.4.29"
 pollster = "0.4.0"
 raw-window-handle = "0.6.2"
 type-layout = "0.2.0"
-glam = { version = "0.30.9", features = ["mint", "serde"] }
-egui = { version = "0.33.2" }
-egui-wgpu = { version = "0.33.2" }
+glam = { version = "0.30.10", features = ["mint", "serde"] }
+egui = { version = "0.33.3" }
+egui-wgpu = { version = "0.33.3" }
 image = "0.25.9"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 ddsfile = "0.5.2"
-tracy-client = { version = "0.18.3", default-features = false }
+tracy-client = { version = "0.18.4", default-features = false }
 bitflags = "2.10.0"
-moka = { version = "0.12.11", default-features = false, features = ["sync"] }
-rapier3d = { version = "0.30.1", features = ["simd-stable", "serde-serialize"] }
+moka = { version = "0.12.12", default-features = false, features = ["sync"] }
+rapier3d = { version = "0.32.0", features = ["simd-stable", "serde-serialize"] }
 rs_foundation = { path = "../rs_foundation" }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
 rs_core_minimal = { path = "../rs_core_minimal" }

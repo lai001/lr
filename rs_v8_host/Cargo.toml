@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-v8 = "142.1.0"
+v8 = "145.0.0"
 notify = "8.2.0"
 notify-debouncer-mini = { version = "0.7.0" }
 walkdir = "2.5.0"
-log = "0.4.28"
+log = "0.4.29"
 rs_engine = { path = "../rs_engine" }
 rs_render = { path = "../rs_render" }

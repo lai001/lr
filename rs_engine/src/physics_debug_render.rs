@@ -66,7 +66,7 @@ impl PhysicsDebugRender {
         let mut bundle = vec![];
         for (_, rb) in bodies.iter() {
             if self.style.rigid_body_axes_length != 0.0 {
-                let basis = rb.rotation().to_rotation_matrix().into_inner();
+                let basis = Matrix::from_quat(*rb.rotation());
                 let coeff = if !rb.is_enabled() {
                     self.style.disabled_color_multiplier
                 } else if rb.is_sleeping() {
@@ -82,11 +82,10 @@ impl PhysicsDebugRender {
 
                 let com = rb
                     .position()
-                    .transform_point(&rb.mass_properties().local_mprops.local_com);
+                    .transform_point(rb.mass_properties().local_mprops.local_com);
 
                 for k in 0..DIM {
-                    let axis = basis.column(k) * self.style.rigid_body_axes_length;
-                    let com = Self::point_to_vec3(&com);
+                    let axis = basis.col(k) * self.style.rigid_body_axes_length;
                     let axis = glam::vec3(axis.x, axis.y, axis.z);
                     bundle.push(RenderRigidBodiesBundle {
                         start: com,
@@ -143,7 +142,7 @@ impl PhysicsDebugRender {
     fn render_shape(
         &mut self,
         shape: &dyn Shape,
-        pos: &Isometry<f32>,
+        pos: &Pose,
         color: glam::Vec4,
     ) -> Vec<RenderRigidBodiesBundle> {
         let mut bundle = vec![];
@@ -155,8 +154,8 @@ impl PhysicsDebugRender {
                 let mut lines: Vec<RenderRigidBodiesBundle> = Vec::with_capacity(indexes.len());
                 for index in indexes {
                     let line = RenderRigidBodiesBundle {
-                        start: Self::point_to_vec3(&(pos * vertexes[index[0] as usize])),
-                        end: Self::point_to_vec3(&(pos * vertexes[index[1] as usize])),
+                        start: (pos * vertexes[index[0] as usize]),
+                        end: (pos * vertexes[index[1] as usize]),
                         color,
                     };
                     lines.push(line);
@@ -167,20 +166,20 @@ impl PhysicsDebugRender {
             TypedShape::Segment(_) => todo!(),
             TypedShape::Triangle(triangle) => {
                 let line1 = RenderRigidBodiesBundle {
-                    start: Self::point_to_vec3(&(pos * triangle.a)),
-                    end: Self::point_to_vec3(&(pos * triangle.b)),
+                    start: (pos * triangle.a),
+                    end: (pos * triangle.b),
                     color,
                 };
 
                 let line2 = RenderRigidBodiesBundle {
-                    start: Self::point_to_vec3(&(pos * triangle.b)),
-                    end: Self::point_to_vec3(&(pos * triangle.c)),
+                    start: (pos * triangle.b),
+                    end: (pos * triangle.c),
                     color,
                 };
 
                 let line3 = RenderRigidBodiesBundle {
-                    start: Self::point_to_vec3(&(pos * triangle.c)),
-                    end: Self::point_to_vec3(&(pos * triangle.a)),
+                    start: (pos * triangle.c),
+                    end: (pos * triangle.a),
                     color,
                 };
                 bundle.append(&mut vec![line1, line2, line3]);
@@ -212,9 +211,5 @@ impl PhysicsDebugRender {
             TypedShape::Voxels(_) => todo!(),
         }
         bundle
-    }
-
-    fn point_to_vec3(point: &Point<f32>) -> glam::Vec3 {
-        glam::vec3(point.x, point.y, point.z)
     }
 }

@@ -179,15 +179,8 @@ impl CollisionComponent {
         };
         let (axis, angle) = rotation.to_axis_angle();
 
-        let mut sensor_builder = RigidBodyBuilder::fixed().translation(vector![
-            translation.x,
-            translation.y,
-            translation.z
-        ]);
-        sensor_builder.position.rotation = Rotation::from_axis_angle(
-            &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
-            angle,
-        );
+        let mut sensor_builder = RigidBodyBuilder::fixed().translation(translation);
+        sensor_builder.position.rotation = Rotation::from_axis_angle(axis.normalize(), angle);
         let rigid_body = sensor_builder.build();
         let collider = collider_builder.build();
 

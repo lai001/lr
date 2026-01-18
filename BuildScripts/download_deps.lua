@@ -126,10 +126,10 @@ do
         --     archive.extract(russimp_file, russimp_prebuild_dir)
         -- end
 
-        local tracy_archive_file = path.join(deps_dir, "Tracy-0.13.0.zip")
-        local tracy_file = path.join(deps_dir, "Tracy-0.13.0")
+        local tracy_archive_file = path.join(deps_dir, "Tracy-0.13.1.zip")
+        local tracy_file = path.join(deps_dir, "Tracy-0.13.1")
         if os.exists(tracy_archive_file) == false then
-            local link = "https://github.com/wolfpld/tracy/releases/download/v0.13.0/windows-0.13.0.zip"
+            local link = "https://github.com/wolfpld/tracy/releases/download/v0.13.1/windows-0.13.1.zip"
             http.download(link, tracy_archive_file)
         end
         if os.exists(tracy_file) == false and os.exists(tracy_archive_file) then
@@ -138,7 +138,7 @@ do
 
         if os.exists(tracy_root_dir) == false then
             git.clone("https://github.com/wolfpld/tracy.git", { outputdir = tracy_root_dir })
-            git.checkout("v0.13.0", { repodir = tracy_root_dir })
+            git.checkout("v0.13.1", { repodir = tracy_root_dir })
         end
 
         if os.exists(kcp_root_dir) == false then

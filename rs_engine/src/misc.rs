@@ -1,4 +1,3 @@
-use rapier3d::na::Point3;
 use rs_core_minimal::{
     misc::distance_from_point_to_segment, parallel::ComputeDispatcher, sphere_3d::Sphere3D,
 };
@@ -28,12 +27,7 @@ pub fn project_to_world(
     (start, end)
 }
 
-pub fn points_to_aabb(points: &[glam::Vec3]) -> rapier3d::prelude::Aabb {
-    let points: Vec<rapier3d::math::Point<f32>> = points
-        .iter()
-        .map(|x| rapier3d::math::Point::<f32>::from_slice(&x.to_array()))
-        .collect();
-
+pub fn points_to_aabb(points: Vec<glam::Vec3>) -> rapier3d::prelude::Aabb {
     let aabb = rapier3d::prelude::Aabb::from_points(points);
     aabb
 }
@@ -46,7 +40,7 @@ pub fn static_mesh_get_aabb(
         .iter()
         .map(|x| x.position.clone())
         .collect();
-    points_to_aabb(&points)
+    points_to_aabb(points)
 }
 
 pub fn transform_aabb(
@@ -57,10 +51,7 @@ pub fn transform_aabb(
     let maxs = glam::vec3(aabb.maxs.x, aabb.maxs.y, aabb.maxs.z);
     let mins = transformation.transform_point3(mins);
     let maxs = transformation.transform_point3(maxs);
-    rapier3d::prelude::Aabb::new(
-        Point3::from_slice(&mins.to_array()),
-        Point3::from_slice(&maxs.to_array()),
-    )
+    rapier3d::prelude::Aabb::new(mins, maxs)
 }
 
 pub fn merge_aabb(aabbs: &[rapier3d::prelude::Aabb]) -> Option<rapier3d::prelude::Aabb> {
@@ -74,13 +65,13 @@ pub fn merge_aabb(aabbs: &[rapier3d::prelude::Aabb]) -> Option<rapier3d::prelude
         points.push(mins);
         points.push(maxs);
     }
-    Some(points_to_aabb(&points))
+    Some(points_to_aabb(points))
 }
 
 pub fn aabb_as_sphere(aabb: &rapier3d::prelude::Aabb) -> Sphere3D {
     let center = aabb.center();
     let center = glam::vec3(center.x, center.y, center.z);
-    let half_extents = glam::Vec3::from_slice(aabb.half_extents().as_slice());
+    let half_extents = aabb.half_extents();
     Sphere3D::new(center, half_extents.length())
 }
 

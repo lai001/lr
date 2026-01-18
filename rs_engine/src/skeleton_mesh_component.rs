@@ -9,7 +9,7 @@ use crate::{
     },
     static_mesh_component::Physics,
 };
-use rapier3d::{na::point, prelude::*};
+use rapier3d::prelude::*;
 use rs_artifact::{skeleton::Skeleton, skin_mesh::SkinMesh};
 use rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE;
 use serde::{Deserialize, Serialize};
@@ -368,24 +368,16 @@ impl SkeletonMeshComponent {
         transformation: glam::Mat4,
     ) -> crate::error::Result<Physics> {
         let (_, rotation, translation) = transformation.to_scale_rotation_translation();
-        let translation = vector![translation.x, translation.y, translation.z];
         let (axis, angle) = rotation.to_axis_angle();
         let mut builder = RigidBodyBuilder::dynamic();
         builder = builder.translation(translation);
-        builder.position.rotation = Rotation::from_axis_angle(
-            &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
-            angle,
-        );
+        builder.position.rotation = Rotation::from_axis_angle(axis.normalize(), angle);
         // builder = builder.enabled_rotations(false, false, false);
         let rigid_body = builder.build();
         let mut colliders = Vec::with_capacity(meshes.len());
 
         for mesh in meshes {
-            let vertices: Vec<_> = mesh
-                .vertexes
-                .iter()
-                .map(|x| point![x.position.x, x.position.y, x.position.z])
-                .collect();
+            let vertices: Vec<_> = mesh.vertexes.iter().map(|x| x.position).collect();
             let mut indices: Vec<_> = vec![];
             for index in mesh.indexes.chunks(3) {
                 indices.push(

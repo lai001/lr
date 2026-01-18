@@ -442,7 +442,6 @@ impl StaticMeshComponent {
                     let translation = rigid_body.translation();
                     let translation = glam::vec3(translation.x, translation.y, translation.z);
                     let rotation = rigid_body.rotation();
-                    let rotation = glam::quat(rotation.i, rotation.j, rotation.k, rotation.w);
                     let scale = run_time
                         .final_transformation
                         .to_scale_rotation_translation()
@@ -452,12 +451,12 @@ impl StaticMeshComponent {
                         network::ENetMode::Server => {
                             send_agent_transformation = Some(AgentTransformation {
                                 translation: translation,
-                                rotation: rotation,
+                                rotation: *rotation,
                             });
                         }
                         network::ENetMode::Client => {}
                     }
-                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                    glam::Mat4::from_scale_rotation_translation(scale, *rotation, translation)
                 };
 
                 match draw_objects {
@@ -569,11 +568,7 @@ impl StaticMeshComponent {
         mesh: &StaticMesh,
         is_use_convex_decomposition: bool,
     ) -> crate::error::Result<Collider> {
-        let vertices: Vec<_> = mesh
-            .vertexes
-            .iter()
-            .map(|x| point![x.position.x, x.position.y, x.position.z])
-            .collect();
+        let vertices: Vec<_> = mesh.vertexes.iter().map(|x| x.position).collect();
         // let deltas = Isometry::identity();
         // let aabb = bounding_volume::details::point_cloud_aabb(&deltas, &vertices);
         // let center = aabb.center();
@@ -608,7 +603,6 @@ impl StaticMeshComponent {
         rotation: glam::Quat,
         translation: glam::Vec3,
     ) -> RigidBody {
-        let translation = vector![translation.x, translation.y, translation.z];
         let (axis, angle) = rotation.to_axis_angle();
         let mut builder = match rigid_body_type {
             RigidBodyType::Dynamic => RigidBodyBuilder::dynamic(),
@@ -617,10 +611,7 @@ impl StaticMeshComponent {
             RigidBodyType::KinematicVelocityBased => RigidBodyBuilder::kinematic_velocity_based(),
         };
         builder = builder.translation(translation);
-        builder.position.rotation = Rotation::from_axis_angle(
-            &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
-            angle,
-        );
+        builder.position.rotation = Rotation::from_axis_angle(axis.normalize(), angle);
         // builder = builder.enabled_rotations(false, false, false);
         let rigid_body = builder.build();
         rigid_body
@@ -709,27 +700,17 @@ impl StaticMeshComponent {
         let (_, rotation, translation) = run_time
             .final_transformation
             .to_scale_rotation_translation();
-        let translation = vector![translation.x, translation.y, translation.z];
         rigid_body.set_translation(translation, false);
         let (axis, angle) = rotation.to_axis_angle();
-        rigid_body.set_rotation(
-            Rotation::from_axis_angle(
-                &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
-                angle,
-            ),
-            false,
-        );
-        rigid_body.set_angvel(vector![0.0, 0.0, 0.0], false);
-        rigid_body.set_linvel(vector![0.0, 0.0, 0.0], false);
+        rigid_body.set_rotation(Rotation::from_axis_angle(axis.normalize(), angle), false);
+        rigid_body.set_angvel(glam::Vec3::ZERO, false);
+        rigid_body.set_linvel(glam::Vec3::ZERO, false);
         rigid_body.reset_forces(false);
         rigid_body.reset_torques(false);
         rigid_body.wake_up(true);
 
-        collider.set_position(translation.into());
-        collider.set_rotation(Rotation::from_axis_angle(
-            &UnitVector::new_normalize(vector![axis.x, axis.y, axis.z]),
-            angle,
-        ));
+        collider.set_position(Pose3::from_translation(translation));
+        collider.set_rotation(Rotation::from_axis_angle(axis.normalize(), angle));
     }
 
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {

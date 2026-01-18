@@ -29,13 +29,17 @@ impl AudioDevice {
         } else {
             host.output_devices()
                 .map_err(|err| crate::error::Error::DevicesError(err))?
-                .find(|x| x.name().map(|y| y == opt.device).unwrap_or(false))
+                .find(|x| {
+                    x.description()
+                        .map(|y| y.name() == opt.device)
+                        .unwrap_or(false)
+                })
         }
         .ok_or(crate::error::Error::Other(format!("No audio device")))?;
         log::trace!(
             "Output device: {}",
             device
-                .name()
+                .description()
                 .map_err(|err| crate::error::Error::DeviceNameError(err))?
         );
         let supported_output_configs = device
@@ -67,7 +71,7 @@ impl AudioDevice {
             _ => unimplemented!(),
         };
         let expect_audio_format: AudioFormat = AudioFormat::from(
-            config.sample_rate().0,
+            config.sample_rate(),
             config.channels() as u32,
             sample_type,
             false,

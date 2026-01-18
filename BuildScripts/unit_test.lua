@@ -21,6 +21,9 @@ do
             "crates/rs_render_core",
             "crates/rs_pack",
             "crates/rs_text",
+            "crates/rs_cprep",
+            "crates/rs_manifest",
+            "crates/rs_network",
         }
         for k, v in ipairs(folders) do
             os.cd(path.join(engine_root_dir, v))

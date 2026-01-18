@@ -238,8 +238,8 @@ impl MultipleResolutionMeshsPass {
                 return None;
             };
             let aabb = AABB::new(
-                type_convertion(root_aabb.mins),
-                type_convertion(root_aabb.maxs),
+                root_aabb.mins,
+                root_aabb.maxs,
                 multiple_resolution_mesh_pass.transformation,
             );
             boxes.push(aabb);
@@ -314,8 +314,8 @@ impl MultipleResolutionMeshsPass {
                 .iter()
                 .map(|x| {
                     AABB::new(
-                        type_convertion(x.aabb.mins),
-                        type_convertion(x.aabb.maxs),
+                        x.aabb.mins,
+                        x.aabb.maxs,
                         multiple_resolution_mesh_pass.transformation,
                     )
                 })
@@ -343,8 +343,4 @@ impl MultipleResolutionMeshsPass {
 
         Some(visible_cluster_ids)
     }
-}
-
-fn type_convertion(value: rapier3d::math::Point<rapier3d::prelude::Real>) -> glam::Vec3 {
-    glam::vec3(value.x, value.y, value.z)
 }

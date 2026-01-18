@@ -11,4 +11,4 @@ notify = "8.2.0"
 notify-debouncer-mini = { version = "0.7.0" }
 walkdir = "2.5.0"
 regex = "1.12.2"
-log = "0.4.28"
+log = "0.4.29"

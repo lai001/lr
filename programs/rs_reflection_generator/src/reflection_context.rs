@@ -134,7 +134,7 @@ impl ParseResult {
             }
         }
 
-        let krate = function.module(db).krate();
+        let krate = function.module(db).krate(db);
 
         if !Self::is_supported_type(db, function.ty(db), &krate) {
             return false;
@@ -618,7 +618,8 @@ fn determine_return(
             });
         } else if let Some(adt) = return_type.as_adt() {
             if let Some(as_enum) = adt.as_enum() {
-                if as_enum.name(db).as_str() == ra_ap_hir::LangItem::Option.name() {
+                let name = format!("{:?}", ra_ap_hir::LangItem::Option);
+                if as_enum.name(db).as_str().eq_ignore_ascii_case(&name) {
                     if return_type.contains_reference(db) {
                         return Err(anyhow!("Not support"));
                     }

@@ -13,14 +13,14 @@ editor = []
 dunce = "1.0.5"
 path-slash = "0.2.1"
 serde = { version = "1.0.228", features = ["derive", "rc"] }
-glam = { version = "0.30.9", features = ["mint", "serde"] }
+glam = { version = "0.30.10", features = ["mint", "serde"] }
 md-5 = { version = "0.10.6" }
 sha2 = { version = "0.10" }
 rayon = "1.11.0"
 lazy_static = "1.5.0"
 regex = "1.12.2"
 rand = { version = "0.9.2" }
-url = { version = "2.5.7", features = ["serde"] }
+url = { version = "2.5.8", features = ["serde"] }
 typetag = "0.2.21"
 dyn-clone = "1.0.20"
 downcast-rs = "2.0.2"

@@ -19,18 +19,18 @@ android-native-activity = [
 accesskit = ["egui/accesskit"]
 
 [dependencies]
-glam = { version = "0.30.9", features = ["mint", "serde"] }
-log = "0.4.28"
+glam = { version = "0.30.10", features = ["mint", "serde"] }
+log = "0.4.29"
 env_logger = "0.11.8"
-egui = "0.33.2"
-url = { version = "2.5.7", features = ["serde"] }
+egui = "0.33.3"
+url = { version = "2.5.8", features = ["serde"] }
 jni = "0.21.1"
 jni_fn = "0.1.2"
 ndk-sys = "0.6.0"
 ndk-context = "0.1.1"
 raw-window-handle = "0.6.2"
 android_logger = "0.15.1"
-tracy-client = { version = "0.18.3", default-features = false }
+tracy-client = { version = "0.18.4", default-features = false }
 winit = { version = "0.30.12" }
 backtrace = { version = "0.3", optional = true }
 tracing = { version = "0.1", optional = true }
