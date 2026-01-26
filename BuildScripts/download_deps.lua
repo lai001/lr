@@ -73,7 +73,7 @@ do
 
         if os.exists(gizmo_dir) == false then
             git.clone("https://github.com/urholaukkarinen/transform-gizmo.git", { outputdir = gizmo_dir })
-            git.checkout("00be178c38a09a6a8df2ae4f557b7a12fcdafe14", { repodir = gizmo_dir })
+            git.checkout("a78b41111e2519b8cda25852f5d9aedf75d677c2", { repodir = gizmo_dir })
         end
 
         if not check_hash_files(os, io, "Resource/Remote/neon_photostudio_2k.exr", "da6a36f6fa031c3896c915eea7e2794d62fdf77a2b800085ca276b1962381e15") then

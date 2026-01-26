@@ -72,6 +72,21 @@ impl LevelPhysics {
         }
     }
 
+    pub fn collision_step(&mut self) {
+        let _ = tracy_client::span!();
+        let mut events: Vec<BroadPhasePairEvent> = vec![];
+        let modified_colliders = self.collider_set.take_modified();
+        let removed_colliders = self.collider_set.take_removed();
+        self.broad_phase.update(
+            &self.integration_parameters,
+            &self.collider_set,
+            &self.rigid_body_set,
+            &modified_colliders,
+            &removed_colliders,
+            &mut events,
+        );
+    }
+
     pub fn query_update(&mut self) {}
 
     pub fn find_the_contact_pair(
@@ -646,16 +661,17 @@ impl Level {
     }
 
     pub fn ray_cast_find_node(
-        &self,
+        &mut self,
         cursor_position: &glam::Vec2,
         window_size: &glam::Vec2,
         // camera: &mut Camera,
         camera_view_matrix: glam::Mat4,
         camera_projection_matrix: glam::Mat4,
     ) -> Option<SingleThreadMutType<SceneNode>> {
-        let Some(physics) = self.runtime.as_ref().map(|x| &x.physics) else {
+        let Some(physics) = self.get_physics_mut() else {
             return None;
         };
+        physics.collision_step();
         let ndc_cursor = glam::vec2(
             cursor_position.x / window_size.x * 2.0 - 1.0,
             1.0 - cursor_position.y / window_size.y * 2.0,

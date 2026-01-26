@@ -453,7 +453,7 @@ impl EditorContext {
                     && self.data_source.is_gizmo_focused == false
                 {
                     if let Some(level) = self.data_source.level.as_ref() {
-                        let level = level.borrow();
+                        let mut level = level.borrow_mut();
                         let componenet_type = level.ray_cast_find_node(
                             &self.mosue_state.position,
                             &glam::vec2(
