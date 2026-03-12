@@ -266,6 +266,9 @@ impl EditorContext {
             HashMap::new(),
             ProjectContext::load_shader_naga_modules(),
         )?;
+        sys_locale::get_locale().inspect(|locale| {
+            rs_localization::set_locale(locale);
+        });
 
         Self::insert_cmds(&mut engine);
 

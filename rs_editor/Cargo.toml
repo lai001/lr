@@ -93,6 +93,8 @@ rapier3d = { version = "0.32.0", features = ["simd-stable", "serde-serialize"] }
 meshopt = "0.6.2"
 v8 = { version = "145.0.0", optional = true }
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
+rust-i18n = "3.1.5"
+sys-locale = "0.3.2"
 rs_render_core = { path = "../crates/rs_render_core" }
 rs_render = { path = "../rs_render" }
 rs_render_types = { path = "../rs_render_types" }
@@ -117,6 +119,7 @@ rs_model_loader = { path = "../crates/rs_model_loader" }
 rs_network = { path = "../crates/rs_network", optional = true }
 rs_manifest = { path = "../crates/rs_manifest" }
 rs_texpress = { path = "../crates/rs_texpress" }
+rs_localization = { path = "../crates/rs_localization" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rs_dotnet = { path = "../rs_dotnet", optional = true }

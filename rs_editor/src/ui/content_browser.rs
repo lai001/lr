@@ -2,6 +2,7 @@ use crate::{content_folder::ContentFolder, thumbnail_cache::ThumbnailCache};
 use egui::{Color32, Context, RichText, Sense, Ui};
 use rs_engine::content::content_file_type::EContentFileType;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
+use rs_localization::t;
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 pub struct DataSource {
@@ -81,72 +82,72 @@ pub fn draw(
                 // ui.set_max_width(500.0);
                 ui.horizontal(|ui| {
                     if ui
-                        .button(RichText::new("Back").color(Color32::WHITE))
+                        .button(RichText::new(t!("Back")).color(Color32::WHITE))
                         .clicked()
                     {
                         click_back = Some(EClickEventType::Back);
                     }
                     let response = ui.allocate_response(ui.available_size(), egui::Sense::click());
                     response.context_menu(|ui| {
-                        ui.menu_button("Create Folder", |ui| {
+                        ui.menu_button(t!("Create Folder"), |ui| {
                             ui.text_edit_singleline(&mut data_source.new_folder_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateFolder);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Material", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_material_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateMaterial);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("IBL", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_ibl_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateIBL);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Particle System", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateParticleSystem);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Curve", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateCurve);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Blend Animation", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateBlendAnimations);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Material Parameters Collection", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateMaterialParametersCollection);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("Level", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_level_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateLevel);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
                         ui.menu_button("RenderTarget2D", |ui| {
                             ui.text_edit_singleline(&mut data_source.new_level_name);
-                            if ui.button("Ok").clicked() {
+                            if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateRenderTarget2D);
                                 ui.close_kind(egui::UiKind::Menu);
                             }

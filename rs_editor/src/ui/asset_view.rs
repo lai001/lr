@@ -4,6 +4,7 @@ use crate::{
 };
 use egui::{Color32, Context, RichText, Ui};
 use rs_engine::file_type::EFileType;
+use rs_localization::t;
 
 #[derive(Debug)]
 pub enum EClickItemType {
@@ -41,7 +42,7 @@ pub fn draw(
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
                         if ui
-                            .button(RichText::new("Back").color(Color32::WHITE))
+                            .button(RichText::new(t!("Back")).color(Color32::WHITE))
                             .clicked()
                         {
                             click_back = Some(EClickItemType::Back);
@@ -138,7 +139,7 @@ fn draw_content(
                                         response.context_menu(|ui| {
                                             highlight_item =
                                                 Some(EClickItemType::SingleClickFile(file.clone()));
-                                            if ui.button("Import as actor").clicked() {
+                                            if ui.button(t!("Import as actor")).clicked() {
                                                 click_item = Some(EClickItemType::ImportAsActor(
                                                     file.clone(),
                                                 ));
@@ -150,7 +151,7 @@ fn draw_content(
                                         response.context_menu(|ui| {
                                             highlight_item =
                                                 Some(EClickItemType::SingleClickFile(file.clone()));
-                                            if ui.button("Create sound").clicked() {
+                                            if ui.button(t!("Create sound")).clicked() {
                                                 click_item =
                                                     Some(EClickItemType::CreateSound(file.clone()));
                                                 ui.close_kind(egui::UiKind::Menu);
@@ -165,7 +166,7 @@ fn draw_content(
                                         response.context_menu(|ui| {
                                             highlight_item =
                                                 Some(EClickItemType::SingleClickFile(file.clone()));
-                                            if ui.button("Create texture").clicked() {
+                                            if ui.button(t!("Create texture")).clicked() {
                                                 click_item = Some(EClickItemType::CreateTexture(
                                                     file.clone(),
                                                 ));
@@ -177,7 +178,7 @@ fn draw_content(
                                         response.context_menu(|ui| {
                                             highlight_item =
                                                 Some(EClickItemType::SingleClickFile(file.clone()));
-                                            if ui.button("Create media source").clicked() {
+                                            if ui.button(t!("Create media source")).clicked() {
                                                 click_item = Some(
                                                     EClickItemType::CreateMediaSource(file.clone()),
                                                 );

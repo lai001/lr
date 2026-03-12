@@ -4,6 +4,7 @@ use crate::{
 };
 use egui::{Button, Context, TopBottomPanel};
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
+use rs_localization::t;
 use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
 use std::path::PathBuf;
 
@@ -56,38 +57,38 @@ impl TopMenu {
         let mut click: Option<EClickEventType> = None;
         TopBottomPanel::top("menu_bar").show(context, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                ui.menu_button("File", |ui| {
+                ui.menu_button(t!("File"), |ui| {
                     // ui.set_min_width(220.0);
                     // ui.style_mut().wrap = Some(false);
 
-                    ui.menu_button("New Project", |ui| {
+                    ui.menu_button(t!("New Project"), |ui| {
                         ui.text_edit_singleline(&mut self.new_project_name);
-                        if ui.add(Button::new("OK")).clicked() {
+                        if ui.add(Button::new(t!("OK"))).clicked() {
                             click =
                                 Some(EClickEventType::NewProject(self.new_project_name.clone()));
                         }
                     });
-                    if ui.add(Button::new("Open Project")).clicked() {
+                    if ui.add(Button::new(t!("Open Project"))).clicked() {
                         click = Some(EClickEventType::OpenProject);
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Open Project Settings")).clicked() {
+                    if ui.add(Button::new(t!("Open Project Settings"))).clicked() {
                         click = Some(EClickEventType::OpenProjectSettings);
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Save Project")).clicked() {
+                    if ui.add(Button::new(t!("Save Project"))).clicked() {
                         click = Some(EClickEventType::SaveProject);
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Export")).clicked() {
+                    if ui.add(Button::new(t!("Export"))).clicked() {
                         click = Some(EClickEventType::Export);
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Open Visual Studio Code")).clicked() {
+                    if ui.add(Button::new(t!("Open Visual Studio Code"))).clicked() {
                         click = Some(EClickEventType::OpenVisualStudioCode);
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    ui.menu_button("Recent Projects", |ui| {
+                    ui.menu_button(t!("Recent Projects"), |ui| {
                         for recent_project_path in &datasource.recent_projects.paths {
                             if !recent_project_path.exists() {
                                 continue;
@@ -106,7 +107,7 @@ impl TopMenu {
                             }
                         }
                     });
-                    ui.menu_button("Build", |ui| {
+                    ui.menu_button(t!("Build"), |ui| {
                         ui.menu_button("Windows", |ui| {
                             ui.menu_button("Debug", |ui| {
                                 if ui.add(Button::new("x64")).clicked() {
@@ -131,66 +132,66 @@ impl TopMenu {
                         });
                     });
                 });
-                ui.menu_button("Window", |ui| {
-                    if ui.add(Button::new("Asset")).clicked() {
+                ui.menu_button(t!("Window"), |ui| {
+                    if ui.add(Button::new(t!("Asset"))).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Asset));
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Content")).clicked() {
+                    if ui.add(Button::new(t!("Content"))).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Content));
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Property")).clicked() {
+                    if ui.add(Button::new(t!("Property"))).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Property));
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Level")).clicked() {
+                    if ui.add(Button::new(t!("Level"))).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::Level));
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Comsole Cmds")).clicked() {
+                    if ui.add(Button::new(t!("Comsole Cmds"))).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::ComsoleCmds));
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Object Property")).clicked() {
+                    if ui.add(Button::new(t!("Object Property"))).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::ObjectProperty));
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    if ui.add(Button::new("Debug Texture")).clicked() {
+                    if ui.add(Button::new(t!("Debug Texture"))).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::DebugTexture));
                         ui.close_kind(egui::UiKind::Menu);
                     }
                 });
-                ui.menu_button("Tool", |ui| {
-                    if ui.add(Button::new("Debug Shader")).clicked() {
+                ui.menu_button(t!("Tool"), |ui| {
+                    if ui.add(Button::new(t!("Debug Shader"))).clicked() {
                         click = Some(EClickEventType::Tool(EToolType::DebugShader));
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    ui.menu_button("View Mode", |ui| {
+                    ui.menu_button(t!("View Mode"), |ui| {
                         if ui
                             .radio_value(
                                 &mut datasource.view_mode,
                                 EViewModeType::Wireframe,
-                                "Wireframe",
+                                t!("Wireframe"),
                             )
                             .clicked()
                         {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Wireframe));
                         }
                         if ui
-                            .radio_value(&mut datasource.view_mode, EViewModeType::Lit, "Lit")
+                            .radio_value(&mut datasource.view_mode, EViewModeType::Lit, t!("Lit"))
                             .clicked()
                         {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Lit));
                         }
                         if ui
-                            .radio_value(&mut datasource.view_mode, EViewModeType::Unlit, "Unlit")
+                            .radio_value(&mut datasource.view_mode, EViewModeType::Unlit, t!("Unlit"))
                             .clicked()
                         {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Unlit));
                         }
                     });
-                    ui.menu_button("Debug Shading", |ui| {
+                    ui.menu_button(t!("Debug Shading"), |ui| {
                         for ty in rs_render::global_uniform::EDebugShadingType::all_types() {
                             if ui
                                 .radio_value(
@@ -215,11 +216,11 @@ impl TopMenu {
                         }
                         datasource.debug_flags = init_flags;
                     });
-                    if ui.add(Button::new("Run")).clicked() {
+                    if ui.add(Button::new(t!("Run"))).clicked() {
                         click = Some(EClickEventType::Run);
                         ui.close_kind(egui::UiKind::Menu);
                     }
-                    ui.menu_button("Standalone Simulation", |ui| {
+                    ui.menu_button(t!("Standalone Simulation"), |ui| {
                         ui.add(
                             egui::DragValue::new(&mut datasource.multiple_players)
                                 .speed(1)
@@ -237,7 +238,7 @@ impl TopMenu {
                     });
                     ui.checkbox(&mut datasource.is_simulate_real_time, "Simulate Real Time");
                 });
-                ui.menu_button("Test", |ui| {
+                ui.menu_button(t!("Test"), |ui| {
                     if ui.add(Button::new("Multiple Draw")).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::MultipleDrawUi));
                         ui.close_kind(egui::UiKind::Menu);
