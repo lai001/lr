@@ -4,11 +4,11 @@ plugins {
 
 android {
     namespace 'com.lai001.lib.lrjni'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         minSdk 29
-        targetSdk 34
+        targetSdk 36
 
         consumerProguardFiles "consumer-rules.pro"
     }

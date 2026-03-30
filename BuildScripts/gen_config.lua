@@ -17,12 +17,16 @@ task("gen_config")
             os.raise("NDK not found")
         end
         local host = (get_config("host") and { get_config("host") } or { "windows" })[1]
-
+        local is_explicit_support_16_kb_page_sizes = true
+        local support_16_kb_page_sizes_flags = ""
+        if is_explicit_support_16_kb_page_sizes then
+            support_16_kb_page_sizes_flags = [[, "-Clink-args=-Wl,-z,max-page-size=16384"]]
+        end
         local target_template = [[
 [target.@target@]
 ar = "@ndk@/toolchains/llvm/prebuilt/@host@-x86_64/bin/llvm-ar.exe"
 linker = "@ndk@/toolchains/llvm/prebuilt/@host@-x86_64/bin/clang.exe"
-rustflags = ["-Clink-args=--target=@target@@api@"]
+rustflags = ["-Clink-args=--target=@target@@api@"@support_16_kb_page_sizes_flags@]
         ]]
 
         local content = ""
@@ -35,6 +39,7 @@ rustflags = ["-Clink-args=--target=@target@@api@"]
             t = t:gsub("@ndk@", ndk_path)
             -- t = t:gsub("@host@", get_config("plat"))
             t = t:gsub("@host@", host)
+            t = t:gsub("@support_16_kb_page_sizes_flags@", support_16_kb_page_sizes_flags)
             content = content .. "\n" .. t
         end
         content = content .. "\n" .. [[
