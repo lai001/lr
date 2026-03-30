@@ -1,53 +1,53 @@
-use glam::Vec3Swizzles;
+use std::sync::Arc;
 
 pub struct ComputeDispatcher {
     workgroup_size: glam::UVec3,
+    is_single_thread: bool,
 }
 
 impl ComputeDispatcher {
     pub fn new(workgroup_size: glam::UVec3) -> ComputeDispatcher {
-        ComputeDispatcher { workgroup_size }
+        ComputeDispatcher {
+            workgroup_size,
+            is_single_thread: false,
+        }
     }
 
     pub fn dispatch_workgroups(
         &self,
         num_work_groups: glam::UVec3,
-        work: impl FnMut(glam::UVec3, glam::UVec3, glam::UVec3, u32) + Send + Clone + 'static,
+        work: impl Fn(glam::UVec3, glam::UVec3, glam::UVec3, u32) + Send + Sync + 'static,
     ) {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        let groups = num_work_groups.element_product();
-        let mut finish_grous = 0;
-        for group_index in 0..groups {
-            crate::thread_pool::ThreadPool::global().spawn({
-                let workgroup_size = self.workgroup_size;
-                let mut work = work.clone();
-                let sender = sender.clone();
-                move || {
-                    let a = num_work_groups.xy().element_product();
-                    let b = group_index % a;
-                    let group_id = glam::uvec3(
-                        b % num_work_groups.y,
-                        b / num_work_groups.x,
-                        group_index / a,
-                    );
-                    for x in 0..workgroup_size.x {
-                        for y in 0..workgroup_size.y {
-                            for z in 0..workgroup_size.z {
-                                let group_thread_id = glam::uvec3(x, y, z);
-                                let dispatch_thread_id =
-                                    group_id * workgroup_size + group_thread_id;
-                                work(group_thread_id, group_id, dispatch_thread_id, group_index);
-                            }
-                        }
+        if self.is_single_thread {
+            for gz in 0..num_work_groups.z {
+                for gy in 0..num_work_groups.y {
+                    for gx in 0..num_work_groups.x {
+                        let group_id = glam::uvec3(gx, gy, gz);
+                        Self::do_work(group_id, &self.workgroup_size, &work);
                     }
-                    sender.send(()).unwrap();
                 }
-            });
-        }
-        for _ in receiver {
-            finish_grous += 1;
-            if finish_grous == groups {
-                break;
+            }
+        } else {
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let work = Arc::new(work);
+            for gz in 0..num_work_groups.z {
+                for gy in 0..num_work_groups.y {
+                    for gx in 0..num_work_groups.x {
+                        let group_id = glam::uvec3(gx, gy, gz);
+                        crate::thread_pool::ThreadPool::global().spawn({
+                            let sender = sender.clone();
+                            let workgroup_size = self.workgroup_size;
+                            let work = work.clone();
+                            move || {
+                                Self::do_work(group_id, &workgroup_size, work.as_ref());
+                                sender.send(()).unwrap();
+                            }
+                        });
+                    }
+                }
+            }
+            for _ in 0..num_work_groups.element_product() {
+                receiver.recv().unwrap();
             }
         }
     }
@@ -61,6 +61,33 @@ impl ComputeDispatcher {
             works_hint.y.div_ceil(workgroup_size.y),
             works_hint.z.div_ceil(workgroup_size.z),
         )
+    }
+
+    pub fn set_is_single_thread(mut self, is_single_thread: bool) -> Self {
+        self.is_single_thread = is_single_thread;
+        return self;
+    }
+
+    fn do_work(
+        group_id: glam::UVec3,
+        workgroup_size: &glam::UVec3,
+        work: &(impl Fn(glam::UVec3, glam::UVec3, glam::UVec3, u32) + Send + Sync + 'static),
+    ) {
+        for tz in 0..workgroup_size.z {
+            for ty in 0..workgroup_size.y {
+                for tx in 0..workgroup_size.x {
+                    let group_thread_id = glam::uvec3(tx, ty, tz);
+                    let group_index =
+                        tz * workgroup_size.x * workgroup_size.y + ty * workgroup_size.x + tx;
+                    let dispatch_thread_id = glam::uvec3(
+                        group_id.x * workgroup_size.x + tx,
+                        group_id.y * workgroup_size.y + ty,
+                        group_id.z * workgroup_size.z + tz,
+                    );
+                    work(group_thread_id, group_id, dispatch_thread_id, group_index);
+                }
+            }
+        }
     }
 }
 
@@ -107,7 +134,7 @@ mod test {
         let num_work_groups = ComputeDispatcher::estimate_num_work_groups(&size, &workgroup_size);
         ComputeDispatcher::new(workgroup_size).dispatch_workgroups(num_work_groups, {
             move |_, _, _, group_index| {
-                assert!(group_index < num_work_groups.element_product());
+                assert!(group_index < workgroup_size.x * workgroup_size.y);
                 let image = unsafe { wrapper_type.0.as_mut().unwrap() };
                 image.as_raw();
                 if let Some(pixel) = image.get_pixel_mut_checked(group_index, 0) {
@@ -115,11 +142,14 @@ mod test {
                 }
             }
         });
-        for (i, pixel) in image.pixels().enumerate() {
-            if (0..size.x).contains(&(i as u32)) {
-                assert_eq!(*pixel, image::Rgba::<u8>([255, 0, 0, 255]));
-            }
-        }
+        assert_eq!(
+            *image.get_pixel(workgroup_size.x * workgroup_size.y - 1, 0),
+            image::Rgba::<u8>([255, 0, 0, 255])
+        );
+        assert_eq!(
+            *image.get_pixel(workgroup_size.x * workgroup_size.y, 0),
+            image::Rgba::<u8>([0, 0, 0, 0])
+        );
     }
 
     #[test]
@@ -154,5 +184,30 @@ mod test {
         });
         assert_eq!(*image.get_pixel(2048, 2048), inside);
         assert_eq!(*image.get_pixel(1023, 2048), outside);
+    }
+
+    #[test]
+    fn test3() {
+        struct Wrapper(*mut Vec<i32>);
+        unsafe impl Send for Wrapper {}
+        unsafe impl Sync for Wrapper {}
+        let workgroup_size = glam::UVec3::splat(1);
+        let num_work_groups = glam::UVec3::splat(10);
+        let mut datas = vec![0; 10 * 10 * 10];
+        let wrapper = Wrapper((&mut datas) as *mut _);
+        ComputeDispatcher::new(workgroup_size).dispatch_workgroups(num_work_groups, {
+            move |_, _, dispatch_thread_id, _| {
+                // https://users.rust-lang.org/t/how-to-share-a-raw-pointer-between-threads/77596
+                let wrapper = &wrapper;
+                let datas: &mut Vec<i32> = unsafe { wrapper.0.as_mut().unwrap() };
+                let index = 10 * 10 * dispatch_thread_id.z
+                    + 10 * dispatch_thread_id.y
+                    + dispatch_thread_id.x;
+                datas[index as usize] += 1;
+            }
+        });
+        for data in datas {
+            assert_eq!(data, 1);
+        }
     }
 }
