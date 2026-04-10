@@ -21,3 +21,4 @@ rs_mesh_optimization = { path = "../crates/rs_mesh_optimization" }
 
 [build-dependencies]
 bindgen = "0.72.1"
+rs_core_minimal = { path = "../rs_core_minimal" }
