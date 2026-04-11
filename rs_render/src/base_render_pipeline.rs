@@ -37,7 +37,7 @@ impl BaseRenderPipeline {
             targets,
             depth_stencil,
             multisample,
-            multiview,
+            multiview_mask,
             primitive,
             vertex_buffer_type,
             hooks,
@@ -126,9 +126,9 @@ impl BaseRenderPipeline {
             label: Some(&format!("{} pipeline layout", tag)),
             bind_group_layouts: &bind_group_layouts
                 .iter()
-                .map(|x| x)
-                .collect::<Vec<&BindGroupLayout>>(),
-            push_constant_ranges: &[],
+                .map(|x| Some(x))
+                .collect::<Vec<Option<&BindGroupLayout>>>(),
+            immediate_size: 0,
         });
         let mut vertex_buffer_layouts: Vec<VertexBufferLayout> = vec![];
         let mut builder: Option<VertexBufferLayoutBuilder> = None;
@@ -155,16 +155,16 @@ impl BaseRenderPipeline {
                 buffers: &vertex_buffer_layouts,
                 compilation_options: PipelineCompilationOptions::default(),
             },
+            primitive: primitive.unwrap_or_default(),
+            depth_stencil,
+            multisample: multisample.unwrap_or_default(),
             fragment: Some(FragmentState {
                 module: &shader,
                 entry_point: Some(&fs.name),
                 targets: &targets,
                 compilation_options: PipelineCompilationOptions::default(),
             }),
-            primitive: primitive.unwrap_or_default(),
-            depth_stencil,
-            multisample: multisample.unwrap_or_default(),
-            multiview,
+            multiview_mask,
             cache: None,
         });
 
@@ -278,6 +278,7 @@ impl BaseRenderPipeline {
                 depth_stencil_attachment,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             if let Some(rect) = scissor_rect {
                 render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);
@@ -478,6 +479,7 @@ impl BaseRenderPipeline {
                 depth_stencil_attachment,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             if let Some(rect) = scissor_rect {
                 render_pass.set_scissor_rect(rect.x, rect.y, rect.z, rect.w);

@@ -95,9 +95,13 @@ impl ApplicationContext {
         }
         self.engine.window_redraw_requested_begin(WINDOW_ID);
         self.gui.begin_ui();
-        egui::TopBottomPanel::top("my_top_panel")
-            .exact_height(0.01)
-            .show(&self.gui.egui_context(), |ui| {
+        let mut panel_ui = rs_egui_utils::create_panel_ui_from_context(
+            self.gui.egui_context(),
+            Some(egui::Id::new("my_top_panel_ui")),
+        );
+        egui::Panel::top("my_top_panel")
+            .exact_size(0.01)
+            .show_inside(&mut panel_ui, |ui| {
                 let _ = ui;
             });
         self.app

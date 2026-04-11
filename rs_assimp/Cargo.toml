@@ -8,10 +8,10 @@ edition = "2021"
 [dependencies]
 log = "0.4.29"
 russimp-sys = { version = "2.0.2", features = ["prebuilt"] }
-bitflags = "2.10.0"
+bitflags = "2.11.0"
 glam = { version = "0.30.10", features = ["mint", "serde"] }
-strum = "0.27.2"
-strum_macros = "0.27.2"
+strum = "0.28.0"
+strum_macros = "0.28.0"
 lazy_static = "1.5.0"
 rs_foundation = { path = "../rs_foundation" }
 

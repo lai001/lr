@@ -1,6 +1,7 @@
 local engine_root_dir = engine_root_dir
 local ffmpeg_dir = ffmpeg_dir
 local russimp_prebuild_dir = russimp_prebuild_dir
+local rs_target_dir = rs_target_dir
 
 local function build_feature_args(features)
     local features_arg = ""
@@ -66,11 +67,7 @@ task("ci")
     on_run(function()
         import("core.base.option")
         local mode = option.get("mode")
-        if mode == nil then
-            mode = "debug"
-        end
-        os.cd(path.join(engine_root_dir, "build/target/release"))
-        os.exec("./rs_shader_compiler.exe")
+        os.exec("xmake compile_shaders")
         os.exec(format("xmake build_editor_target --mode=%s", mode))
         os.exec(format("xmake build_desktop_standalone_target --mode=%s", mode))
         os.cd(engine_root_dir)

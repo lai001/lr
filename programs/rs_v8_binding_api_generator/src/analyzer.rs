@@ -3,6 +3,7 @@ use ra_ap_load_cargo::{load_workspace, LoadCargoConfig, ProcMacroServerChoice};
 use ra_ap_proc_macro_api::ProcMacroClient;
 use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace, RustLibSource};
 use ra_ap_vfs::{AbsPathBuf, Vfs};
+use std::num::NonZero;
 
 pub struct Analyzer {
     pub root_database: RootDatabase,
@@ -24,10 +25,18 @@ impl Analyzer {
                 let _ = message;
             },
         )?;
+        let num_worker_threads = std::thread::available_parallelism()
+            .unwrap_or(NonZero::new(1).unwrap())
+            .get();
+        let proc_macro_processes = std::thread::available_parallelism()
+            .unwrap_or(NonZero::new(1).unwrap())
+            .get();
         let load_cargo_config: LoadCargoConfig = LoadCargoConfig {
             load_out_dirs_from_check: true,
             with_proc_macro_server: ProcMacroServerChoice::None,
             prefill_caches: false,
+            num_worker_threads,
+            proc_macro_processes,
         };
         let (root_database, vfs, proc_macro_server) = load_workspace(
             project_workspace.clone(),

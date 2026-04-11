@@ -159,21 +159,21 @@ impl State {
                 self.on_mouse_button_input(*state, *button);
                 EventResponse {
                     repaint: true,
-                    consumed: self.egui_ctx.wants_pointer_input(),
+                    consumed: self.egui_ctx.egui_wants_pointer_input(),
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.on_mouse_wheel(scale_factor, *delta);
                 EventResponse {
                     repaint: true,
-                    consumed: self.egui_ctx.wants_pointer_input(),
+                    consumed: self.egui_ctx.egui_wants_pointer_input(),
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.on_cursor_moved(*position, scale_factor);
                 EventResponse {
                     repaint: true,
-                    consumed: self.egui_ctx.is_using_pointer(),
+                    consumed: self.egui_ctx.egui_is_using_pointer(),
                 }
             }
             WindowEvent::CursorLeft { .. } => {
@@ -189,8 +189,10 @@ impl State {
                 let consumed = match touch.phase {
                     winit::event::TouchPhase::Started
                     | winit::event::TouchPhase::Ended
-                    | winit::event::TouchPhase::Cancelled => self.egui_ctx.wants_pointer_input(),
-                    winit::event::TouchPhase::Moved => self.egui_ctx.is_using_pointer(),
+                    | winit::event::TouchPhase::Cancelled => {
+                        self.egui_ctx.egui_wants_pointer_input()
+                    }
+                    winit::event::TouchPhase::Moved => self.egui_ctx.egui_is_using_pointer(),
                 };
                 EventResponse {
                     repaint: true,
@@ -223,7 +225,7 @@ impl State {
                 };
                 EventResponse {
                     repaint: true,
-                    consumed: self.egui_ctx.wants_keyboard_input(),
+                    consumed: self.egui_ctx.egui_wants_keyboard_input(),
                 }
             }
             WindowEvent::KeyboardInput {
@@ -238,7 +240,7 @@ impl State {
                     }
                 } else {
                     self.on_keyboard_input(event);
-                    let consumed = self.egui_ctx.wants_keyboard_input()
+                    let consumed = self.egui_ctx.egui_wants_keyboard_input()
                         || event.logical_key
                             == winit::keyboard::Key::Named(winit::keyboard::NamedKey::Tab);
                     EventResponse {
@@ -339,7 +341,7 @@ impl State {
                 self.egui_input.events.push(egui::Event::Zoom(zoom_factor));
                 EventResponse {
                     repaint: true,
-                    consumed: self.egui_ctx.wants_pointer_input(),
+                    consumed: self.egui_ctx.egui_wants_pointer_input(),
                 }
             }
         }
@@ -525,6 +527,7 @@ impl State {
                 unit,
                 delta,
                 modifiers,
+                phase: egui::TouchPhase::Move,
             });
         }
     }
@@ -604,8 +607,7 @@ impl State {
             events: _,
             mutable_text_under_cursor: _,
             ime,
-            #[cfg(feature = "accesskit")]
-            accesskit_update,
+            accesskit_update: _,
             num_completed_passes: _,
             request_discard_reasons: _,
         } = platform_output;

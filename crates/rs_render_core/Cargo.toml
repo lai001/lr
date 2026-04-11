@@ -6,13 +6,13 @@ edition = "2021"
 [features]
 default = ["wgpu_latest", "serde"]
 wgpu_latest = ["dep:wgpu"]
-wgpu26 = ["dep:wgpu26"]
+wgpu28 = ["dep:wgpu28"]
 profiler = ["tracy-client/enable"]
-serde = ["wgpu?/serde", "wgpu26?/serde"]
+serde = ["wgpu?/serde", "wgpu28?/serde"]
 
 [dependencies]
-wgpu = { version = "27.0.1", features = ["spirv", "naga-ir"], optional = true }
-wgpu26 = { package = "wgpu", version = "=26.0.1", features = [
+wgpu = { version = "29.0.1", features = ["spirv", "naga-ir"], optional = true }
+wgpu28 = { package = "wgpu", version = "=28.0.0", features = [
     "spirv",
     "naga-ir",
 ], optional = true }

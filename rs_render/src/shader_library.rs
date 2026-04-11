@@ -179,13 +179,13 @@ impl ShaderLibrary {
         let span = tracy_client::span!();
         span.emit_text(name.as_ref());
         let shader_module = (|| {
-            device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
             let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(&name.as_ref()),
                 source: shader_source,
             });
-            if let Some(err) = device
-                .pop_error_scope()
+            if let Some(err) = error_scope
+                .pop()
                 .block_on()
                 .map(|x| crate::error::Error::Wgpu(Mutex::new(x)))
             {

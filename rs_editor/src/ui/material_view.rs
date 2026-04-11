@@ -734,8 +734,12 @@ impl MaterialView {
         };
 
         self.event = None;
+        let mut panel_ui = rs_egui_utils::create_panel_ui_from_context(
+            context,
+            Some(egui::Id::new("MaterialViewPanel")),
+        );
 
-        TopBottomPanel::top("material_menu_bar").show(context, |ui| {
+        Panel::top("material_menu_bar").show_inside(&mut panel_ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("Tool", |ui| {
                     if ui.add(Button::new("Debug Shader Code")).clicked() {
@@ -819,7 +823,7 @@ impl MaterialView {
             });
 
         let snarl = &mut material.borrow_mut().snarl;
-        let result = Self::do_draw(&mut self.viewer, &self.style, snarl, context);
+        let result = Self::do_draw(&mut self.viewer, &self.style, snarl, &mut panel_ui);
         if let Some(result) = result {
             if let Ok(result) = result {
                 self.current_resolve_result = Some(result.clone());
@@ -832,13 +836,13 @@ impl MaterialView {
         viewer: &mut GraphViewer,
         style: &SnarlStyle,
         snarl: &mut Snarl<MaterialNode>,
-        context: &egui::Context,
+        panel_ui: &mut Ui,
     ) -> Option<anyhow::Result<HashMap<MaterialOptions, ResolveResult>>> {
-        egui::SidePanel::left("Detail").show(context, |ui| {
+        egui::Panel::left("Detail").show_inside(panel_ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |_| {});
         });
 
-        egui::CentralPanel::default().show(context, |ui| {
+        egui::CentralPanel::default().show_inside(panel_ui, |ui| {
             snarl.show(viewer, style, egui::Id::new("MaterialView"), ui);
         });
 

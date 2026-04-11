@@ -17,22 +17,22 @@ serde = ["wgpu/serde", "rs_render_core/serde"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 serde = { version = "1.0.228", features = ["derive", "rc"] }
-wgpu = { version = "27.0.1", features = ["spirv", "naga-ir"] }
-naga = { version = "27.0.3" }
+wgpu = { version = "29.0.1", features = ["spirv", "naga-ir"] }
+naga = { version = "29.0.1" }
 log = "0.4.29"
 pollster = "0.4.0"
 raw-window-handle = "0.6.2"
 type-layout = "0.2.0"
 glam = { version = "0.30.10", features = ["mint", "serde"] }
-egui = { version = "0.33.3" }
-egui-wgpu = { version = "0.33.3" }
-image = "0.25.9"
+egui = { version = "0.34.1" }
+egui-wgpu = { version = "0.34.1" }
+image = "0.25.10"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 ddsfile = "0.5.2"
 tracy-client = { version = "0.18.4", default-features = false }
-bitflags = "2.10.0"
-moka = { version = "0.12.12", default-features = false, features = ["sync"] }
+bitflags = "2.11.0"
+moka = { version = "0.12.15", default-features = false, features = ["sync"] }
 rapier3d = { version = "0.32.0", features = ["simd-stable", "serde-serialize"] }
 rs_foundation = { path = "../rs_foundation" }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }
@@ -58,4 +58,4 @@ android_logger = "0.15.1"
 [target.'cfg(target_os = "windows")'.dependencies]
 renderdoc = { version = "0.12.1", optional = true }
 windows = { version = "0.62.2", optional = true }
-wgpu-hal = { version = "27.0.4", optional = true }
+wgpu-hal = { version = "29.0.1", optional = true }

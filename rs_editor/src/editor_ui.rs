@@ -98,7 +98,11 @@ impl EditorUI {
         model_loader: &mut ModelLoader,
     ) -> ClickEvent {
         let mut click = ClickEvent::default();
-        click.menu_event = self.top_menu.draw(context, data_source);
+        let mut panel_ui = rs_egui_utils::create_panel_ui_from_context(
+            context,
+            Some(egui::Id::new("EditorPanel")),
+        );
+        click.menu_event = self.top_menu.draw(context, &mut panel_ui, data_source);
 
         if let Some(level) = &data_source.level {
             let window = Self::new_window("Level", data_source.input_mode);

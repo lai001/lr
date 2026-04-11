@@ -44,20 +44,20 @@ reflection = ["dep:rs_reflection_core", "dep:rs_reflection_system"]
 network = ["dep:rs_network", "rs_engine/network"]
 
 [dependencies]
-futures = "0.3.31"
-tokio = { version = "1.49.0", features = ["full"] }
-egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "4ae5be3", version = "0.8.0", features = [
+futures = "0.3.32"
+tokio = { version = "1.51.1", features = ["full"] }
+egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "5bdc34e", version = "0.9.0", features = [
     "serde",
 ] }
-syn = { version = "2.0.114", features = ["full", "extra-traits"] }
+syn = { version = "2.0.117", features = ["full", "extra-traits"] }
 log = "0.4.29"
-env_logger = "0.11.8"
+env_logger = "0.11.10"
 russimp = { version = "3.2.1", features = ["prebuilt", "static-link"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 bincode = { version = "=2.0.1", features = ["serde"] }
 glam = { version = "0.30.10", features = ["mint"] }
-uuid = { version = "1.19.0", features = [
+uuid = { version = "1.23.0", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
@@ -65,33 +65,33 @@ uuid = { version = "1.19.0", features = [
 ] }
 url = { version = "2.5.8", features = ["serde"] }
 percent-encoding = "2.3.2"
-winit = { version = "0.30.12" }
-egui = { version = "0.33.3" }
-egui_extras = { version = "0.33.3", features = ["all_loaders"] }
-egui-winit = { version = "0.33.3" }
-egui_plot = "0.34.0"
+winit = { version = "0.30.13" }
+egui = { version = "0.34.1" }
+egui_extras = { version = "0.34.1", features = ["all_loaders"] }
+egui-winit = { version = "0.34.1" }
+egui_plot = "0.35.0"
 uniform-cubic-splines = { version = "=0.3.1" }
 rfd = "0.17.2"
-image = "0.25.9"
-regex = "1.12.2"
+image = "0.25.10"
+regex = "1.12.3"
 notify = "8.2.0"
 notify-debouncer-mini = { version = "0.7.0" }
 walkdir = "2.5.0"
 dunce = "1.0.5"
 path-slash = "0.2.1"
-md-5 = { version = "0.10.6" }
-anyhow = { version = "1.0.100" }
+md-5 = { version = "0.11.0" }
+anyhow = { version = "1.0.102" }
 lazy_static = "1.5.0"
 image_dds = { version = "0.7.2" }
-clap = { version = "4.5.54", features = ["derive"] }
-naga = { version = "27.0.3", features = ["serialize", "deserialize"] }
-wgpu = "27.0.1"
-rand = { version = "0.9.2" }
+clap = { version = "4.6.0", features = ["derive"] }
+naga = { version = "29.0.1", features = ["serialize", "deserialize"] }
+wgpu = "29.0.1"
+rand = { version = "0.10.0" }
 mp4 = { version = "0.14.0" }
 tracy-client = { version = "0.18.4", default-features = false }
 rapier3d = { version = "0.32.0", features = ["simd-stable", "serde-serialize"] }
 meshopt = "0.6.2"
-v8 = { version = "145.0.0", optional = true }
+v8 = { version = "147.1.0", optional = true }
 transform-gizmo-egui = { path = "../.xmake/deps/egui-gizmo/crates/transform-gizmo-egui" }
 rust-i18n = "3.1.5"
 sys-locale = "0.3.2"
@@ -120,6 +120,7 @@ rs_network = { path = "../crates/rs_network", optional = true }
 rs_manifest = { path = "../crates/rs_manifest" }
 rs_texpress = { path = "../crates/rs_texpress" }
 rs_localization = { path = "../crates/rs_localization" }
+rs_egui_utils = { path = "../crates/rs_egui_utils" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rs_dotnet = { path = "../rs_dotnet", optional = true }
@@ -131,7 +132,7 @@ path = "src/main.rs"
 
 [build-dependencies]
 winresource = "0.1"
-svg_to_ico = "1.2"
+svg_to_ico = "1.3"
 glob = "0.3.3"
 rs_core_minimal = { path = "../rs_core_minimal" }
 

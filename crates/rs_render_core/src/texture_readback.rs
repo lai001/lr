@@ -1,8 +1,8 @@
 use crate::buffer_dimensions::BufferDimensions;
 use crate::error::Result;
 use wgpu::{Origin3d, TexelCopyTextureInfo, TextureAspect, TextureFormat::*};
-#[cfg(feature = "wgpu26")]
-use wgpu26 as wgpu;
+#[cfg(feature = "wgpu28")]
+use wgpu28 as wgpu;
 
 pub type TextureArrayData = Vec<Vec<u8>>;
 pub type MipmapTextureArrayData = Vec<TextureArrayData>;
@@ -156,13 +156,10 @@ pub fn map_texture_options2(
     let buffer_slice = output_buffer.slice(..);
     let (sender, receiver) = std::sync::mpsc::channel();
     buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
-    #[cfg(not(feature = "wgpu26"))]
     let _ = device.poll(wgpu::PollType::Wait {
         submission_index: Some(submission_index),
         timeout: None,
     });
-    #[cfg(feature = "wgpu26")]
-    let _ = device.poll(wgpu::PollType::Wait);
 
     receiver
         .recv()

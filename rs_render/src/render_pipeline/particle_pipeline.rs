@@ -36,9 +36,9 @@ impl ParticlePipeline {
         })];
         builder.shader_name = ParticleShader {}.get_name();
         builder.depth_stencil = Some(DepthStencilState {
-            depth_compare: CompareFunction::Less,
+            depth_compare: Some(CompareFunction::Less),
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: false,
+            depth_write_enabled: Some(false),
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });

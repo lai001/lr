@@ -70,7 +70,7 @@ pub extern "C" fn nativeDeviceCreatePipelineLayout(
         let pipeline_layout = (*device).create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&ffi_to_rs_string(label).unwrap_or(String::new())),
             bind_group_layouts: &[],
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
         let handle = Box::into_raw(Box::new(pipeline_layout));
         log::trace!(
@@ -113,7 +113,7 @@ pub extern "C" fn nativeDeviceCreateRenderPipeline(
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
         let handle = Box::into_raw(Box::new(render_pipeline));

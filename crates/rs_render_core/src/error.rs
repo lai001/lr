@@ -1,5 +1,5 @@
-#[cfg(feature = "wgpu26")]
-use wgpu26 as wgpu;
+#[cfg(feature = "wgpu28")]
+use wgpu28 as wgpu;
 
 #[derive(Debug)]
 pub enum Error {

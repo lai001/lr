@@ -49,7 +49,13 @@ end
 task("create_default_load_plugins_file")
 do
     on_run(function()
-        os.exec(path.join(rs_target_dir, "release/rs_build_tool") .. " create-default-load-plugins-file")
+        import("lib.detect.find_program")
+        local search_paths = {
+            path.join(rs_target_dir, "release"),
+            path.join(rs_target_dir, "debug")
+        }
+        local program = find_program("rs_build_tool", {paths = search_paths})
+        os.exec(format("%s create-default-load-plugins-file", program))
     end)
     set_menu {
         usage = "xmake create_default_load_plugins_file",
@@ -59,9 +65,14 @@ end
 
 task("generate_v8_api")
     on_run(function()
-        local exe = path.join(rs_target_dir, "release/rs_v8_binding_api_generator")
+        import("lib.detect.find_program")
+        local search_paths = {
+            path.join(rs_target_dir, "release"),
+            path.join(rs_target_dir, "debug")
+        }
+        local program = find_program("rs_v8_binding_api_generator", {paths = search_paths})
         local path = path.join(engine_root_dir, "rs_engine/Cargo.toml")
-        os.exec(format("%s generator --manifest-file %s", exe, path))
+        os.exec(format("%s generator --manifest-file %s", program, path))
     end)
     set_menu {
         usage = "xmake generate_v8_api"
@@ -69,12 +80,18 @@ task("generate_v8_api")
 
 task("compile_shaders")
     on_run(function()
-        os.cd(path.join(engine_root_dir, "build/target/release"))
-        os.exec("./rs_shader_compiler.exe")
+        import("lib.detect.find_program")
+        local search_paths = {
+            path.join(rs_target_dir, "release"),
+            path.join(rs_target_dir, "debug")
+        }
+        local program = find_program("rs_shader_compiler", {paths = search_paths})
+        os.cd(path.directory(program))
+        os.exec(program)
     end)
     set_menu {
         usage = "xmake compile_shaders"
-    }    
+    }
 
 task("setup")
 do

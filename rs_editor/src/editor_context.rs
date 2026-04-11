@@ -245,7 +245,7 @@ impl EditorContext {
         egui_context.set_embed_viewports(false);
         egui_context.set_fonts(Self::load_font());
         let style = egui::Style::default().clone();
-        egui_context.set_style(style);
+        egui_context.set_global_style(style);
         let egui_winit_state = egui_winit::State::new(
             egui_context,
             egui::ViewportId::ROOT,
@@ -437,7 +437,7 @@ impl EditorContext {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if *button == winit::event::MouseButton::Right
-                    && !self.egui_winit_state.egui_ctx().is_pointer_over_area()
+                    && !self.egui_winit_state.egui_ctx().is_pointer_over_egui()
                 {
                     match state {
                         winit::event::ElementState::Pressed => {
@@ -449,7 +449,7 @@ impl EditorContext {
                     }
                 }
                 if *button == winit::event::MouseButton::Left
-                    && !self.egui_winit_state.egui_ctx().is_pointer_over_area()
+                    && !self.egui_winit_state.egui_ctx().is_pointer_over_egui()
                     && self.mosue_state.is_focus
                     && *state == winit::event::ElementState::Pressed
                     && egui_event_response.consumed == false

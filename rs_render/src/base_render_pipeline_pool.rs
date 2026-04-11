@@ -13,7 +13,7 @@ pub struct BaseRenderPipelineBuilder {
     pub targets: Vec<Option<ColorTargetState>>,
     pub depth_stencil: Option<DepthStencilState>,
     pub multisample: Option<MultisampleState>,
-    pub multiview: Option<NonZeroU32>,
+    pub multiview_mask: Option<NonZeroU32>,
     pub primitive: Option<PrimitiveState>,
     pub vertex_buffer_type: Option<VertexBufferType>,
     pub hooks: Option<HashMap<glam::UVec2, EBindGroupLayoutEntryHookType>>,
@@ -32,9 +32,9 @@ impl BaseRenderPipelineBuilder {
             write_mask: ColorWrites::ALL,
         })];
         builder.depth_stencil = Some(DepthStencilState {
-            depth_compare: CompareFunction::Less,
+            depth_compare: Some(CompareFunction::Less),
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: true,
+            depth_write_enabled: Some(true),
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });
@@ -59,9 +59,9 @@ impl BaseRenderPipelineBuilder {
             write_mask: ColorWrites::ALL,
         })];
         builder.depth_stencil = Some(DepthStencilState {
-            depth_compare: CompareFunction::Less,
+            depth_compare: Some(CompareFunction::Less),
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: true,
+            depth_write_enabled: Some(true),
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });
@@ -81,9 +81,9 @@ impl BaseRenderPipelineBuilder {
         let mut builder = BaseRenderPipelineBuilder::default();
         builder.targets = vec![];
         builder.depth_stencil = Some(DepthStencilState {
-            depth_compare: CompareFunction::Less,
+            depth_compare: Some(CompareFunction::Less),
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: true,
+            depth_write_enabled: Some(true),
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });
@@ -104,7 +104,7 @@ impl Hash for BaseRenderPipelineBuilder {
         self.targets.hash(state);
         self.depth_stencil.hash(state);
         self.multisample.hash(state);
-        self.multiview.hash(state);
+        self.multiview_mask.hash(state);
         self.primitive.hash(state);
         self.vertex_buffer_type.hash(state);
         if let Some(hooks) = &self.hooks {

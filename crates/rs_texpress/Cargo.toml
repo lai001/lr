@@ -9,17 +9,17 @@ editor = []
 standalone = []
 
 [dependencies]
-strum = "0.27.2"
-strum_macros = "0.27"
+strum = "0.28.0"
+strum_macros = "0.28"
 glob = "0.3.3"
 rs_core_minimal = { path = "../../rs_core_minimal" }
 rs_foundation = { path = "../../rs_foundation" }
 
 [dev-dependencies]
-image = "0.25.9"
+image = "0.25.10"
 
 [target.'cfg(not(all(target_os = "android", target_arch = "x86_64")))'.dependencies]
-ktx2-rw = { git = "https://github.com/AllenDang/ktx2-rw", rev = "1dfa70d", version = "0.2.4" }
+ktx2-rw = { git = "https://github.com/AllenDang/ktx2-rw", rev = "2a42c93", version = "0.2.4" }
 image_dds = { version = "0.7.2" }
 
 [target.'cfg(not(all(target_os="android", target_arch="x86_64")))'.features] 

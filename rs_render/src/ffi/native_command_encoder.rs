@@ -37,6 +37,7 @@ pub extern "C" fn nativeCommandEncoderBeginRenderPass(
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         });
         let handle = Box::into_raw(Box::new(render_pass));
         log::trace!(

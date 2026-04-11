@@ -37,9 +37,9 @@ impl GridPipeline {
         })];
         builder.shader_name = GridShader {}.get_name();
         builder.depth_stencil = Some(DepthStencilState {
-            depth_compare: CompareFunction::Less,
+            depth_compare: Some(CompareFunction::Less),
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: true,
+            depth_write_enabled: Some(true),
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });

@@ -35,9 +35,9 @@ impl BaseComputePipeline {
             label: Some(&format!("{} pipeline layout", tag)),
             bind_group_layouts: &bind_group_layouts
                 .iter()
-                .map(|x| x)
-                .collect::<Vec<&BindGroupLayout>>(),
-            push_constant_ranges: &[],
+                .map(|x| Some(x))
+                .collect::<Vec<Option<&BindGroupLayout>>>(),
+            immediate_size: 0,
         });
 
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {

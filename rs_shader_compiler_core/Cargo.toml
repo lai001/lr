@@ -12,15 +12,15 @@ force_builtin_processor = []
 detect_encoding = ["dep:encoding_rs", "dep:chardetng"]
 
 [dependencies]
-wgpu = "27.0.1"
-naga = "27.0.3"
+wgpu = "29.0.1"
+naga = "29.0.1"
 pollster = "0.4.0"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 walkdir = "2.5.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-chardetng = { version = "0.1.17", optional = true }
+chardetng = { version = "1.0.0", optional = true }
 encoding_rs = { version = "0.8.35", optional = true }
 rs_foundation = { path = "../rs_foundation" }
 rs_cprep = { path = "../crates/rs_cprep" }

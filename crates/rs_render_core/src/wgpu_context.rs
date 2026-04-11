@@ -1,8 +1,8 @@
 use crate::error::Result;
 use std::collections::HashMap;
 use std::fmt::Debug;
-#[cfg(feature = "wgpu26")]
-use wgpu26 as wgpu;
+#[cfg(feature = "wgpu28")]
+use wgpu28 as wgpu;
 
 pub struct WindowTarget<
     'a,
@@ -69,6 +69,10 @@ impl WGPUContext {
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         unsafe {
+            #[cfg(feature = "wgpu_latest")]
+            let surface_target = wgpu::SurfaceTargetUnsafe::from_display_and_window(window, window)
+                .map_err(|err| crate::error::Error::WindowError(err))?;
+            #[cfg(not(feature = "wgpu_latest"))]
             let surface_target = wgpu::SurfaceTargetUnsafe::from_window(window)
                 .map_err(|err| crate::error::Error::WindowError(err))?;
             instance
@@ -134,7 +138,6 @@ impl WGPUContext {
         .map_err(|err| crate::error::Error::RequestAdapterError(err))?;
         #[allow(unused_mut)]
         let mut required_features = adapter.features();
-        #[cfg(feature = "wgpu_latest")]
         let experimental_features = {
             let experimental_features: wgpu::ExperimentalFeatures = Self::experimental_features();
             if !experimental_features.is_enabled() {
@@ -148,7 +151,6 @@ impl WGPUContext {
             label: device_debug_label,
             memory_hints: wgpu::MemoryHints::MemoryUsage,
             trace: wgpu::Trace::Off,
-            #[cfg(feature = "wgpu_latest")]
             experimental_features,
         }))
         .map_err(|err| crate::error::Error::RequestDeviceError(err))?;
@@ -165,7 +167,12 @@ impl WGPUContext {
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         let _span = tracy_client::span!();
-        let instance = wgpu::Instance::new(&instance_desc.unwrap_or_default());
+        let instance = wgpu::Instance::new(
+            #[cfg(feature = "wgpu_latest")]
+            instance_desc.unwrap_or(wgpu::InstanceDescriptor::new_without_display_handle()),
+            #[cfg(not(feature = "wgpu_latest"))]
+            &instance_desc.unwrap_or_default(),
+        );
         let mut wgpu_surfaces = Vec::with_capacity(window_targets.len());
         for (_, window_target) in window_targets.iter() {
             let surface = Self::new_surface(&instance, window_target.window)?;
@@ -212,7 +219,12 @@ impl WGPUContext {
         device_debug_label: Option<&str>,
     ) -> Result<WGPUContext> {
         let _span = tracy_client::span!();
-        let instance = wgpu::Instance::new(&instance_desc.unwrap_or_default());
+        let instance = wgpu::Instance::new(
+            #[cfg(feature = "wgpu_latest")]
+            instance_desc.unwrap_or(wgpu::InstanceDescriptor::new_without_display_handle()),
+            #[cfg(not(feature = "wgpu_latest"))]
+            &instance_desc.unwrap_or_default(),
+        );
         let (adapter, device, queue) =
             Self::adapter_device_queue(&instance, None, power_preference, device_debug_label)?;
         Ok(WGPUContext {
@@ -224,7 +236,6 @@ impl WGPUContext {
         })
     }
 
-    #[cfg(feature = "wgpu_latest")]
     fn experimental_features() -> wgpu::ExperimentalFeatures {
         wgpu::ExperimentalFeatures::disabled()
     }
@@ -307,12 +318,11 @@ impl WGPUContext {
         surface.surface_config.format
     }
 
-    pub fn get_current_surface_texture(
-        &self,
-        window_id: isize,
-    ) -> std::result::Result<wgpu::SurfaceTexture, wgpu::SurfaceError> {
+    #[cfg(feature = "wgpu_latest")]
+    pub fn get_current_surface_texture(&self, window_id: isize) -> wgpu::CurrentSurfaceTexture {
         let surface = self.surfaces.get(&window_id).expect("Not null");
-        surface.surface.get_current_texture()
+        let current_texture = surface.surface.get_current_texture();
+        current_texture
     }
 
     pub fn get_surface_config(&self, window_id: isize) -> &wgpu::SurfaceConfiguration {

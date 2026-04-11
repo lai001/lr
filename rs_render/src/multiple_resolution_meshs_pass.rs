@@ -147,6 +147,7 @@ impl MultipleResolutionMeshsPass {
                 depth_stencil_attachment: Some(depth_stencil_attachment),
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             for draw_object in draw_objects {

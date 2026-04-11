@@ -380,8 +380,11 @@ impl ParticleSystemView {
                 }
             });
         }
-
-        egui::SidePanel::left("system").show(context, |ui| {
+        let mut panel_ui = rs_egui_utils::create_panel_ui_from_context(
+            context,
+            Some(egui::Id::new("ParticlePanel")),
+        );
+        egui::Panel::left("system").show_inside(&mut panel_ui, |ui| {
             ui.label(format!("{} {}", &name, template.time));
             let _ = ui.separator();
             for (name, emiter) in &template.emiters {

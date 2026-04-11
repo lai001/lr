@@ -103,7 +103,8 @@ fn verify_shaders() -> anyhow::Result<()> {
                     log::trace!("Verifying: {:?}", &path);
                     let shader_source = std::fs::read_to_string(path)?;
                     let module = naga::front::wgsl::parse_str(&shader_source)?;
-                    ctx.get_device()
+                    let error_scope = ctx
+                        .get_device()
                         .push_error_scope(wgpu::ErrorFilter::Validation);
                     let _ = ctx
                         .get_device()
@@ -111,7 +112,7 @@ fn verify_shaders() -> anyhow::Result<()> {
                             label: None,
                             source: wgpu::ShaderSource::Naga(std::borrow::Cow::Owned(module)),
                         });
-                    let err = ctx.get_device().pop_error_scope().block_on();
+                    let err = error_scope.pop().block_on();
                     if let Some(err) = err {
                         return Err(anyhow::anyhow!("{}", err));
                     }
@@ -133,7 +134,7 @@ fn main() -> anyhow::Result<()> {
     builder.filter_module("wgpu_core", log::LevelFilter::Off);
     builder.filter_module("wgpu_hal", log::LevelFilter::Off);
     builder.init();
-    let args = Args::try_parse()?;
+    let args = Args::parse();
     match args.input_file {
         Some(input_file) => {
             let result: anyhow::Result<String> = (|| {

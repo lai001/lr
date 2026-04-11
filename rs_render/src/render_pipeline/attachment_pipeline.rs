@@ -58,9 +58,9 @@ impl AttachmentPipeline {
         builder.multisample = None;
         builder.targets = vec![];
         builder.depth_stencil = Some(DepthStencilState {
-            depth_compare: CompareFunction::Never,
+            depth_compare: Some(CompareFunction::Never),
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: true,
+            depth_write_enabled: Some(true),
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });

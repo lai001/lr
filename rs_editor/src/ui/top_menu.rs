@@ -2,7 +2,7 @@ use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
     data_source::DataSource,
 };
-use egui::{Button, Context, TopBottomPanel};
+use egui::{Button, Context, Panel};
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_localization::t;
 use rs_render::{global_uniform::EDebugShadingType, view_mode::EViewModeType};
@@ -52,10 +52,13 @@ impl TopMenu {
     pub fn draw(
         &mut self,
         context: &Context,
+        panel_ui: &mut egui::Ui,
         datasource: &mut DataSource,
     ) -> Option<EClickEventType> {
+        let _ = context;
         let mut click: Option<EClickEventType> = None;
-        TopBottomPanel::top("menu_bar").show(context, |ui| {
+
+        Panel::top("menu_bar").show_inside(panel_ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button(t!("File"), |ui| {
                     // ui.set_min_width(220.0);
@@ -185,7 +188,11 @@ impl TopMenu {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Lit));
                         }
                         if ui
-                            .radio_value(&mut datasource.view_mode, EViewModeType::Unlit, t!("Unlit"))
+                            .radio_value(
+                                &mut datasource.view_mode,
+                                EViewModeType::Unlit,
+                                t!("Unlit"),
+                            )
                             .clicked()
                         {
                             click = Some(EClickEventType::ViewMode(EViewModeType::Unlit));

@@ -6,12 +6,12 @@ pub mod test {
     use crate::cache::{FontCache, GlyphKey};
     use image::{GenericImage, GenericImageView};
     use linebender_resource_handle::Blob;
+    use parley::FontFamily;
     use parley::{
         Alignment, AlignmentOptions, FontContext, Layout, LayoutContext, PositionedLayoutItem,
         StyleProperty,
     };
-    use parley::{FontFamily, FontStack};
-    use rand::Rng;
+    use rand::{Rng, RngExt};
     use std::collections::HashMap;
     use std::num::NonZeroUsize;
     use std::sync::Arc;
@@ -188,9 +188,9 @@ members of the human family is the foundation of freedom, justice and peace in t
             let font_size: u32 = 30;
             builder.push_default(StyleProperty::FontSize(font_size as f32));
 
-            let binding = [FontFamily::Named(Cow::Borrowed(&font_name))];
-            let font_stack = FontStack::List(Cow::Borrowed(&binding));
-            builder.push_default(StyleProperty::FontStack(font_stack));
+            builder.push_default(StyleProperty::FontFamily(FontFamily::named(
+                &Cow::Borrowed(&font_name),
+            )));
 
             let mut layout: Layout<()> = builder.build(text);
 

@@ -7,16 +7,16 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.29"
-env_logger = "0.11.8"
+env_logger = "0.11.10"
 serde = { version = "1.0.228", features = ["derive"] }
 # typetag = "0.2"
 # dyn-clone = "1.0.16"
 bincode = { version = "=2.0.1", features = ["serde"] }
 glam = { version = "0.30.10", features = ["mint", "serde"] }
 type-layout = "0.2.0"
-image = "0.25.9"
+image = "0.25.10"
 url = { version = "2.5.8", features = ["serde"] }
-uuid = { version = "1.19.0", features = [
+uuid = { version = "1.23.0", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",

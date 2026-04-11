@@ -17,6 +17,7 @@ use ra_ap_project_model::*;
 use ra_ap_syntax::*;
 use ra_ap_vfs::*;
 use std::fmt::Debug;
+use std::num::NonZero;
 use std::path::Path;
 use std::{cell::RefCell, rc::Rc};
 
@@ -186,10 +187,18 @@ impl ReflectionContext {
             &cargo_config,
             &load_project_workspace_progress,
         )?;
+        let num_worker_threads = std::thread::available_parallelism()
+            .unwrap_or(NonZero::new(1).unwrap())
+            .get();
+        let proc_macro_processes = std::thread::available_parallelism()
+            .unwrap_or(NonZero::new(1).unwrap())
+            .get();
         let load_cargo_config: LoadCargoConfig = LoadCargoConfig {
             load_out_dirs_from_check: true,
             with_proc_macro_server: ProcMacroServerChoice::None,
             prefill_caches: false,
+            num_worker_threads,
+            proc_macro_processes,
         };
         let (db, vfs, proc_macro) = load_workspace(
             project_workspace.clone(),

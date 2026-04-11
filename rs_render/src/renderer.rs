@@ -342,11 +342,13 @@ impl Renderer {
                     gl: GlBackendOptions {
                         gles_minor_version: Gles3MinorVersion::Automatic,
                         fence_behavior: GlFenceBehavior::Normal,
+                        debug_fns: GlDebugFns::Auto,
                     },
                     dx12: Dx12BackendOptions::default(),
                     noop: NoopBackendOptions::default(),
                 },
                 memory_budget_thresholds: MemoryBudgetThresholds::default(),
+                display: None,
             }),
             None,
         )
@@ -1030,8 +1032,7 @@ impl Renderer {
                     let _ = device.poll(wgpu::PollType::wait_indefinitely());
                     if let Ok(Ok(_)) = receiver.recv() {
                         let mut padded_buffer_view = buffer.slice(..).get_mapped_range_mut();
-                        let padded_buffer = padded_buffer_view.as_mut();
-                        padded_buffer.copy_from_slice(&update_buffer_command.data);
+                        padded_buffer_view.copy_from_slice(&update_buffer_command.data);
                         drop(padded_buffer_view);
                     }
                     buffer.unmap();
@@ -1347,15 +1348,14 @@ impl Renderer {
                     .change_scale_factor(info.window_id, info.new_factor);
             }
             RenderCommand::WindowRedrawRequestedBegin(window_id) => {
-                let surface_texture = match self.wgpu_context.get_current_surface_texture(window_id)
+                let current_texture = self.wgpu_context.get_current_surface_texture(window_id);
+                let surface_texture = if let wgpu::CurrentSurfaceTexture::Success(surface_texture) =
+                    current_texture
                 {
-                    Ok(texture) => texture,
-                    Err(err) => {
-                        if err != wgpu::SurfaceError::Outdated {
-                            log::warn!("{}", err);
-                        }
-                        return None;
-                    }
+                    surface_texture
+                } else {
+                    log::warn!("{:?}", &current_texture);
+                    return None;
                 };
                 let old_surface_texture = self.surface_textures.insert(window_id, surface_texture);
                 assert!(old_surface_texture.is_none());
@@ -1866,6 +1866,7 @@ impl Renderer {
                 depth_stencil_attachment,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             {
                 for draw_object_command in draw_object_commands {
@@ -2673,9 +2674,10 @@ impl Renderer {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some(&format!("Shadow pass")),
                 color_attachments: &render_pass_color_attachments,
-                occlusion_query_set: None,
                 depth_stencil_attachment: Some(depth_stencil_attachment),
                 timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             for (i, bind_groups_key) in bind_groupss.drain(..).enumerate() {

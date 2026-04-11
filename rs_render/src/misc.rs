@@ -78,9 +78,12 @@ pub fn find_most_compatible_texture_usages(format: wgpu::TextureFormat) -> wgpu:
         return wgpu::TextureUsages::all()
             - wgpu::TextureUsages::STORAGE_ATOMIC
             - wgpu::TextureUsages::STORAGE_BINDING
-            - wgpu::TextureUsages::RENDER_ATTACHMENT;
+            - wgpu::TextureUsages::RENDER_ATTACHMENT
+            - wgpu::TextureUsages::TRANSIENT;
     } else {
-        return wgpu::TextureUsages::all() - wgpu::TextureUsages::STORAGE_ATOMIC;
+        return wgpu::TextureUsages::all()
+            - wgpu::TextureUsages::STORAGE_ATOMIC
+            - wgpu::TextureUsages::TRANSIENT;
     }
 }
 

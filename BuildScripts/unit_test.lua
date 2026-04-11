@@ -3,6 +3,12 @@ local engine_root_dir = engine_root_dir
 task("unit_test")
 do
     on_run(function()
+        import("core.base.option")
+        local mode = option.get("mode")
+        local mode_arg = ""
+        if mode == "release" then
+            mode_arg = "--release"
+        end
         local folders = {
             "rs_artifact",
             "rs_assimp",
@@ -28,8 +34,7 @@ do
         for k, v in ipairs(folders) do
             os.cd(path.join(engine_root_dir, v))
             local package = path.basename(v)
-            os.exec(format("cargo test --package %s", package))
-            os.exec(format("cargo test --package %s --release", package))
+            os.exec(format("cargo test --package %s %s", package, mode_arg))
         end
 
         local with_additional_args = {
@@ -43,12 +48,16 @@ do
                 features_args = format("%s --features %s", features_args, v)
             end
             local package = path.basename(k)
-            os.exec(format("cargo test --package %s %s", package, features_args))
-            os.exec(format("cargo test --package %s %s --release", package, features_args))
+            os.exec(format("cargo test --package %s %s %s", package, features_args, mode_arg))
         end
     end)
     set_menu {
         usage = "xmake unit_test",
         description = "Unit test",
+        options = {
+            { "m", "mode", "kv", "debug", "Set the build mode.",
+                " - debug",
+                " - release" }
+        }
     }
 end
