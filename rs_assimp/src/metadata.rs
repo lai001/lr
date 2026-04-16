@@ -1,5 +1,5 @@
 use crate::convert::{ConvertToString, ConvertToVec3};
-use russimp_sys::*;
+use rs_assimp_sys::*;
 use std::marker::PhantomData;
 
 #[derive(Debug)]
@@ -16,14 +16,14 @@ pub enum EMetadataType {
 }
 
 pub struct Metadata<'a> {
-    _ai_metadata: &'a mut russimp_sys::aiMetadata,
+    _ai_metadata: &'a mut aiMetadata,
     pub values: Vec<EMetadataType>,
     pub keys: Vec<String>,
     marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Metadata<'a> {
-    pub fn borrow_from(ai_metadata: &'a mut russimp_sys::aiMetadata) -> Metadata<'a> {
+    pub fn borrow_from(ai_metadata: &'a mut aiMetadata) -> Metadata<'a> {
         const AIMETADATATYPE_AI_BOOL: i32 = aiMetadataType_AI_BOOL;
         const AIMETADATATYPE_AI_INT32: i32 = aiMetadataType_AI_INT32;
         const AIMETADATATYPE_AI_UINT64: i32 = aiMetadataType_AI_UINT64;

@@ -1,6 +1,7 @@
 use crate::{
     animation::Animation,
     bone::Bone,
+    convert::ConvertToString,
     error::Result,
     get_assimp_error,
     material::Material,
@@ -10,8 +11,9 @@ use crate::{
     post_process_steps::PostProcessSteps,
     property_store::PropertyStore,
     skeleton::Skeleton,
+    texture::Texture,
 };
-use russimp_sys::*;
+use rs_assimp_sys::*;
 use std::{
     cell::RefCell, collections::HashMap, ffi::CString, fmt::Debug, marker::PhantomData, path::Path,
     rc::Rc,
@@ -97,7 +99,7 @@ fn collect_armatures<'a>(
 }
 
 pub struct Scene<'a> {
-    c: *const russimp_sys::aiScene,
+    c: *const aiScene,
     pub name: String,
     pub meshes: Vec<Rc<RefCell<Mesh<'a>>>>,
     pub root_node: Option<Rc<RefCell<Node<'a>>>>,
@@ -106,6 +108,7 @@ pub struct Scene<'a> {
     pub materials: Vec<Material<'a>>,
     pub skeletons: Vec<Skeleton<'a>>,
     pub animations: Vec<Animation<'a>>,
+    pub textures: Vec<Texture<'a>>,
     pub metadata: Option<Metadata<'a>>,
     marker: PhantomData<&'a ()>,
 }
@@ -173,7 +176,8 @@ impl<'a> Scene<'a> {
             .as_ref()
             .unwrap();
             for material in slice {
-                let material = Material::borrow_from(material.as_mut().unwrap());
+                let textures = Self::textures_from_scene(ai_scene);
+                let material = Material::borrow_from(material.as_mut().unwrap(), textures);
                 materials.push(material);
             }
         }
@@ -206,7 +210,8 @@ impl<'a> Scene<'a> {
             }
         }
         resolve_node_bone_offset_matrix(all_nodes.clone(), meshes.clone());
-        let scene_name = ai_scene.mName.into();
+        let scene_name = ai_scene.mName.to_string();
+        let textures = Self::textures_from_scene(ai_scene);
         let scene = Scene {
             c: ai_scene,
             name: scene_name,
@@ -219,6 +224,7 @@ impl<'a> Scene<'a> {
             animations,
             metadata,
             marker: PhantomData,
+            textures,
         };
 
         Ok(scene)
@@ -229,7 +235,7 @@ impl<'a> Scene<'a> {
         let path = path.as_os_str().as_encoded_bytes();
         let path = CString::new(path).map_err(|err| crate::error::Error::Nul(err))?;
         unsafe {
-            let ai_scene = russimp_sys::aiImportFile(path.as_ptr(), flags.bits());
+            let ai_scene = aiImportFile(path.as_ptr(), flags.bits());
             Self::new(ai_scene)
         }
     }
@@ -243,7 +249,7 @@ impl<'a> Scene<'a> {
         let path = path.as_os_str().as_encoded_bytes();
         let path = CString::new(path).map_err(|err| crate::error::Error::Nul(err))?;
         unsafe {
-            let ai_scene = russimp_sys::aiImportFileExWithProperties(
+            let ai_scene = aiImportFileExWithProperties(
                 path.as_ptr(),
                 flags.bits(),
                 std::ptr::null_mut(),
@@ -251,6 +257,21 @@ impl<'a> Scene<'a> {
             );
             Self::new(ai_scene)
         }
+    }
+
+    unsafe fn textures_from_scene(ai_scene: &'a aiScene) -> Vec<Texture<'a>> {
+        let mut textures: Vec<Texture<'a>> = vec![];
+        if !ai_scene.mTextures.is_null() {
+            let slice =
+                std::ptr::slice_from_raw_parts(ai_scene.mTextures, ai_scene.mNumTextures as usize)
+                    .as_ref()
+                    .unwrap();
+            for texture in slice {
+                let texture = Texture::borrow_from(texture.as_mut().unwrap());
+                textures.push(texture);
+            }
+        }
+        textures
     }
 }
 

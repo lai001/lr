@@ -1,4 +1,4 @@
-use russimp_sys::aiVertexWeight;
+use rs_assimp_sys::*;
 
 pub struct VertexWeight {
     pub vertex_id: u32,

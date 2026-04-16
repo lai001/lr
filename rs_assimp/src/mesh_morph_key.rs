@@ -1,7 +1,8 @@
+use rs_assimp_sys::*;
 use std::marker::PhantomData;
 
 pub struct MeshMorphKey<'a> {
-    _ai_mesh_morph_key: &'a mut russimp_sys::aiMeshMorphKey,
+    _ai_mesh_morph_key: &'a mut aiMeshMorphKey,
     pub time: f64,
     pub values: Vec<u32>,
     pub weights: Vec<f64>,
@@ -9,7 +10,7 @@ pub struct MeshMorphKey<'a> {
 }
 
 impl<'a> MeshMorphKey<'a> {
-    pub fn borrow_from(ai_mesh_morph_key: &'a mut russimp_sys::aiMeshMorphKey) -> MeshMorphKey<'a> {
+    pub fn borrow_from(ai_mesh_morph_key: &'a mut aiMeshMorphKey) -> MeshMorphKey<'a> {
         let time = ai_mesh_morph_key.mTime;
         let values = unsafe {
             std::slice::from_raw_parts_mut(

@@ -4,7 +4,7 @@ pub enum Error {
     CreateProjectFailed,
     OpenProjectFailed(Option<String>),
     ExportFailed(Option<String>),
-    Russimp(russimp::RussimpError),
+    Assimp(rs_assimp::error::Error),
     Url(url::ParseError, String),
     Other(String),
 }

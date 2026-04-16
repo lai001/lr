@@ -1,8 +1,12 @@
-use crate::{anim_behaviour::EAnimBehaviour, node::Node, quat_key::QuatKey, vector_key::VectorKey};
+use crate::{
+    anim_behaviour::EAnimBehaviour, convert::ConvertToString, node::Node, quat_key::QuatKey,
+    vector_key::VectorKey,
+};
+use rs_assimp_sys::*;
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct NodeAnim<'a> {
-    _ai_node_anim: &'a mut russimp_sys::aiNodeAnim,
+    _ai_node_anim: &'a mut aiNodeAnim,
     pub node: Option<Rc<RefCell<Node<'a>>>>,
     pub pre_state: EAnimBehaviour,
     pub post_state: EAnimBehaviour,
@@ -14,10 +18,10 @@ pub struct NodeAnim<'a> {
 
 impl<'a> NodeAnim<'a> {
     pub fn borrow_from(
-        ai_node_anim: &'a mut russimp_sys::aiNodeAnim,
+        ai_node_anim: &'a mut aiNodeAnim,
         map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
     ) -> NodeAnim<'a> {
-        let node_name: String = ai_node_anim.mNodeName.into();
+        let node_name: String = ai_node_anim.mNodeName.to_string();
         let pre_state = ai_node_anim.mPreState;
         let post_state = ai_node_anim.mPostState;
         let position_keys = unsafe {

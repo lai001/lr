@@ -1,8 +1,9 @@
-use crate::{node::Node, skeleton_bone::SkeletonBone};
+use crate::{convert::ConvertToString, node::Node, skeleton_bone::SkeletonBone};
+use rs_assimp_sys::*;
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Skeleton<'a> {
-    _ai_skeleton: &'a mut russimp_sys::aiSkeleton,
+    _ai_skeleton: &'a mut aiSkeleton,
     pub name: String,
     pub bones: Vec<SkeletonBone<'a>>,
     marker: PhantomData<&'a ()>,
@@ -10,10 +11,10 @@ pub struct Skeleton<'a> {
 
 impl<'a> Skeleton<'a> {
     pub fn borrow_from(
-        ai_skeleton: &'a mut russimp_sys::aiSkeleton,
+        ai_skeleton: &'a mut aiSkeleton,
         map: &HashMap<String, Rc<RefCell<Node<'a>>>>,
     ) -> Skeleton<'a> {
-        let name = ai_skeleton.mName.into();
+        let name = ai_skeleton.mName.to_string();
         let mut bones = vec![];
         if ai_skeleton.mBones.is_null() == false {
             let ai_bones = unsafe {

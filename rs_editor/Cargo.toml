@@ -52,7 +52,7 @@ egui-snarl = { git = "https://github.com/zakarumych/egui-snarl.git", rev = "5bdc
 syn = { version = "2.0.117", features = ["full", "extra-traits"] }
 log = "0.4.29"
 env_logger = "0.11.10"
-russimp = { version = "3.2.1", features = ["prebuilt", "static-link"] }
+# russimp = { version = "3.2.1", features = ["prebuilt", "static-link"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 bincode = { version = "=2.0.1", features = ["serde"] }

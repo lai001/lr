@@ -1,5 +1,5 @@
 use bitflags::bitflags;
-use russimp_sys::*;
+use rs_assimp_sys::*;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

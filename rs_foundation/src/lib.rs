@@ -5,6 +5,7 @@ use std::{
 
 pub mod channel;
 pub mod id_generator;
+pub mod math;
 pub mod new;
 pub mod profiler;
 pub mod round_to_multiple;

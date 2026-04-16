@@ -1,7 +1,7 @@
-use russimp_sys::*;
+use rs_assimp_sys::*;
 use strum_macros::EnumIter;
 
-#[derive(Debug, EnumIter, Clone, Copy)]
+#[derive(Debug, EnumIter, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum TextureType {
     None = aiTextureType_aiTextureType_NONE as _,
     Diffuse = aiTextureType_aiTextureType_DIFFUSE as _,

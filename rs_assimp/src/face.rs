@@ -1,13 +1,14 @@
+use rs_assimp_sys::*;
 use std::marker::PhantomData;
 
 pub struct Face<'a> {
-    _ai_face: &'a mut russimp_sys::aiFace,
+    _ai_face: &'a mut aiFace,
     pub indices: Vec<u32>,
     marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Face<'a> {
-    pub fn borrow_from(ai_face: &'a mut russimp_sys::aiFace) -> Face<'a> {
+    pub fn borrow_from(ai_face: &'a mut aiFace) -> Face<'a> {
         let ai_indices =
             unsafe { std::slice::from_raw_parts(ai_face.mIndices, ai_face.mNumIndices as _) };
         let indices = ai_indices.to_vec();

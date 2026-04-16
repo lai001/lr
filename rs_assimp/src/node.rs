@@ -3,7 +3,7 @@ use crate::{
     mesh::Mesh,
     metadata::Metadata,
 };
-use russimp_sys::aiNode;
+use rs_assimp_sys::*;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -30,7 +30,7 @@ pub enum ENodeType {
 }
 
 pub struct Node<'a> {
-    c: &'a mut russimp_sys::aiNode,
+    c: &'a mut aiNode,
     pub parent: Option<Weak<RefCell<Node<'a>>>>,
     pub name: String,
     pub path: String,
@@ -44,7 +44,7 @@ pub struct Node<'a> {
 }
 
 impl<'a> Node<'a> {
-    pub fn new(c: &'a mut russimp_sys::aiNode, path: String) -> Node<'a> {
+    pub fn new(c: &'a mut aiNode, path: String) -> Node<'a> {
         let name = c.mName.to_string();
         let metadata = match unsafe { c.mMetaData.as_mut() } {
             Some(m_meta_data) => Some(Metadata::borrow_from(m_meta_data)),

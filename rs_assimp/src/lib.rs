@@ -21,15 +21,17 @@ pub mod quat_key;
 pub mod scene;
 pub mod skeleton;
 pub mod skeleton_bone;
+pub mod texture;
 pub mod texture_type;
 pub mod vector_key;
 pub mod vertex_weight;
 
+pub use rs_assimp_sys::*;
 pub(crate) const AISTRING_MAXLEN: usize = 1024;
 
 fn get_assimp_error() -> crate::error::AssimpError {
     unsafe {
-        let error_buf = russimp_sys::aiGetErrorString();
+        let error_buf = rs_assimp_sys::aiGetErrorString();
         let error = std::ffi::CStr::from_ptr(error_buf)
             .to_string_lossy()
             .to_string();

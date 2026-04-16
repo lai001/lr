@@ -7,13 +7,14 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.29"
-russimp-sys = { version = "2.0.2", features = ["prebuilt"] }
+# russimp-sys = { version = "2.0.2", features = ["prebuilt"] }
 bitflags = "2.11.0"
 glam = { version = "0.30.10", features = ["mint", "serde"] }
 strum = "0.28.0"
 strum_macros = "0.28.0"
 lazy_static = "1.5.0"
 rs_foundation = { path = "../rs_foundation" }
+rs_assimp_sys = { path = "../crates/rs_assimp_sys" }
 
 [dev-dependencies]
 rs_core_minimal = { path = "../rs_core_minimal" }

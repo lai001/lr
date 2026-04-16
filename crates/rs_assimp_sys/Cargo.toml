@@ -1,0 +1,11 @@
+[package]
+name = "rs_assimp_sys"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.72.1"
+walkdir = "2.5.0"
+rs_core_minimal = { path = "../../rs_core_minimal" }

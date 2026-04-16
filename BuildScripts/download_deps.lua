@@ -10,6 +10,7 @@ local dotnet_sdk_dir = dotnet_sdk_dir
 local check_hash_files = check_hash_files
 local hash_files = hash_files
 local kcp_root_dir = kcp_root_dir
+local assimp_root_dir = assimp_root_dir
 
 task("hash_files")
 do
@@ -168,6 +169,11 @@ do
         if os.exists(compressonatorcli) == false and os.exists(compressonatorcli_file) then
             print(format("Extract %s to %s", compressonatorcli_file, compressonatorcli))
             archive.extract(compressonatorcli_file, compressonatorcli)
+        end
+
+        if os.exists(assimp_root_dir) == false then
+            git.clone("https://github.com/assimp/assimp.git", { outputdir = assimp_root_dir })
+            git.checkout("v6.0.4", { repodir = assimp_root_dir })
         end
     end)
     set_menu {

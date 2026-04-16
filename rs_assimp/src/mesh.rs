@@ -1,15 +1,15 @@
 use crate::{
     bone::Bone,
-    convert::{ConvertToVec3, ConvertToVec4},
+    convert::{ConvertToString, ConvertToVec3, ConvertToVec4},
     face::Face,
     node::Node,
     primitive_type::EPrimitiveType,
 };
-// use russimp_sys::AI_MAX_NUMBER_OF_TEXTURECOORDS;
+use rs_assimp_sys::*;
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Mesh<'a> {
-    _ai_mesh: &'a mut russimp_sys::aiMesh,
+    _ai_mesh: &'a mut aiMesh,
     pub name: String,
     pub bones: Vec<Rc<RefCell<Bone<'a>>>>,
     pub primitive_type: EPrimitiveType,
@@ -21,15 +21,16 @@ pub struct Mesh<'a> {
     pub texture_coords: Vec<Vec<glam::Vec3>>,
     pub colors: Vec<Vec<glam::Vec4>>,
     pub faces: Vec<Face<'a>>,
+    pub material_index: u32,
     marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Mesh<'a> {
     pub fn borrow_from(
-        ai_mesh: &'a mut russimp_sys::aiMesh,
+        ai_mesh: &'a mut aiMesh,
         map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
     ) -> Mesh<'a> {
-        let name = ai_mesh.mName.into();
+        let name = ai_mesh.mName.to_string();
         let mut bones = Vec::new();
         if ai_mesh.mBones.is_null() == false {
             let slice = unsafe {
@@ -46,7 +47,7 @@ impl<'a> Mesh<'a> {
         }
 
         let primitive_type: std::result::Result<EPrimitiveType, String> =
-            (ai_mesh.mPrimitiveTypes as russimp_sys::aiPrimitiveType).try_into();
+            (ai_mesh.mPrimitiveTypes as aiPrimitiveType).try_into();
         let primitive_type = match primitive_type {
             Ok(primitive_type) => primitive_type,
             Err(err) => {
@@ -126,7 +127,7 @@ impl<'a> Mesh<'a> {
                 .iter_mut()
                 .map(|x| Face::borrow_from(x))
                 .collect();
-
+        let material_index = ai_mesh.mMaterialIndex;
         Mesh {
             _ai_mesh: ai_mesh,
             name,
@@ -140,6 +141,7 @@ impl<'a> Mesh<'a> {
             texture_coords,
             colors,
             faces,
+            material_index,
         }
     }
 }

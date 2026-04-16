@@ -1,8 +1,9 @@
 use crate::node::{get_node_path, Node};
+use rs_assimp_sys::*;
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct SkeletonBone<'a> {
-    _ai_skeleton_bone: &'a mut russimp_sys::aiSkeletonBone,
+    _ai_skeleton_bone: &'a mut aiSkeletonBone,
     pub armature: Option<Rc<RefCell<Node<'a>>>>,
     pub node: Option<Rc<RefCell<Node<'a>>>>,
 
@@ -11,7 +12,7 @@ pub struct SkeletonBone<'a> {
 
 impl<'a> SkeletonBone<'a> {
     pub fn borrow_from(
-        ai_skeleton_bone: &'a mut russimp_sys::aiSkeletonBone,
+        ai_skeleton_bone: &'a mut aiSkeletonBone,
         map: &HashMap<String, Rc<RefCell<Node<'a>>>>,
     ) -> SkeletonBone<'a> {
         let armature = match unsafe { ai_skeleton_bone.mArmature.as_mut() } {

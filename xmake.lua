@@ -14,6 +14,7 @@ tracy_root_dir = path.join(deps_dir, "tracy")
 dotnet_sdk_dir = path.join(deps_dir, "dotnetSDK")
 rs_target_dir = path.join(engine_root_dir, "build/target")
 kcp_root_dir = path.join(deps_dir, "kcp")
+assimp_root_dir = path.join(deps_dir, "assimp")
 
 function trim_quotes_and_newlines(str)
     str = str:gsub("^[\r\n\"%s]+", "")

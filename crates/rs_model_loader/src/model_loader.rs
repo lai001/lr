@@ -3,6 +3,7 @@ use rs_artifact::{
     mesh_vertex::MeshVertex,
     skin_mesh::{SkinMesh, SkinMeshVertex},
 };
+use rs_assimp::texture_type::TextureType;
 use rs_core_minimal::name_generator::NameGenerator;
 use rs_engine::{
     build_content_file_url,
@@ -12,7 +13,6 @@ use rs_engine::{
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_render::vertex_data_type::skin_mesh_vertex::INVALID_BONE;
-use russimp::material::TextureType;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -53,7 +53,7 @@ impl ModelLoader {
 
     fn get_texture_absolute_path(
         model_file_path: &Path,
-        texture: &russimp::material::Texture,
+        texture: &rs_assimp::texture::Texture,
         additional_paths: &[&Path],
     ) -> String {
         let mut dirs: Vec<std::path::PathBuf> = Vec::new();
@@ -75,7 +75,7 @@ impl ModelLoader {
 
     fn collect_textures(
         model_file_path: &Path,
-        materials: &[russimp::material::Material],
+        materials: &[rs_assimp::material::Material],
         additional_paths: &[&Path],
     ) -> HashMap<String, TextureType> {
         let mut result = HashMap::new();
@@ -83,7 +83,7 @@ impl ModelLoader {
             for (texture_type, impoted_texture) in &material.textures {
                 let path = Self::get_texture_absolute_path(
                     model_file_path,
-                    &*impoted_texture.borrow(),
+                    impoted_texture,
                     additional_paths,
                 );
                 result.insert(path, texture_type.clone());
@@ -94,8 +94,8 @@ impl ModelLoader {
 
     fn make_vertex(
         index: u32,
-        imported_mesh: &russimp::mesh::Mesh,
-        uv_map: &Option<Vec<russimp::Vector3D>>,
+        imported_mesh: &rs_assimp::mesh::Mesh,
+        uv_map: &Option<Vec<glam::Vec3>>,
     ) -> MeshVertex {
         let mut texture_coord: glam::Vec2 = glam::vec2(0.0, 0.0);
         if let Some(uv_map) = uv_map {
@@ -103,23 +103,18 @@ impl ModelLoader {
             texture_coord = glam::vec2(uv.x, uv.y);
         }
         let vertex = imported_mesh.vertices.get(index as usize).unwrap();
-        let mut vertex_color: russimp::Color4D = russimp::Color4D {
-            r: 0.0,
-            g: 0.0,
-            b: 0.0,
-            a: 0.0,
-        };
+        let mut vertex_color: glam::Vec4 = glam::Vec4::ZERO;
         if let Some(color) = imported_mesh.colors.get(index as usize) {
-            if let Some(color) = color {
-                if let Some(color) = color.get(0) {
-                    vertex_color = *color;
-                }
+            // if let Some(color) = color {
+            if let Some(color) = color.get(0) {
+                vertex_color = *color;
             }
+            // }
         }
         let normal = imported_mesh
             .normals
             .get(index as usize)
-            .unwrap_or(&russimp::Vector3D {
+            .unwrap_or(&glam::Vec3 {
                 x: 0.5,
                 y: 0.5,
                 z: 1.0,
@@ -127,28 +122,22 @@ impl ModelLoader {
         let tangent = imported_mesh
             .tangents
             .get(index as usize)
-            .unwrap_or(&russimp::Vector3D {
+            .unwrap_or(&glam::Vec3 {
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
             });
-        let bitangent =
-            imported_mesh
-                .bitangents
-                .get(index as usize)
-                .unwrap_or(&russimp::Vector3D {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                });
+        let bitangent = imported_mesh
+            .bitangents
+            .get(index as usize)
+            .unwrap_or(&glam::Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            });
 
         let vertex = MeshVertex {
-            vertex_color: glam::vec4(
-                vertex_color.r,
-                vertex_color.g,
-                vertex_color.b,
-                vertex_color.a,
-            ),
+            vertex_color: vertex_color,
             position: glam::vec3(vertex.x, vertex.y, vertex.z),
             normal: glam::vec3(normal.x, normal.y, normal.z),
             tangent: glam::vec3(tangent.x, tangent.y, tangent.z),
@@ -268,14 +257,12 @@ impl ModelLoader {
         additional_paths: &[&Path],
     ) -> crate::error::Result<Vec<MeshCluster>> {
         let resource_manager = ResourceManager::default();
-        let scene = russimp::scene::Scene::from_file(
+        let scene = rs_assimp::scene::Scene::from_file(
             &file_path.to_str().unwrap(),
-            vec![
-                russimp::scene::PostProcess::Triangulate,
-                russimp::scene::PostProcess::CalculateTangentSpace,
-            ],
+            rs_assimp::post_process_steps::PostProcessSteps::Triangulate
+                | rs_assimp::post_process_steps::PostProcessSteps::CalcTangentSpace,
         )
-        .map_err(|err| crate::error::Error::Russimp(err))?;
+        .map_err(|err| crate::error::Error::Assimp(err))?;
 
         let mut mesh_clusters: Vec<MeshCluster> = Vec::new();
         let textures = Self::collect_textures(file_path, &scene.materials, additional_paths);
@@ -288,18 +275,19 @@ impl ModelLoader {
             resource_manager.load_images_from_disk_and_cache_parallel(load);
         }
         for imported_mesh in &scene.meshes {
+            let imported_mesh = imported_mesh.borrow();
             let mut vertex_buffer: Vec<MeshVertex> = vec![];
             let mut index_buffer: Vec<u32> = vec![];
-            let mut uv_map: Option<Vec<russimp::Vector3D>> = None;
+            let mut uv_map: Option<Vec<glam::Vec3>> = None;
             if let Some(map) = imported_mesh.texture_coords.get(0) {
-                if let Some(map) = map {
-                    uv_map = Some(map.to_vec());
-                }
+                // if let Some(map) = map {
+                uv_map = Some(map.to_vec());
+                // }
             }
             for face in &imported_mesh.faces {
-                let indices = &face.0;
+                let indices = &face.indices;
                 for index in indices {
-                    let vertex = Self::make_vertex(*index, imported_mesh, &uv_map);
+                    let vertex = Self::make_vertex(*index, &imported_mesh, &uv_map);
                     vertex_buffer.push(vertex);
                     index_buffer.push(*index);
                 }
@@ -313,11 +301,8 @@ impl ModelLoader {
             };
             if let Some(material) = scene.materials.get(imported_mesh.material_index as usize) {
                 for (texture_type, texture) in &material.textures {
-                    let path = Self::get_texture_absolute_path(
-                        file_path,
-                        &*texture.borrow(),
-                        additional_paths,
-                    );
+                    let path =
+                        Self::get_texture_absolute_path(file_path, texture, additional_paths);
                     cluster.textures_dic.insert(texture_type.clone(), path);
                 }
             }

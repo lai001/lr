@@ -1,12 +1,13 @@
 use crate::{
-    convert::ConvertToMat4,
+    convert::{ConvertToMat4, ConvertToString},
     node::{self, Node},
     vertex_weight::VertexWeight,
 };
+use rs_assimp_sys::*;
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Bone<'a> {
-    _ai_bone: &'a mut russimp_sys::aiBone,
+    _ai_bone: &'a mut aiBone,
     pub name: String,
     pub offset_matrix: glam::Mat4,
     pub weights: Vec<VertexWeight>,
@@ -17,10 +18,10 @@ pub struct Bone<'a> {
 
 impl<'a> Bone<'a> {
     pub fn borrow_from(
-        ai_bone: &'a mut russimp_sys::aiBone,
+        ai_bone: &'a mut aiBone,
         map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
     ) -> Bone<'a> {
-        let name = ai_bone.mName.into();
+        let name = ai_bone.mName.to_string();
         let offset_matrix = ai_bone.mOffsetMatrix.to_mat4();
         let ai_weights =
             unsafe { std::slice::from_raw_parts(ai_bone.mWeights, ai_bone.mNumWeights as _) };

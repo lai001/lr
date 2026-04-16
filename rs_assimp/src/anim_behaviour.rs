@@ -1,4 +1,4 @@
-use russimp_sys::*;
+use rs_assimp_sys::*;
 use strum_macros::EnumIter;
 
 #[derive(Debug, EnumIter, Clone, Copy)]

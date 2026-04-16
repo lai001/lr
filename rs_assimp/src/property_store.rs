@@ -1,9 +1,9 @@
 use crate::convert::ConvertToAIString;
-use russimp_sys::*;
+use rs_assimp_sys::*;
 use std::marker::PhantomData;
 
 pub struct PropertyStore {
-    c: *mut russimp_sys::aiPropertyStore,
+    c: *mut aiPropertyStore,
     marker: PhantomData<()>,
 }
 
@@ -25,11 +25,11 @@ impl PropertyStore {
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut russimp_sys::aiPropertyStore {
+    pub fn get_mut(&mut self) -> &mut aiPropertyStore {
         unsafe { self.c.as_mut().expect("Not null.") }
     }
 
-    pub fn get(&self) -> &russimp_sys::aiPropertyStore {
+    pub fn get(&self) -> &aiPropertyStore {
         unsafe { self.c.as_ref().expect("Not null.") }
     }
 

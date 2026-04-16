@@ -1,4 +1,4 @@
-use russimp_sys::{aiColor3D, aiColor4D, aiMatrix4x4, aiString, aiVector3D};
+use rs_assimp_sys::{aiColor3D, aiColor4D, aiMatrix4x4, aiString, aiVector3D};
 
 use crate::AISTRING_MAXLEN;
 
@@ -53,7 +53,14 @@ impl ConvertToMat4 for aiMatrix4x4 {
 
 impl ConvertToString for aiString {
     fn to_string(&self) -> String {
-        self.into()
+        unsafe {
+            std::str::from_utf8(std::slice::from_raw_parts(
+                self.data.as_ptr() as *const u8,
+                self.length as _,
+            ))
+        }
+        .unwrap()
+        .into()
     }
 }
 

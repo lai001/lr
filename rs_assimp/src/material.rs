@@ -1,6 +1,6 @@
-use crate::{convert::ConvertToString, texture_type::TextureType};
-use russimp_sys::*;
-use std::marker::PhantomData;
+use crate::{convert::ConvertToString, texture::Texture, texture_type::TextureType};
+use rs_assimp_sys::*;
+use std::{collections::HashMap, marker::PhantomData};
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone, Copy)]
@@ -43,7 +43,7 @@ impl EPropertyTypeInfo {
 }
 
 pub struct MaterialProperty<'a> {
-    _ai_material_property: &'a mut russimp_sys::aiMaterialProperty,
+    _ai_material_property: &'a mut aiMaterialProperty,
     pub key: String,
     _semantic: u32,
     _index: u32,
@@ -56,7 +56,7 @@ pub struct MaterialProperty<'a> {
 impl<'a> MaterialProperty<'a> {
     pub fn new(
         ai_material_property: &'a mut aiMaterialProperty,
-        ai_material: &russimp_sys::aiMaterial,
+        ai_material: &aiMaterial,
     ) -> MaterialProperty<'a> {
         let key = ai_material_property.mKey.to_string();
         let semantic = ai_material_property.mSemantic;
@@ -88,7 +88,7 @@ impl<'a> MaterialProperty<'a> {
     }
 
     fn get_property_type_value(
-        ai_material: &russimp_sys::aiMaterial,
+        ai_material: &aiMaterial,
         ai_material_property: &mut aiMaterialProperty,
         property_type_info: EPropertyTypeInfo,
         index: u32,
@@ -152,14 +152,19 @@ impl<'a> MaterialProperty<'a> {
 }
 
 pub struct Material<'a> {
-    _ai_material: &'a mut russimp_sys::aiMaterial,
+    _ai_material: &'a mut aiMaterial,
     pub num_allocated: u32,
     pub material_properties: Vec<MaterialProperty<'a>>,
+    pub textures: HashMap<TextureType, Texture<'a>>,
     marker: PhantomData<&'a ()>,
 }
 
 impl<'a> Material<'a> {
-    pub fn borrow_from(ai_material: &'a mut russimp_sys::aiMaterial) -> Material<'a> {
+    pub fn borrow_from(
+        ai_material: &'a mut aiMaterial,
+        textures: Vec<Texture<'a>>,
+    ) -> Material<'a> {
+        let mut paths: HashMap<String, TextureType> = HashMap::new();
         for texture_type in TextureType::iter() {
             unsafe {
                 for index in 0..aiGetMaterialTextureCount(ai_material, texture_type as _) {
@@ -180,11 +185,21 @@ impl<'a> Material<'a> {
                         std::ptr::null_mut(),
                     );
                     assert_eq!(aiReturn_aiReturn_SUCCESS, status);
+                    paths.insert(path.to_string(), texture_type);
                     // aiGetMaterialProperty(c, pKey, texture_type as _, index, pPropOut);
                     // println!("{}", path.to_string());
                 }
             }
         }
+        let mut matched_textures: HashMap<TextureType, Texture<'a>> = HashMap::new();
+
+        for texture in textures {
+            let ty = paths.get(&texture.filename);
+            if let Some(ty) = ty {
+                matched_textures.insert(*ty, texture);
+            }
+        }
+
         let ai_properties = unsafe {
             std::ptr::slice_from_raw_parts(ai_material.mProperties, ai_material.mNumProperties as _)
                 .as_ref()
@@ -201,6 +216,7 @@ impl<'a> Material<'a> {
             num_allocated,
             marker: PhantomData,
             material_properties,
+            textures: matched_textures,
         }
     }
 }

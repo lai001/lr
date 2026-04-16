@@ -1,8 +1,12 @@
-use crate::{mesh_anim::MeshAnim, mesh_morph_anim::MeshMorphAnim, node::Node, node_anim::NodeAnim};
+use crate::{
+    convert::ConvertToString, mesh_anim::MeshAnim, mesh_morph_anim::MeshMorphAnim, node::Node,
+    node_anim::NodeAnim,
+};
+use rs_assimp_sys::*;
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 pub struct Animation<'a> {
-    _ai_animation: &'a mut russimp_sys::aiAnimation,
+    _ai_animation: &'a mut aiAnimation,
     pub name: String,
     pub duration: f64,
     pub ticks_per_second: f64,
@@ -14,10 +18,10 @@ pub struct Animation<'a> {
 
 impl<'a> Animation<'a> {
     pub fn borrow_from(
-        ai_animation: &'a mut russimp_sys::aiAnimation,
+        ai_animation: &'a mut aiAnimation,
         map: &mut HashMap<String, Rc<RefCell<Node<'a>>>>,
     ) -> Animation<'a> {
-        let name = ai_animation.mName.into();
+        let name = ai_animation.mName.to_string();
         let duration = ai_animation.mDuration;
         let ticks_per_second = ai_animation.mTicksPerSecond;
         let mut channels: Vec<NodeAnim<'a>> = vec![];
