@@ -3,7 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub mod bandwidth_meter;
 pub mod channel;
+pub mod fps_counter;
 pub mod id_generator;
 pub mod math;
 pub mod new;

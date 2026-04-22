@@ -5,7 +5,6 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::Duration,
 };
 
 #[derive(Clone, Debug)]
@@ -70,7 +69,13 @@ impl Server {
         let mut connections = vec![];
         for stream in self.recciver.try_iter() {
             log::trace!("New stream: {:?}", stream.peer_addr(),);
-            match stream.set_read_timeout(Some(Duration::from_millis(1))) {
+            // match stream.set_read_timeout(Some(std::time::Duration::from_millis(1))) {
+            //     Ok(_) => {}
+            //     Err(err) => {
+            //         log::warn!("{} {}", self.addr.to_string(), err);
+            //     }
+            // }
+            match stream.set_nonblocking(true) {
                 Ok(_) => {}
                 Err(err) => {
                     log::warn!("{err}")
@@ -85,7 +90,7 @@ impl Server {
                     self.clients.push(client);
                 }
                 Err(err) => {
-                    log::warn!("{}", err);
+                    log::warn!("{} {}", self.addr.to_string(), err);
                 }
             }
         }
@@ -111,7 +116,7 @@ impl Server {
         self.shutdown_all_streams();
         let timeout = std::time::Duration::from_secs_f32(3.0);
         if let Err(err) = TcpStream::connect_timeout(&self.addr, timeout) {
-            log::warn!("{}", err);
+            log::warn!("{} {}", self.addr.to_string(), err);
         }
     }
 
@@ -125,6 +130,18 @@ impl Server {
 
     pub fn addr(&self) -> &SocketAddr {
         &self.addr
+    }
+
+    pub fn outgoing_bandwidth(&self) -> usize {
+        self.clients
+            .iter()
+            .fold(0, |acc, x| acc + x.outgoing_bandwidth())
+    }
+
+    pub fn incoming_bandwidth(&self) -> usize {
+        self.clients
+            .iter()
+            .fold(0, |acc, x| acc + x.incoming_bandwidth())
     }
 }
 

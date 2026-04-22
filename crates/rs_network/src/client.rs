@@ -1,3 +1,8 @@
+use rs_foundation::{
+    bandwidth_meter::BandwidthMeter,
+    new::{MultipleThreadMut, MultipleThreadMutType},
+};
+
 use crate::{
     codec::{Decoder, Encoder, Message},
     length_prefix_decoder::LengthPrefixDecoder,
@@ -21,6 +26,8 @@ pub struct Client {
     shutdown: Arc<AtomicBool>,
     pub peer_addr: SocketAddr,
     pub local_addr: SocketAddr,
+    outgoing_bandwidth_meter: MultipleThreadMutType<BandwidthMeter>,
+    incoming_bandwidth_meter: MultipleThreadMutType<BandwidthMeter>,
 }
 
 impl Drop for Client {
@@ -45,7 +52,12 @@ impl Client {
                 log::warn!("{err}")
             }
         }
-
+        match tcp_stream.set_nonblocking(true) {
+            Ok(_) => {}
+            Err(err) => {
+                log::warn!("{err}")
+            }
+        }
         Self::from_stream(tcp_stream, debug_label)
     }
 
@@ -64,11 +76,15 @@ impl Client {
         let shutdown = Arc::new(AtomicBool::new(false));
         let (sender, recciver) = std::sync::mpsc::channel::<Vec<u8>>();
         let (sender1, recciver1) = std::sync::mpsc::channel::<Vec<u8>>();
+        let incoming_bandwidth_meter = MultipleThreadMut::new(BandwidthMeter::new());
+        let outgoing_bandwidth_meter = MultipleThreadMut::new(BandwidthMeter::new());
         let _ = std::thread::Builder::new()
             .name(format!("Network"))
             .spawn({
                 let sender = sender.clone();
                 let shutdown = shutdown.clone();
+                let incoming_bandwidth_meter = incoming_bandwidth_meter.clone();
+                let outgoing_bandwidth_meter = outgoing_bandwidth_meter.clone();
                 #[cfg(feature="network_debug_trace")]
                 let debug_label = debug_label.clone();
                 move || {
@@ -81,6 +97,7 @@ impl Client {
                         match tcp_stream.read(&mut buffer) {
                             Ok(size) => {
                                 if size != 0 {
+                                    incoming_bandwidth_meter.lock().unwrap().send(size);
                                     if buffer.len() < size {
                                         buffer.resize(size, 0);
                                     }
@@ -97,15 +114,20 @@ impl Client {
                                 }
                             }
                             Err(err) => {
-                                if !matches!(err.kind(), std::io::ErrorKind::TimedOut) {
-                                    match &debug_label {
-                                        Some(debug_label) => {
-                                            log::warn!("[{debug_label}] Failed to read from: {peer_addr}, {err}");
+                                match err.kind() {
+                                    std::io::ErrorKind::WouldBlock => {
+                                        std::thread::sleep(Duration::from_millis(1));
+                                    },
+                                    err => {
+                                        match &debug_label {
+                                            Some(debug_label) => {
+                                                log::warn!("[{debug_label}] Failed to read from: {peer_addr}, {err}");
+                                            }
+                                            None => {
+                                                log::warn!("Failed to read from: {peer_addr}, {err}");
+                                            }
                                         }
-                                        None => {
-                                            log::warn!("Failed to read from: {peer_addr}, {err}");
-                                        }
-                                    }
+                                    },
                                 }
                             }
                         }
@@ -116,6 +138,7 @@ impl Client {
                                     Ok(bytes) => {
                                         // let _ = tcp_stream.flush();
                                         if bytes != 0 {
+                                            outgoing_bandwidth_meter.lock().unwrap().send(bytes);
                                             #[cfg(feature="network_debug_trace")]
                                             match &debug_label {
                                                 Some(debug_label) => {
@@ -131,15 +154,20 @@ impl Client {
                                         }
                                     }
                                     Err(err) => {
-                                        if !matches!(err.kind(), std::io::ErrorKind::TimedOut) {
-                                            match &debug_label {
-                                                Some(debug_label) => {
-                                                    log::warn!("[{debug_label}] Failed to write to: {peer_addr}, {err}");
+                                        match err.kind() {
+                                            std::io::ErrorKind::WouldBlock => {
+                                                std::thread::sleep(Duration::from_millis(1));
+                                            },
+                                            err => {
+                                                match &debug_label {
+                                                    Some(debug_label) => {
+                                                        log::warn!("[{debug_label}] Failed to write to: {peer_addr}, {err}");
+                                                    }
+                                                    None => {
+                                                        log::warn!("Failed to write to: {peer_addr}, {err}");
+                                                    }
                                                 }
-                                                None => {
-                                                    log::warn!("Failed to write to: {peer_addr}, {err}");
-                                                }
-                                            }
+                                            },
                                         }
                                     }
                                 }
@@ -166,6 +194,8 @@ impl Client {
             shutdown,
             peer_addr,
             local_addr,
+            outgoing_bandwidth_meter,
+            incoming_bandwidth_meter,
         })
     }
 
@@ -173,7 +203,7 @@ impl Client {
         while let Ok(data) = self.recciver.try_recv() {
             let result = self.decoder.decode(data);
             if let Err(err) = result {
-                log::warn!("{}", err);
+                log::warn!("{} {}", self.local_addr.to_string(), err);
             }
         }
         self.decoder.take_messages()
@@ -184,7 +214,7 @@ impl Client {
         match self.sender.send(encoded) {
             Ok(_) => {}
             Err(err) => {
-                log::warn!("Write, {err}");
+                log::warn!("{} Write, {err}", self.local_addr.to_string());
             }
         }
     }
@@ -195,6 +225,14 @@ impl Client {
 
     pub fn local_addr(&self) -> &SocketAddr {
         &self.local_addr
+    }
+
+    pub fn outgoing_bandwidth(&self) -> usize {
+        self.outgoing_bandwidth_meter.lock().unwrap().bandwidth()
+    }
+
+    pub fn incoming_bandwidth(&self) -> usize {
+        self.incoming_bandwidth_meter.lock().unwrap().bandwidth()
     }
 }
 

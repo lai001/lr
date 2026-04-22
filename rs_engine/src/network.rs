@@ -58,6 +58,10 @@ pub trait NetworkReplicated {
     fn on_net_mode_changed(&mut self, net_mode: ENetMode) {
         let _ = net_mode;
     }
+
+    fn debug_description(&self) -> Option<String> {
+        None
+    }
 }
 
 pub trait NetworkModule {

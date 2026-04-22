@@ -17,6 +17,7 @@ uuid = { version = "1.23.0", features = [
 serde = { version = "1.0.228", features = ["derive"] }
 rs_artifact = { path = "../../rs_artifact" }
 rs_core_minimal = { path = "../../rs_core_minimal" }
+rs_foundation = { path = "../../rs_foundation" }
 
 [build-dependencies]
 bindgen = "0.72.1"

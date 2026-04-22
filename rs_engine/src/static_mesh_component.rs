@@ -1,7 +1,7 @@
 #[cfg(feature = "network")]
-use crate::network;
-#[cfg(feature = "network")]
 use crate::network::NetworkReplicated;
+#[cfg(feature = "network")]
+use crate::network::{self};
 use crate::{
     content::{content_file_type::EContentFileType, level::LevelPhysics, material::Material},
     drawable::EDrawObjectType,
@@ -18,10 +18,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct AgentTransformation {
     pub translation: glam::Vec3,
     pub rotation: glam::Quat,
+}
+
+impl AgentTransformation {
+    pub fn abs_diff_eq(&self, rhs: &Self) -> bool {
+        let max_abs_diff = 1.0e-6;
+        self.rotation.abs_diff_eq(rhs.rotation, max_abs_diff)
+            && self.translation.abs_diff_eq(rhs.translation, max_abs_diff)
+    }
 }
 
 #[derive(Clone)]
@@ -76,6 +84,10 @@ pub struct NetworkFields {
     is_sync_with_server: bool,
     #[serde(skip)]
     net_mode: network::ENetMode,
+    #[serde(skip)]
+    debug_description: Option<String>,
+    #[serde(skip)]
+    agent_transformation: Option<AgentTransformation>,
 }
 
 #[cfg(feature = "network")]
@@ -87,6 +99,8 @@ impl NetworkFields {
             replicated_datas: TransmissionType::new(),
             is_sync_with_server: false,
             net_mode: network::ENetMode::Server,
+            debug_description: None,
+            agent_transformation: None,
         }
     }
 
@@ -149,8 +163,22 @@ impl crate::network::NetworkReplicated for StaticMeshComponent {
         if let Err(err) = &encoded_data {
             log::warn!("{}", err);
         }
+
+        let replicated_field_types = self
+            .network_fields
+            .replicated_datas
+            .keys()
+            .map(|x| format!("{:?}", x))
+            .collect::<Vec<String>>()
+            .join(", ");
+        let description = format!(
+            "Name: {}, Field types: {}",
+            &self.name, &replicated_field_types
+        );
+        self.network_fields.debug_description = Some(description);
         self.network_fields.reset();
-        encoded_data.unwrap_or_default()
+        let data = encoded_data.unwrap_or_default();
+        data
     }
 
     fn on_sync(&mut self, data: &Vec<u8>) {
@@ -205,6 +233,10 @@ impl crate::network::NetworkReplicated for StaticMeshComponent {
 
     fn debug_name(&self) -> Option<String> {
         Some(self.name.clone())
+    }
+
+    fn debug_description(&self) -> Option<String> {
+        self.network_fields.debug_description.clone()
     }
 
     fn sync_with_server(&mut self, is_sync: bool) {
@@ -484,7 +516,7 @@ impl StaticMeshComponent {
         }
         #[cfg(feature = "network")]
         if let Some(send_agent_transformation) = send_agent_transformation {
-            let _ = self.set_agent_transformation(&send_agent_transformation);
+            let _ = self.set_agent_transformation(send_agent_transformation);
         }
     }
 
@@ -900,9 +932,15 @@ impl StaticMeshComponent {
     #[cfg(feature = "network")]
     pub fn set_agent_transformation(
         &mut self,
-        agent_transformation: &AgentTransformation,
+        agent_transformation: AgentTransformation,
     ) -> rs_artifact::error::Result<()> {
+        if let Some(lhs) = self.network_fields.agent_transformation.as_ref() {
+            if lhs.abs_diff_eq(&agent_transformation) {
+                return Ok(());
+            }
+        }
         let data = rs_artifact::bincode_legacy::serialize(&agent_transformation, None)?;
+        self.network_fields.agent_transformation = Some(agent_transformation);
         self.network_fields
             .replicated_datas
             .insert(ReplicatedFieldType::AgentTransformation, data);

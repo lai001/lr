@@ -18,6 +18,7 @@ pub struct NetworkObjectData {
     pub replicated: Vec<u8>,
     pub call: Vec<u8>,
     // #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_name: Option<String>,
     pub debug_description: Option<String>,
 }
 
@@ -427,7 +428,8 @@ impl Application {
                     id: *network_replicated.get_network_id(),
                     replicated: network_replicated.on_replicated(),
                     call: network_replicated.call(),
-                    debug_description: network_replicated.debug_name(),
+                    debug_name: network_replicated.debug_name(),
+                    debug_description: network_replicated.debug_description(),
                 };
                 if network_object_data.is_valid() {
                     endpoint_data.network_object_datas.push(network_object_data);
@@ -442,7 +444,8 @@ impl Application {
                     id: *network_replicated.get_network_id(),
                     replicated: network_replicated.on_replicated(),
                     call: network_replicated.call(),
-                    debug_description: network_replicated.debug_name(),
+                    debug_name: network_replicated.debug_name(),
+                    debug_description: network_replicated.debug_description(),
                 };
                 if network_object_data.is_valid() {
                     endpoint_data.network_object_datas.push(network_object_data);
@@ -601,7 +604,8 @@ impl Application {
                     id: *network_replicated.get_network_id(),
                     replicated: network_replicated.on_replicated(),
                     call: network_replicated.call(),
-                    debug_description: network_replicated.debug_name(),
+                    debug_name: network_replicated.debug_name(),
+                    debug_description: network_replicated.debug_description(),
                 };
                 if network_object_data.is_valid() {
                     endpoint_data.network_object_datas.push(network_object_data);
@@ -616,7 +620,8 @@ impl Application {
                     id: *network_replicated.get_network_id(),
                     replicated: network_replicated.on_replicated(),
                     call: network_replicated.call(),
-                    debug_description: network_replicated.debug_name(),
+                    debug_name: network_replicated.debug_name(),
+                    debug_description: network_replicated.debug_description(),
                 };
                 if network_object_data.is_valid() {
                     endpoint_data.network_object_datas.push(network_object_data);
