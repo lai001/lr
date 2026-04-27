@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-profiler = ["tracy-client/enable"]
+profiler = ["tracy-client/enable", "rapier3d/profiler"]
 required_detail_edges = []
 
 [dependencies]

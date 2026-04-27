@@ -18,7 +18,7 @@ standalone = [
     "rs_render/standalone",
     "rs_core_minimal/standalone",
 ]
-profiler = ["tracy-client/enable", "rs_render/profiler"]
+profiler = ["tracy-client/enable", "rs_render/profiler", "rapier3d/profiler"]
 plugin_shared_crate = []
 network = ["dep:rs_network"]
 android-native-activity = ["winit/android-native-activity"]
