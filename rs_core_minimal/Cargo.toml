@@ -24,6 +24,7 @@ url = { version = "2.5.8", features = ["serde"] }
 typetag = "0.2.21"
 dyn-clone = "1.0.20"
 downcast-rs = "2.0.2"
+bitflags = "2.11.0"
 rs_foundation = { path = "../rs_foundation" }
 
 [dev-dependencies]

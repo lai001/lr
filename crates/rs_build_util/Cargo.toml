@@ -1,0 +1,11 @@
+[package]
+name = "rs_build_util"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+build-rs = "0.3.4"
+build-print = "1.0.1"
+serde = { version = "1.0.228", features = ["derive", "rc"] }
+serde_json = "1.0.149"
+rs_core_minimal = { path = "../../rs_core_minimal" }

@@ -15,6 +15,9 @@ task("fmt") do
             for _, file in ipairs(os.files(project .. "/src/**.rs")) do
                 table.insert(rustfmt_args, file)
             end
+            for _, file in ipairs(os.files(project .. "/build.rs")) do
+                table.insert(rustfmt_args, file)
+            end
         end
         local clang_format_args = { "-style=microsoft", "-i" }
         for _, file in ipairs(os.files("rs_quickjs/src/**.h")) do

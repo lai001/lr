@@ -32,6 +32,22 @@ pub fn get_engine_generated_dir() -> PathBuf {
 }
 
 #[cfg(feature = "editor")]
+pub fn get_engine_build_tmp_dir() -> PathBuf {
+    get_engine_root_dir().join("build/tmp")
+}
+
+#[cfg(feature = "editor")]
+pub fn create_engine_build_tmp_dir() -> PathBuf {
+    let path = get_engine_build_tmp_dir();
+    if path.exists() {
+        path
+    } else {
+        std::fs::create_dir_all(path.clone()).unwrap();
+        path
+    }
+}
+
+#[cfg(feature = "editor")]
 pub fn get_engine_resource_dir() -> PathBuf {
     get_engine_root_dir().join("Resource")
 }
