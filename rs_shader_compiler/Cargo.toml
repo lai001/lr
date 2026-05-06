@@ -16,9 +16,9 @@ anyhow = { version = "1.0.102" }
 bincode = { version = "=2.0.1", features = ["serde"] }
 log = "0.4.29"
 env_logger = "0.11.10"
-clap = { version = "4.6.0", features = ["derive"] }
-wgpu = "29.0.1"
-naga = { version = "29.0.1", features = ["serialize", "deserialize"] }
+clap = { version = "4.6.1", features = ["derive"] }
+wgpu = "29.0.3"
+naga = { version = "29.0.3", features = ["serialize", "deserialize"] }
 pollster = "0.4.0"
 dunce = "1.0.5"
 path-slash = "0.2.1"

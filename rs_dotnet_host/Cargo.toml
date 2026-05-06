@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 lazy_static = "1.5.0"
 glam = { version = "0.30.10", features = ["mint"] }
-wgpu = "29.0.1"
+wgpu = "29.0.3"
 notify = "8.2.0"
 notify-debouncer-mini = { version = "0.7.0" }
 walkdir = "2.5.0"

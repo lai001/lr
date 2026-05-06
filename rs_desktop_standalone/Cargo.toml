@@ -19,14 +19,14 @@ plugin_shared_crate = ["rs_engine/plugin_shared_crate"]
 network = ["dep:rs_network", "rs_engine/network"]
 
 [dependencies]
-clap = { version = "4.6.0", features = ["derive"] }
+clap = { version = "4.6.1", features = ["derive"] }
 log = "0.4.29"
 env_logger = "0.11.10"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 bincode = { version = "=2.0.1", features = ["serde"] }
 glam = { version = "0.30.10" }
-uuid = { version = "1.23.0", features = [
+uuid = { version = "1.23.1", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
@@ -35,9 +35,9 @@ uuid = { version = "1.23.0", features = [
 url = { version = "2.5.8", features = ["serde"] }
 percent-encoding = "2.3.2"
 winit = { version = "0.30.13" }
-egui = { version = "0.34.1" }
-egui_extras = { version = "0.34.1", features = ["all_loaders"] }
-egui-winit = { version = "0.34.1" }
+egui = { version = "0.34.2" }
+egui_extras = { version = "0.34.2", features = ["all_loaders"] }
+egui-winit = { version = "0.34.2" }
 rfd = "0.17.2"
 image = "0.25.10"
 regex = "1.12.3"
@@ -49,8 +49,8 @@ path-slash = "0.2.1"
 md-5 = { version = "0.11.0" }
 anyhow = { version = "1.0.102" }
 lazy_static = "1.5.0"
-naga = { version = "29.0.1" }
-wgpu = "29.0.1"
+naga = { version = "29.0.3" }
+wgpu = "29.0.3"
 tracy-client = { version = "0.18.4", default-features = false }
 rs_proc_macros = { path = "../rs_proc_macros" }
 rs_render = { path = "../rs_render" }

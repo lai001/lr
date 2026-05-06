@@ -16,15 +16,15 @@ serde = { version = "1.0.228", features = ["derive", "rc"] }
 glam = { version = "0.30.10", features = ["mint", "serde"] }
 md-5 = { version = "0.11.0" }
 sha2 = { version = "0.11" }
-rayon = "1.11.0"
+rayon = "1.12.0"
 lazy_static = "1.5.0"
 regex = "1.12.3"
-rand = { version = "0.10.0" }
+rand = { version = "0.10.1" }
 url = { version = "2.5.8", features = ["serde"] }
 typetag = "0.2.21"
 dyn-clone = "1.0.20"
 downcast-rs = "2.0.2"
-bitflags = "2.11.0"
+bitflags = "2.11.1"
 rs_foundation = { path = "../rs_foundation" }
 
 [dev-dependencies]

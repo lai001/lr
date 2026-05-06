@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 log = "0.4.29"
 # russimp-sys = { version = "2.0.2", features = ["prebuilt"] }
-bitflags = "2.11.0"
+bitflags = "2.11.1"
 glam = { version = "0.30.10", features = ["mint", "serde"] }
 strum = "0.28.0"
 strum_macros = "0.28.0"

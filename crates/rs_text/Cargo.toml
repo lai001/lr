@@ -21,7 +21,7 @@ rs_pack = { path = "../rs_pack" }
 [dev-dependencies]
 lyon = "1.0.19"
 vello = "0.8.0"
-rand = "0.10.0"
+rand = "0.10.1"
 rs_render_core = { path = "../rs_render_core", default-features = false, features = [
     "wgpu28",
 ] }
