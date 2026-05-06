@@ -450,6 +450,12 @@ impl EditorContext {
                 }
                 if *button == winit::event::MouseButton::Left
                     && !self.egui_winit_state.egui_ctx().is_pointer_over_egui()
+                    && self
+                        .egui_winit_state
+                        .egui_ctx()
+                        .pointer_latest_pos()
+                        .map(|x| x.y > 20.0)
+                        == Some(true)
                     && self.mosue_state.is_focus
                     && *state == winit::event::ElementState::Pressed
                     && egui_event_response.consumed == false

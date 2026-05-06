@@ -98,11 +98,6 @@ impl EditorUI {
         model_loader: &mut ModelLoader,
     ) -> ClickEvent {
         let mut click = ClickEvent::default();
-        let mut panel_ui = rs_egui_utils::create_panel_ui_from_context(
-            context,
-            Some(egui::Id::new("EditorPanel")),
-        );
-        click.menu_event = self.top_menu.draw(context, &mut panel_ui, data_source);
 
         if let Some(level) = &data_source.level {
             let window = Self::new_window("Level", data_source.input_mode);
@@ -180,6 +175,14 @@ impl EditorUI {
                 data_source.is_gizmo_focused = false;
             }
         }
+
+        // Fix gizmo rendering causing top menu flickering, draw menu above the gizmo view
+        let mut panel_ui = rs_egui_utils::create_panel_ui_from_context(
+            context,
+            Some(egui::Id::new("EditorPanel")),
+        );
+        click.menu_event = self.top_menu.draw(context, &mut panel_ui, data_source);
+
         let window = Self::new_window("Gizmo Settings", data_source.input_mode);
         gizmo_settings::draw(
             window,
