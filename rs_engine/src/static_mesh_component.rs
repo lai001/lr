@@ -2,6 +2,7 @@
 use crate::network::NetworkReplicated;
 #[cfg(feature = "network")]
 use crate::network::{self};
+use crate::physics_ability::{self};
 use crate::{
     content::{content_file_type::EContentFileType, level::LevelPhysics, material::Material},
     drawable::EDrawObjectType,
@@ -51,7 +52,7 @@ impl Physics {
 pub struct StaticMeshComponentRuntime {
     draw_objects: Option<EDrawObjectType>,
     _mesh: Option<Arc<StaticMesh>>,
-    pub physics: Option<Physics>,
+    pub physics: Option<physics_ability::PhysicsAbility>,
     pub parent_final_transformation: glam::Mat4,
     pub final_transformation: glam::Mat4,
     aabb: Option<Aabb>,
@@ -123,7 +124,7 @@ pub struct StaticMeshComponent {
     pub transformation: glam::Mat4,
     pub material_url: Option<url::Url>,
     pub is_visible: bool,
-    pub rigid_body_type: RigidBodyType,
+    pub physics: physics_ability::Initialization,
     pub is_enable_multiresolution: bool,
     #[cfg(feature = "network")]
     #[serde(default)]
@@ -295,6 +296,10 @@ impl StaticMeshComponent {
         material_url: Option<url::Url>,
         transformation: glam::Mat4,
     ) -> StaticMeshComponent {
+        let shape_type = physics_ability::EShapeType::Mesh(physics_ability::MeshOptions {
+            mesh_url: static_mesh_url.clone(),
+            is_use_convex_decomposition: false,
+        });
         StaticMeshComponent {
             name,
             transformation,
@@ -302,7 +307,10 @@ impl StaticMeshComponent {
             run_time: None,
             static_mesh: static_mesh_url,
             is_visible: true,
-            rigid_body_type: RigidBodyType::Dynamic,
+            physics: physics_ability::Initialization {
+                rigid_body_type: RigidBodyType::Dynamic,
+                shape_type,
+            },
             is_enable_multiresolution: false,
             #[cfg(feature = "network")]
             network_fields: NetworkFields::new(),
@@ -596,108 +604,27 @@ impl StaticMeshComponent {
         run_time.draw_objects = Some(draw_object);
     }
 
-    pub fn build_collider(
-        mesh: &StaticMesh,
-        is_use_convex_decomposition: bool,
-    ) -> crate::error::Result<Collider> {
-        let vertices: Vec<_> = mesh.vertexes.iter().map(|x| x.position).collect();
-        // let deltas = Isometry::identity();
-        // let aabb = bounding_volume::details::point_cloud_aabb(&deltas, &vertices);
-        // let center = aabb.center();
-        // let diag = (aabb.maxs - aabb.mins).norm();
-        // vertices
-        //     .iter_mut()
-        //     .for_each(|p| *p = (*p - center.coords) * 10.0 / diag);
-
-        let mut indices: Vec<_> = vec![];
-        for index in mesh.indexes.chunks(3) {
-            indices
-                .push(<[u32; 3]>::try_from(index).map_err(crate::error::Error::TryFromSliceError)?);
-        }
-
-        let decomposed_shape = if is_use_convex_decomposition {
-            SharedShape::convex_decomposition(&vertices, &indices)
-        } else {
-            SharedShape::trimesh_with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)
-                .map_err(|err| {
-                    crate::error::Error::Other(Some(format!("Fail to build mesh, {}", err)))
-                })?
-        };
-        let collider = ColliderBuilder::new(decomposed_shape)
-            .contact_skin(0.1)
-            .active_events(ActiveEvents::COLLISION_EVENTS)
-            .build();
-        Ok(collider)
-    }
-
-    pub fn build_rigid_body(
-        rigid_body_type: RigidBodyType,
-        rotation: glam::Quat,
-        translation: glam::Vec3,
-    ) -> RigidBody {
-        let (axis, angle) = rotation.to_axis_angle();
-        let mut builder = match rigid_body_type {
-            RigidBodyType::Dynamic => RigidBodyBuilder::dynamic(),
-            RigidBodyType::Fixed => RigidBodyBuilder::fixed(),
-            RigidBodyType::KinematicPositionBased => RigidBodyBuilder::kinematic_position_based(),
-            RigidBodyType::KinematicVelocityBased => RigidBodyBuilder::kinematic_velocity_based(),
-        };
-        builder = builder.translation(translation);
-        builder.position.rotation = Rotation::from_axis_angle(axis.normalize(), angle);
-        // builder = builder.enabled_rotations(false, false, false);
-        let rigid_body = builder.build();
-        rigid_body
-    }
-
-    fn build_physics(
-        mesh: &StaticMesh,
-        is_use_convex_decomposition: bool,
-        transformation: glam::Mat4,
-        rigid_body_type: RigidBodyType,
-    ) -> crate::error::Result<Physics> {
-        let (_, rotation, translation) = transformation.to_scale_rotation_translation();
-        let collider = Self::build_collider(mesh, is_use_convex_decomposition)?;
-        let rigid_body = Self::build_rigid_body(rigid_body_type, rotation, translation);
-        Ok(Physics {
-            colliders: vec![collider],
-            collider_handles: vec![],
-            rigid_body,
-            rigid_body_handle: RigidBodyHandle::invalid(),
-            is_apply_simulate: true,
-        })
-    }
-
-    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+    pub fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
         let Some(run_time) = &mut self.run_time else {
-            return;
-        };
-        let Some(static_mesh) = run_time._mesh.as_ref() else {
             return;
         };
         if run_time.physics.is_some() {
             log::warn!("Double initialize physics, {}", self.name);
         }
-        let Ok(mut physics) = Self::build_physics(
-            static_mesh,
-            false,
+        let resource_manager = engine.get_resource_manager().clone();
+        let physics = physics_ability::PhysicsAbility::new(
+            &self.physics,
             run_time.final_transformation,
-            self.rigid_body_type.clone(),
-        ) else {
-            return;
-        };
-        let handle = level_physics
-            .rigid_body_set
-            .insert(physics.rigid_body.clone());
-        for collider in physics.colliders.clone() {
-            let collider_handle = level_physics.collider_set.insert_with_parent(
-                collider,
-                handle,
-                &mut level_physics.rigid_body_set,
-            );
-            physics.collider_handles.push(collider_handle);
-        }
-        physics.rigid_body_handle = handle;
-
+            true,
+            files,
+            resource_manager,
+            level_physics,
+        );
         run_time.physics = Some(physics);
     }
 
@@ -708,7 +635,14 @@ impl StaticMeshComponent {
         physics.is_apply_simulate = is_apply_simulate;
     }
 
-    pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
+    pub fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
+        let _ = engine;
+        let _ = files;
         let Some(run_time) = self.run_time.as_mut() else {
             return;
         };
@@ -719,6 +653,9 @@ impl StaticMeshComponent {
         let Some(level_physics) = level_physics else {
             return;
         };
+        if !physics.is_valid() {
+            return;
+        }
 
         let rigid_body = level_physics
             .rigid_body_set
@@ -745,11 +682,11 @@ impl StaticMeshComponent {
         collider.set_rotation(Rotation::from_axis_angle(axis.normalize(), angle));
     }
 
-    pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
+    pub fn get_physics_mut(&mut self) -> Option<&mut physics_ability::PhysicsAbility> {
         self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten()
     }
 
-    pub fn get_physics(&self) -> Option<&Physics> {
+    pub fn get_physics(&self) -> Option<&physics_ability::PhysicsAbility> {
         self.run_time.as_ref().map(|x| x.physics.as_ref()).flatten()
     }
 

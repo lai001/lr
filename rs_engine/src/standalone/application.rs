@@ -281,6 +281,18 @@ impl Application {
         #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
         #[cfg(not(target_os = "android"))] keys_detector: &mut crate::keys_detector::KeysDetector,
     ) {
+        #[cfg(feature = "network")]
+        let label = if self.net_module.is_authority {
+            "server"
+        } else {
+            "client"
+        };
+        #[cfg(feature = "network")]
+        let _span =
+            rs_tracy_client_ext::span_alloc!(format!("on_redraw_requested[{}]", label).as_str());
+        #[cfg(not(feature = "network"))]
+        let _span = tracy_client::span!();
+
         let _ = ctx;
         #[cfg(not(target_os = "android"))]
         let _ = window;
@@ -308,10 +320,11 @@ impl Application {
                     }
                 }
                 if changed_state.contains(ChangedStateFlags::Transformation) {
-                    actor
-                        .scene_node
-                        .borrow_mut()
-                        .notify_transformation_updated(active_level.get_physics_mut());
+                    actor.scene_node.borrow_mut().notify_transformation_updated(
+                        engine,
+                        active_level.get_physics_mut(),
+                        &self._contents,
+                    );
                 }
             }
         }

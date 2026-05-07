@@ -132,6 +132,7 @@ pub fn on_window_event(
 pub fn render_combo_box2<'a, Value>(
     ui: &mut egui::Ui,
     label: &str,
+    id_salt: Option<egui::Id>,
     current_value: &mut Option<&'a Value>,
     selected_collection: Vec<Option<&'a Value>>,
 ) -> bool
@@ -139,7 +140,8 @@ where
     Value: ToUIString + std::cmp::PartialEq,
 {
     let mut is_changed = false;
-    let combo_box = egui::ComboBox::from_label(label).selected_text(format!("{}", {
+    let id_salt = id_salt.unwrap_or_else(|| egui::Id::new(label));
+    let combo_box = egui::ComboBox::new(id_salt, label).selected_text(format!("{}", {
         match current_value {
             Some(current_url) => current_url.to_ui_string(),
             None => "None".to_string(),
@@ -165,6 +167,7 @@ where
 pub fn render_combo_box<'a, Value>(
     ui: &mut egui::Ui,
     label: &str,
+    id_salt: Option<egui::Id>,
     current_value: &mut Option<&'a Value>,
     candidate_items: &'a Vec<Value>,
 ) -> bool
@@ -175,7 +178,7 @@ where
         Vec::with_capacity(1 + candidate_items.len());
     selected_collection.push(None);
     selected_collection.append(&mut candidate_items.iter().map(|x| Some(x)).collect());
-    render_combo_box2(ui, label, current_value, selected_collection)
+    render_combo_box2(ui, label, id_salt, current_value, selected_collection)
 }
 
 pub fn render_combo_box_not_null<Value>(
@@ -228,5 +231,17 @@ impl ToUIString for RigidBodyType {
 impl ToUIString for url::Url {
     fn to_ui_string(&self) -> String {
         self.to_string()
+    }
+}
+
+impl ToUIString for &str {
+    fn to_ui_string(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToUIString for String {
+    fn to_ui_string(&self) -> String {
+        self.clone()
     }
 }

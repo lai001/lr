@@ -434,6 +434,8 @@ impl PlayerViewport {
     // }
 
     pub fn update_global_constants(&mut self, engine: &mut Engine) {
+        let _span = tracy_client::span!();
+
         let view: glam::Mat4 = self.camera.get_view_matrix();
         let projection: glam::Mat4 = self.camera.get_projection_matrix();
         let world_location: glam::Vec3 = self.camera.get_world_location();

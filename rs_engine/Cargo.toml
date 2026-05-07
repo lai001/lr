@@ -18,7 +18,7 @@ standalone = [
     "rs_render/standalone",
     "rs_core_minimal/standalone",
 ]
-profiler = ["tracy-client/enable", "rs_render/profiler", "rapier3d/profiler"]
+profiler = ["tracy-client/enable", "rs_render/profiler", "rapier3d/profiler", "rs_tracy_client_ext/profiler"]
 plugin_shared_crate = []
 network = ["dep:rs_network"]
 android-native-activity = ["winit/android-native-activity"]
@@ -69,6 +69,7 @@ rs_proc_macros = { path = "../rs_proc_macros" }
 rs_render_types = { path = "../rs_render_types" }
 rs_render_core = { path = "../crates/rs_render_core" }
 rs_network = { path = "../crates/rs_network", optional = true }
+rs_tracy_client_ext = { path = "../crates/rs_tracy_client_ext" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15.1"

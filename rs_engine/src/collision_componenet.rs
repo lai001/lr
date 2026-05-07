@@ -192,7 +192,14 @@ impl CollisionComponent {
         })
     }
 
-    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+    pub fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let Some(run_time) = &mut self.run_time else {
             return;
         };
@@ -217,8 +224,13 @@ impl CollisionComponent {
         run_time.physics = Some(physics);
     }
 
-    pub fn recreate_physics(&mut self, level_physics: &mut LevelPhysics) {
-        self.initialize_physics(level_physics);
+    pub fn recreate_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        self.initialize_physics(engine, level_physics, files);
     }
 
     pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
@@ -243,11 +255,16 @@ impl CollisionComponent {
         }
     }
 
-    pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
+    pub fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
         let Some(level_physics) = level_physics else {
             return;
         };
-        self.recreate_physics(level_physics);
+        self.recreate_physics(engine, level_physics, files);
     }
 
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {

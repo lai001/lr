@@ -190,6 +190,7 @@ pub enum ReplicatedFieldType {
 #[derive(Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
 pub enum RemoteCallType {
     AddActor,
+    RemoveActor,
 }
 
 #[cfg(feature = "network")]
@@ -197,6 +198,7 @@ impl RemoteCallType {
     pub fn expected_parameter_length(&self) -> usize {
         match self {
             RemoteCallType::AddActor => 1,
+            RemoteCallType::RemoveActor => 1,
         }
     }
 }
@@ -265,6 +267,26 @@ impl NetworkFields {
         };
         let call = RemoteCall {
             ty: RemoteCallType::AddActor,
+            args: vec![arg_data],
+        };
+        debug_assert!(call.is_valid_args_len());
+        self.remote_calls.push(call);
+    }
+
+    fn remove_actors(&mut self, actors: Vec<SingleThreadMutType<Actor>>) {
+        let ids = actors
+            .iter()
+            .map(|actor| actor.borrow().get_network_id().clone())
+            .collect::<Vec<uuid::Uuid>>();
+        let arg_data = match rs_artifact::bincode_legacy::serialize::<Vec<uuid::Uuid>>(&ids, None) {
+            Ok(arg_data) => arg_data,
+            Err(err) => {
+                log::warn!("{err}");
+                return;
+            }
+        };
+        let call = RemoteCall {
+            ty: RemoteCallType::RemoveActor,
             args: vec![arg_data],
         };
         debug_assert!(call.is_valid_args_len());
@@ -355,6 +377,25 @@ impl crate::network::NetworkReplicated for Level {
                                 actor.sync_with_server(true);
                             }
                             self.add_new_actors(engine, actors, contents, player_viewport);
+                        }
+                    }
+                    RemoteCallType::RemoveActor => {
+                        if call_data.is_valid_args_len() {
+                            let actor_ids = rs_artifact::bincode_legacy::deserialize::<
+                                Vec<uuid::Uuid>,
+                            >(&call_data.args[0], None)?;
+                            let mut remove_actors = vec![];
+                            for actor in &self.actors {
+                                let c = actor.clone();
+                                let actor = actor.borrow();
+                                let id = actor.get_network_id();
+                                if actor_ids.contains(id) {
+                                    remove_actors.push(c);
+                                }
+                            }
+                            for actor in remove_actors {
+                                self.delete_actor_client(actor);
+                            }
                         }
                     }
                 }
@@ -514,7 +555,7 @@ impl Level {
         self.init_actors(engine, actors, files, player_viewport);
         let actors = self.actors.clone();
         for actor in actors {
-            self.init_actor_physics(actor.clone());
+            self.init_actor_physics(actor.clone(), engine, files);
         }
         let name = self.get_name();
         log::trace!("initialize level: {}", name);
@@ -533,13 +574,18 @@ impl Level {
         }
     }
 
-    pub fn init_actor_physics(&mut self, actor: SingleThreadMutType<Actor>) {
+    pub fn init_actor_physics(
+        &mut self,
+        actor: SingleThreadMutType<Actor>,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+    ) {
         let Some(physics) = self.get_physics_mut() else {
             return;
         };
         let level_physics = physics;
         let mut actor = actor.borrow_mut();
-        actor.initialize_physics(level_physics);
+        actor.initialize_physics(engine, level_physics, files);
     }
 
     // pub fn update_actor_physics(&mut self, actor: SingleThreadMutType<Actor>) {
@@ -553,6 +599,8 @@ impl Level {
     // }
 
     pub fn tick(&mut self, time: f32, engine: &mut Engine, player_viewport: &mut PlayerViewport) {
+        let _span = tracy_client::span!();
+
         for light in self.directional_lights.clone() {
             let mut light = light.borrow_mut();
             light.update(engine);
@@ -654,7 +702,7 @@ impl Level {
         self.init_actors(engine, actors.clone(), files, player_viewport);
 
         for actor in actors.clone() {
-            self.init_actor_physics(actor.clone());
+            self.init_actor_physics(actor.clone(), engine, files);
         }
 
         self.actors.append(&mut actors);
@@ -715,7 +763,7 @@ impl Level {
                 let is_find = (|| {
                     let mut component = static_mesh_component.borrow_mut();
                     if let Some(physics) = component.get_physics_mut() {
-                        if physics.get_collider_handles().contains(&handle) {
+                        if physics.collider_handles().contains(&handle) {
                             return true;
                         }
                     }
@@ -804,6 +852,22 @@ impl Level {
     }
 
     pub fn delete_actor(&mut self, actor: SingleThreadMutType<Actor>) {
+        #[cfg(feature = "network")]
+        {
+            if self.is_server() {
+                self.delete_actor_client(actor.clone());
+                self.network_fields.remove_actors(vec![actor]);
+            } else {
+                self.network_fields.remove_actors(vec![actor]);
+            }
+        }
+        #[cfg(not(feature = "network"))]
+        {
+            self.delete_actor_client(actor);
+        }
+    }
+
+    fn delete_actor_client(&mut self, actor: SingleThreadMutType<Actor>) {
         let delete_actors = self
             .actors
             .iter()
@@ -1037,7 +1101,7 @@ impl Level {
         self.network_fields.add_new_actors(actors.clone());
         self.init_actors(engine, actors.clone(), files, player_viewport);
         for actor in actors.clone() {
-            self.init_actor_physics(actor.clone());
+            self.init_actor_physics(actor.clone(), engine, files);
         }
         self.actors.append(&mut actors);
     }

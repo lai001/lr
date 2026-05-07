@@ -409,7 +409,14 @@ impl SkeletonMeshComponent {
         })
     }
 
-    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+    pub fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
             return;
         };
@@ -472,8 +479,12 @@ impl SkeletonMeshComponent {
 
     pub fn on_post_update_transformation(
         &mut self,
-        level_physics: Option<&mut crate::content::level::LevelPhysics>,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
     ) {
+        let _ = files;
+        let _ = engine;
         let _ = level_physics;
     }
 

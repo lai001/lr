@@ -254,7 +254,14 @@ impl SceneComponent {
         final_transformation
     }
 
-    pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
+    pub fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let _ = level_physics;
     }
 
@@ -262,7 +269,14 @@ impl SceneComponent {
         vec![]
     }
 
-    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+    pub fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let _ = level_physics;
     }
 
@@ -398,12 +412,12 @@ macro_rules! common_fn {
             }
         }
 
-        pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
+        pub fn on_post_update_transformation(&mut self, engine: &mut Engine, level_physics: Option<&mut LevelPhysics>, files: &[EContentFileType]) {
             match &mut self.component {
                 $(
                     EComponentType::$x(component) => {
                         let mut component = component.borrow_mut();
-                        component.on_post_update_transformation(level_physics);
+                        component.on_post_update_transformation(engine, level_physics, files);
                     }
                 )*
             }
@@ -459,13 +473,15 @@ macro_rules! common_fn {
 
         pub fn initialize_physics(
             &mut self,
+            engine: &mut Engine,
             level_physics: &mut LevelPhysics,
+            files: &[EContentFileType],
         ) {
             match &mut self.component {
                 $(
                     EComponentType::$x(component) => {
                         let mut component = component.borrow_mut();
-                        component.initialize_physics(level_physics);
+                        component.initialize_physics(engine, level_physics, files);
                     }
                 )*
             }
@@ -525,15 +541,20 @@ impl SceneNode {
         }
     }
 
-    pub fn notify_transformation_updated(&mut self, mut level_physics: Option<&mut LevelPhysics>) {
+    pub fn notify_transformation_updated(
+        &mut self,
+        engine: &mut Engine,
+        mut level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
         let parent_final_transformation = self.get_parent_final_transformation();
         let final_transformation = parent_final_transformation * self.get_transformation();
         self.set_final_transformation(final_transformation);
 
         if let Some(level_physics) = level_physics.as_mut() {
-            self.on_post_update_transformation(Some(level_physics));
+            self.on_post_update_transformation(engine, Some(level_physics), files);
         } else {
-            self.on_post_update_transformation(None);
+            self.on_post_update_transformation(engine, None, files);
         }
         for child in self.childs.clone() {
             let parent_transformation = self.get_final_transformation();
@@ -546,14 +567,18 @@ impl SceneNode {
             for child in self.childs.clone() {
                 crate::actor::Actor::on_post_update_transformation_recursion(
                     &mut child.borrow_mut(),
+                    engine,
                     Some(level_physics),
+                    files,
                 );
             }
         } else {
             for child in self.childs.clone() {
                 crate::actor::Actor::on_post_update_transformation_recursion(
                     &mut child.borrow_mut(),
+                    engine,
                     None,
+                    files,
                 );
             }
         }

@@ -1,5 +1,5 @@
 use crate::{
-    content::level::LevelPhysics,
+    content::{content_file_type::EContentFileType, level::LevelPhysics},
     drawable::{CustomDrawObject, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
@@ -187,7 +187,14 @@ impl super::component::Component for PointLightComponent {
         self.transformation
     }
 
-    fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
+    fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let _ = level_physics;
     }
 
@@ -238,7 +245,14 @@ impl super::component::Component for PointLightComponent {
         })
     }
 
-    fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+    fn initialize_physics(
+        &mut self,
+        engine: &mut crate::engine::Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[crate::content::content_file_type::EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let _ = level_physics;
     }
 

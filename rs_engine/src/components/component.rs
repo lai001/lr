@@ -17,7 +17,9 @@ pub trait Component {
 
     fn on_post_update_transformation(
         &mut self,
-        level_physics: Option<&mut crate::content::level::LevelPhysics>,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
     );
 
     fn set_final_transformation(&mut self, final_transformation: glam::Mat4);
@@ -33,7 +35,12 @@ pub trait Component {
         player_viewport: &mut PlayerViewport,
     );
 
-    fn initialize_physics(&mut self, level_physics: &mut LevelPhysics);
+    fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    );
 
     fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics);
 }

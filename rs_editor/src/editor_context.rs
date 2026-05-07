@@ -3463,7 +3463,11 @@ impl EditorContext {
                                 let mut active_level = active_level.borrow_mut();
                                 let physics = active_level.get_physics_mut();
                                 if let Some(physics) = physics {
-                                    static_mesh_component.initialize_physics(physics);
+                                    static_mesh_component.initialize_physics(
+                                        &mut self.engine,
+                                        physics,
+                                        &files,
+                                    );
                                 }
                             }
                             _ => unimplemented!(),
@@ -3496,6 +3500,30 @@ impl EditorContext {
                     _ => unimplemented!(),
                 }
             }
+            object_property_view::EEventType::UpdatePhysicsShapeType(
+                object_property_view::UpdatePhysicsShapeType {
+                    selected_object, ..
+                },
+            ) => match selected_object {
+                ESelectedObjectType::SceneNode(scene_node) => {
+                    let mut scene_node = scene_node.borrow_mut();
+                    let mut active_level = active_level.borrow_mut();
+                    let physics = active_level.get_physics_mut();
+                    if let Some(level_physics) = physics {
+                        let files = if let Some(folder) =
+                            &self.data_source.content_data_source.current_folder
+                        {
+                            folder.borrow().files.clone()
+                        } else {
+                            vec![]
+                        };
+                        scene_node.initialize_physics(&mut self.engine, level_physics, &files);
+                    }
+                }
+                _ => {
+                    unimplemented!()
+                }
+            },
         }
     }
 
@@ -3596,8 +3624,14 @@ impl EditorContext {
                         }
                     }
                 }
+                let files =
+                    if let Some(folder) = &self.data_source.content_data_source.current_folder {
+                        folder.borrow().files.clone()
+                    } else {
+                        vec![]
+                    };
                 let level_physics = active_level.get_physics_mut();
-                secne_node.notify_transformation_updated(level_physics);
+                secne_node.notify_transformation_updated(&mut self.engine, level_physics, &files);
             }
 
             ESelectedObjectType::DirectionalLight(component) => {

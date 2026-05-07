@@ -232,7 +232,7 @@ fn render_scene_page(
 fn render_node(ui: &mut Ui, node: SingleThreadMutType<rs_assimp::node::Node<'_>>) {
     let node = node.borrow();
     ui.label("Transformation");
-    ObjectPropertyView::transformation_detail(&node.transformation, ui);
+    ObjectPropertyView::transformation_widget(&node.transformation, ui);
     for mesh in node.meshes.clone() {
         let mesh = mesh.borrow();
         ui.label(format!("Mesh: {}", mesh.name));

@@ -90,8 +90,12 @@ impl super::component::Component for SpotLightComponent {
 
     fn on_post_update_transformation(
         &mut self,
-        level_physics: Option<&mut crate::content::level::LevelPhysics>,
+        engine: &mut crate::engine::Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[crate::content::content_file_type::EContentFileType],
     ) {
+        let _ = engine;
+        let _ = files;
         let _ = level_physics;
     }
 
@@ -131,7 +135,14 @@ impl super::component::Component for SpotLightComponent {
         })
     }
 
-    fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+    fn initialize_physics(
+        &mut self,
+        engine: &mut crate::engine::Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[crate::content::content_file_type::EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let _ = level_physics;
     }
 

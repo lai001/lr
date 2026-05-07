@@ -166,8 +166,13 @@ impl BlendAnimationUIWindow {
         let candidate_items = self.collect_skeleton_urls();
         let _ = ui;
         let mut current_value = self.preview_skeleton_url.as_ref();
-        let is_changed =
-            misc::render_combo_box(ui, "Preview skeleton", &mut current_value, &candidate_items);
+        let is_changed = misc::render_combo_box(
+            ui,
+            "Preview skeleton",
+            Some(egui::Id::new("Preview skeleton")),
+            &mut current_value,
+            &candidate_items,
+        );
         if is_changed {
             let new = current_value.cloned();
             event_type = Some(EventType::PreviewSkeletonUrl(new));

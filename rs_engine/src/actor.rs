@@ -181,9 +181,15 @@ impl Actor {
         self.update_components_world_transformation();
     }
 
-    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+    pub fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
         Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
-            node.borrow_mut().initialize_physics(level_physics);
+            node.borrow_mut()
+                .initialize_physics(engine, level_physics, files);
         });
     }
 
@@ -305,20 +311,29 @@ impl Actor {
 
     pub fn on_post_update_transformation_recursion(
         scene_node: &mut SceneNode,
+        engine: &mut Engine,
         level_physics: Option<&mut crate::content::level::LevelPhysics>,
+        files: &[EContentFileType],
     ) {
         if let Some(level_physics) = level_physics {
-            scene_node.on_post_update_transformation(Some(level_physics));
+            scene_node.on_post_update_transformation(engine, Some(level_physics), files);
             for child in scene_node.childs.clone() {
                 Self::on_post_update_transformation_recursion(
                     &mut child.borrow_mut(),
+                    engine,
                     Some(level_physics),
+                    files,
                 );
             }
         } else {
-            scene_node.on_post_update_transformation(None);
+            scene_node.on_post_update_transformation(engine, None, files);
             for child in scene_node.childs.clone() {
-                Self::on_post_update_transformation_recursion(&mut child.borrow_mut(), None);
+                Self::on_post_update_transformation_recursion(
+                    &mut child.borrow_mut(),
+                    engine,
+                    None,
+                    files,
+                );
             }
         }
     }

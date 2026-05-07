@@ -27,6 +27,7 @@ pub mod misc;
 #[cfg(feature = "network")]
 pub mod network;
 pub mod particle;
+pub mod physics_ability;
 pub mod physics_debug_render;
 pub mod planar_reflection;
 pub mod player_viewport;

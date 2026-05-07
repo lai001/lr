@@ -323,11 +323,25 @@ impl CameraComponent {
         run_time.bundles.iter().map(|x| &x.draw_object).collect()
     }
 
-    pub fn on_post_update_transformation(&mut self, level_physics: Option<&mut LevelPhysics>) {
+    pub fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let _ = level_physics;
     }
 
-    pub fn initialize_physics(&mut self, level_physics: &mut LevelPhysics) {
+    pub fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
         let _ = level_physics;
     }
 

@@ -1,11 +1,13 @@
-use rapier3d::prelude::RigidBodyType;
+use super::misc::{render_combo_box, render_combo_box_not_null};
+use rapier3d::prelude::{Ball, Cuboid, HalfSpace, RigidBodyType};
 use rs_engine::{
-    actor::Actor, components::component::Component, directional_light::DirectionalLight,
+    actor::Actor,
+    components::component::Component,
+    directional_light::DirectionalLight,
+    physics_ability::{EShapeType, MeshOptions},
     scene_node::*,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
-
-use super::misc::{render_combo_box, render_combo_box_not_null};
 
 pub struct UpdateMaterial {
     pub selected_object: ESelectedObjectType,
@@ -25,6 +27,11 @@ pub struct UpdateStaticMesh {
     pub new: Option<url::Url>,
 }
 
+pub struct UpdatePhysicsShapeType {
+    pub selected_object: ESelectedObjectType,
+    pub shape_type: EShapeType,
+}
+
 pub enum EEventType {
     UpdateMaterial(UpdateMaterial),
     UpdateAnimation(UpdateAnimation),
@@ -39,6 +46,7 @@ pub enum EEventType {
     ),
     ChangeName(ESelectedObjectType, String),
     UpdateIsEnableMultiresolution(ESelectedObjectType, bool, bool),
+    UpdatePhysicsShapeType(UpdatePhysicsShapeType),
 }
 
 #[derive(Clone)]
@@ -104,8 +112,8 @@ impl ObjectPropertyView {
                             event = Some(EEventType::ChangeName(selected_object_clone, new_name));
                         }
 
-                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                        Self::transformation_widget_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_widget(&component.get_final_transformation(), ui);
                     }
                     EComponentType::StaticMeshComponent(static_mesh_component) => {
                         ui.label(format!("Type: StaticMeshComponent"));
@@ -118,8 +126,8 @@ impl ObjectPropertyView {
                             ));
                         }
 
-                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                        Self::transformation_widget_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_widget(&component.get_final_transformation(), ui);
 
                         {
                             let mut current_url = component.material_url.as_ref();
@@ -128,6 +136,7 @@ impl ObjectPropertyView {
                             let is_changed = render_combo_box(
                                 ui,
                                 "Material",
+                                Some(egui::Id::new("Material")),
                                 &mut current_url,
                                 &candidate_items,
                             );
@@ -147,6 +156,7 @@ impl ObjectPropertyView {
                             let is_changed = render_combo_box(
                                 ui,
                                 "Static mesh",
+                                Some(egui::Id::new("StaticMesh")),
                                 &mut current_url,
                                 &candidate_items,
                             );
@@ -168,9 +178,102 @@ impl ObjectPropertyView {
                         let _ = render_combo_box_not_null(
                             ui,
                             "Rigid body type",
-                            &mut component.rigid_body_type,
+                            &mut component.physics.rigid_body_type,
                             body_types,
                         );
+
+                        let candidate_items: Vec<String> = vec![
+                            format!("HalfSpace"),
+                            format!("Ball"),
+                            format!("Cuboid"),
+                            format!("Mesh"),
+                        ];
+                        let mut current_value: String;
+                        match &component.physics.shape_type {
+                            rs_engine::physics_ability::EShapeType::HalfSpace(_) => {
+                                current_value = candidate_items[0].clone();
+                            }
+                            rs_engine::physics_ability::EShapeType::Ball(_) => {
+                                current_value = candidate_items[1].clone();
+                            }
+                            rs_engine::physics_ability::EShapeType::Cuboid(_) => {
+                                current_value = candidate_items[2].clone();
+                            }
+                            rs_engine::physics_ability::EShapeType::Mesh(_) => {
+                                current_value = candidate_items[3].clone();
+                            }
+                        }
+                        let mut is_changed = render_combo_box_not_null(
+                            ui,
+                            "Shape type",
+                            &mut current_value,
+                            candidate_items,
+                        );
+                        if is_changed {
+                            match current_value.as_str() {
+                                "HalfSpace" => {
+                                    component.physics.shape_type =
+                                        EShapeType::HalfSpace(HalfSpace::new(glam::Vec3::Z))
+                                }
+                                "Ball" => {
+                                    component.physics.shape_type = EShapeType::Ball(Ball::new(5.0))
+                                }
+                                "Cuboid" => {
+                                    component.physics.shape_type =
+                                        EShapeType::Cuboid(Cuboid::new(glam::Vec3::splat(5.0)))
+                                }
+                                "Mesh" => {
+                                    component.physics.shape_type = EShapeType::Mesh(MeshOptions {
+                                        mesh_url: None,
+                                        is_use_convex_decomposition: false,
+                                    })
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+
+                        match &mut component.physics.shape_type {
+                            rs_engine::physics_ability::EShapeType::HalfSpace(half_space) => {
+                                is_changed = Self::vec3_widget_mut(
+                                    &mut half_space.normal,
+                                    ui,
+                                    "HalfSpace",
+                                    false,
+                                );
+                            }
+                            rs_engine::physics_ability::EShapeType::Ball(ball) => {
+                                is_changed = Self::vec1_widget_mut(&mut ball.radius, ui, "Ball");
+                            }
+                            rs_engine::physics_ability::EShapeType::Cuboid(cuboid) => {
+                                is_changed = Self::vec3_widget_mut(
+                                    &mut cuboid.half_extents,
+                                    ui,
+                                    "Cuboid",
+                                    false,
+                                );
+                            }
+                            rs_engine::physics_ability::EShapeType::Mesh(mesh_options) => {
+                                let mut current_url = mesh_options.mesh_url.as_ref();
+                                let candidate_items = self.static_meshes.borrow();
+                                is_changed = render_combo_box(
+                                    ui,
+                                    "Static mesh",
+                                    Some(egui::Id::new("ShapeTypeStaticMesh")),
+                                    &mut current_url,
+                                    &candidate_items,
+                                );
+                                mesh_options.mesh_url = current_url.cloned();
+                            }
+                        }
+                        if is_changed {
+                            event =
+                                Some(EEventType::UpdatePhysicsShapeType(UpdatePhysicsShapeType {
+                                    selected_object: selected_object_clone.clone(),
+                                    shape_type: component.physics.shape_type.clone(),
+                                }));
+                        }
 
                         if ui
                             .checkbox(
@@ -197,8 +300,8 @@ impl ObjectPropertyView {
                             ));
                         }
 
-                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                        Self::transformation_widget_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_widget(&component.get_final_transformation(), ui);
 
                         egui::ComboBox::from_label("Animation")
                             .selected_text(format!("{}", {
@@ -296,8 +399,8 @@ impl ObjectPropertyView {
                         }
                         ui.checkbox(&mut component.is_show_preview, "Is show frustum");
 
-                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                        Self::transformation_widget_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_widget(&component.get_final_transformation(), ui);
                         ui.checkbox(&mut component.is_enable, "Is enable");
                     }
                     EComponentType::CollisionComponent(component) => {
@@ -311,8 +414,8 @@ impl ObjectPropertyView {
                         }
                         ui.checkbox(&mut component.is_show_preview, "Is show preview");
 
-                        Self::transformation_detail_mut(component.get_transformation_mut(), ui);
-                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                        Self::transformation_widget_mut(component.get_transformation_mut(), ui);
+                        Self::transformation_widget(&component.get_final_transformation(), ui);
                     }
                     EComponentType::SpotLightComponent(component) => {
                         ui.label(format!("Type: SpotLightComponent"));
@@ -324,24 +427,24 @@ impl ObjectPropertyView {
                             ));
                         }
                         let mut transformation = component.get_transformation();
-                        Self::transformation_detail_mut(&mut transformation, ui);
+                        Self::transformation_widget_mut(&mut transformation, ui);
                         component.set_transformation(transformation);
-                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                        Self::transformation_widget(&component.get_final_transformation(), ui);
 
                         ui.vertical(|ui| {
-                            Self::detail_view_mut(
+                            Self::vec3_widget_mut(
                                 &mut component.spot_light.light.ambient,
                                 ui,
                                 "Ambient",
                                 true,
                             );
-                            Self::detail_view_mut(
+                            Self::vec3_widget_mut(
                                 &mut component.spot_light.light.diffuse,
                                 ui,
                                 "Diffuse",
                                 true,
                             );
-                            Self::detail_view_mut(
+                            Self::vec3_widget_mut(
                                 &mut component.spot_light.light.specular,
                                 ui,
                                 "Specular",
@@ -384,24 +487,24 @@ impl ObjectPropertyView {
                             ));
                         }
                         let mut transformation = component.get_transformation();
-                        Self::transformation_detail_mut(&mut transformation, ui);
+                        Self::transformation_widget_mut(&mut transformation, ui);
                         component.set_transformation(transformation);
-                        Self::transformation_detail(&component.get_final_transformation(), ui);
+                        Self::transformation_widget(&component.get_final_transformation(), ui);
 
                         ui.vertical(|ui| {
-                            Self::detail_view_mut(
+                            Self::vec3_widget_mut(
                                 &mut component.point_light.ambient,
                                 ui,
                                 "Ambient",
                                 true,
                             );
-                            Self::detail_view_mut(
+                            Self::vec3_widget_mut(
                                 &mut component.point_light.diffuse,
                                 ui,
                                 "Diffuse",
                                 true,
                             );
-                            Self::detail_view_mut(
+                            Self::vec3_widget_mut(
                                 &mut component.point_light.specular,
                                 ui,
                                 "Specular",
@@ -435,7 +538,7 @@ impl ObjectPropertyView {
                 }
                 ui.checkbox(&mut component.is_show_preview, "Is show preview");
 
-                Self::transformation_detail_mut(component.get_transformation_mut(), ui);
+                Self::transformation_widget_mut(component.get_transformation_mut(), ui);
 
                 let mut is_changed = false;
 
@@ -492,31 +595,31 @@ impl ObjectPropertyView {
         event
     }
 
-    pub fn transformation_detail(transformation: &glam::Mat4, ui: &mut egui::Ui) {
+    pub fn transformation_widget(transformation: &glam::Mat4, ui: &mut egui::Ui) {
         let (scale, rotation, translation) = transformation.to_scale_rotation_translation();
         let rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
-        Self::affine_detail(&scale, &rotation, &translation, ui);
+        Self::affine_widget(&scale, &rotation, &translation, ui);
     }
 
-    pub fn transformation_detail_mut(transformation: &mut glam::Mat4, ui: &mut egui::Ui) {
+    pub fn transformation_widget_mut(transformation: &mut glam::Mat4, ui: &mut egui::Ui) {
         let (mut scale, rotation, mut translation) = transformation.to_scale_rotation_translation();
         let mut rotation = glam::Vec3::from(rotation.to_euler(glam::EulerRot::XYZ));
-        Self::affine_detail_mut(&mut scale, &mut rotation, &mut translation, ui);
+        Self::affine_widget_mut(&mut scale, &mut rotation, &mut translation, ui);
         let rotation =
             glam::Quat::from_euler(glam::EulerRot::XYZ, rotation.x, rotation.y, rotation.z);
         *transformation = glam::Mat4::from_scale_rotation_translation(scale, rotation, translation);
     }
 
-    pub fn affine_detail_mut(
+    pub fn affine_widget_mut(
         scale: &mut glam::Vec3,
         rotation: &mut glam::Vec3,
         translation: &mut glam::Vec3,
         ui: &mut egui::Ui,
     ) {
         ui.vertical(|ui| {
-            Self::detail_view_mut(translation, ui, "Location", true);
-            Self::detail_view_mut(scale, ui, "Scale", false);
-            Self::detail_view_mut(rotation, ui, "Rotation", true);
+            Self::vec3_widget_mut(translation, ui, "Location", true);
+            Self::vec3_widget_mut(scale, ui, "Scale", false);
+            Self::vec3_widget_mut(rotation, ui, "Rotation", true);
         });
         if translation.is_nan() {
             *translation = glam::Vec3::ZERO;
@@ -529,20 +632,20 @@ impl ObjectPropertyView {
         }
     }
 
-    pub fn affine_detail(
+    pub fn affine_widget(
         scale: &glam::Vec3,
         rotation: &glam::Vec3,
         translation: &glam::Vec3,
         ui: &mut egui::Ui,
     ) {
         ui.vertical(|ui| {
-            Self::detail_view(translation, ui, "Location");
-            Self::detail_view(scale, ui, "Scale");
-            Self::detail_view(rotation, ui, "Rotation");
+            Self::vec3_widget(translation, ui, "Location");
+            Self::vec3_widget(scale, ui, "Scale");
+            Self::vec3_widget(rotation, ui, "Rotation");
         });
     }
 
-    fn detail_view(value: &glam::Vec3, ui: &mut egui::Ui, label: &str) {
+    pub fn vec3_widget(value: &glam::Vec3, ui: &mut egui::Ui, label: &str) {
         ui.horizontal(|ui| {
             ui.label(format!(
                 "{} x: {}, y: {}, z: {}",
@@ -551,21 +654,47 @@ impl ObjectPropertyView {
         });
     }
 
-    fn detail_view_mut(
+    fn vec3_widget_mut(
         value: &mut glam::Vec3,
         ui: &mut egui::Ui,
         label: &str,
         is_allow_zero_value: bool,
-    ) {
+    ) -> bool {
+        let mut is_changed = false;
         let old = value.clone();
         ui.horizontal(|ui| {
             ui.label(label);
-            ui.add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "));
-            ui.add(egui::DragValue::new(&mut value.y).speed(0.1).prefix("y: "));
-            ui.add(egui::DragValue::new(&mut value.z).speed(0.1).prefix("z: "));
+            is_changed = is_changed
+                || ui
+                    .add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "))
+                    .changed();
+            is_changed = is_changed
+                || ui
+                    .add(egui::DragValue::new(&mut value.y).speed(0.1).prefix("y: "))
+                    .changed();
+            is_changed = is_changed
+                || ui
+                    .add(egui::DragValue::new(&mut value.z).speed(0.1).prefix("z: "))
+                    .changed();
             if value.cmpeq(glam::Vec3::ZERO).any() && !is_allow_zero_value {
                 *value = old;
             }
         });
+        is_changed
+    }
+
+    fn vec1_widget_mut<Num: egui::emath::Numeric>(
+        value: &mut Num,
+        ui: &mut egui::Ui,
+        label: &str,
+    ) -> bool {
+        let mut is_changed = false;
+        ui.horizontal(|ui| {
+            ui.label(label);
+            is_changed = ui
+                .add(egui::DragValue::new(value).speed(0.1).prefix("x: "))
+                .changed();
+        });
+        is_changed
     }
 }

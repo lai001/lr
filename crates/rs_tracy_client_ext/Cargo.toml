@@ -1,0 +1,10 @@
+[package]
+name = "rs_tracy_client_ext"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+profiler = ["tracy-client/enable"]
+
+[dependencies]
+tracy-client = { version = "0.18.4", default-features = false }
