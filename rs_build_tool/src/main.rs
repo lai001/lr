@@ -321,7 +321,7 @@ fn write_build_script_file(projcet_folder: &Path) -> anyhow::Result<()> {
     }
 
     let ffmpeg_search_dir = engine_root_dir
-        .join(".xmake/deps/ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0/lib")
+        .join(".xmake/deps/ffmpeg-n7.1.4-win64-gpl-shared-7.1/lib")
         .canonicalize_slash()?;
     let ffmpeg_search_dir = ffmpeg_search_dir
         .to_str()

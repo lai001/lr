@@ -16,12 +16,13 @@ task("hash_files")
 do
     on_run(function()
         import("core.base.option")
+        import("core.base.bytes")
         local input = option.get("input")
         local is_trace = option.get("trace") ~= nil
         if input == nil then
             raise()
         end
-        local value = hash_files(os, io, is_trace, input)
+        local value = hash_files(os, io, bytes, is_trace, input)
         print(value)
     end)
     set_menu {
@@ -41,6 +42,7 @@ do
         import("utils.archive")
         import("devel.git")
         import("core.project.config")
+        import("core.base.bytes")
         config.load()
         os.mkdir(deps_dir)
 
@@ -53,10 +55,12 @@ do
                 "https://download.visualstudio.microsoft.com/download/pr/5af098e1-e433-4fda-84af-3f54fd27c108/6bd1c6e48e64e64871957289023ca590/" ..
                 dotnetSDKFilename
 
-            if not check_hash_files(os, io, path.join(deps_dir, dotnetSDKFilename), "ddb7dc983df37b20bd03b57c27c1ecdc3eee8f7187cca9d6498023381f912dc0") then
+            if not check_hash_files(os, io, bytes, path.join(deps_dir, dotnetSDKFilename), "56d7cd50cb936ef098039e93bef6656e") then
+                print("Download dotnet")
                 http.download(link, path.join(deps_dir, dotnetSDKFilename))
             end
-            if not check_hash_files(os, io, dotnet_sdk_dir .. "/**/*.exe", "fa916994a7eedcc3050f9bda118dfc4fb05a85bb1a04ed344fd8a79274e1b7f4") then
+            if not check_hash_files(os, io, bytes, dotnet_sdk_dir .. "/**/*.exe", "f98dc7bb0b9c6462975c7ad0bc6b55b7") then
+                print(format("Extract dotnet to %s", dotnet_sdk_dir))
                 archive.extract(path.join(deps_dir, dotnetSDKFilename), dotnet_sdk_dir)
             end
         end
@@ -77,27 +81,31 @@ do
             git.checkout("85e09401ee3b827668c5ad7cc9160aa9e544207a", { repodir = gizmo_dir })
         end
 
-        if not check_hash_files(os, io, "Resource/Remote/neon_photostudio_2k.exr", "da6a36f6fa031c3896c915eea7e2794d62fdf77a2b800085ca276b1962381e15") then
+        if not check_hash_files(os, io, bytes, "Resource/Remote/neon_photostudio_2k.exr", "3ad9df2cce80d8737e2a51be73a6507d") then
             local link = "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/2k/neon_photostudio_2k.exr"
+            print("Download neon_photostudio_2k.exr")
             http.download(link, "Resource/Remote/neon_photostudio_2k.exr")
         end
 
-        local ffmpeg_zip_filename = path.join(deps_dir, "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0.zip")
-        if not check_hash_files(os, io, ffmpeg_zip_filename, "ee396b019b29624dd2e9a2b538ed74e9a9b36eb9a60868d89efc255c80accbab") then
+        local ffmpeg_zip_filename = path.join(deps_dir, "ffmpeg-n7.1.4-win64-gpl-shared-7.1.zip")
+        if not check_hash_files(os, io, bytes, ffmpeg_zip_filename, "a931f06f18583bae37d5f1dfd00336b1") then
             local link =
-            "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2023-07-24-12-50/ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0.zip"
+            "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-15-13-34/ffmpeg-n7.1.4-win64-gpl-shared-7.1.zip"
+            print("Download ffmpeg")
             http.download(link, ffmpeg_zip_filename)
         end
-        if not check_hash_files(os, io, ffmpeg_dir .. "/**/*.dll", "9d2d55a148c1579ff929f79cf6b47ae96bdee670139dba88f424629422605a87") then
+        if not check_hash_files(os, io, bytes, ffmpeg_dir .. "/**/*.dll", "389d5abb6480b4f10e6e95c046cb674a") then
+            print(format("Extract ffmpeg to %s", deps_dir))
             archive.extract(ffmpeg_zip_filename, deps_dir)
         end
 
-        if os.exists("Resource/Remote/BigBuckBunny.mp4") == false then
-            local link = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-            http.download(link, "Resource/Remote/BigBuckBunny.mp4")
+        if not check_hash_files(os, io, bytes, "Resource/Remote/xgplayer-demo-360p.mp4", "2b8918b9a0f8bfbfae7b2775c60118d1") then
+            local link = "https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/mp4/xgplayer-demo-360p.mp4"
+            print("Download xgplayer-demo-360p.mp4")
+            http.download(link, "Resource/Remote/xgplayer-demo-360p.mp4")
         end
 
-        if os.exists("Resource/Remote/sample-15s.mp3") == false then
+        if not check_hash_files(os, io, bytes, "Resource/Remote/sample-15s.mp3", "b402473130c79fdc8ec88f5f244fc796") then
             local link = "https://download.samplelib.com/mp3/sample-15s.mp3"
             http.download(link, "Resource/Remote/sample-15s.mp3")
         end
