@@ -1,3 +1,4 @@
+pub mod bitonic_sort;
 pub mod color;
 pub mod error;
 pub mod file_manager;

@@ -11,6 +11,7 @@ pub mod math;
 pub mod new;
 pub mod profiler;
 pub mod round_to_multiple;
+pub mod unsafe_type_wrapper;
 
 #[repr(C)]
 #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
