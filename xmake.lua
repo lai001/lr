@@ -1,4 +1,4 @@
-set_xmakever("3.0.1")
+set_xmakever("3.0.8")
 
 deps_dir = path.absolute(".xmake/deps/")
 rs_project_name = "rs_computer_graphics"
@@ -7,7 +7,7 @@ gizmo_dir = path.join(deps_dir, "egui-gizmo")
 quickjs_dir = path.join(deps_dir, "quickjs")
 metis_dir = path.join(deps_dir, "METIS")
 gklib_dir = path.join(deps_dir, "GKlib")
-ffmpeg_dir = path.join(deps_dir, "ffmpeg-n6.0-31-g1ebb0e43f9-win64-gpl-shared-6.0")
+ffmpeg_dir = path.join(deps_dir, "ffmpeg-n7.1.4-win64-gpl-shared-7.1")
 russimp_prebuild_dir = deps_dir
 engine_root_dir = path.absolute("./")
 tracy_root_dir = path.join(deps_dir, "tracy")
@@ -26,33 +26,30 @@ function remove_ansi_escape(str)
     return str:gsub("[\27\155][][()#;?%d]*[A-PRZcf-ntqry=><~]", "")
 end
 
-function hash_files(os_module, io_module, is_trace, folder_or_file_path)
-    local os = os_module
-    local io = io_module
+function hash_files(os, io, bytes, is_trace, folder_or_file_path)
     if os.isfile(folder_or_file_path) then
-        local outdata, errdata = os.iorun("xmake l hash.sha256 " .. folder_or_file_path)
-        return trim_quotes_and_newlines(remove_ansi_escape(outdata))
+        local outdata = hash.md5(folder_or_file_path)
+        return outdata
     else
         local content = ""
         for k, v in ipairs(os.files(folder_or_file_path)) do
             if is_trace then
                 print(k, v)
             end
-            local outdata, errdata = os.iorun("xmake l hash.sha256 " .. v)
-            content = content .. remove_ansi_escape(outdata)
+            local outdata = hash.md5(v)
+            content = content .. outdata
         end
-        local file = path.join(os.tmpdir(), "file.txt")
-        if is_trace then
-            print(file)
+        if content == "" then
+            return nil
         end
-        io.writefile(file, content)
-        local outdata, errdata = os.iorun("xmake l hash.sha256 " .. file)
-        return trim_quotes_and_newlines(remove_ansi_escape(outdata))
+        local data = bytes(content)
+        local outdata = hash.md5(data)
+        return outdata
     end
 end
 
-function check_hash_files(os_module, io_module, folder_or_file_path, expected)
-    local value = hash_files(os_module, io_module, false, folder_or_file_path)
+function check_hash_files(os, io, bytes, folder_or_file_path, expected)
+    local value = hash_files(os, io, bytes, false, folder_or_file_path)
     if value == nil then
         return false
     end
