@@ -178,6 +178,7 @@ impl ObjectPropertyView {
                         let _ = render_combo_box_not_null(
                             ui,
                             "Rigid body type",
+                            "Rigid body type",
                             &mut component.physics.rigid_body_type,
                             body_types,
                         );
@@ -205,6 +206,7 @@ impl ObjectPropertyView {
                         }
                         let mut is_changed = render_combo_box_not_null(
                             ui,
+                            "Shape type",
                             "Shape type",
                             &mut current_value,
                             candidate_items,

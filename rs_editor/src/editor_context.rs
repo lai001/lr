@@ -31,7 +31,9 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use lazy_static::lazy_static;
-use rs_artifact::derive_data::compressed_texture::CompressedTexture;
+use rs_artifact::{
+    derive_data::compressed_texture::CompressedTexture, material_paramenters::BaseDataValueType,
+};
 use rs_core_minimal::{
     file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
 };
@@ -626,7 +628,7 @@ impl EditorContext {
         };
         let mut material_content = material_content.borrow_mut();
         material_content.set_pipeline_handle(handle);
-        material_content.set_material_info(material_info);
+        material_content.set_material_info(engine, material_info);
     }
 
     fn hotreload_material(&mut self) {
@@ -636,7 +638,9 @@ impl EditorContext {
         for material_editor in project_context.project.materials.clone() {
             let material_editor = material_editor.borrow();
             let snarl = &material_editor.snarl;
-            let resolve_result = material_resolve::resolve(snarl, MaterialOptions::all());
+            let paramenters = &material_editor.paramenters;
+            let resolve_result =
+                material_resolve::resolve(snarl, MaterialOptions::all(), paramenters);
             let Ok(resolve_result) = resolve_result else {
                 continue;
             };
@@ -790,18 +794,46 @@ impl EditorContext {
                 self.standalone_ui_windows
                     .retain(|x| !close_windows.contains(&x.get_window_id()));
 
-                if let Some(Some(event)) = self
-                    .material_ui_window
-                    .as_mut()
-                    .map(|x| &mut x.material_view.event)
-                {
-                    match event {
-                        material_view::EEventType::Update(material, resolve_result) => {
-                            Self::do_reload_material(
-                                &mut self.engine,
-                                &material.borrow(),
-                                resolve_result,
-                            );
+                if let Some(material_ui_window) = self.material_ui_window.as_mut() {
+                    if let Some(event) = &mut material_ui_window.material_view.event {
+                        match event {
+                            material_view::EEventType::Update(material, resolve_result) => {
+                                Self::do_reload_material(
+                                    &mut self.engine,
+                                    &material.borrow(),
+                                    resolve_result,
+                                );
+                            }
+                            material_view::EEventType::AddParamenter(material) => {
+                                let mut material = material.borrow_mut();
+                                material
+                                    .paramenters
+                                    .add(format!("X"), BaseDataValueType::F32(0.0));
+                                material_ui_window.material_view.viewer.is_updated = true;
+                            }
+                            material_view::EEventType::ChangeParamenterDataType(
+                                material,
+                                name,
+                                base_data_value_type,
+                            ) => {
+                                let mut material = material.borrow_mut();
+                                material
+                                    .paramenters
+                                    .change_type(name, base_data_value_type.clone());
+                                material_ui_window.material_view.viewer.is_updated = true;
+                            }
+                            material_view::EEventType::ChangeParamenterName(
+                                material,
+                                old_name,
+                                new_name,
+                            ) => {
+                                let mut material = material.borrow_mut();
+                                material.paramenters.change_name(old_name, new_name);
+                                material_ui_window.material_view.viewer.is_updated = true;
+                            }
+                            material_view::EEventType::ChangeParamenterDefaultValue(_) => {
+                                material_ui_window.material_view.viewer.is_updated = true;
+                            }
                         }
                     }
                 }
@@ -2709,7 +2741,7 @@ impl EditorContext {
                     }
                     let handle = self.engine.create_material(shader_code);
                     material.set_pipeline_handle(handle);
-                    material.set_material_info(material_info);
+                    material.set_material_info(&mut self.engine, material_info);
                 }
                 let material_editor = crate::material::Material::new(material.asset_url.clone(), {
                     let mut snarl = egui_snarl::Snarl::new();

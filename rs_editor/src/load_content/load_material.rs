@@ -88,7 +88,7 @@ impl<'a> PostLoading for LoadMaterial<'a> {
             let pipeline_handle = engine.create_material(shader_code);
             let mut material_content = self.material_content.borrow_mut();
             material_content.set_pipeline_handle(pipeline_handle);
-            material_content.set_material_info(material_info);
+            material_content.set_material_info(engine, material_info);
         }
         self.material_editor
             .borrow_mut()
@@ -113,11 +113,16 @@ impl<'a> LoadMaterial<'a> {
             return None;
         };
         let snarl_wrapper = SnarlWrapper::copy_snarl_from(url, &material_editor.borrow().snarl);
+        let paramenters = material_editor.borrow().paramenters.clone();
+
         let (sender, receiver) = std::sync::mpsc::channel();
         ThreadPool::global().spawn({
             move || {
-                let resolve_result =
-                    crate::material_resolve::resolve(&snarl_wrapper.get(), MaterialOptions::all());
+                let resolve_result = crate::material_resolve::resolve(
+                    &snarl_wrapper.get(),
+                    MaterialOptions::all(),
+                    &paramenters,
+                );
                 let _ = sender.send(resolve_result);
             }
         });

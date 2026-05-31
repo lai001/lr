@@ -1,10 +1,7 @@
 use crate::{
-    engine::Engine,
-    handle::BufferHandle,
-    uniform_map::{StructField, UniformMap},
-    url_extension::UrlExtension,
+    engine::Engine, handle::BufferHandle, uniform_map::UniformMap, url_extension::UrlExtension,
 };
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
+use rs_artifact::{asset::Asset, material_paramenters::StructField, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone)]

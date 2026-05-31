@@ -996,6 +996,13 @@ impl PlayerViewport {
                     "Fail to load group binding to resource".to_string(),
                 )))?;
 
+                Self::push_user_paramenter_binding_resources(
+                    skin_objcet.user_paramenters.clone(),
+                    &material,
+                    material_info,
+                    &mut group_binding_to_resource,
+                );
+
                 if let Some(group_binding) = &material_info.skin_constants_binding {
                     group_binding_to_resource
                         .push((*group_binding, skin_objcet.skin_constants_resource.clone()));
@@ -1062,13 +1069,20 @@ impl PlayerViewport {
                     .get(&MaterialOptions { is_skin: false })
                     .ok_or(crate::error::Error::Other(None))?;
 
-                let group_binding_to_resource = Self::load_group_binding_to_resource(
+                let mut group_binding_to_resource = Self::load_group_binding_to_resource(
                     static_mesh_draw_objcet.pbr_binding_resources.clone(),
                     material_info,
                 )
                 .ok_or(crate::error::Error::NullReference(Some(
                     "Fail to load group binding to resource".to_string(),
                 )))?;
+
+                Self::push_user_paramenter_binding_resources(
+                    static_mesh_draw_objcet.user_paramenters.clone(),
+                    &material,
+                    material_info,
+                    &mut group_binding_to_resource,
+                );
 
                 let mut binding_resources = Self::make_binding_resources(group_binding_to_resource);
                 binding_resources[0]
@@ -1568,5 +1582,27 @@ impl PlayerViewport {
 
     pub fn input_mode(&self) -> EInputMode {
         self._input_mode
+    }
+
+    fn push_user_paramenter_binding_resources(
+        mut user_paramenters: Vec<EBindingResource>,
+        material: &crate::content::material::Material,
+        material_info: &rs_artifact::material::MaterialInfo,
+        group_binding_to_resource: &mut Vec<(GroupBinding, EBindingResource)>,
+    ) {
+        let mut user_paramenter_binding_resources: Vec<EBindingResource> = vec![];
+        user_paramenter_binding_resources.append(&mut user_paramenters);
+        if let Some(default_handle) =
+            material.default_parament_handle(&MaterialOptions { is_skin: false })
+        {
+            user_paramenter_binding_resources.push(EBindingResource::Constants(*default_handle));
+        }
+        assert!(user_paramenter_binding_resources.len() >= material_info.paramenters.len());
+        for (binding_resource, paramenter) in user_paramenter_binding_resources
+            .iter()
+            .zip(&material_info.paramenters)
+        {
+            group_binding_to_resource.push((paramenter.binding, binding_resource.clone()));
+        }
     }
 }

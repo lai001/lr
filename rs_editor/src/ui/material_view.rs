@@ -2,17 +2,23 @@ use crate::{
     content_folder::ContentFolder,
     editor_ui,
     material_resolve::{self, ResolveResult},
+    ui::misc::{
+        f32_widget_mut, render_combo_box_not_null, vec2_widget_mut, vec3_widget_mut,
+        vec4_widget_mut,
+    },
 };
 use egui::*;
 use egui_snarl::{
     ui::{Grid, PinInfo, SnarlStyle, SnarlViewer},
     InPin, NodeId, OutPin, Snarl,
 };
+use rs_artifact::material_paramenters::{BaseDataValueType, StructField};
 use rs_engine::content::material_paramenters_collection::MaterialParamentersCollection;
 use rs_foundation::new::SingleThreadMutType;
+use rs_localization::t;
 use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 const NODE_IO_COLOR: Color32 = Color32::WHITE;
 
@@ -22,6 +28,7 @@ pub struct GraphViewer {
     pub material_parameters_collection_urls: Vec<url::Url>,
     pub is_updated: bool,
     pub folder: SingleThreadMutType<ContentFolder>,
+    pub paramenters: crate::material::Paramenters,
 }
 
 impl GraphViewer {
@@ -115,6 +122,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::Time => 1,
             EMaterialNodeType::Sin(_) => 1,
             EMaterialNodeType::MaterialParamentersCollection(_) => 1,
+            EMaterialNodeType::Paramenter(_) => 1,
         }
     }
 
@@ -128,6 +136,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::Time => 0,
             EMaterialNodeType::Sin(_) => 1,
             EMaterialNodeType::MaterialParamentersCollection(_) => 2,
+            EMaterialNodeType::Paramenter(_) => 0,
         }
     }
 
@@ -397,6 +406,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 }
                 PinInfo::default()
             }
+            EMaterialNodeType::Paramenter(_) => PinInfo::default(),
         }
     }
 
@@ -438,6 +448,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::MaterialParamentersCollection(_) => {
                 PinInfo::square().with_fill(NODE_IO_COLOR)
             }
+            EMaterialNodeType::Paramenter(_) => PinInfo::square().with_fill(NODE_IO_COLOR),
         }
     }
 
@@ -511,6 +522,17 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 ui.close_kind(egui::UiKind::Menu);
             }
         }
+        ui.menu_button("Paramenter", |ui| {
+            for field in self.paramenters.fields() {
+                if ui.button(field.name.clone()).clicked() {
+                    let node = MaterialNode {
+                        node_type: EMaterialNodeType::Paramenter(field.clone()),
+                    };
+                    snarl.insert_node(pos, node);
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+            }
+        });
     }
 
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<MaterialNode>) {
@@ -624,6 +646,7 @@ pub enum EMaterialNodeType {
             Option<String>,
         ),
     ),
+    Paramenter(StructField),
 }
 
 impl EMaterialNodeType {
@@ -639,6 +662,9 @@ impl EMaterialNodeType {
             EMaterialNodeType::MaterialParamentersCollection(_) => {
                 format!("MaterialParamentersCollection")
             }
+            EMaterialNodeType::Paramenter(struct_field) => {
+                format!("Paramenter: {}", &struct_field.name)
+            }
         }
     }
 }
@@ -653,6 +679,14 @@ pub enum EEventType {
         Rc<RefCell<crate::material::Material>>,
         HashMap<MaterialOptions, ResolveResult>,
     ),
+    AddParamenter(Rc<RefCell<crate::material::Material>>),
+    ChangeParamenterDataType(
+        Rc<RefCell<crate::material::Material>>,
+        String,
+        BaseDataValueType,
+    ),
+    ChangeParamenterName(Rc<RefCell<crate::material::Material>>, String, String),
+    ChangeParamenterDefaultValue(Rc<RefCell<crate::material::Material>>),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -695,6 +729,7 @@ impl MaterialView {
             is_updated: false,
             material_parameters_collection_urls,
             folder: folder.clone(),
+            paramenters: crate::material::Paramenters::empty(),
         };
 
         let node = MaterialNode {
@@ -720,7 +755,11 @@ impl MaterialView {
             node_type: EMaterialNodeType::Sink(Default::default()),
         };
         let _ = snarl.insert_node(egui::pos2(0.0, 0.0), node);
-        material_resolve::resolve(&snarl, MaterialOptions::all())
+        material_resolve::resolve(
+            &snarl,
+            MaterialOptions::all(),
+            &crate::material::Paramenters::empty(),
+        )
     }
 
     pub fn draw(
@@ -732,7 +771,9 @@ impl MaterialView {
         let Some(material) = current_open_material else {
             return;
         };
-
+        {
+            self.viewer.paramenters = material.borrow().paramenters.clone();
+        }
         self.event = None;
         let mut panel_ui = rs_egui_utils::create_panel_ui_from_context(
             context,
@@ -822,8 +863,18 @@ impl MaterialView {
                 }
             });
 
-        let snarl = &mut material.borrow_mut().snarl;
-        let result = Self::do_draw(&mut self.viewer, &self.style, snarl, &mut panel_ui);
+        let material_clone = material.clone();
+        let mut material = material.borrow_mut();
+
+        if let Some(event) = Self::render_detail(
+            &mut panel_ui,
+            material.paramenters.fields_iter_mut(),
+            material_clone,
+        ) {
+            self.event = Some(event);
+        }
+
+        let result = Self::do_draw(&mut self.viewer, &self.style, &mut panel_ui, &mut material);
         if let Some(result) = result {
             if let Ok(result) = result {
                 self.current_resolve_result = Some(result.clone());
@@ -835,20 +886,98 @@ impl MaterialView {
     fn do_draw(
         viewer: &mut GraphViewer,
         style: &SnarlStyle,
-        snarl: &mut Snarl<MaterialNode>,
         panel_ui: &mut Ui,
+        material: &mut crate::material::Material,
     ) -> Option<anyhow::Result<HashMap<MaterialOptions, ResolveResult>>> {
-        egui::Panel::left("Detail").show_inside(panel_ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |_| {});
-        });
+        {
+            let snarl = &mut material.snarl;
 
-        egui::CentralPanel::default().show_inside(panel_ui, |ui| {
-            snarl.show(viewer, style, egui::Id::new("MaterialView"), ui);
-        });
+            egui::CentralPanel::default().show_inside(panel_ui, |ui| {
+                snarl.show(viewer, style, egui::Id::new("MaterialView"), ui);
+            });
+        }
 
         if !viewer.is_updated {
             return None;
         }
-        Some(material_resolve::resolve(snarl, MaterialOptions::all()))
+        let snarl = &mut material.snarl;
+        let material_paramenters = &material.paramenters;
+        Some(material_resolve::resolve(
+            snarl,
+            MaterialOptions::all(),
+            material_paramenters,
+        ))
+    }
+
+    fn render_detail(
+        panel_ui: &mut Ui,
+        fields: std::slice::IterMut<'_, StructField>,
+        material: SingleThreadMutType<crate::material::Material>,
+    ) -> Option<EEventType> {
+        let mut event = None;
+        egui::Panel::left("Detail").show_inside(panel_ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.strong(t!("Add Paramenter"));
+
+                    let is_clicked = ui
+                        .button(egui::WidgetText::RichText(Arc::new(
+                            egui::RichText::new("+").strong(),
+                        )))
+                        .clicked();
+                    if is_clicked {
+                        event = Some(EEventType::AddParamenter(material.clone()));
+                    }
+                });
+
+                for (index, field) in fields.enumerate() {
+                    let StructField { name, data_type } = field;
+                    ui.horizontal(|ui| {
+                        let selected_collection: Vec<String> = BaseDataValueType::all_type_names()
+                            .iter()
+                            .map(|x| x.to_string())
+                            .collect();
+                        let mut current_value = data_type.name().to_string();
+                        let is_changed = render_combo_box_not_null(
+                            ui,
+                            "",
+                            format!("Data Type {index}"),
+                            &mut current_value,
+                            selected_collection,
+                        );
+                        if is_changed {
+                            event = Some(EEventType::ChangeParamenterDataType(
+                                material.clone(),
+                                name.clone(),
+                                BaseDataValueType::default_value(&current_value)
+                                    .expect("Valid name"),
+                            ));
+                        }
+                        let mut current_name = name.clone();
+                        ui.spacing_mut().text_edit_width = 60.0;
+                        if ui.text_edit_singleline(&mut current_name).changed() {
+                            event = Some(EEventType::ChangeParamenterName(
+                                material.clone(),
+                                name.clone(),
+                                current_name.clone(),
+                            ));
+                        };
+
+                        let is_changed = match data_type {
+                            BaseDataValueType::F32(value) => f32_widget_mut(value, ui, ""),
+                            BaseDataValueType::Vec2(value) => vec2_widget_mut(value, ui, ""),
+                            BaseDataValueType::Vec3(value) => vec3_widget_mut(value, ui, ""),
+                            BaseDataValueType::Vec4(value) => vec4_widget_mut(value, ui, ""),
+                        };
+                        if is_changed {
+                            event =
+                                Some(EEventType::ChangeParamenterDefaultValue(material.clone()));
+                        }
+                    });
+                }
+            });
+        });
+
+        event
     }
 }

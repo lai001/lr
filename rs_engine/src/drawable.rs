@@ -115,6 +115,7 @@ pub struct MaterialDrawObject {
     pub(crate) skin_constants_resource: EBindingResource,
 
     pub(crate) user_textures_resources: Vec<EBindingResource>,
+    pub(crate) user_paramenters: Vec<EBindingResource>,
 
     pub(crate) material: Rc<RefCell<crate::content::material::Material>>,
     pub(crate) constants_buffer_handle: BufferHandle,
@@ -138,6 +139,7 @@ pub struct StaticMeshMaterialDrawObject {
     pub(crate) pbr_binding_resources: PBRBindingResources,
 
     pub(crate) user_textures_resources: Vec<EBindingResource>,
+    pub(crate) user_paramenters: Vec<EBindingResource>,
 
     pub(crate) material: Rc<RefCell<crate::content::material::Material>>,
     pub(crate) constants_buffer_handle: BufferHandle,

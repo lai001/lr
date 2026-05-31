@@ -1,12 +1,10 @@
 use crate::ui::misc::render_combo_box_not_null;
+use rs_artifact::material_paramenters::{BaseDataValueType, StructField};
 use rs_core_minimal::name_generator::NameGenerator;
-use rs_engine::{
-    content::{
-        content_file_type::EContentFileType, ibl::IBL,
-        material_paramenters_collection::MaterialParamentersCollection,
-        render_target_2d::RenderTarget2D, texture::TextureFile,
-    },
-    uniform_map::{BaseDataValueType, StructField},
+use rs_engine::content::{
+    content_file_type::EContentFileType, ibl::IBL,
+    material_paramenters_collection::MaterialParamentersCollection,
+    render_target_2d::RenderTarget2D, texture::TextureFile,
 };
 use rs_foundation::new::SingleThreadMutType;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
@@ -399,7 +397,7 @@ impl ContentItemPropertyView {
                     wgpu::TextureFormat::Rgba8Unorm,
                     wgpu::TextureFormat::R8Unorm,
                 ];
-                if render_combo_box_not_null(ui, "Format", format, candidate_items) {
+                if render_combo_box_not_null(ui, "Format", "Format", format, candidate_items) {
                     self.click = Some(EEventType::RenderTarget2D(
                         object.clone(),
                         RenderTarget2DPropertyType::Format(render_target_2d.format),

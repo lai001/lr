@@ -1,4 +1,4 @@
-use crate::{asset::Asset, resource_type::EResourceType};
+use crate::{asset::Asset, material_paramenters::StructField, resource_type::EResourceType};
 use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -35,6 +35,18 @@ pub struct MaterialParamentersCollectionBinding {
     pub material_paramenters_collection_url: url::Url,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Paramenters {
+    pub binding: GroupBinding,
+    pub fields: Vec<StructField>,
+}
+
+impl Paramenters {
+    pub fn is_valid(&self) -> bool {
+        !self.fields.is_empty()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct MaterialInfo {
     pub map_textures: HashSet<TextureBinding>,
@@ -55,6 +67,7 @@ pub struct MaterialInfo {
     pub cluster_light_binding: Option<GroupBinding>,
     pub cluster_light_index_binding: Option<GroupBinding>,
     pub material_paramenters_collection_bindings: HashSet<MaterialParamentersCollectionBinding>,
+    pub paramenters: Vec<Paramenters>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

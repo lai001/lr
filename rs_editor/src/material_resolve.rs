@@ -1,7 +1,8 @@
 use crate::ui::material_view::{EMaterialNodeType, MaterialNode};
 use egui_snarl::{InPinId, NodeId, OutPinId, Snarl};
-use rs_artifact::material::{
-    GroupBinding, MaterialInfo, MaterialParamentersCollectionBinding, TextureBinding,
+use rs_artifact::{
+    material::{GroupBinding, MaterialInfo, MaterialParamentersCollectionBinding, TextureBinding},
+    material_paramenters::{BaseDataValueType, StructField},
 };
 use rs_engine::{
     content::material_paramenters_collection::MaterialParamentersCollection,
@@ -39,10 +40,14 @@ struct ResolveContext<'a> {
     current_group: usize,
     current_binding: usize,
     used_material_paramenters_collections: Vec<SingleThreadMutType<MaterialParamentersCollection>>,
+    material_paramenters: &'a crate::material::Paramenters,
 }
 
 impl<'a> ResolveContext<'a> {
-    fn from_snarl(snarl: &'a Snarl<MaterialNode>) -> ResolveContext<'a> {
+    fn new(
+        snarl: &'a Snarl<MaterialNode>,
+        material_paramenters: &'a crate::material::Paramenters,
+    ) -> ResolveContext<'a> {
         let mut node_io_infos: HashMap<NodeId, NodeIOInfo> = HashMap::new();
         for (out_pin_id, in_pin_id) in snarl.wires() {
             node_io_infos
@@ -74,6 +79,7 @@ impl<'a> ResolveContext<'a> {
             current_group: 0,
             current_binding: 0,
             used_material_paramenters_collections: vec![],
+            material_paramenters,
         }
     }
 
@@ -152,6 +158,7 @@ impl<'a> ResolveContext<'a> {
             cluster_light_binding: None,
             cluster_light_index_binding: None,
             material_paramenters_collection_bindings: HashSet::new(),
+            paramenters: vec![],
         };
         let is_support_cluster_light = true;
         let mut definitions: Vec<String> = vec![
@@ -160,6 +167,7 @@ impl<'a> ResolveContext<'a> {
             "USER_TEXTURES=@USER_TEXTURES@".to_string(),
             "MATERIAL_PARAMENTERS_COLLECTION_UNIFORMS=@MATERIAL_PARAMENTERS_COLLECTION_UNIFORMS@"
                 .to_string(),
+            "USER_MATERIAL_PARAMENTERS_UNIFORM=@USER_MATERIAL_PARAMENTERS_UNIFORM@".to_string(),
             format!("MAX_POINT_LIGHTS_NUM={}", MAX_POINT_LIGHTS_NUM),
             format!("MAX_SPOT_LIGHTS_NUM={}", MAX_SPOT_LIGHTS_NUM),
         ];
@@ -245,6 +253,34 @@ impl<'a> ResolveContext<'a> {
         let shader_code = shader_code.replace(
             "@MATERIAL_PARAMENTERS_COLLECTION_UNIFORMS@",
             &material_paramenters_collection_uniform_code,
+        );
+
+        let mut user_material_paramenters_uniform_code = "".to_string();
+        if let Some(code) = material_paramenters_to_struct_string(
+            "UserMaterialParamentersUniform",
+            self.material_paramenters,
+        ) {
+            let binding = format!(
+                "@group({}) @binding({}) var<uniform> user_material_paramenters_uniform: UserMaterialParamentersUniform;\n",
+                self.current_group, self.current_binding,
+            );
+            let group_binding =
+                rs_artifact::material::GroupBinding::new(self.current_group, self.current_binding);
+            self.current_binding += 1;
+            user_material_paramenters_uniform_code.push_str(&code);
+            user_material_paramenters_uniform_code.push_str("\n");
+            user_material_paramenters_uniform_code.push_str(&binding);
+            user_material_paramenters_uniform_code.push_str("\n");
+            material_info
+                .paramenters
+                .push(rs_artifact::material::Paramenters {
+                    binding: group_binding,
+                    fields: self.material_paramenters.fields().to_vec(),
+                });
+        }
+        let shader_code = shader_code.replace(
+            "@USER_MATERIAL_PARAMENTERS_UNIFORM@",
+            &user_material_paramenters_uniform_code,
         );
 
         Ok(ResolveResult {
@@ -533,6 +569,12 @@ impl<'a> ResolveContext<'a> {
                     "".to_string()
                 }
             }
+            EMaterialNodeType::Paramenter(struct_field) => {
+                format!(
+                    "var {} = user_material_paramenters_uniform.{};",
+                    &var_name, struct_field.name
+                )
+            }
         }
     }
 }
@@ -540,10 +582,11 @@ impl<'a> ResolveContext<'a> {
 pub fn resolve(
     snarl: &Snarl<MaterialNode>,
     options: Vec<MaterialOptions>,
+    material_paramenters: &crate::material::Paramenters,
 ) -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
     let mut results: HashMap<MaterialOptions, ResolveResult> = HashMap::new();
     for option in options {
-        let mut resolve_context = ResolveContext::from_snarl(snarl);
+        let mut resolve_context = ResolveContext::new(snarl, material_paramenters);
         let result = resolve_context.resolve(&option)?;
         // let result = resolve_internal(snarl, &option)?;
         results.insert(option, result);
@@ -558,47 +601,54 @@ fn node_var_name(node_id: NodeId) -> String {
 fn material_paramenters_collection_to_struct_string(
     material_paramenters_collection: &MaterialParamentersCollection,
 ) -> String {
-    let mut fields = "".to_string();
-    let len = material_paramenters_collection.fields.len();
-    for (index, field) in material_paramenters_collection.fields.iter().enumerate() {
-        match field.data_type {
-            rs_engine::uniform_map::BaseDataValueType::F32(_) => {
-                let text = format!("    {}: f32,", &field.name);
-                fields.push_str(&text);
-                if index != len - 1 {
-                    fields.push_str("\n");
-                }
+    let name = material_paramenters_collection.url.get_name_in_editor();
+    fields_to_struct_string(&name, &material_paramenters_collection.fields)
+}
+
+fn material_paramenters_to_struct_string(
+    name: &str,
+    material_paramenters: &crate::material::Paramenters,
+) -> Option<String> {
+    let code = fields_to_struct_string(name, material_paramenters.fields());
+    if code.is_empty() {
+        return None;
+    } else {
+        Some(code)
+    }
+}
+
+fn fields_to_struct_string(name: &str, fields: &[StructField]) -> String {
+    if fields.is_empty() {
+        return String::new();
+    }
+    let len = fields.len();
+    let fields_iter = fields.iter();
+    let mut fields = String::with_capacity(64 * len);
+    for (index, field) in fields_iter.enumerate() {
+        let text = match field.data_type {
+            BaseDataValueType::F32(_) => {
+                format!("    {}: f32,", &field.name)
             }
-            rs_engine::uniform_map::BaseDataValueType::Vec2(_) => {
-                let text = format!("    {}: vec{}<f32>,", &field.name, 2);
-                fields.push_str(&text);
-                if index != len - 1 {
-                    fields.push_str("\n");
-                }
+            BaseDataValueType::Vec2(_) => {
+                format!("    {}: vec2<f32>,", &field.name)
             }
-            rs_engine::uniform_map::BaseDataValueType::Vec3(_) => {
-                let text = format!("    {}: vec{}<f32>,", &field.name, 3);
-                fields.push_str(&text);
-                if index != len - 1 {
-                    fields.push_str("\n");
-                }
+            BaseDataValueType::Vec3(_) => {
+                format!("    {}: vec3<f32>,", &field.name)
             }
-            rs_engine::uniform_map::BaseDataValueType::Vec4(_) => {
-                let text = format!("    {}: vec{}<f32>,", &field.name, 4);
-                fields.push_str(&text);
-                if index != len - 1 {
-                    fields.push_str("\n");
-                }
+            BaseDataValueType::Vec4(_) => {
+                format!("    {}: vec4<f32>,", &field.name)
             }
+        };
+        fields.push_str(&text);
+        if index != len - 1 {
+            fields.push_str("\n");
         }
     }
 
     return format!(
         r"
-struct {} {{
-{}
-}}",
-        material_paramenters_collection.url.get_name_in_editor(),
-        fields
+struct {name} {{
+{fields}
+}}"
     );
 }

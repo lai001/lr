@@ -1,8 +1,10 @@
+use crate::content::material::ParamentResource;
 #[cfg(feature = "network")]
 use crate::network::NetworkReplicated;
 #[cfg(feature = "network")]
 use crate::network::{self};
 use crate::physics_ability::{self};
+use crate::uniform_map::UniformMap;
 use crate::{
     content::{content_file_type::EContentFileType, level::LevelPhysics, material::Material},
     drawable::EDrawObjectType,
@@ -12,8 +14,11 @@ use crate::{
     resource_manager::ResourceManager,
 };
 use rapier3d::prelude::*;
+use rs_artifact::material_paramenters::BaseDataValueType;
 use rs_artifact::static_mesh::StaticMesh;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
+use rs_render::command::EBindingResource;
+use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "network")]
 use std::collections::HashMap;
@@ -51,6 +56,8 @@ impl Physics {
 #[derive(Clone)]
 pub struct StaticMeshComponentRuntime {
     draw_objects: Option<EDrawObjectType>,
+    parament_resource: Option<crate::content::material::ParamentResource>,
+    is_parament_resource_dirty: bool,
     _mesh: Option<Arc<StaticMesh>>,
     pub physics: Option<physics_ability::PhysicsAbility>,
     pub parent_final_transformation: glam::Mat4,
@@ -383,6 +390,7 @@ impl StaticMeshComponent {
                 log::warn!("Can not find material {}", url);
             }
         }
+        let parament_resource = Self::create_parament_resource(engine, material.clone());
 
         let (draw_object, mesh, aabb) = if let Some(find_static_mesh) = find_static_mesh {
             let mut draw_object: EDrawObjectType;
@@ -410,6 +418,13 @@ impl StaticMeshComponent {
                 }
                 EDrawObjectType::StaticMeshMaterial(draw_object) => {
                     draw_object.constants.model = self.transformation;
+                    if let Some(parament_resource) = &parament_resource {
+                        draw_object.user_paramenters.push(
+                            rs_render::command::EBindingResource::Constants(
+                                *parament_resource.handle,
+                            ),
+                        );
+                    }
                 }
                 _ => unimplemented!(),
             }
@@ -427,8 +442,69 @@ impl StaticMeshComponent {
             aabb,
             pending_rigid_body: None,
             pending_agent_transformation: None,
+            parament_resource: parament_resource,
+            is_parament_resource_dirty: false,
         });
         self.on_is_enable_multiresolution_changed();
+    }
+
+    fn create_parament_resource(
+        engine: &mut Engine,
+        material: Option<std::rc::Rc<std::cell::RefCell<Material>>>,
+    ) -> Option<ParamentResource> {
+        let mut parament_resource: Option<ParamentResource> = None;
+        if let Some(material) = material.clone() {
+            let material = material.borrow();
+            let material_info = material.get_material_info();
+            let material_info = material_info
+                .get(&MaterialOptions { is_skin: false })
+                .expect("Valid");
+            assert!(material_info.paramenters.len() <= 1);
+            for parament in &material_info.paramenters {
+                if parament.is_valid() {
+                    let uniform_map = UniformMap::new(&parament.fields);
+                    let buffer_handle = engine.create_buffer(
+                        uniform_map.get_data().to_vec(),
+                        wgpu::BufferUsages::UNIFORM,
+                        None,
+                    );
+                    if let Ok(buffer_handle) = buffer_handle {
+                        parament_resource = Some(ParamentResource {
+                            handle: buffer_handle,
+                            uniform_map: uniform_map,
+                        });
+                    }
+                }
+            }
+        }
+        parament_resource
+    }
+
+    pub fn set_material_value(&mut self, name: &str, value: BaseDataValueType) -> bool {
+        let Some(run_time) = &mut self.run_time else {
+            return false;
+        };
+        let Some(parament_resource) = run_time.parament_resource.as_mut() else {
+            return false;
+        };
+        let is_success = match value {
+            BaseDataValueType::F32(value) => parament_resource
+                .uniform_map
+                .set_field_f32_value(name, value),
+            BaseDataValueType::Vec2(value) => parament_resource
+                .uniform_map
+                .set_field_vec2_value(name, value),
+            BaseDataValueType::Vec3(value) => parament_resource
+                .uniform_map
+                .set_field_vec3_value(name, value),
+            BaseDataValueType::Vec4(value) => parament_resource
+                .uniform_map
+                .set_field_vec4_value(name, value),
+        };
+        if is_success {
+            run_time.is_parament_resource_dirty = true;
+        }
+        return is_success;
     }
 
     pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
@@ -437,9 +513,31 @@ impl StaticMeshComponent {
         let Some(run_time) = &mut self.run_time else {
             return;
         };
-        let Some(draw_objects) = run_time.draw_objects.as_mut() else {
+        let Some(mut draw_objects) = run_time.draw_objects.as_mut() else {
             return;
         };
+
+        if run_time.is_parament_resource_dirty {
+            run_time.is_parament_resource_dirty = false;
+            if let Some(parament_resource) = run_time.parament_resource.as_mut() {
+                let buffer_handle = engine
+                    .create_buffer(
+                        parament_resource.uniform_map.get_data().to_vec(),
+                        wgpu::BufferUsages::UNIFORM,
+                        None,
+                    )
+                    .expect("Valid");
+                parament_resource.handle = buffer_handle.clone();
+                match &mut draw_objects {
+                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                        draw_object.user_paramenters =
+                            vec![EBindingResource::Constants(*buffer_handle)];
+                    }
+                    _ => {}
+                }
+            };
+        }
+
         if let Some(physics) = run_time.physics.as_mut() {
             if let Some(pending_rigid_body) = run_time.pending_rigid_body.take() {
                 let handle = level_physics.rigid_body_set.insert(pending_rigid_body);

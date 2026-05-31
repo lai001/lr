@@ -173,9 +173,47 @@ pub fn frustum_from_perspective(
     }
 }
 
+// pub fn is_valid_name(name: &str) -> bool {
+//     let re = regex::Regex::new(r"^\w+$").unwrap();
+//     re.is_match(name)
+// }
+
 pub fn is_valid_name(name: &str) -> bool {
-    let re = regex::Regex::new(r"^\w+$").unwrap();
-    re.is_match(name)
+    is_valid_ascii_name(name)
+}
+
+pub fn is_valid_ascii_name(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let mut chars = name.chars();
+    match chars.next().unwrap() {
+        c if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    for c in chars {
+        if !(c.is_ascii_alphanumeric() || c == '_') {
+            return false;
+        }
+    }
+    true
+}
+
+pub fn is_valid_unicode_name(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let mut chars = name.chars();
+    match chars.next().unwrap() {
+        c if c.is_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    for c in chars {
+        if !(c.is_alphanumeric() || c == '_') {
+            return false;
+        }
+    }
+    true
 }
 
 pub fn subdivide_two_points(subdivide: usize, p0: &glam::Vec3, p1: &glam::Vec3) -> Vec<glam::Vec3> {
@@ -492,7 +530,7 @@ mod test {
         subdivide_two_points,
     };
     use crate::{
-        misc::{get_sha256_from_reader, is_point_in_polygon, is_valid_name},
+        misc::{get_sha256_from_reader, is_point_in_polygon, is_valid_name, is_valid_unicode_name},
         sphere_3d::Sphere3D,
     };
 
@@ -508,6 +546,8 @@ mod test {
         assert_eq!(is_valid_name("🔥"), false);
         assert_eq!(is_valid_name("."), false);
         assert_eq!(is_valid_name("**"), false);
+        assert_eq!(is_valid_unicode_name("a🔥"), false);
+        assert_eq!(is_valid_unicode_name("中"), true);
     }
 
     #[test]

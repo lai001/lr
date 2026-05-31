@@ -184,6 +184,7 @@ where
 pub fn render_combo_box_not_null<Value>(
     ui: &mut egui::Ui,
     label: &str,
+    id_salt: impl std::hash::Hash,
     current_value: &mut Value,
     selected_collection: Vec<Value>,
 ) -> bool
@@ -191,7 +192,7 @@ where
     Value: ToUIString + std::cmp::PartialEq,
 {
     let mut is_changed = false;
-    let combo_box = egui::ComboBox::from_label(label)
+    let combo_box = egui::ComboBox::new(id_salt, label)
         .selected_text(format!("{}", { current_value.to_ui_string() }));
     combo_box.show_ui(ui, |ui| {
         for selected_value in selected_collection {
@@ -203,6 +204,79 @@ where
                 break;
             }
         }
+    });
+    is_changed
+}
+
+pub fn vec4_widget_mut(value: &mut glam::Vec4, ui: &mut egui::Ui, label: &str) -> bool {
+    let mut is_changed = false;
+    ui.horizontal(|ui| {
+        ui.label(label);
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "))
+                .changed();
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.y).speed(0.1).prefix("y: "))
+                .changed();
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.z).speed(0.1).prefix("z: "))
+                .changed();
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.w).speed(0.1).prefix("w: "))
+                .changed();
+    });
+    is_changed
+}
+
+pub fn vec3_widget_mut(value: &mut glam::Vec3, ui: &mut egui::Ui, label: &str) -> bool {
+    let mut is_changed = false;
+    ui.horizontal(|ui| {
+        ui.label(label);
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "))
+                .changed();
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.y).speed(0.1).prefix("y: "))
+                .changed();
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.z).speed(0.1).prefix("z: "))
+                .changed();
+    });
+    is_changed
+}
+
+pub fn vec2_widget_mut(value: &mut glam::Vec2, ui: &mut egui::Ui, label: &str) -> bool {
+    let mut is_changed = false;
+    ui.horizontal(|ui| {
+        ui.label(label);
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "))
+                .changed();
+        is_changed = is_changed
+            || ui
+                .add(egui::DragValue::new(&mut value.y).speed(0.1).prefix("y: "))
+                .changed();
+    });
+    is_changed
+}
+
+pub fn f32_widget_mut<Num: egui::emath::Numeric>(
+    value: &mut Num,
+    ui: &mut egui::Ui,
+    label: &str,
+) -> bool {
+    let mut is_changed = false;
+    ui.horizontal(|ui| {
+        ui.label(label);
+        is_changed = ui.add(egui::DragValue::new(value).speed(0.1)).changed();
     });
     is_changed
 }

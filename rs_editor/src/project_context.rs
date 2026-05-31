@@ -476,9 +476,13 @@ impl ProjectContext {
                         .find(|x| x.borrow().url == material_content.borrow().asset_url)
                         .cloned();
                     if let Some(material_editor) = find {
+                        let material_editor = material_editor.borrow();
+                        let snarl = &material_editor.snarl;
+                        let paramenters = &material_editor.paramenters;
                         if let Ok(resolve_result) = crate::material_resolve::resolve(
-                            &material_editor.borrow().snarl,
+                            snarl,
                             MaterialOptions::all(),
+                            paramenters,
                         ) {
                             let mut shader_code: HashMap<MaterialOptions, String> = HashMap::new();
                             let mut material_info: HashMap<MaterialOptions, MaterialInfo> =

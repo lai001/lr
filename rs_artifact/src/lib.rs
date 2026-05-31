@@ -11,6 +11,7 @@ pub mod image;
 #[cfg(target_os = "android")]
 pub mod java_input_stream;
 pub mod material;
+pub mod material_paramenters;
 pub mod mesh_vertex;
 pub mod mesh_vertex_visitor;
 pub mod node_anim;

@@ -15,7 +15,7 @@ fn cal_align_of(row: isize, width: isize) -> isize {
 }
 
 fn fill(current_offset: usize, align: usize) -> usize {
-    (rs_foundation::alignment(current_offset as isize, align as isize) as usize) - current_offset
+    rs_foundation::align_up(current_offset, align) - current_offset
 }
 
 // trait Alignment {

@@ -546,7 +546,7 @@ impl Engine {
                             let pipeline_handle = self.create_material(material.code);
                             let mut material_content = material_content.borrow_mut();
                             material_content.set_pipeline_handle(pipeline_handle);
-                            material_content.set_material_info(material.material_info);
+                            material_content.set_material_info(self, material.material_info);
                         }
                     }
                 }
@@ -1179,6 +1179,7 @@ impl Engine {
             skin_constants: Default::default(),
             virtual_texture_constants: Default::default(),
             debug_group_label: Some(name),
+            user_paramenters: vec![],
         };
         EDrawObjectType::SkinMaterial(object)
     }
@@ -1416,6 +1417,7 @@ impl Engine {
             constants: Default::default(),
             virtual_texture_constants: Default::default(),
             debug_group_label: Some(name),
+            user_paramenters: vec![],
         };
         EDrawObjectType::StaticMeshMaterial(object)
     }

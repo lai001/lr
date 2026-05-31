@@ -195,6 +195,7 @@ impl BlendAnimationUIWindow {
                 let is_changed = render_combo_box_not_null(
                     ui,
                     &format!("Animation {}", index),
+                    &format!("Animation {}", index),
                     current_value,
                     self.collect_animation_urls(),
                 );

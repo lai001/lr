@@ -115,8 +115,30 @@ pub fn cast_to_type_vec<U>(mut buffer: Vec<u8>) -> Vec<U> {
     }
 }
 
-pub fn alignment(n: isize, align: isize) -> isize {
+pub fn align_up(n: usize, align: usize) -> usize {
+    debug_assert_ne!(align, 0);
+    debug_assert!(align.is_power_of_two());
     ((n) + (align) - 1) & !((align) - 1)
+}
+
+pub fn align_up_checked(n: usize, align: usize) -> Option<usize> {
+    if align == 0 || !align.is_power_of_two() {
+        return None;
+    }
+    n.checked_add(align - 1).map(|v| v & !(align - 1))
+}
+
+pub fn align_up_any_checked(n: usize, align: usize) -> Option<usize> {
+    if align == 0 {
+        return None;
+    }
+    let k = n.checked_add(align - 1)?.checked_div(align)?;
+    k.checked_mul(align)
+}
+
+pub fn align_up_any(n: usize, align: usize) -> usize {
+    debug_assert_ne!(align, 0);
+    ((n + align - 1) / align) * align
 }
 
 pub fn next_highest_power_of_two(v: isize) -> isize {
@@ -208,7 +230,7 @@ pub fn is_program_in_path(program: &str) -> bool {
 }
 
 pub fn size_padding_of(current_size: usize, align: usize) -> usize {
-    (alignment(current_size as isize, align as isize) as usize) - current_size
+    align_up(current_size, align) - current_size
 }
 
 pub fn round_down_to_multiple(value: f32, multiple: f32) -> f32 {
@@ -234,7 +256,14 @@ pub fn full_cmd_from_command(command: &std::process::Command) -> String {
 
 #[cfg(test)]
 pub mod test {
-    use crate::{alignment, math_remap_value_range, next_highest_power_of_two};
+    use crate::{
+        align_up, align_up_any, math_remap_value_range, next_highest_power_of_two, size_padding_of,
+    };
+
+    #[test]
+    fn size_padding_of_test() {
+        assert_eq!(size_padding_of(418, 4), 2);
+    }
 
     #[test]
     pub fn next_highest_power_of_two_test() {
@@ -243,7 +272,8 @@ pub mod test {
 
     #[test]
     pub fn alignment_test() {
-        assert_eq!(alignment(418, 4), 420);
+        assert_eq!(align_up(418, 4), 420);
+        assert_eq!(align_up_any(418, 9), 423);
     }
 
     #[test]

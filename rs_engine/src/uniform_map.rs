@@ -1,52 +1,13 @@
-use serde::{Deserialize, Serialize};
+use rs_artifact::material_paramenters::{BaseDataValueType, StructField, WgslMemoryLayout};
 use std::collections::{HashMap, HashSet};
 
-pub trait WgslMemoryLayout {
-    fn align_of(&self) -> usize;
-    fn size_of(&self) -> usize;
-}
-
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub enum BaseDataValueType {
-    F32(f32),
-    Vec2(glam::Vec2),
-    Vec3(glam::Vec3),
-    Vec4(glam::Vec4),
-}
-
-impl WgslMemoryLayout for BaseDataValueType {
-    fn align_of(&self) -> usize {
-        match self {
-            BaseDataValueType::F32(_) => 4,
-            BaseDataValueType::Vec2(_) => 8,
-            BaseDataValueType::Vec3(_) => 16,
-            BaseDataValueType::Vec4(_) => 16,
-        }
-    }
-
-    fn size_of(&self) -> usize {
-        match self {
-            BaseDataValueType::F32(_) => 4,
-            BaseDataValueType::Vec2(_) => 8,
-            BaseDataValueType::Vec3(_) => 12,
-            BaseDataValueType::Vec4(_) => 16,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct StructField {
-    pub name: String,
-    pub data_type: BaseDataValueType,
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Range {
     field: StructField,
     offset: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UniformMap {
     data: Vec<u8>,
     name_range: HashMap<String, Range>,
