@@ -9,9 +9,9 @@ edition = "2021"
 ffmpeg-next = "8.1.0"
 cpal = "0.17.3"
 image = "0.25.10"
-bitflags = "2.11.1"
+bitflags = "2.13.0"
 num-complex = "0.4.6"
-log = "0.4.29"
+log = "0.4.32"
 rustfft = "6.4.1"
 glam = { version = "0.30.10", features = ["mint"] }
 mp4 = { version = "0.14.0" }

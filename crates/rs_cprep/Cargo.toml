@@ -9,7 +9,7 @@ edition = "2024"
 # path-absolutize = "3"
 # tera = "1.20.1"
 logos = "0.16.1"
-regex = "1.12.3"
+regex = "1.12.4"
 lalrpop-util = { version = "0.23.1", features = ["lexer", "unicode"] }
 
 [build-dependencies]

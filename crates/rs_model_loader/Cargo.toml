@@ -13,7 +13,7 @@ standalone = [
 ]
 
 [dependencies]
-log = "0.4.29"
+log = "0.4.32"
 glam = { version = "0.30.10", features = ["mint"] }
 # russimp = { version = "3.2.1", features = ["prebuilt", "static-link"] }
 url = { version = "2.5.8", features = ["serde"] }

@@ -18,5 +18,5 @@ path-slash = "0.2.1"
 naga = { version = "29.0.3" }
 wgpu = "29.0.3"
 anyhow = { version = "1.0.102" }
-toml_edit = "0.25.11"
+toml_edit = "0.25.12"
 rs_foundation = { path = "../rs_foundation" }
