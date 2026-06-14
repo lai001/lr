@@ -139,30 +139,50 @@ impl PhysicsDebugRender {
         bundle
     }
 
+    fn to_outline_bundle(
+        pos: &Pose,
+        color: glam::Vec4,
+        outline: (Vec<Vec3>, Vec<[u32; 2]>),
+    ) -> Vec<RenderRigidBodiesBundle> {
+        let (vertexes, indexes) = outline;
+        let mut lines: Vec<RenderRigidBodiesBundle> = Vec::with_capacity(indexes.len());
+        for index in indexes {
+            let line = RenderRigidBodiesBundle {
+                start: (pos * vertexes[index[0] as usize]),
+                end: (pos * vertexes[index[1] as usize]),
+                color,
+            };
+            lines.push(line);
+        }
+        lines
+    }
+
     fn render_shape(
         &mut self,
         shape: &dyn Shape,
         pos: &Pose,
         color: glam::Vec4,
     ) -> Vec<RenderRigidBodiesBundle> {
-        let mut bundle = vec![];
+        let mut bundles = vec![];
         match shape.as_typed_shape() {
-            TypedShape::Ball(_) => todo!(),
-            TypedShape::Cuboid(cuboid) => {
-                let cuboid_outline = Cuboid::new(cuboid.half_extents).to_outline();
-                let (vertexes, indexes) = cuboid_outline;
-                let mut lines: Vec<RenderRigidBodiesBundle> = Vec::with_capacity(indexes.len());
-                for index in indexes {
-                    let line = RenderRigidBodiesBundle {
-                        start: (pos * vertexes[index[0] as usize]),
-                        end: (pos * vertexes[index[1] as usize]),
-                        color,
-                    };
-                    lines.push(line);
-                }
-                bundle.append(&mut lines);
+            TypedShape::Ball(ball) => {
+                let outline = ball.to_outline(self.style.subdivisions);
+                let mut lines = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut lines);
             }
-            TypedShape::Capsule(_) => todo!(),
+            TypedShape::Cuboid(cuboid) => {
+                let outline = cuboid.to_outline();
+                let mut lines = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut lines);
+            }
+            TypedShape::Capsule(capsule) => {
+                let mut lines = Self::to_outline_bundle(
+                    pos,
+                    color,
+                    capsule.to_outline(self.style.subdivisions),
+                );
+                bundles.append(&mut lines);
+            }
             TypedShape::Segment(_) => todo!(),
             TypedShape::Triangle(triangle) => {
                 let line1 = RenderRigidBodiesBundle {
@@ -182,12 +202,12 @@ impl PhysicsDebugRender {
                     end: (pos * triangle.a),
                     color,
                 };
-                bundle.append(&mut vec![line1, line2, line3]);
+                bundles.append(&mut vec![line1, line2, line3]);
             }
             TypedShape::TriMesh(tri_mesh) => {
                 for triangle in tri_mesh.triangles() {
                     let mut shape_bundle = self.render_shape(&triangle, pos, color);
-                    bundle.append(&mut shape_bundle);
+                    bundles.append(&mut shape_bundle);
                 }
             }
             TypedShape::Polyline(_) => todo!(),
@@ -196,20 +216,52 @@ impl PhysicsDebugRender {
             TypedShape::Compound(compound) => {
                 for (sub_pos, shape) in compound.shapes() {
                     let mut shape_bundle = self.render_shape(&**shape, &(pos * sub_pos), color);
-                    bundle.append(&mut shape_bundle);
+                    bundles.append(&mut shape_bundle);
                 }
             }
             TypedShape::ConvexPolyhedron(_) => todo!(),
-            TypedShape::Cylinder(_) => todo!(),
-            TypedShape::Cone(_) => todo!(),
-            TypedShape::RoundCuboid(_) => todo!(),
+            TypedShape::Cylinder(cylinder) => {
+                let outline = cylinder.to_outline(self.style.subdivisions);
+                let mut lines = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut lines);
+            }
+            TypedShape::Cone(cone) => {
+                let outline = cone.to_outline(self.style.subdivisions);
+                let mut lines = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut lines);
+            }
+            TypedShape::RoundCuboid(round_cuboid) => {
+                let outline = round_cuboid.to_outline(self.style.subdivisions);
+                let mut bundle = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut bundle);
+            }
             TypedShape::RoundTriangle(_) => todo!(),
-            TypedShape::RoundCylinder(_) => todo!(),
-            TypedShape::RoundCone(_) => todo!(),
-            TypedShape::RoundConvexPolyhedron(_) => todo!(),
-            TypedShape::Custom(_) => todo!(),
-            TypedShape::Voxels(_) => todo!(),
+            TypedShape::RoundCylinder(round_cylinder) => {
+                let outline = round_cylinder
+                    .to_outline(self.style.subdivisions, self.style.border_subdivisions);
+                let mut bundle = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut bundle);
+            }
+            TypedShape::RoundCone(round_cone) => {
+                let outline =
+                    round_cone.to_outline(self.style.subdivisions, self.style.border_subdivisions);
+                let mut bundle = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut bundle);
+            }
+            TypedShape::RoundConvexPolyhedron(round_convex_polyhedron) => {
+                let outline = round_convex_polyhedron.to_outline(self.style.subdivisions);
+                let mut bundle = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut bundle);
+            }
+            TypedShape::Custom(_) => {
+                todo!()
+            }
+            TypedShape::Voxels(voxels) => {
+                let outline = voxels.to_outline();
+                let mut bundle = Self::to_outline_bundle(pos, color, outline);
+                bundles.append(&mut bundle);
+            }
         }
-        bundle
+        bundles
     }
 }

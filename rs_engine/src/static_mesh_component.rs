@@ -576,10 +576,10 @@ impl StaticMeshComponent {
                         .0;
                     glam::Mat4::from_scale_rotation_translation(scale, *rotation, *translation)
                 } else {
-                    let rigid_body = &level_physics.rigid_body_set[physics.rigid_body_handle];
-                    let translation = rigid_body.translation();
-                    let translation = glam::vec3(translation.x, translation.y, translation.z);
-                    let rotation = rigid_body.rotation();
+                    physics.tick(time, engine, level_physics);
+                    let translation = *physics.translation();
+                    let rotation = *physics.rotation();
+
                     let scale = run_time
                         .final_transformation
                         .to_scale_rotation_translation()
@@ -589,14 +589,15 @@ impl StaticMeshComponent {
                         network::ENetMode::Server => {
                             send_agent_transformation = Some(AgentTransformation {
                                 translation: translation,
-                                rotation: *rotation,
+                                rotation: rotation,
                             });
                         }
                         network::ENetMode::Client => {}
                     }
-                    glam::Mat4::from_scale_rotation_translation(scale, *rotation, translation)
-                };
 
+                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                };
+                run_time.final_transformation = transformation;
                 match draw_objects {
                     EDrawObjectType::Static(draw_object) => {
                         draw_object.constants.model = transformation;

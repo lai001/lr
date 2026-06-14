@@ -257,10 +257,30 @@ impl PhysicsAbility {
         &self.translation
     }
 
-    pub fn set_controller_desired_movement(&mut self, controller_desired_movement: glam::Vec3) {
+    pub fn set_controller_desired_movement(
+        &mut self,
+        controller_desired_movement: glam::Vec3,
+    ) -> bool {
         if let Some(_) = &self.controller {
             self.controller_desired_movement = controller_desired_movement;
+            return true;
         }
+        return false;
+    }
+
+    pub fn set_controller_rotation(
+        &mut self,
+        level_physics: &mut LevelPhysics,
+        rotation: glam::Quat,
+        wake_up: bool,
+    ) -> bool {
+        if let Some(_) = &self.controller {
+            let character_body = &mut level_physics.rigid_body_set[self.rigid_body_handle];
+            character_body.set_rotation(rotation, wake_up);
+            self.rigid_body.set_rotation(rotation, wake_up);
+            return true;
+        }
+        return false;
     }
 
     pub fn is_controller(&self) -> bool {
@@ -307,8 +327,8 @@ impl PhysicsAbility {
             );
 
             let character_body = &mut level_physics.rigid_body_set[self.rigid_body_handle];
-            let pose = character_body.position();
-            self.translation = pose.translation;
+            let pose = *character_body.position();
+            self.translation = pose.translation + possible_movement.translation;
             self.rotation = pose.rotation;
             character_body
                 .set_next_kinematic_translation(pose.translation + possible_movement.translation);
