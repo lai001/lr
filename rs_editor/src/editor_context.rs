@@ -187,19 +187,28 @@ pub struct EditorContext {
 }
 
 impl EditorContext {
-    fn load_font() -> egui::FontDefinitions {
+    // https://github.com/emilk/egui/issues/3529
+    fn load_fallback_os_fonts(font_definitions: &mut egui::FontDefinitions) -> anyhow::Result<()> {
+        #[cfg(target_os = "windows")]
+        {
+            font_definitions.font_data.insert(
+                "segoe_ui_symbol".to_owned(),
+                egui::FontData::from_owned(std::fs::read("C:/Windows/Fonts/seguisym.ttf")?).into(),
+            );
+            font_definitions
+                .families
+                .get_mut(&egui::FontFamily::Proportional)
+                .ok_or(anyhow!("Missing Proportional"))?
+                .push("segoe_ui_symbol".to_owned());
+        }
+        Ok(())
+    }
+
+    fn load_custom_fonts(font_definitions: &mut egui::FontDefinitions) -> anyhow::Result<()> {
         let font_path = rs_core_minimal::file_manager::get_engine_resource(
             "Remote/Font/SourceHanSansHWSC/OTF/SimplifiedChineseHW/SourceHanSansHWSC-Regular.otf",
         );
-        let font_data = match std::fs::read(font_path) {
-            Ok(font_data) => font_data,
-            Err(_) => {
-                return egui::FontDefinitions::default();
-            }
-        };
-        let mut font_definitions = egui::FontDefinitions::default().clone();
-        font_definitions.families.clear();
-        font_definitions.font_data.clear();
+        let font_data = std::fs::read(font_path)?;
         font_definitions.font_data.insert(
             "SourceHanSansHWSC-Regular".to_owned(),
             Arc::new(egui::FontData::from_owned(font_data)),
@@ -214,6 +223,19 @@ impl EditorContext {
             egui::FontFamily::Proportional,
             vec!["SourceHanSansHWSC-Regular".to_owned()],
         );
+        Ok(())
+    }
+
+    fn load_font() -> egui::FontDefinitions {
+        let mut font_definitions = egui::FontDefinitions::default().clone();
+        font_definitions.families.clear();
+        font_definitions.font_data.clear();
+        if let Err(err) = Self::load_custom_fonts(&mut font_definitions) {
+            log::warn!("{err}");
+        }
+        if let Err(err) = Self::load_fallback_os_fonts(&mut font_definitions) {
+            log::warn!("{err}");
+        }
         font_definitions
     }
 
