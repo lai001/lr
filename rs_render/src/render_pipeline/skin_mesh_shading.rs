@@ -1,15 +1,15 @@
 use crate::{
+    VertexBufferType,
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     global_shaders::{
         global_shader::GlobalShader,
-        skeleton_shading::{SkeletonShadingShader, NUM_MAX_BONE},
+        skeleton_shading::{NUM_MAX_BONE, SkeletonShadingShader},
     },
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2, MeshVertex5},
     view_mode::EViewModeType,
-    VertexBufferType,
 };
 use std::sync::Arc;
 use type_layout::TypeLayout;

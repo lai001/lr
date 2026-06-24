@@ -1,6 +1,6 @@
 use std::sync::{
-    mpsc::{sync_channel, Receiver, SyncSender, TryRecvError},
     Arc, Mutex,
+    mpsc::{Receiver, SyncSender, TryRecvError, sync_channel},
 };
 
 pub enum SingleConsumeChnnelAPayload<T> {

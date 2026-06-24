@@ -1,4 +1,4 @@
-use image::{imageops, ImageError};
+use image::{ImageError, imageops};
 use wgpu::{util::DeviceExt, *};
 
 pub struct TextureLoader {}

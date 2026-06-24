@@ -1,6 +1,6 @@
 use crate::{
-    brigde_data::image2d_vertex::Image2DVertex, shader::shader_library::ShaderLibrary, util,
-    VertexBufferLayout,
+    VertexBufferLayout, brigde_data::image2d_vertex::Image2DVertex,
+    shader::shader_library::ShaderLibrary, util,
 };
 use rs_foundation::cast_to_raw_buffer;
 use wgpu::*;

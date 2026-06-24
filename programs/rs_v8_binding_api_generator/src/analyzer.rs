@@ -1,5 +1,5 @@
 use ra_ap_ide::RootDatabase;
-use ra_ap_load_cargo::{load_workspace, LoadCargoConfig, ProcMacroServerChoice};
+use ra_ap_load_cargo::{LoadCargoConfig, ProcMacroServerChoice, load_workspace};
 use ra_ap_proc_macro_api::ProcMacroClient;
 use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace, RustLibSource};
 use ra_ap_vfs::{AbsPathBuf, Vfs};

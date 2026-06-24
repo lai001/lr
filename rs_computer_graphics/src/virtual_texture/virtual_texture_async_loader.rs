@@ -6,8 +6,8 @@ use crate::{thread_pool::ThreadPool, util::texture2d_from_rgba_image};
 use std::{
     collections::HashMap,
     sync::{
-        mpsc::{Receiver, Sender},
         Arc,
+        mpsc::{Receiver, Sender},
     },
 };
 

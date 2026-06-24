@@ -97,7 +97,12 @@ impl WGStruct {
                 let member_size = item.data_type.size_of();
                 let fill_size = Self::fill(offset, member_align);
                 if fill_size > 0 {
-                    message = message + &Self::tab_str(level + 1) + &format!("name(implicit struct size padding) offset({} + {})                  size({})\n", p_offset, offset, fill_size);
+                    message = message
+                        + &Self::tab_str(level + 1)
+                        + &format!(
+                            "name(implicit struct size padding) offset({} + {})                  size({})\n",
+                            p_offset, offset, fill_size
+                        );
                 }
 
                 if let EDataType::Struct(s) = &item.data_type {

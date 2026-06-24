@@ -1,12 +1,12 @@
 use crate::{
     hw::{
-        find_hw_pix_fmt, get_available_hwdevice_types, get_hw_format, hw_decoder_init, MyUserData,
+        MyUserData, find_hw_pix_fmt, get_available_hwdevice_types, get_hw_format, hw_decoder_init,
     },
     time_range::TimeRangeRational,
 };
 use ffmpeg_next::ffi::{
-    av_hwframe_transfer_data, av_seek_frame, AVCodec, AVCodecContext, AVHWDeviceType,
-    AVPixelFormat, AVSEEK_FLAG_BACKWARD,
+    AVCodec, AVCodecContext, AVHWDeviceType, AVPixelFormat, AVSEEK_FLAG_BACKWARD,
+    av_hwframe_transfer_data, av_seek_frame,
 };
 use rs_foundation::TimeRange;
 use std::collections::HashMap;

@@ -1,8 +1,8 @@
-use std::sync::mpsc::channel;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
+use std::sync::mpsc::channel;
 
 pub struct SyncWait {
     owned_thread_sender: Mutex<Sender<()>>,

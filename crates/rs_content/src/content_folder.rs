@@ -68,11 +68,12 @@ impl ContentFolder {
             self.get_url().path(),
             self.relative_path.display()
         );
-        assert!(self
-            .files
-            .iter()
-            .map(|x| x.get_name())
-            .all(|x| x != file.get_name()),);
+        assert!(
+            self.files
+                .iter()
+                .map(|x| x.get_name())
+                .all(|x| x != file.get_name()),
+        );
         self.files.push(file);
     }
 

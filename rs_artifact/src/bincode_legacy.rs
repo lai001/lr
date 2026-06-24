@@ -1,5 +1,5 @@
-use crate::error::Result;
 use crate::EEndianType;
+use crate::error::Result;
 use serde::de::DeserializeOwned;
 
 pub fn serialize<T>(val: &T, endian_type: Option<EEndianType>) -> Result<Vec<u8>>

@@ -1,6 +1,8 @@
 use crate::{
     bindings::{
-        gk_free, graph_t, libmetis__CreateGraph, libmetis__FreeGraph, libmetis__InitGraph,
+        KMETIS_DEFAULT_UFACTOR, MCPMETIS_DEFAULT_UFACTOR, METIS_NOPTIONS, METIS_PartGraphKway,
+        METIS_PartGraphRecursive, METIS_SetDefaultOptions, PMETIS_DEFAULT_UFACTOR, gk_free,
+        graph_t, libmetis__CreateGraph, libmetis__FreeGraph, libmetis__InitGraph,
         libmetis__imalloc, libmetis__ismalloc, libmetis__rsmalloc, mctype_et_METIS_CTYPE_SHEM,
         miptype_et_METIS_IPTYPE_METISRB, mobjtype_et_METIS_OBJTYPE_CUT,
         moptions_et_METIS_OPTION_CONTIG, moptions_et_METIS_OPTION_CTYPE,
@@ -12,8 +14,6 @@ use crate::{
         moptions_et_METIS_OPTION_RTYPE, moptions_et_METIS_OPTION_SEED,
         moptions_et_METIS_OPTION_UFACTOR, mptype_et_METIS_PTYPE_KWAY, mptype_et_METIS_PTYPE_RB,
         mrtype_et_METIS_RTYPE_FM, mrtype_et_METIS_RTYPE_GREEDY, params_t, rstatus_et_METIS_OK,
-        METIS_PartGraphKway, METIS_PartGraphRecursive, METIS_SetDefaultOptions,
-        KMETIS_DEFAULT_UFACTOR, MCPMETIS_DEFAULT_UFACTOR, METIS_NOPTIONS, PMETIS_DEFAULT_UFACTOR,
     },
     edge::Edge,
     graph::{Graph, GraphVertexIndex, MeshVertexIndex, TriangleGraph},

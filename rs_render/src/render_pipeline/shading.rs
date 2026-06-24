@@ -1,11 +1,11 @@
 use crate::{
+    VertexBufferType,
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::BaseRenderPipelineBuilder,
     global_shaders::{global_shader::GlobalShader, shading::ShadingShader},
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::*,
-    VertexBufferType,
 };
 use type_layout::TypeLayout;
 use wgpu::*;

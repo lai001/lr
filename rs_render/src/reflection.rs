@@ -1,4 +1,4 @@
-use crate::{shader_library::ShaderLibrary, VertexBufferType};
+use crate::{VertexBufferType, shader_library::ShaderLibrary};
 use naga::*;
 use std::collections::HashMap;
 use wgpu::*;

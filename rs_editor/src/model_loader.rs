@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use glam::Vec3Swizzles;
 use rs_artifact::{
     mesh_vertex::MeshVertex,

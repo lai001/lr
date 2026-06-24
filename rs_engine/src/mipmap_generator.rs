@@ -1,5 +1,5 @@
 use crate::error::Result;
-use image::{imageops, DynamicImage};
+use image::{DynamicImage, imageops};
 use rs_render_core::buffer_dimensions::BufferDimensions;
 use std::path::Path;
 use wgpu::*;

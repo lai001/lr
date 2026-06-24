@@ -1,7 +1,7 @@
 use crate::error::Result;
 use rs_artifact::{
-    virtual_texture::image::{Image, TileIndex},
     EEndianType,
+    virtual_texture::image::{Image, TileIndex},
 };
 use rs_render::virtual_texture_source::TVirtualTextureSource;
 use std::{fs::File, path::Path};

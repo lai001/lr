@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::file_header::HEADER_OFFSET;
-use crate::{file_header::IDENTIFICATION_SIZE, EEndianType};
+use crate::{EEndianType, file_header::IDENTIFICATION_SIZE};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::hash::Hash;

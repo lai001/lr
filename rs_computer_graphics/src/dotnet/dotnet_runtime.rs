@@ -1,6 +1,6 @@
 use crate::{
     dotnet::{
-        application::{RuntimeApplicationFunctions, GLOBAL_RUNTIME_APPLICATION_FUNCTIONS},
+        application::{GLOBAL_RUNTIME_APPLICATION_FUNCTIONS, RuntimeApplicationFunctions},
         entry_info,
     },
     ffi::{

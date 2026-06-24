@@ -1,16 +1,16 @@
 use crate::error::Result;
 use crate::skeleton::Skeleton;
 use crate::{
+    EEndianType,
     asset::{self, Asset},
     file_header::{
-        self, FileHeader, ARTIFACT_FILE_MAGIC_NUMBERS, HEADER_LENGTH_SIZE, IDENTIFICATION_SIZE,
+        self, ARTIFACT_FILE_MAGIC_NUMBERS, FileHeader, HEADER_LENGTH_SIZE, IDENTIFICATION_SIZE,
     },
     image::Image,
     resource_info::ResourceInfo,
     resource_type::EResourceType,
     shader_source_code::ShaderSourceCode,
     static_mesh::StaticMesh,
-    EEndianType,
 };
 use rs_core_minimal::settings::Settings;
 use serde::{Deserialize, Serialize};

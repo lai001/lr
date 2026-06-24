@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::library_reload::LibraryReload;
 use notify::ReadDirectoryChangesWatcher;
-use notify_debouncer_mini::{new_debouncer, DebouncedEvent, Debouncer};
+use notify_debouncer_mini::{DebouncedEvent, Debouncer, new_debouncer};
 use std::path::Path;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};

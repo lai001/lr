@@ -1,6 +1,6 @@
 extern crate ffmpeg_next as ffmpeg;
 use ffmpeg::{
-    format::{input, Pixel},
+    format::{Pixel, input},
     media::Type,
     software::scaling::{context::Context, flag::Flags},
     util::frame::video::Video,

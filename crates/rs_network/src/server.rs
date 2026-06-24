@@ -2,8 +2,8 @@ use crate::client::Client;
 use std::{
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 

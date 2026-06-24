@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use lsp_server::Connection;
-use lsp_types::{notification::Notification, request::Request, MessageType};
+use lsp_types::{MessageType, notification::Notification, request::Request};
 use std::path::Path;
 
 fn base_log<S: AsRef<str>>(

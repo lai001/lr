@@ -7,7 +7,7 @@ use crate::{
     material::Material,
     mesh::Mesh,
     metadata::Metadata,
-    node::{self, get_node_path, Node},
+    node::{self, Node, get_node_path},
     post_process_steps::PostProcessSteps,
     property_store::PropertyStore,
     skeleton::Skeleton,

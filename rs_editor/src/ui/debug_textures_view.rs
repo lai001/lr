@@ -1,4 +1,4 @@
-use egui::{load::SizedTexture, ImageSource, TextureId, Ui};
+use egui::{ImageSource, TextureId, Ui, load::SizedTexture};
 use rs_engine::resource_manager::ResourceManager;
 
 pub enum EClickEventType {

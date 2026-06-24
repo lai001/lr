@@ -1,6 +1,6 @@
+use super::win::LoadLibraryW;
 use super::win::get_func_ptr;
 use super::win::to_wstring;
-use super::win::LoadLibraryW;
 use crate::error::StatusCode;
 use crate::windows::global_context::GLOBAL_CONTEXT;
 

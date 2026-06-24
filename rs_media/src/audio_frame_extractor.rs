@@ -4,7 +4,7 @@ use crate::{
     time_range::TimeRangeRational,
 };
 use ffmpeg_next::{
-    ffi::{av_rescale_q_rnd, av_seek_frame, AVRational, AVRounding, AVSEEK_FLAG_BACKWARD},
+    ffi::{AVRational, AVRounding, AVSEEK_FLAG_BACKWARD, av_rescale_q_rnd, av_seek_frame},
     util::format,
 };
 use rs_core_audio::{

@@ -1,4 +1,5 @@
 use crate::{
+    VertexBufferType,
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     command::{MaterialRenderPipelineHandle, Viewport},
@@ -6,7 +7,6 @@ use crate::{
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2, MeshVertex5},
     view_mode::EViewModeType,
-    VertexBufferType,
 };
 use rs_render_types::MaterialOptions;
 use std::{collections::HashMap, sync::Arc};

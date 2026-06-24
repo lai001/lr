@@ -1,6 +1,6 @@
 use anyhow::Result;
 use notify::ReadDirectoryChangesWatcher;
-use notify_debouncer_mini::{new_debouncer, DebouncedEvent, Debouncer};
+use notify_debouncer_mini::{DebouncedEvent, Debouncer, new_debouncer};
 use rs_render::{command::BuiltinShaderChanged, global_shaders::global_shader::GlobalShader};
 use std::{path::Path, sync::mpsc::Receiver};
 

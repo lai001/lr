@@ -17,9 +17,11 @@ impl Rgba32float2rgba8unormCSPipeline {
     pub fn execute(&self, device: &Device, queue: &Queue, source_texture: &Texture) -> Texture {
         debug_assert_eq!(source_texture.format(), TextureFormat::Rgba32Float);
         debug_assert_eq!(source_texture.dimension(), TextureDimension::D2);
-        debug_assert!(source_texture
-            .usage()
-            .contains(TextureUsages::STORAGE_BINDING));
+        debug_assert!(
+            source_texture
+                .usage()
+                .contains(TextureUsages::STORAGE_BINDING)
+        );
 
         let target_texture = device.create_texture(&TextureDescriptor {
             label: None,

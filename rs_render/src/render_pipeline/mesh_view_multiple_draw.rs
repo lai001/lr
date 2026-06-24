@@ -1,4 +1,5 @@
 use crate::{
+    VertexBufferType,
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     global_shaders::{
@@ -7,7 +8,6 @@ use crate::{
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::MeshVertex4,
-    VertexBufferType,
 };
 use std::sync::Arc;
 use type_layout::TypeLayout;

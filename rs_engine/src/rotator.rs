@@ -89,7 +89,7 @@ impl Rotator {
 #[cfg(test)]
 mod test {
     use super::Rotator;
-    use crate::misc::{Mat4Extension, FORWARD_VECTOR};
+    use crate::misc::{FORWARD_VECTOR, Mat4Extension};
     use glam::EulerRot;
 
     #[test]
@@ -173,8 +173,10 @@ mod test {
             pitch: 45.0f32.to_radians(),
         };
 
-        assert!(rotator
-            .to_forward_vector()
-            .abs_diff_eq(final_transformation.get_forward_vector(), 0.001));
+        assert!(
+            rotator
+                .to_forward_vector()
+                .abs_diff_eq(final_transformation.get_forward_vector(), 0.001)
+        );
     }
 }

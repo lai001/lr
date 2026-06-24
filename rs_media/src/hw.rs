@@ -2,11 +2,11 @@ use std::collections::HashMap;
 extern crate ffmpeg_next as ffmpeg;
 use ffmpeg::{
     ffi::{
-        av_buffer_ref, av_buffer_unref, av_hwdevice_ctx_create, av_hwdevice_iterate_types,
-        av_hwframe_transfer_data, avcodec_get_hw_config, AVBufferRef, AVCodec, AVCodecContext,
-        AVHWDeviceType, AVPixelFormat, AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX,
+        AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX, AVBufferRef, AVCodec, AVCodecContext,
+        AVHWDeviceType, AVPixelFormat, av_buffer_ref, av_buffer_unref, av_hwdevice_ctx_create,
+        av_hwdevice_iterate_types, av_hwframe_transfer_data, avcodec_get_hw_config,
     },
-    format::{input, Pixel},
+    format::{Pixel, input},
     media::Type,
     software::scaling::{context::Context, flag::Flags},
     util::frame::video::Video,

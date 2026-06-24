@@ -12,8 +12,8 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };

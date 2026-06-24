@@ -5,7 +5,7 @@ use crate::{
     global_uniform::CameraFrustum,
     shader_library::ShaderLibrary,
 };
-use wgpu::{util::DeviceExt, BufferUsages};
+use wgpu::{BufferUsages, util::DeviceExt};
 
 pub struct LightCullingComputePipeline {
     base_compute_pipeline: BaseComputePipeline,

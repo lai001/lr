@@ -1,11 +1,11 @@
 use crate::{
+    VertexBufferType,
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     global_shaders::{global_shader::GlobalShader, particle::ParticleShader},
     gpu_vertex_buffer::GpuVertexBufferImp,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{Instance0, MeshVertex0, MeshVertex5},
-    VertexBufferType,
 };
 use std::{collections::HashMap, sync::Arc};
 use type_layout::TypeLayout;

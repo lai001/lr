@@ -5,7 +5,7 @@ use crate::material_type::EMaterialType;
 use crate::shader::shader_library::ShaderLibrary;
 use crate::static_mesh::StaticMesh;
 use crate::virtual_texture::virtual_texture_configuration::VirtualTextureConfiguration;
-use crate::{util, VertexBufferLayout};
+use crate::{VertexBufferLayout, util};
 use wgpu::*;
 
 #[repr(align(16), C)]

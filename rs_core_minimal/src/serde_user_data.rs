@@ -1,5 +1,5 @@
-use downcast_rs::{impl_downcast, Downcast};
-use dyn_clone::{clone_trait_object, DynClone};
+use downcast_rs::{Downcast, impl_downcast};
+use dyn_clone::{DynClone, clone_trait_object};
 use serde::{Deserialize, Serialize};
 
 #[typetag::serde]

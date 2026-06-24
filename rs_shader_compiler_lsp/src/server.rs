@@ -1,9 +1,9 @@
 use crate::{lsp_types_ext, misc};
 use lsp_server::{Connection, Response};
 use lsp_types::{
-    notification::Notification, request::Request, CompletionOptions, ConfigurationItem,
-    HoverProviderCapability, InitializeParams, OneOf, Registration, RegistrationParams,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, WorkDoneProgressOptions,
+    CompletionOptions, ConfigurationItem, HoverProviderCapability, InitializeParams, OneOf,
+    Registration, RegistrationParams, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind, WorkDoneProgressOptions, notification::Notification, request::Request,
 };
 use serde::{Deserialize, Serialize};
 use std::{

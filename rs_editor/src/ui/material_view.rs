@@ -8,8 +8,8 @@ use crate::{
 };
 use egui::*;
 use egui_snarl::{
-    ui::{Grid, PinInfo, SnarlStyle, SnarlViewer},
     InPin, NodeId, OutPin, Snarl,
+    ui::{Grid, PinInfo, SnarlStyle, SnarlViewer},
 };
 use rs_artifact::material_paramenters::{BaseDataValueType, StructField};
 use rs_content::content_manager::ContentManager;

@@ -42,10 +42,12 @@ mod test {
             .join("shaders/pbr_shading.wgsl")
             .canonicalize_slash()
             .unwrap();
-        let include_dirs = vec![render_crate_dir
-            .join("shaders")
-            .canonicalize_slash()
-            .unwrap()];
+        let include_dirs = vec![
+            render_crate_dir
+                .join("shaders")
+                .canonicalize_slash()
+                .unwrap(),
+        ];
 
         let mut definitions = vec![
             "VIRTUAL_TEXTURE",

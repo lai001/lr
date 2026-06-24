@@ -1,6 +1,7 @@
 use crate::{
+    VertexBufferType,
     base_render_pipeline_pool::BaseRenderPipelinePool,
-    compute_pipeline::box_culling::{BoxCullingPipeline, AABB},
+    compute_pipeline::box_culling::{AABB, BoxCullingPipeline},
     global_shaders::{global_shader::GlobalShader, view_depth::ViewDepthShader},
     gpu_vertex_buffer::{Draw, EDrawCallType, GpuVertexBufferImp},
     misc::find_or_insert_bind_groups,
@@ -8,7 +9,6 @@ use crate::{
     render_pipeline::generic_pipeline::GenericPipeline,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::MeshVertex5,
-    VertexBufferType,
 };
 use std::{collections::HashMap, iter::zip, ops::Range, sync::Arc};
 use type_layout::TypeLayout;

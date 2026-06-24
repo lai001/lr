@@ -7,7 +7,7 @@ use crate::{
     project::Project,
     project_context::{EFolderUpdateType, ProjectContext},
     standalone_simulation_options::{
-        MultiplePlayerOptions, StandaloneSimulationType, DEFAULT_SERVER_ADDR,
+        DEFAULT_SERVER_ADDR, MultiplePlayerOptions, StandaloneSimulationType,
     },
     ui::{
         asset_view,
@@ -28,7 +28,7 @@ use crate::{
     watch_shader::WatchShader,
     windows_manager::WindowsManager,
 };
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use lazy_static::lazy_static;
 use rs_artifact::{
     derive_data::compressed_texture::CompressedTexture, material_paramenters::BaseDataValueType,

@@ -31,8 +31,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
     Buffer, Extent3d, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 use winit::event::{Event::*, VirtualKeyCode};
 use winit::event_loop::ControlFlow;

@@ -1,6 +1,6 @@
 use crate::{get_engine_root_dir_at_compile_time, string_extension::StringExtension};
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use syn::*;
 
 struct MultipleThreadFunctionsGeneratorFileParams {

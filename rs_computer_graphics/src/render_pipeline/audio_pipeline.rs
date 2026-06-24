@@ -4,7 +4,7 @@ use crate::camera::Camera;
 use crate::material_type::EMaterialType;
 use crate::shader::shader_library::ShaderLibrary;
 use crate::static_mesh::StaticMesh;
-use crate::{util, VertexBufferLayout};
+use crate::{VertexBufferLayout, util};
 use wgpu::*;
 
 #[repr(C)]

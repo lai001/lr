@@ -44,7 +44,7 @@ use rs_media::{
     audio_format::EAudioSampleType, audio_frame_extractor::AudioFrameExtractor,
     audio_player_item::AudioPlayerItem, video_frame_player::VideoFramePlayer,
 };
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 use std::{
     borrow::Borrow,
     collections::{HashSet, VecDeque},

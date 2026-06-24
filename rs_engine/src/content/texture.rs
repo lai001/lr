@@ -1,6 +1,6 @@
-use crate::{build_asset_url, url_extension::UrlExtension, ASSET_SCHEME};
+use crate::{ASSET_SCHEME, build_asset_url, url_extension::UrlExtension};
 #[cfg(feature = "editor")]
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 use std::{

@@ -1,4 +1,4 @@
-use image::{imageops, ImageError};
+use image::{ImageError, imageops};
 use std::path::Path;
 use wgpu::{util::DeviceExt, *};
 

@@ -1,5 +1,5 @@
 use crate::custom_event::ECustomEventType;
-use rs_artifact::{artifact::ArtifactReader, EEndianType};
+use rs_artifact::{EEndianType, artifact::ArtifactReader};
 use rs_engine::{
     engine::Engine,
     frame_sync::{EOptions, FrameSync},

@@ -1,11 +1,11 @@
 use crate::media_stream::{EWhenceType, StreamIO};
 use ffmpeg_next::{
+    Error,
     ffi::{
-        av_malloc, avformat_alloc_context, avformat_close_input, avformat_find_stream_info,
-        avformat_open_input, avio_alloc_context, AVFMT_FLAG_CUSTOM_IO,
+        AVFMT_FLAG_CUSTOM_IO, av_malloc, avformat_alloc_context, avformat_close_input,
+        avformat_find_stream_info, avformat_open_input, avio_alloc_context,
     },
     format::context,
-    Error,
 };
 use std::sync::Arc;
 

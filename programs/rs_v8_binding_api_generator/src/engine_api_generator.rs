@@ -2,9 +2,9 @@ use crate::{
     analyzer,
     generated_module_partion::GeneratedModulePartion,
     misc::{
-        make_api_code, make_assign_function, make_bind_function, make_param, make_param_list,
-        make_return_value_expr, make_unwrap_object, resolve_struct_import_path_ident,
-        EWrappedStructType,
+        EWrappedStructType, make_api_code, make_assign_function, make_bind_function, make_param,
+        make_param_list, make_return_value_expr, make_unwrap_object,
+        resolve_struct_import_path_ident,
     },
     register_function_maker::RegisterFunctionMaker,
 };
@@ -14,8 +14,8 @@ use proc_macro2::TokenStream;
 use ra_ap_hir::{HasVisibility, Semantics, Visibility};
 use ra_ap_ide_db::base_db::RootQueryDb;
 use ra_ap_syntax::{
-    ast::{self, HasModuleItem},
     SourceFile,
+    ast::{self, HasModuleItem},
 };
 use ra_ap_vfs::AbsPathBuf;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;

@@ -521,9 +521,9 @@ impl<'a> ResolveContext<'a> {
                 if let Some(texture_url) = texture_url {
                     material_info.virtual_textures.insert(texture_url.clone());
                     format!(
-                    "var {} = virtual_texture_sample(vertex_output.tex_coord0, virtual_texture_constants.virtual_texture_max_lod, virtual_texture_constants.virtual_texture_size).xyz;",
-                    var_name,
-                )
+                        "var {} = virtual_texture_sample(vertex_output.tex_coord0, virtual_texture_constants.virtual_texture_max_lod, virtual_texture_constants.virtual_texture_size).xyz;",
+                        var_name,
+                    )
                 } else {
                     format!("var {} = vec3<f32>(0.0);", var_name)
                 }

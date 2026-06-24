@@ -1,4 +1,4 @@
-use rs_proc_macros::{shader_uniform, GlobalShader, MultipleThreadFunctionsGenerator};
+use rs_proc_macros::{GlobalShader, MultipleThreadFunctionsGenerator, shader_uniform};
 use std::sync::{Arc, Mutex};
 
 struct STResourceManager {}

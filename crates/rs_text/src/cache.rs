@@ -134,11 +134,7 @@ impl FontCache {
     pub fn glyph_index(&self, font_name: &str, character: char) -> Option<u32> {
         let font_info = self.fonts_cache.get(font_name)?;
         let index = font_info.font.lookup_glyph_index(character);
-        if index == 0 {
-            None
-        } else {
-            Some(index as u32)
-        }
+        if index == 0 { None } else { Some(index as u32) }
     }
 
     pub fn character(&self, font_name: &str, glyph_index: u32) -> Option<&char> {

@@ -1,18 +1,18 @@
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
-    project::{Project, ASSET_FOLDER_NAME, CONTENT_FOLDER_NAME},
+    project::{ASSET_FOLDER_NAME, CONTENT_FOLDER_NAME, Project},
 };
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use rs_artifact::{
-    artifact::ArtifactAssetEncoder, material::MaterialInfo, shader_source_code::ShaderSourceCode,
-    sound::ESoundFileType, EEndianType,
+    EEndianType, artifact::ArtifactAssetEncoder, material::MaterialInfo,
+    shader_source_code::ShaderSourceCode, sound::ESoundFileType,
 };
 use rs_content::content_manager::ContentManager;
 use rs_engine::{
-    content::content_file_type::EContentFileType, resource_manager::ResourceManager,
-    thread_pool::ThreadPool, ASSET_SCHEME,
+    ASSET_SCHEME, content::content_file_type::EContentFileType, resource_manager::ResourceManager,
+    thread_pool::ThreadPool,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_hotreload_plugin::hot_reload::HotReload;
@@ -681,7 +681,11 @@ impl ProjectContext {
             let file = match std::fs::File::open(&read_path) {
                 Ok(file) => file,
                 Err(err) => {
-                    log::warn!("Failed to read naga module, consider rebuilding shader compiler program and recompiling shader again, {}. {}", &read_path.to_string_lossy(), err);
+                    log::warn!(
+                        "Failed to read naga module, consider rebuilding shader compiler program and recompiling shader again, {}. {}",
+                        &read_path.to_string_lossy(),
+                        err
+                    );
                     continue;
                 }
             };
@@ -694,7 +698,11 @@ impl ProjectContext {
             {
                 Ok(module) => module,
                 Err(err) => {
-                    log::warn!("Failed to read naga module, consider rebuilding shader compiler program and recompiling shader again, {}. {}", &read_path.to_string_lossy(), err);
+                    log::warn!(
+                        "Failed to read naga module, consider rebuilding shader compiler program and recompiling shader again, {}. {}",
+                        &read_path.to_string_lossy(),
+                        err
+                    );
                     continue;
                 }
             };

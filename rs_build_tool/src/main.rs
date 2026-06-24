@@ -8,7 +8,7 @@ use rs_build_tool::{
 };
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_foundation::change_working_directory;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::{collections::HashMap, path::Path};
 
 fn try_write_setting_json_file(settings_path: &Path) -> anyhow::Result<()> {

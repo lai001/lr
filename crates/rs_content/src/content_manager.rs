@@ -354,7 +354,8 @@ impl ContentManager {
             if !urls.contains(&url)
                 && let Some(path) = Self::get_path(&self.content_root_folder_path, &url)
                 && let Some(parent) = path.parent()
-                && let relative_path = Self::make_relative_path( parent,  &self.content_root_folder_path)
+                && let relative_path =
+                    Self::make_relative_path(parent, &self.content_root_folder_path)
                 && let Some(folder) = self.content_folders.get_mut(&relative_path)
             {
                 folder.insert_file(new_file.clone());

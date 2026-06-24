@@ -2,7 +2,7 @@ use rs_artifact::EEndianType;
 
 use crate::{
     annex_b_encoder::START_CODE_PREFIX,
-    codec::{Decoder, Header, Message, ENDIAN_TYPE_UNIT_SIZE},
+    codec::{Decoder, ENDIAN_TYPE_UNIT_SIZE, Header, Message},
 };
 
 pub struct AnnexBDecoder {

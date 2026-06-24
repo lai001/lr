@@ -1,7 +1,7 @@
 use crate::type_expected::{GlamVec2Expected, GlamVec3Expected, GlamVec4Expected};
 use serde::{
-    de::{self, SeqAccess, Unexpected, Visitor},
     Deserialize, Deserializer,
+    de::{self, SeqAccess, Unexpected, Visitor},
 };
 use std::fmt;
 

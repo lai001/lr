@@ -1,4 +1,5 @@
 use crate::{
+    VertexBufferType,
     base_render_pipeline_pool::BaseRenderPipelinePool,
     global_shaders::{
         depth::{DepthShader, DepthSkinShader},
@@ -7,7 +8,6 @@ use crate::{
     render_pipeline::generic_pipeline::GenericPipeline,
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex2, MeshVertex5},
-    VertexBufferType,
 };
 use type_layout::TypeLayout;
 use wgpu::*;

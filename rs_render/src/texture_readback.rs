@@ -115,9 +115,11 @@ pub fn map_texture_options2(
     buffer_dimensions: &BufferDimensions,
     output_buffer: &wgpu::Buffer,
 ) -> crate::error::Result<TextureArrayData> {
-    debug_assert!(output_buffer
-        .usage()
-        .contains(wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST));
+    debug_assert!(
+        output_buffer
+            .usage()
+            .contains(wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST)
+    );
     let copy_size = wgpu::Extent3d {
         width: buffer_dimensions.width as u32,
         height: buffer_dimensions.height as u32,

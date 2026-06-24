@@ -1,5 +1,5 @@
-use crate::error::Result;
 use crate::EEndianType;
+use crate::error::Result;
 
 type HeaderLengthDataType = u64;
 
@@ -164,7 +164,7 @@ impl FileHeader {
 
 #[cfg(test)]
 mod test {
-    use super::{FileHeader, ARTIFACT_FILE_MAGIC_NUMBERS};
+    use super::{ARTIFACT_FILE_MAGIC_NUMBERS, FileHeader};
     use crate::{
         artifact::ArtifactFileHeader, resource_info::ResourceInfo, resource_type::EResourceType,
     };

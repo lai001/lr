@@ -127,7 +127,12 @@ fn dump(module: &naga::Module, ty: &naga::Type, p_offset: usize, level: u32) -> 
                     let member_size = type_inner.size_of(module);
                     let fill_size = fill(offset, member_align);
                     if fill_size > 0 {
-                        message = message + &tab_str(level + 1) + &format!("name(implicit struct size padding) offset({} + {})                  size({})\n", p_offset, offset, fill_size);
+                        message = message
+                            + &tab_str(level + 1)
+                            + &format!(
+                                "name(implicit struct size padding) offset({} + {})                  size({})\n",
+                                p_offset, offset, fill_size
+                            );
                     }
 
                     if let naga::TypeInner::Struct { .. } = &type_inner {

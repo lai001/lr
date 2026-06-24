@@ -255,7 +255,7 @@ pub fn to_deinterleaved_data<T: Copy + Default>(source_data: &[T], channel: usiz
 
 #[cfg(test)]
 mod tests {
-    use super::{to_interleaved_data, AudioFormatConverter};
+    use super::{AudioFormatConverter, to_interleaved_data};
     use crate::{
         audio_format::{AudioFormat, EAudioFormatIdentifiersType},
         audio_format_converter::to_deinterleaved_data,

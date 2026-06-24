@@ -6,8 +6,8 @@ use crate::motion_event::{self, MotionEvent};
 use rs_artifact::artifact::{ArtifactFileHeader, ArtifactReader};
 use rs_artifact::java_input_stream::JavaInputStream;
 use rs_artifact::{
-    file_header::{FileHeader, ARTIFACT_FILE_MAGIC_NUMBERS},
     EEndianType,
+    file_header::{ARTIFACT_FILE_MAGIC_NUMBERS, FileHeader},
 };
 use rs_engine::frame_sync::FrameSync;
 use rs_engine::input_mode::EInputMode;

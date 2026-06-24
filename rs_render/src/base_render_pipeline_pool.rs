@@ -1,7 +1,7 @@
+use crate::VertexBufferType;
 use crate::base_render_pipeline::BaseRenderPipeline;
 use crate::bind_group_layout_entry_hook::EBindGroupLayoutEntryHookType;
 use crate::shader_library::ShaderLibrary;
-use crate::VertexBufferType;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::{collections::HashMap, hash::Hash};

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
-use egui::{load::SizedTexture, TextureId};
+use egui::{TextureId, load::SizedTexture};
 use egui_winit::State;
 use image::GenericImage;
 use rs_audio::{audio_engine::AudioEngine, audio_player_node::AudioPlayerNode};
@@ -17,7 +17,7 @@ use rs_engine::{
 };
 use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
 use rs_media::{
-    composition::{check_composition, CompositionInfo},
+    composition::{CompositionInfo, check_composition},
     video_frame_player::VideoFramePlayer,
 };
 use rs_render::command::{

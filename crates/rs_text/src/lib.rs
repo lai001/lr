@@ -17,8 +17,8 @@ pub mod test {
     use std::sync::Arc;
     use std::{borrow::Cow, collections::HashSet};
     use vello::kurbo::Vec2;
-    use vello::{kurbo::Affine, *};
     use vello::{Renderer, RendererOptions};
+    use vello::{kurbo::Affine, *};
 
     pub fn test_font_file_path() -> std::path::PathBuf {
         rs_core_minimal::file_manager::get_engine_resource(

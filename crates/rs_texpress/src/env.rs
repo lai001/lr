@@ -446,7 +446,7 @@ thread_local! {
 
 #[cfg(test)]
 mod test {
-    use crate::env::{compressonatorcli_supported, ktxcli_supported, TexpressEnv};
+    use crate::env::{TexpressEnv, compressonatorcli_supported, ktxcli_supported};
     use rs_core_minimal::file_manager::get_current_exe_dir;
     use std::path::PathBuf;
 

@@ -1,3 +1,4 @@
+use crate::{VertexBufferLayout, util};
 use crate::{
     actor::Actor,
     brigde_data::mesh_vertex::MeshVertex,
@@ -8,7 +9,6 @@ use crate::{
     shader::shader_library::ShaderLibrary,
     static_mesh::StaticMesh,
 };
-use crate::{util, VertexBufferLayout};
 use wgpu::*;
 
 #[repr(C)]

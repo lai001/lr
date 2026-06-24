@@ -1,8 +1,8 @@
 use crate::{
+    VertexBufferType,
     base_render_pipeline::BaseRenderPipeline,
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     shader_library::ShaderLibrary,
-    VertexBufferType,
 };
 use std::sync::Arc;
 use wgpu::*;

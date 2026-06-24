@@ -626,7 +626,7 @@ impl Preprocessor {
 
 #[cfg(test)]
 pub mod test {
-    use crate::processor::{process_simple, Definition, MacroBranch};
+    use crate::processor::{Definition, MacroBranch, process_simple};
     use std::collections::HashMap;
 
     fn process_include(file: &str) -> Box<dyn std::io::Read> {

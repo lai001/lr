@@ -1,4 +1,4 @@
-use rs_core_minimal::need_copy::{is_need_copy, CompareMode};
+use rs_core_minimal::need_copy::{CompareMode, is_need_copy};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,

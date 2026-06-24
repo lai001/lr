@@ -1,5 +1,5 @@
 use crate::{camera::Camera, gizmo::FGizmo, rotator::Rotator};
-use egui::{color_picker::Alpha, Context, TextureId, Ui, Vec2, Widget};
+use egui::{Context, TextureId, Ui, Vec2, Widget, color_picker::Alpha};
 use egui_demo_lib::DemoWindows;
 use egui_gizmo::GizmoMode;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};

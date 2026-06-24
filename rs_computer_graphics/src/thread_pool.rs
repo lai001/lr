@@ -1,6 +1,6 @@
 use std::sync::{
-    mpsc::{channel, sync_channel, Receiver, Sender, SyncSender, TryRecvError},
     Arc, Mutex,
+    mpsc::{Receiver, Sender, SyncSender, TryRecvError, channel, sync_channel},
 };
 
 lazy_static! {

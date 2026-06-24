@@ -1,4 +1,4 @@
-use egui::{color_picker::Alpha, Context, Widget};
+use egui::{Context, Widget, color_picker::Alpha};
 use transform_gizmo_egui::*;
 
 fn gizmo_mode_text(gizmo_mode: &EnumSet<GizmoMode>) -> &'static str {

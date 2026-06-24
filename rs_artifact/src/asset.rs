@@ -1,9 +1,9 @@
 use crate::error::Result;
 use crate::{
-    artifact::ResourceEncodeTask,
-    file_header::{FileHeader, ASSET_FILE_MAGIC_NUMBERS, HEADER_LENGTH_SIZE},
-    resource_type::EResourceType,
     EEndianType,
+    artifact::ResourceEncodeTask,
+    file_header::{ASSET_FILE_MAGIC_NUMBERS, FileHeader, HEADER_LENGTH_SIZE},
+    resource_type::EResourceType,
 };
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek};

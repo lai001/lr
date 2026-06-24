@@ -1,4 +1,4 @@
-use crate::node::{get_node_path, Node};
+use crate::node::{Node, get_node_path};
 use rs_assimp_sys::*;
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
