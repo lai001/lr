@@ -14,7 +14,7 @@ impl LoadContents {
         engine: &mut rs_engine::engine::Engine,
         project_context: &ProjectContext,
         model_loader: &mut ModelLoader,
-        files: &Vec<EContentFileType>,
+        files: Vec<EContentFileType>,
     ) -> anyhow::Result<()> {
         let _span = tracy_client::span!();
         {
@@ -33,7 +33,7 @@ impl LoadContents {
                     EContentFileType::StaticMesh(ref_cell) => {
                         if let Some(future) = super::load_static_mesh::LoadStaticMesh::new(
                             cx.clone(),
-                            ref_cell.clone(),
+                            ref_cell,
                             scenes.clone(),
                         ) {
                             futures.push(Box::new(future));
@@ -42,7 +42,7 @@ impl LoadContents {
                     EContentFileType::SkeletonMesh(ref_cell) => {
                         if let Some(future) = super::load_skeleton_mesh::LoadSkeletonMesh::new(
                             cx.clone(),
-                            ref_cell.clone(),
+                            ref_cell,
                             scenes.clone(),
                         ) {
                             futures.push(Box::new(future));
@@ -52,7 +52,7 @@ impl LoadContents {
                         if let Some(future) =
                             super::load_skeleton_animation::LoadSkeletonAnimation::new(
                                 cx.clone(),
-                                ref_cell.clone(),
+                                ref_cell,
                                 scenes.clone(),
                             )
                         {
@@ -62,7 +62,7 @@ impl LoadContents {
                     EContentFileType::Skeleton(ref_cell) => {
                         if let Some(future) = super::load_skeleton::LoadSkeleton::new(
                             cx.clone(),
-                            ref_cell.clone(),
+                            ref_cell,
                             scenes.clone(),
                         ) {
                             futures.push(Box::new(future));
@@ -76,7 +76,7 @@ impl LoadContents {
                         }
                         if let Some(future) = super::load_virtual_texture::LoadVirtualTexture::new(
                             cx.clone(),
-                            ref_cell.clone(),
+                            ref_cell,
                         ) {
                             futures.push(Box::new(future));
                         }
@@ -84,22 +84,20 @@ impl LoadContents {
                     EContentFileType::Level(_) => {}
                     EContentFileType::Material(ref_cell) => {
                         if let Some(future) =
-                            super::load_material::LoadMaterial::new(cx.clone(), ref_cell.clone())
+                            super::load_material::LoadMaterial::new(cx.clone(), ref_cell)
                         {
                             futures.push(Box::new(future));
                         }
                     }
                     EContentFileType::IBL(ref_cell) => {
-                        if let Some(future) =
-                            super::load_ibl::LoadIBL::new(cx.clone(), ref_cell.clone())
-                        {
+                        if let Some(future) = super::load_ibl::LoadIBL::new(cx.clone(), ref_cell) {
                             futures.push(Box::new(future));
                         }
                     }
                     EContentFileType::ParticleSystem(_) => {}
                     EContentFileType::Sound(ref_cell) => {
                         if let Some(future) =
-                            super::load_sound::LoadSound::new(cx.clone(), ref_cell.clone())
+                            super::load_sound::LoadSound::new(cx.clone(), ref_cell)
                         {
                             futures.push(Box::new(future));
                         }

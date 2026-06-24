@@ -61,11 +61,12 @@ pub fn build_asset_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseErro
     url::Url::parse(&format!("{ASSET_SCHEME}://{ASSET_ROOT}/{}", name.as_ref()))
 }
 
-pub fn build_content_file_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
-    url::Url::parse(&format!(
+pub fn build_content_file_url(path: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
+    let input = format!(
         "{CONTENT_SCHEME}://{CONTENT_ROOT}/{}",
-        name.as_ref()
-    ))
+        path.as_ref().trim_matches('/')
+    );
+    url::Url::parse(input.trim_matches('/'))
 }
 
 pub fn build_built_in_resouce_url(name: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
@@ -79,3 +80,31 @@ pub fn build_derive_data_url(name: impl AsRef<str>) -> Result<url::Url, url::Par
 #[global_allocator]
 static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
     tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
+
+#[cfg(test)]
+mod test {
+    use crate::build_content_file_url;
+
+    #[test]
+    fn test_build_content_file_url() {
+        let names = vec!["Untitled1", "Untitled1/", "/Untitled1", "/Untitled1/"];
+        for names in names.windows(2) {
+            assert_eq!(
+                build_content_file_url(names[0]).unwrap(),
+                build_content_file_url(names[1]).unwrap()
+            )
+        }
+        let names = vec![
+            "Untitled1/Untitled2",
+            "Untitled1/Untitled2/",
+            "/Untitled1/Untitled2",
+            "/Untitled1/Untitled2/",
+        ];
+        for names in names.windows(2) {
+            assert_eq!(
+                build_content_file_url(names[0]).unwrap(),
+                build_content_file_url(names[1]).unwrap()
+            )
+        }
+    }
+}

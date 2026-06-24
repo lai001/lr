@@ -1,0 +1,23 @@
+[package]
+name = "rs_content"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["editor"]
+editor = ["rs_core_minimal/editor", "rs_engine/editor"]
+standalone = ["rs_core_minimal/standalone", "rs_engine/standalone"]
+
+[dependencies]
+thiserror = "2.0.18"
+log = "0.4.32"
+url = { version = "2.5.8", features = ["serde"] }
+notify = "8.2.0"
+notify-debouncer-full = { version = "0.7.0" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+walkdir = "2.5.0"
+pathdiff = "0.2.3"
+rs_foundation = { path = "../../rs_foundation" }
+rs_engine = { path = "../../rs_engine" }
+rs_core_minimal = { path = "../../rs_core_minimal" }

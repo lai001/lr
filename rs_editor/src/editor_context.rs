@@ -1,6 +1,5 @@
 use crate::{
     build_config::EBuildType,
-    content_folder::ContentFolder,
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource},
     editor_ui::{EditorUI, GizmoEvent},
@@ -34,6 +33,7 @@ use lazy_static::lazy_static;
 use rs_artifact::{
     derive_data::compressed_texture::CompressedTexture, material_paramenters::BaseDataValueType,
 };
+use rs_content::content_manager::ContentManager;
 use rs_core_minimal::{
     file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
 };
@@ -1296,7 +1296,7 @@ impl EditorContext {
             engine,
             project_context,
             model_loader,
-            &files,
+            files,
         );
         if let Err(err) = result {
             log::warn!("{}", err);
@@ -1332,20 +1332,22 @@ impl EditorContext {
         log::trace!("Update asset folder. {:?}", asset_folder);
         self.data_source.asset_folder = Some(asset_folder.clone());
         self.data_source.current_asset_folder = Some(asset_folder);
-
-        self.data_source.content_data_source.current_folder =
-            Some(project_context.project.content.clone());
+        let content_manager = project_context.content_manager.clone();
+        let content_manager = content_manager.borrow();
+        let root_content_folder = content_manager.root_content_folder().map(|x| x.clone());
+        let all_content_files = content_manager.content_files();
+        let content_files_map = content_manager.content_files_map();
+        self.data_source.content_data_source.current_folder = root_content_folder;
         self.data_source.content_data_source.contents =
             SingleThreadMut::new(self.get_all_contents());
         Self::content_load_resources(
             &mut self.engine,
             &mut self.model_loader,
             &project_context,
-            project_context.project.content.borrow().files.clone(),
+            all_content_files.to_vec(),
         );
 
-        self.engine
-            .on_content_files_changed(project_context.project.content.borrow().files_to_map(true));
+        self.engine.on_content_files_changed(content_files_map);
 
         self.engine
             .set_settings(project_context.project.settings.borrow().clone());
@@ -1355,9 +1357,7 @@ impl EditorContext {
             let settings = project_context.project.settings.borrow();
             let engine_settings = &settings.engine_settings;
             let default_level = engine_settings.default_level.clone();
-            let binding = project_context.project.content.borrow();
-            let find_level = binding
-                .files
+            let find_level = all_content_files
                 .iter()
                 .find(|x| match x {
                     EContentFileType::Level(level) => {
@@ -1374,7 +1374,7 @@ impl EditorContext {
                     _ => None,
                 });
             if let Some(level) = find_level.cloned() {
-                self.open_level(level);
+                self.open_level(level, &content_manager);
             }
         }
 
@@ -1390,8 +1390,7 @@ impl EditorContext {
                 .borrow_mut();
             static_meshes.clear();
 
-            let files = &project_context.project.content.borrow().files;
-            for file in files {
+            for file in all_content_files {
                 match file {
                     EContentFileType::Material(material) => {
                         let url = material.borrow().url.clone();
@@ -1433,15 +1432,19 @@ impl EditorContext {
         Ok(())
     }
 
-    fn open_level(&mut self, level: Rc<RefCell<rs_engine::content::level::Level>>) {
+    fn open_level(
+        &mut self,
+        level: Rc<RefCell<rs_engine::content::level::Level>>,
+        content_manager: &ContentManager,
+    ) {
+        let all_content_files = content_manager.content_files();
         self.data_source.level = Some(level.clone());
-        if let Some(folder) = &self.data_source.content_data_source.current_folder {
-            level.borrow_mut().initialize(
-                &mut self.engine,
-                &folder.borrow().files,
-                &mut self.player_viewport,
-            );
-        }
+        level.borrow_mut().initialize(
+            &mut self.engine,
+            all_content_files,
+            &mut self.player_viewport,
+        );
+        log::trace!("Open level");
     }
 
     fn process_custom_event(
@@ -1562,25 +1565,31 @@ impl EditorContext {
         if let Some(skeleton) = &load_result.skeleton {
             add_files.push(EContentFileType::Skeleton(skeleton.clone()));
         }
-        let content = project_context.project.content.clone();
-        let mut content = content.borrow_mut();
         Self::content_load_resources(
             &mut self.engine,
             &mut self.model_loader,
             project_context,
             add_files.clone(),
         );
-        content.files.append(&mut add_files);
+        {
+            project_context
+                .content_manager
+                .borrow_mut()
+                .append(add_files);
+        }
         let mut active_level = active_level.borrow_mut();
         let new_actor = SingleThreadMut::new(rs_engine::actor::Actor::new_with_node(
             load_result.appropriate_name,
             load_result.scene_node,
         ));
+
+        let content_manager = project_context.content_manager.borrow();
+        let all_content_files = content_manager.content_files();
         Self::add_new_actors(
             &mut active_level,
             &mut self.engine,
             vec![new_actor],
-            &content.files,
+            all_content_files,
             &mut self.player_viewport,
         );
         // active_level.init_actor_physics(load_result.actor.clone());
@@ -1884,13 +1893,13 @@ impl EditorContext {
         let Some(project_context) = &mut self.project_context else {
             return;
         };
-        let folder = project_context.project.content.clone();
+        let content_manager = project_context.content_manager.clone();
         let mut ui_window = MaterialUIWindow::new(
             self.editor_ui.egui_context.clone(),
             &mut *self.window_manager.borrow_mut(),
             event_loop_window_target,
             &mut self.engine,
-            folder,
+            content_manager,
         )
         .expect("Should be opened");
         if let Some(open_material) = open_material {
@@ -2021,13 +2030,13 @@ impl EditorContext {
         let Some(project_context) = self.project_context.as_ref() else {
             return;
         };
-        let content = project_context.project.content.clone();
+        let content_manager = project_context.content_manager.clone();
         let ui_window = BlendAnimationUIWindow::new(
             self.editor_ui.egui_context.clone(),
             &mut *self.window_manager.borrow_mut(),
             event_loop_window_target,
             &mut self.engine,
-            content,
+            content_manager,
             blend_animation,
         )
         .expect("Should be opened");
@@ -2038,11 +2047,9 @@ impl EditorContext {
         let Some(project_context) = &self.project_context else {
             return vec![];
         };
-        project_context
-            .project
-            .content
-            .borrow()
-            .files
+        let content_manager = project_context.content_manager.borrow();
+        let content_files = content_manager.content_files();
+        content_files
             .iter()
             .filter_map(|x| match x {
                 EContentFileType::Texture(_) => Some(x.get_url()),
@@ -2056,11 +2063,9 @@ impl EditorContext {
         let Some(project_context) = &self.project_context else {
             return vec![];
         };
-        project_context
-            .project
-            .content
-            .borrow()
-            .files
+        let content_manager = project_context.content_manager.borrow();
+        let content_files = content_manager.content_files();
+        content_files
             .iter()
             .filter_map(|x| match x {
                 EContentFileType::Texture(texture) => {
@@ -2105,14 +2110,13 @@ impl EditorContext {
     }
 
     fn get_all_content_names(&self) -> Vec<String> {
-        let content_data_source = &self.data_source.content_data_source;
-        let Some(current_folder) = &content_data_source.current_folder else {
+        let Some(project_context) = self.project_context.as_ref() else {
             return vec![];
         };
+        let content_manager = project_context.content_manager.borrow();
+        let content_files = content_manager.content_files();
         let names = {
-            let current_folder = current_folder.borrow();
-            current_folder
-                .files
+            content_files
                 .iter()
                 .map(|x| x.get_name())
                 .collect::<Vec<String>>()
@@ -2121,12 +2125,12 @@ impl EditorContext {
     }
 
     fn get_all_contents(&self) -> Vec<EContentFileType> {
-        let content_data_source = &self.data_source.content_data_source;
-        let Some(current_folder) = &content_data_source.current_folder else {
+        let Some(project_context) = self.project_context.as_ref() else {
             return vec![];
         };
-        let current_folder = current_folder.borrow();
-        current_folder.files.to_vec()
+        let content_manager = project_context.content_manager.borrow();
+        let content_files = content_manager.content_files();
+        content_files.to_vec()
     }
 
     pub fn copy_file_and_log<P: AsRef<Path> + Clone + Debug>(
@@ -2454,13 +2458,13 @@ impl EditorContext {
                 let Some(project_context) = self.project_context.as_mut() else {
                     return;
                 };
-                let content = project_context.project.content.clone();
-                let content = content.borrow_mut();
+                let content_manager = project_context.content_manager.borrow();
+                let content_files = content_manager.content_files();
                 let mut camera_component =
                     CameraComponent::new("Camera".to_string(), glam::Mat4::IDENTITY);
                 camera_component.initialize(
                     &mut self.engine,
-                    &content.files,
+                    content_files,
                     &mut self.player_viewport,
                 );
                 let camera_component = SingleThreadMut::new(camera_component);
@@ -2510,8 +2514,8 @@ impl EditorContext {
                 let Some(project_context) = self.project_context.as_mut() else {
                     return;
                 };
-                let content = project_context.project.content.clone();
-                let content = content.borrow_mut();
+                let content_manager = project_context.content_manager.borrow();
+                let content_files = content_manager.content_files();
                 let mut active_level = active_level.borrow_mut();
                 let new_actor = active_level.create_and_insert_actor();
                 let new_actor = new_actor.borrow_mut();
@@ -2522,7 +2526,7 @@ impl EditorContext {
                     CameraComponent::new("Camera".to_string(), glam::Mat4::IDENTITY);
                 camera_component.initialize(
                     &mut self.engine,
-                    &content.files,
+                    content_files,
                     &mut self.player_viewport,
                 );
                 let camera_component = SingleThreadMut::new(camera_component);
@@ -2537,8 +2541,8 @@ impl EditorContext {
                 let Some(project_context) = self.project_context.as_mut() else {
                     return;
                 };
-                let content = project_context.project.content.clone();
-                let content = content.borrow_mut();
+                let content_manager = project_context.content_manager.borrow();
+                let content_files = content_manager.content_files();
                 let mut parent_node = parent_node.borrow_mut();
                 let names = parent_node
                     .childs
@@ -2552,7 +2556,7 @@ impl EditorContext {
                     let mut collision_component = collision_component.borrow_mut();
                     collision_component.initialize(
                         &mut self.engine,
-                        &content.files,
+                        content_files,
                         &mut self.player_viewport,
                     );
                 }
@@ -2566,13 +2570,13 @@ impl EditorContext {
                     return;
                 };
 
+                let content_manager = project_context.content_manager.borrow();
+                let content_files = content_manager.content_files();
                 let mut active_level = active_level.borrow_mut();
-                let content = project_context.project.content.clone();
-                let content = content.borrow_mut();
                 active_level.duplicate_actor(
                     actor,
                     &mut self.engine,
-                    &content.files,
+                    content_files,
                     &mut self.player_viewport,
                 );
             }
@@ -2580,8 +2584,8 @@ impl EditorContext {
                 let Some(project_context) = self.project_context.as_mut() else {
                     return;
                 };
-                let content = project_context.project.content.clone();
-                let content = content.borrow_mut();
+                let content_manager = project_context.content_manager.borrow();
+                let content_files = content_manager.content_files();
                 let mut parent_node = parent_node.borrow_mut();
                 let names = parent_node
                     .childs
@@ -2595,7 +2599,7 @@ impl EditorContext {
                     let mut spot_light_component = spot_light_component.borrow_mut();
                     spot_light_component.initialize(
                         &mut self.engine,
-                        &content.files,
+                        content_files,
                         &mut self.player_viewport,
                     );
                 }
@@ -2605,8 +2609,8 @@ impl EditorContext {
                 let Some(project_context) = self.project_context.as_mut() else {
                     return;
                 };
-                let content = project_context.project.content.clone();
-                let content = content.borrow_mut();
+                let content_manager = project_context.content_manager.borrow();
+                let content_files = content_manager.content_files();
                 let mut parent_node = parent_node.borrow_mut();
                 let names = parent_node
                     .childs
@@ -2620,7 +2624,7 @@ impl EditorContext {
                     let mut point_light_component = point_light_component.borrow_mut();
                     point_light_component.initialize(
                         &mut self.engine,
-                        &content.files,
+                        content_files,
                         &mut self.player_viewport,
                     );
                 }
@@ -2630,8 +2634,8 @@ impl EditorContext {
                 let Some(project_context) = self.project_context.as_mut() else {
                     return;
                 };
-                let content = project_context.project.content.clone();
-                let content = content.borrow_mut();
+                let content_manager = project_context.content_manager.borrow();
+                let content_files = content_manager.content_files();
                 let mut parent_node = parent_node.borrow_mut();
                 let component = StaticMeshComponent::new_sp(
                     format!("Untitled"),
@@ -2643,7 +2647,7 @@ impl EditorContext {
                     let mut component = component.borrow_mut();
                     component.initialize(
                         &mut self.engine,
-                        &content.files,
+                        content_files,
                         &mut self.player_viewport,
                     );
                 }
@@ -2662,36 +2666,50 @@ impl EditorContext {
         let Some(event) = content_browser_event else {
             return;
         };
-        let Some(current_folder) = &self.data_source.content_data_source.current_folder else {
+        let Some(current_folder) = &mut self.data_source.content_data_source.current_folder else {
             return;
         };
         match event {
             content_browser::EClickEventType::CreateFolder => {
                 let new_folder_name = &self.data_source.content_data_source.new_folder_name;
-                let names: Vec<String> = current_folder
-                    .borrow()
-                    .folders
-                    .iter()
-                    .map(|x| x.borrow().name.clone())
-                    .collect();
-                if names.contains(new_folder_name) {
-                    return;
+                if let Some(project_context) = self.project_context.as_ref() {
+                    let content_manager = project_context.content_manager.clone();
+                    let mut content_manager = content_manager.borrow_mut();
+                    match content_manager.create_sub_folder(current_folder, new_folder_name) {
+                        Ok(folder_path) => {
+                            log::trace!("Create folder: {:?}", folder_path);
+                        }
+                        Err(err) => log::warn!("Fail to create folder: {err}"),
+                    }
                 }
-                let new_folder = ContentFolder::new(new_folder_name, Some(current_folder.clone()));
-                current_folder
-                    .borrow_mut()
-                    .folders
-                    .push(Rc::new(RefCell::new(new_folder)));
             }
             content_browser::EClickEventType::Back => {
-                let parent_folder = current_folder.borrow().parent_folder.clone();
+                let parent_folder = current_folder.parent_folder().cloned();
                 let Some(parent_folder) = parent_folder else {
                     return;
                 };
-                self.data_source.content_data_source.current_folder = Some(parent_folder.clone());
+                if let Some(project_context) = self.project_context.as_ref() {
+                    let content_manager = project_context.content_manager.clone();
+                    let content_manager = content_manager.borrow();
+                    if let Some(opend_folder) = content_manager
+                        .content_folders()
+                        .get(&parent_folder)
+                        .cloned()
+                    {
+                        self.data_source.content_data_source.current_folder = Some(opend_folder);
+                    }
+                }
             }
             content_browser::EClickEventType::OpenFolder(folder) => {
-                self.data_source.content_data_source.current_folder = Some(folder.clone());
+                if let Some(project_context) = self.project_context.as_ref() {
+                    let content_manager = project_context.content_manager.clone();
+                    let content_manager = content_manager.borrow();
+                    if let Some(opend_folder) =
+                        content_manager.content_folders().get(&folder).cloned()
+                    {
+                        self.data_source.content_data_source.current_folder = Some(opend_folder);
+                    }
+                }
             }
             content_browser::EClickEventType::OpenFile(file) => {
                 self.editor_ui.content_item_property_view.content = Some(file.clone());
@@ -2713,7 +2731,11 @@ impl EditorContext {
                     EContentFileType::Skeleton(_) => {}
                     EContentFileType::Texture(_) => {}
                     EContentFileType::Level(level) => {
-                        self.open_level(level);
+                        if let Some(project_context) = self.project_context.as_ref() {
+                            let content_manager = project_context.content_manager.clone();
+                            let content_manager = content_manager.borrow();
+                            self.open_level(level, &content_manager);
+                        }
                     }
                     EContentFileType::Material(material) => {
                         self.open_material_window(event_loop_window_target, Some(material.clone()));
@@ -2787,12 +2809,10 @@ impl EditorContext {
                     .project
                     .materials
                     .push(Rc::new(RefCell::new(material_editor)));
-                project_context
-                    .project
-                    .content
-                    .borrow_mut()
-                    .files
-                    .push(EContentFileType::Material(Rc::new(RefCell::new(material))));
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                let material = SingleThreadMut::new(material);
+                content_manager.append(vec![EContentFileType::Material(material)]);
 
                 let mut materials = self.editor_ui.object_property_view.materials.borrow_mut();
                 if !materials.contains(&build_content_file_url(&name).unwrap()) {
@@ -2810,12 +2830,10 @@ impl EditorContext {
                 let Some(project_context) = &mut self.project_context else {
                     return;
                 };
-                project_context
-                    .project
-                    .content
-                    .borrow_mut()
-                    .files
-                    .push(EContentFileType::IBL(new_ibl));
+
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.append(vec![EContentFileType::IBL(new_ibl)]);
             }
             content_browser::EClickEventType::CreateParticleSystem => {
                 let names = self.get_all_content_names();
@@ -2830,22 +2848,17 @@ impl EditorContext {
                     build_content_file_url(&name).unwrap(),
                 );
                 let particle_system = SingleThreadMut::new(particle_system);
-                project_context
-                    .project
-                    .content
-                    .borrow_mut()
-                    .files
-                    .push(EContentFileType::ParticleSystem(particle_system));
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.append(vec![EContentFileType::ParticleSystem(particle_system)]);
             }
             content_browser::EClickEventType::DeleteFile(content_file) => {
                 let Some(project_context) = &mut self.project_context else {
                     return;
                 };
-                let content = project_context.project.content.clone();
-                let mut content = content.borrow_mut();
-                content
-                    .files
-                    .retain(|x| x.get_url() != content_file.get_url());
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.delete_contents(vec![content_file]);
             }
             content_browser::EClickEventType::CreateCurve => {
                 let names = self.get_all_content_names();
@@ -2859,12 +2872,9 @@ impl EditorContext {
                 let curve =
                     rs_engine::content::curve::Curve::new(build_content_file_url(&name).unwrap());
                 let curve = SingleThreadMut::new(curve);
-                project_context
-                    .project
-                    .content
-                    .borrow_mut()
-                    .files
-                    .push(EContentFileType::Curve(curve));
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.append(vec![EContentFileType::Curve(curve)]);
             }
             content_browser::EClickEventType::Rename(mut content_file_type, new_name) => {
                 let names = self.get_all_content_names();
@@ -2909,12 +2919,10 @@ impl EditorContext {
                 let blend_animation =
                     rs_engine::content::blend_animations::BlendAnimations::new(content_url);
                 let blend_animation = SingleThreadMut::new(blend_animation);
-                project_context
-                    .project
-                    .content
-                    .borrow_mut()
-                    .files
-                    .push(EContentFileType::BlendAnimations(blend_animation));
+
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.append(vec![EContentFileType::BlendAnimations(blend_animation)]);
             }
             content_browser::EClickEventType::CreateMaterialParametersCollection => {
                 let names = self.get_all_content_names();
@@ -2932,11 +2940,12 @@ impl EditorContext {
                     rs_engine::content::material_paramenters_collection::MaterialParamentersCollection::new(content_url);
                 let material_paramenters_collection =
                     SingleThreadMut::new(material_paramenters_collection);
-                project_context.project.content.borrow_mut().files.push(
-                    EContentFileType::MaterialParamentersCollection(
-                        material_paramenters_collection,
-                    ),
-                );
+
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.append(vec![EContentFileType::MaterialParamentersCollection(
+                    material_paramenters_collection,
+                )]);
             }
             content_browser::EClickEventType::Detail(file) => {
                 self.editor_ui.content_item_property_view.content = Some(file.clone());
@@ -2950,12 +2959,10 @@ impl EditorContext {
                 let name =
                     make_unique_name(names, &self.data_source.content_data_source.new_level_name);
                 let new_level = rs_engine::content::level::Level::new(name);
-                project_context
-                    .project
-                    .content
-                    .borrow_mut()
-                    .files
-                    .push(EContentFileType::Level(SingleThreadMut::new(new_level)));
+                let new_level = SingleThreadMut::new(new_level);
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.append(vec![EContentFileType::Level(new_level)]);
             }
             content_browser::EClickEventType::CreateRenderTarget2D => {
                 let names = self.get_all_content_names();
@@ -2978,9 +2985,11 @@ impl EditorContext {
                         None,
                     );
                 render_target_2d.init_resouce(&mut self.engine);
-                project_context.project.content.borrow_mut().files.push(
-                    EContentFileType::RenderTarget2D(SingleThreadMut::new(render_target_2d)),
-                );
+                let render_target_2d = SingleThreadMut::new(render_target_2d);
+
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.append(vec![EContentFileType::RenderTarget2D(render_target_2d)]);
             }
         }
     }
@@ -3030,7 +3039,6 @@ impl EditorContext {
                     if let Some(current_folder) =
                         &self.data_source.content_data_source.current_folder
                     {
-                        let mut current_folder = current_folder.borrow_mut();
                         let folder_url = current_folder.get_url();
                         let url = folder_url.join(&asset_file.name).unwrap();
                         let mut texture_file = TextureFile::new(url);
@@ -3045,7 +3053,14 @@ impl EditorContext {
                             project_context,
                             vec![texture_file.clone()],
                         );
-                        current_folder.files.push(texture_file.clone());
+
+                        let content_manager = project_context.content_manager.clone();
+                        let mut content_manager = content_manager.borrow_mut();
+                        content_manager.append(vec![texture_file]);
+                        self.data_source.content_data_source.current_folder = content_manager
+                            .content_folders()
+                            .get(current_folder.relative_path())
+                            .cloned();
                     }
                 }
             }
@@ -3078,7 +3093,6 @@ impl EditorContext {
                 };
                 let new_name = make_unique_name(names, &asset_file.name);
 
-                let mut current_folder = current_folder.borrow_mut();
                 let folder_url = current_folder.get_url();
                 let url = folder_url.join(&new_name).unwrap();
 
@@ -3090,7 +3104,13 @@ impl EditorContext {
                     project_context,
                     vec![content.clone()],
                 );
-                current_folder.files.push(content);
+                let content_manager = project_context.content_manager.clone();
+                let mut content_manager = content_manager.borrow_mut();
+                content_manager.append(vec![content]);
+                self.data_source.content_data_source.current_folder = content_manager
+                    .content_folders()
+                    .get(current_folder.relative_path())
+                    .cloned();
             }
             asset_view::EClickItemType::ImportAsActor(asset_file) => {
                 let result = self.open_model_file(asset_file.path.clone());
@@ -3373,31 +3393,29 @@ impl EditorContext {
                             rs_engine::scene_node::EComponentType::StaticMeshComponent(
                                 static_mesh_component,
                             ) => {
-                                let files = if let Some(folder) =
-                                    &self.data_source.content_data_source.current_folder
-                                {
-                                    folder.borrow().files.clone()
-                                } else {
-                                    vec![]
+                                let Some(project_context) = self.project_context.as_ref() else {
+                                    return;
                                 };
+                                let content_manager = project_context.content_manager.clone();
+                                let content_manager = content_manager.borrow();
+                                let files = content_manager.content_files();
                                 let mut static_mesh_component = static_mesh_component.borrow_mut();
                                 static_mesh_component.set_material(
                                     &mut self.engine,
                                     update_material.new,
-                                    &files,
+                                    files,
                                     &mut self.player_viewport,
                                 );
                             }
                             rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                                 skeleton_mesh_component,
                             ) => {
-                                let files = if let Some(folder) =
-                                    &self.data_source.content_data_source.current_folder
-                                {
-                                    folder.borrow().files.clone()
-                                } else {
-                                    vec![]
+                                let Some(project_context) = self.project_context.as_ref() else {
+                                    return;
                                 };
+                                let content_manager = project_context.content_manager.clone();
+                                let content_manager = content_manager.borrow();
+                                let files = content_manager.content_files();
                                 let mut skeleton_mesh_component =
                                     skeleton_mesh_component.borrow_mut();
                                 if let Some(url) = update_material.new {
@@ -3451,15 +3469,14 @@ impl EditorContext {
                             rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
                                 skeleton_mesh_component,
                             ) => {
+                                let Some(project_context) = self.project_context.as_ref() else {
+                                    return;
+                                };
+                                let content_manager = project_context.content_manager.clone();
+                                let content_manager = content_manager.borrow();
+                                let files = content_manager.content_files();
                                 let mut skeleton_mesh_component =
                                     skeleton_mesh_component.borrow_mut();
-                                let files = if let Some(folder) =
-                                    &self.data_source.content_data_source.current_folder
-                                {
-                                    folder.borrow().files.clone()
-                                } else {
-                                    vec![]
-                                };
                                 skeleton_mesh_component.set_animation(
                                     update_animation.new,
                                     self.engine.get_resource_manager().clone(),
@@ -3498,15 +3515,14 @@ impl EditorContext {
                             rs_engine::scene_node::EComponentType::StaticMeshComponent(
                                 static_mesh_component,
                             ) => {
+                                let Some(project_context) = self.project_context.as_ref() else {
+                                    return;
+                                };
+                                let content_manager = project_context.content_manager.clone();
+                                let content_manager = content_manager.borrow();
+                                let files = content_manager.content_files();
                                 let mut static_mesh_component = static_mesh_component.borrow_mut();
                                 let static_mesh_url = update_static_mesh.new;
-                                let files = if let Some(folder) =
-                                    &self.data_source.content_data_source.current_folder
-                                {
-                                    folder.borrow().files.clone()
-                                } else {
-                                    vec![]
-                                };
                                 static_mesh_component.set_static_mesh_url(
                                     static_mesh_url,
                                     self.engine.get_resource_manager().clone(),
@@ -3564,13 +3580,12 @@ impl EditorContext {
                     let mut active_level = active_level.borrow_mut();
                     let physics = active_level.get_physics_mut();
                     if let Some(level_physics) = physics {
-                        let files = if let Some(folder) =
-                            &self.data_source.content_data_source.current_folder
-                        {
-                            folder.borrow().files.clone()
-                        } else {
-                            vec![]
+                        let Some(project_context) = self.project_context.as_ref() else {
+                            return;
                         };
+                        let content_manager = project_context.content_manager.clone();
+                        let content_manager = content_manager.borrow();
+                        let files = content_manager.content_files();
                         scene_node.initialize_physics(&mut self.engine, level_physics, &files);
                     }
                 }
@@ -3678,12 +3693,12 @@ impl EditorContext {
                         }
                     }
                 }
-                let files =
-                    if let Some(folder) = &self.data_source.content_data_source.current_folder {
-                        folder.borrow().files.clone()
-                    } else {
-                        vec![]
-                    };
+                let Some(project_context) = self.project_context.as_ref() else {
+                    return;
+                };
+                let content_manager = project_context.content_manager.clone();
+                let content_manager = content_manager.borrow();
+                let files = content_manager.content_files();
                 let level_physics = active_level.get_physics_mut();
                 secne_node.notify_transformation_updated(&mut self.engine, level_physics, &files);
             }

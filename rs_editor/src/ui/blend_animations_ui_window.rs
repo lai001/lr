@@ -6,6 +6,7 @@ use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui::Ui;
 use egui_winit::State;
+use rs_content::content_manager::ContentManager;
 use rs_engine::{
     content::{blend_animations::BlendAnimations, skeleton_mesh::SkeletonMesh},
     engine::Engine,
@@ -36,7 +37,7 @@ pub struct BlendAnimationUIWindow {
     preview_skeleton_mesh_component: Option<SkeletonMeshComponent>,
     preview_skeleton_url: Option<url::Url>,
     skeleton_meshes: Vec<SingleThreadMutType<SkeletonMesh>>,
-    pub content: SingleThreadMutType<crate::content_folder::ContentFolder>,
+    content_manager: SingleThreadMutType<ContentManager>,
     start: std::time::Instant,
     level: rs_engine::content::level::Level,
     window_id: isize,
@@ -48,7 +49,7 @@ impl BlendAnimationUIWindow {
         window_manager: &mut WindowsManager,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
-        content: SingleThreadMutType<crate::content_folder::ContentFolder>,
+        content_manager: SingleThreadMutType<ContentManager>,
         blend_animation: SingleThreadMutType<BlendAnimations>,
     ) -> anyhow::Result<BlendAnimationUIWindow> {
         let window_context = window_manager.spwan_new_window(
@@ -102,7 +103,7 @@ impl BlendAnimationUIWindow {
             blend_animation,
             preview_skeleton_mesh_component: None,
             preview_skeleton_url: None,
-            content,
+            content_manager,
             skeleton_meshes: vec![],
             start: std::time::Instant::now(),
             level: rs_engine::content::level::Level::empty_level(),
@@ -111,7 +112,8 @@ impl BlendAnimationUIWindow {
     }
 
     fn collect_skeleton_urls(&self) -> Vec<url::Url> {
-        let files = self.content.borrow().files.clone();
+        let content_manager = self.content_manager.borrow();
+        let files = content_manager.content_files();
         let mut urls = vec![];
         for file in files {
             if let rs_engine::content::content_file_type::EContentFileType::Skeleton(_) = file {
@@ -123,7 +125,8 @@ impl BlendAnimationUIWindow {
     }
 
     fn collect_animation_urls(&self) -> Vec<url::Url> {
-        let files = self.content.borrow().files.clone();
+        let content_manager = self.content_manager.borrow();
+        let files = content_manager.content_files();
         let mut urls = vec![];
         for file in files {
             if let rs_engine::content::content_file_type::EContentFileType::SkeletonAnimation(_) =
@@ -140,7 +143,8 @@ impl BlendAnimationUIWindow {
         &self,
         skeleton_url: &url::Url,
     ) -> Vec<SingleThreadMutType<SkeletonMesh>> {
-        let files = self.content.borrow().files.clone();
+        let content_manager = self.content_manager.borrow();
+        let files = content_manager.content_files();
         let skeleton_meshes: Vec<SingleThreadMutType<SkeletonMesh>> = files
             .iter()
             .filter_map(|x| {
@@ -244,8 +248,8 @@ impl BlendAnimationUIWindow {
                         None,
                         glam::Mat4::IDENTITY,
                     );
-                    let files = &self.content.borrow().files;
-
+                    let content_manager = self.content_manager.borrow();
+                    let files = content_manager.content_files();
                     skeleton_mesh_component.initialize(engine, files, &mut self.player_view_port);
                     self.preview_skeleton_mesh_component = Some(skeleton_mesh_component);
                 } else {
@@ -285,7 +289,8 @@ impl BlendAnimationUIWindow {
             }
         }
         if let Some(component) = self.preview_skeleton_mesh_component.as_mut() {
-            let files = &self.content.borrow().files;
+            let content_manager = self.content_manager.borrow();
+            let files = content_manager.content_files();
             component.on_post_update_animation(files);
         }
     }

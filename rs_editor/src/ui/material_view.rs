@@ -1,5 +1,4 @@
 use crate::{
-    content_folder::ContentFolder,
     editor_ui,
     material_resolve::{self, ResolveResult},
     ui::misc::{
@@ -13,7 +12,11 @@ use egui_snarl::{
     InPin, NodeId, OutPin, Snarl,
 };
 use rs_artifact::material_paramenters::{BaseDataValueType, StructField};
-use rs_engine::content::material_paramenters_collection::MaterialParamentersCollection;
+use rs_content::content_manager::ContentManager;
+use rs_engine::content::{
+    content_file_type::EContentFileType,
+    material_paramenters_collection::MaterialParamentersCollection,
+};
 use rs_foundation::new::SingleThreadMutType;
 use rs_localization::t;
 use rs_render_types::MaterialOptions;
@@ -25,9 +28,8 @@ const NODE_IO_COLOR: Color32 = Color32::WHITE;
 pub struct GraphViewer {
     pub texture_urls: Vec<url::Url>,
     pub virtual_texture_urls: Vec<url::Url>,
-    pub material_parameters_collection_urls: Vec<url::Url>,
     pub is_updated: bool,
-    pub folder: SingleThreadMutType<ContentFolder>,
+    pub content_manager: SingleThreadMutType<ContentManager>,
     pub paramenters: crate::material::Paramenters,
 }
 
@@ -104,6 +106,21 @@ impl GraphViewer {
                 break;
             }
         }
+    }
+
+    fn collect_material_parameters_collections(
+        contents: Vec<EContentFileType>,
+    ) -> Vec<SingleThreadMutType<MaterialParamentersCollection>> {
+        let mut material_parameters_collections = vec![];
+        for content in contents {
+            match content {
+                EContentFileType::MaterialParamentersCollection(material_parameters_collection) => {
+                    material_parameters_collections.push(material_parameters_collection);
+                }
+                _ => {}
+            }
+        }
+        material_parameters_collections
     }
 }
 
@@ -327,11 +344,12 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                                         self.is_updated = true;
                                     }
 
-                                    let material_parameters_collections = {
-                                        self.folder
-                                            .borrow()
-                                            .collect_material_parameters_collections(true)
-                                    };
+                                    let content_manager = self.content_manager.borrow();
+                                    let contents = content_manager.content_files();
+                                    let material_parameters_collections =
+                                        Self::collect_material_parameters_collections(
+                                            contents.to_vec(),
+                                        );
 
                                     for material_parameters_collection in
                                         material_parameters_collections
@@ -702,11 +720,10 @@ pub struct MaterialView {
     pub event: Option<EEventType>,
     pub current_resolve_result: Option<HashMap<MaterialOptions, ResolveResult>>,
     pub validate: Option<HashMap<MaterialOptions, rs_render::error::Result<()>>>,
-    pub folder: SingleThreadMutType<ContentFolder>,
 }
 
 impl MaterialView {
-    pub fn new(folder: SingleThreadMutType<ContentFolder>) -> MaterialView {
+    pub fn new(content_manager: SingleThreadMutType<ContentManager>) -> MaterialView {
         let mut snarl = Snarl::new();
         let mut style = SnarlStyle::new();
         style.bg_pattern = Some(egui_snarl::ui::BackgroundPattern::Grid(Grid {
@@ -715,20 +732,11 @@ impl MaterialView {
         }));
         style.wire_style = Some(egui_snarl::ui::WireStyle::AxisAligned { corner_radius: 5.0 });
 
-        let material_parameters_collection_urls = {
-            folder
-                .borrow()
-                .collect_material_parameters_collections(true)
-                .iter()
-                .map(|x| x.borrow().url.clone())
-                .collect()
-        };
         let viewer = GraphViewer {
             texture_urls: vec![],
             virtual_texture_urls: vec![],
             is_updated: false,
-            material_parameters_collection_urls,
-            folder: folder.clone(),
+            content_manager: content_manager,
             paramenters: crate::material::Paramenters::empty(),
         };
 
@@ -745,7 +753,6 @@ impl MaterialView {
             event: None,
             current_resolve_result: None,
             validate: None,
-            folder,
         }
     }
 

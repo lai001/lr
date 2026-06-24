@@ -2,7 +2,6 @@ use anyhow::anyhow;
 use path_slash::PathBufExt;
 use rs_artifact::EEndianType;
 use rs_core_minimal::{file_manager, path_ext::CanonicalizeSlashExt, settings::Settings};
-use rs_engine::content::content_file_type::EContentFileType;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
@@ -16,6 +15,7 @@ pub const PROJECT_FILE_EXTENSION: &str = "rsproject";
 pub const ASSET_FOLDER_NAME: &str = "asset";
 pub const BUILD_FOLDER_NAME: &str = "build";
 pub const SHADER_FOLDER_NAME: &str = "shader";
+pub const CONTENT_FOLDER_NAME: &str = "content";
 pub const SRC_FOLDER_NAME: &str = "src";
 pub const VERSION_STR: &str = "0.0.1";
 
@@ -26,7 +26,6 @@ pub struct Project {
     pub settings: Rc<RefCell<Settings>>,
     pub endian_type: EEndianType,
     pub materials: Vec<Rc<RefCell<crate::material::Material>>>,
-    pub content: Rc<RefCell<crate::content_folder::ContentFolder>>,
 }
 
 impl Project {
@@ -63,19 +62,11 @@ impl Project {
         if project_file_path.exists() {
             return Err(anyhow!("{:?} is exists", project_file_path));
         }
-        let content = Rc::new(RefCell::new(crate::content_folder::ContentFolder::default()));
-        content
-            .borrow_mut()
-            .files
-            .push(EContentFileType::Level(Rc::new(RefCell::new(
-                rs_engine::content::level::Level::empty_level(),
-            ))));
         let empty_project = Project {
             version_str: VERSION_STR.to_string(),
             project_name: project_name.to_string(),
             endian_type: EEndianType::Little,
             settings: Rc::new(RefCell::new(Settings::default())),
-            content,
             materials: vec![],
         };
         let json_str = serde_json::ser::to_string_pretty(&empty_project)?;
@@ -93,6 +84,7 @@ impl Project {
         std::fs::create_dir(project_folder.join(ASSET_FOLDER_NAME))?;
         std::fs::create_dir(project_folder.join(SHADER_FOLDER_NAME))?;
         std::fs::create_dir(project_folder.join(BUILD_FOLDER_NAME))?;
+        std::fs::create_dir(project_folder.join(CONTENT_FOLDER_NAME))?;
         Ok(())
     }
 

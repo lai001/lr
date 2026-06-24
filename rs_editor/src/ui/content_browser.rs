@@ -1,14 +1,15 @@
-use crate::{content_folder::ContentFolder, thumbnail_cache::ThumbnailCache};
+use crate::thumbnail_cache::ThumbnailCache;
 use egui::{Color32, Context, RichText, Sense, Ui};
+use rs_content::content_folder::ContentFolder;
 use rs_engine::content::content_file_type::EContentFileType;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_localization::t;
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::path::{Path, PathBuf};
 
 pub struct DataSource {
     pub is_open: bool,
     pub contents: SingleThreadMutType<Vec<EContentFileType>>,
-    pub current_folder: Option<Rc<RefCell<ContentFolder>>>,
+    pub current_folder: Option<ContentFolder>,
     pub highlight_file: Option<EContentFileType>,
     pub new_folder_name: String,
     pub new_material_name: String,
@@ -43,7 +44,7 @@ pub enum EClickEventType {
     CreateLevel,
     CreateMaterialParametersCollection,
     CreateRenderTarget2D,
-    OpenFolder(Rc<RefCell<ContentFolder>>),
+    OpenFolder(PathBuf),
     OpenFile(EContentFileType),
     DeleteFile(EContentFileType),
     SingleClickFile(EContentFileType),
@@ -53,7 +54,7 @@ pub enum EClickEventType {
 }
 
 enum EItemType {
-    Folder(Rc<RefCell<ContentFolder>>),
+    Folder(PathBuf),
     File(EContentFileType),
 }
 
@@ -154,7 +155,7 @@ pub fn draw(
                         });
                     });
                 });
-                if let Some(current_folder) = current_folder {
+                if let Some(current_folder) = &current_folder {
                     click_item = draw_content(
                         ui,
                         project_folder_path,
@@ -173,29 +174,34 @@ pub fn draw(
 fn draw_content(
     ui: &mut Ui,
     project_folder_path: &Path,
-    current_folder: Rc<RefCell<ContentFolder>>,
+    current_folder: &ContentFolder,
     highlight_file: Option<EContentFileType>,
     thumbnail_cache: &mut ThumbnailCache,
 ) -> Option<EClickEventType> {
-    let folders = current_folder.borrow().folders.clone();
-    let files = current_folder.borrow().files.clone();
+    let folders = current_folder.folders();
+    let files = current_folder.files().to_vec();
     let mut total_items: Vec<EItemType> = vec![];
     for folder in folders {
-        total_items.push(EItemType::Folder(folder));
+        total_items.push(EItemType::Folder(folder.clone()));
     }
     for file in files {
         total_items.push(EItemType::File(file));
     }
     let mut click: Option<EClickEventType> = None;
 
-    let chunk_size = ((ui.available_width() / 50.0).floor() as usize - 1).max(1);
+    let chunk_size = (((ui.available_width() - 50.0) / 50.0).floor() as usize - 1).max(1);
     let mut iter = total_items.chunks(chunk_size);
     while let Some(row) = iter.next() {
-        ui.horizontal_wrapped(|ui| {
+        ui.horizontal(|ui| {
             for item in row {
                 match item {
                     EItemType::Folder(folder) => {
-                        ui.push_id(folder.borrow().name.clone(), |ui| {
+                        let folder_name = folder
+                            .file_name()
+                            .map(|x| x.to_str())
+                            .flatten()
+                            .map(|x| x.to_string());
+                        if let Some(folder_name) = folder_name {
                             let response = ui
                                 .vertical(|ui| {
                                     ui.set_max_height(50.0);
@@ -203,14 +209,14 @@ fn draw_content(
                                     ui.image(egui::include_image!(
                                         "../../../Resource/Editor/folder.svg"
                                     ));
-                                    ui.label(folder.borrow().name.clone());
+                                    ui.label(folder_name);
                                 })
                                 .response;
                             let response = response.interact(egui::Sense::click());
                             if response.double_clicked() {
                                 click = Some(EClickEventType::OpenFolder(folder.clone()));
                             }
-                        });
+                        }
                     }
                     EItemType::File(file) => {
                         let name = file.get_name().clone();
@@ -219,7 +225,7 @@ fn draw_content(
                             ui.set_max_height(50.0);
                             ui.set_max_width(50.0);
                             let mut response = ui
-                                .push_id(name.clone(), |ui| {
+                                .vertical(|ui| {
                                     if let Some(highlight_file) = highlight_file.as_ref() {
                                         if highlight_file.get_url() == file.get_url() {
                                             ui.painter().rect_filled(

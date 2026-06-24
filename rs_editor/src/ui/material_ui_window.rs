@@ -1,9 +1,8 @@
 use super::{material_view::MaterialView, ui_window::UIWindow};
-use crate::{
-    content_folder::ContentFolder, editor_context::EWindowType, windows_manager::WindowsManager,
-};
+use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
+use rs_content::content_manager::ContentManager;
 use rs_engine::engine::Engine;
 use rs_foundation::new::SingleThreadMutType;
 use winit::event::WindowEvent;
@@ -18,7 +17,6 @@ pub struct MaterialUIWindow {
     pub material_view: MaterialView,
     pub data_source: DataSource,
     pub context: egui::Context,
-    pub folder: SingleThreadMutType<ContentFolder>,
     window_id: isize,
 }
 
@@ -28,7 +26,7 @@ impl MaterialUIWindow {
         window_manager: &mut WindowsManager,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
-        folder: SingleThreadMutType<ContentFolder>,
+        content_manager: SingleThreadMutType<ContentManager>,
     ) -> anyhow::Result<MaterialUIWindow> {
         let window_context = window_manager.spwan_new_window(
             EWindowType::Material,
@@ -61,7 +59,7 @@ impl MaterialUIWindow {
         egui_winit_state.egui_input_mut().viewport_id = viewport_id;
         egui_winit_state.egui_input_mut().viewports =
             std::iter::once((viewport_id, Default::default())).collect();
-        let material_view = MaterialView::new(folder.clone());
+        let material_view = MaterialView::new(content_manager);
         let data_source = DataSource {
             current_open_material: None,
             is_shader_code_window_open: false,
@@ -71,7 +69,6 @@ impl MaterialUIWindow {
             material_view,
             data_source,
             context,
-            folder,
             window_id,
         })
     }

@@ -121,6 +121,7 @@ rs_manifest = { path = "../crates/rs_manifest" }
 rs_texpress = { path = "../crates/rs_texpress" }
 rs_localization = { path = "../crates/rs_localization" }
 rs_egui_utils = { path = "../crates/rs_egui_utils" }
+rs_content = { path = "../crates/rs_content" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rs_dotnet = { path = "../rs_dotnet", optional = true }

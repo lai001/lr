@@ -1,5 +1,4 @@
 pub mod build_config;
-pub mod content_folder;
 pub mod custom_event;
 pub mod data_source;
 pub mod editor;

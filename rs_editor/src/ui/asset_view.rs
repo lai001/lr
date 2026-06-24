@@ -50,7 +50,18 @@ pub fn draw(
                         ui.label(asset_folder.path.to_str().unwrap());
                     });
                     ui.separator();
-                    egui::ScrollArea::both().show(ui, |ui| {
+                    let rect = ui.available_rect_before_wrap();
+                    egui::ScrollArea::both().show_viewport(ui, |ui, _| {
+                        let mut menu_child_ui = ui.new_child(egui::UiBuilder::new());
+                        let response = menu_child_ui.allocate_rect(rect, egui::Sense::click());
+                        response.context_menu(|ui| {
+                            ui.menu_button(
+                                t!("Create"),
+                                |ui| {
+                                    if ui.button(t!("Material")).clicked() {}
+                                },
+                            );
+                        });
                         click_asset =
                             draw_content(ui, asset_folder, highlight_file, thumbnail_cache);
                     });

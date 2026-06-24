@@ -1,6 +1,6 @@
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
-    project::{Project, ASSET_FOLDER_NAME},
+    project::{Project, ASSET_FOLDER_NAME, CONTENT_FOLDER_NAME},
 };
 use anyhow::{anyhow, Context};
 use notify::ReadDirectoryChangesWatcher;
@@ -9,10 +9,12 @@ use rs_artifact::{
     artifact::ArtifactAssetEncoder, material::MaterialInfo, shader_source_code::ShaderSourceCode,
     sound::ESoundFileType, EEndianType,
 };
+use rs_content::content_manager::ContentManager;
 use rs_engine::{
     content::content_file_type::EContentFileType, resource_manager::ResourceManager,
     thread_pool::ThreadPool, ASSET_SCHEME,
 };
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_hotreload_plugin::hot_reload::HotReload;
 use rs_model_loader::model_loader::ModelLoader;
 use rs_render_types::MaterialOptions;
@@ -66,6 +68,7 @@ pub struct ProjectContext {
     folder_receiver:
         Option<std::sync::mpsc::Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>>,
     folder_debouncer: Option<Debouncer<ReadDirectoryChangesWatcher>>,
+    pub content_manager: SingleThreadMutType<ContentManager>,
 }
 
 impl ProjectContext {
@@ -95,6 +98,9 @@ impl ProjectContext {
             _shader_folder_path: project_folder_path.join("shader"),
             folder_receiver: None,
             folder_debouncer: None,
+            content_manager: SingleThreadMut::new(ContentManager::from_path(
+                project_folder_path.join(CONTENT_FOLDER_NAME),
+            )),
         };
         context.watch_project_folder()?;
         Ok(context)
@@ -177,6 +183,10 @@ impl ProjectContext {
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
+        let errors = self.content_manager.borrow().sync_disk();
+        for (url, error) in errors {
+            log::warn!("url: {}, error: {}", url, error);
+        }
         let json_str = serde_json::ser::to_string_pretty(&self.project)?;
         let mut file = std::fs::File::create(self.project_file_path.clone())?;
         Ok(file.write_fmt(format_args!("{}", json_str))?)
@@ -316,6 +326,16 @@ impl ProjectContext {
         self.project_folder_path.join(format!("js"))
     }
 
+    pub fn get_content_folder_path(&self) -> PathBuf {
+        self.project_folder_path.join(CONTENT_FOLDER_NAME)
+    }
+
+    pub fn try_create_content_folder_path(&self) -> anyhow::Result<PathBuf> {
+        let path = self.get_content_folder_path();
+        let _ = std::fs::create_dir_all(path.clone())?;
+        Ok(path)
+    }
+
     pub fn export(&mut self, model_loader: &mut ModelLoader) -> anyhow::Result<PathBuf> {
         let _span = tracy_client::span!();
 
@@ -367,7 +387,7 @@ impl ProjectContext {
             rs_engine::content::material_paramenters_collection::MaterialParamentersCollection,
         > = HashMap::new();
 
-        for file in &self.project.content.borrow().files {
+        for file in self.content_manager.borrow().content_files() {
             match file {
                 EContentFileType::StaticMesh(asset) => {
                     {
