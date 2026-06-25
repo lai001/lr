@@ -4,6 +4,37 @@ use crate::{
 };
 use rs_assimp_sys::*;
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
+use strum_macros::EnumIter;
+
+#[derive(Debug, EnumIter, Clone, Copy, PartialEq, Eq)]
+pub enum EAnimInterpolation {
+    Step = aiAnimInterpolation_aiAnimInterpolation_Step as _,
+    Linear = aiAnimInterpolation_aiAnimInterpolation_Linear as _,
+    SphericalLinear = aiAnimInterpolation_aiAnimInterpolation_Spherical_Linear as _,
+    CubicSpline = aiAnimInterpolation_aiAnimInterpolation_Cubic_Spline as _,
+    Force32Bit = aiAnimInterpolation__aiAnimInterpolation_Force32Bit as _,
+}
+
+impl TryFrom<aiAnimInterpolation> for EAnimInterpolation {
+    type Error = &'static str;
+
+    fn try_from(ai_anim_interpolation: aiAnimInterpolation) -> Result<Self, Self::Error> {
+        if ai_anim_interpolation == aiAnimInterpolation_aiAnimInterpolation_Step {
+            Ok(EAnimInterpolation::Step)
+        } else if ai_anim_interpolation == aiAnimInterpolation_aiAnimInterpolation_Linear {
+            Ok(EAnimInterpolation::Linear)
+        } else if ai_anim_interpolation == aiAnimInterpolation_aiAnimInterpolation_Spherical_Linear
+        {
+            Ok(EAnimInterpolation::SphericalLinear)
+        } else if ai_anim_interpolation == aiAnimInterpolation_aiAnimInterpolation_Cubic_Spline {
+            Ok(EAnimInterpolation::CubicSpline)
+        } else if ai_anim_interpolation == aiAnimInterpolation__aiAnimInterpolation_Force32Bit {
+            Ok(EAnimInterpolation::Force32Bit)
+        } else {
+            Err("Not a valid value.")
+        }
+    }
+}
 
 pub struct NodeAnim<'a> {
     _ai_node_anim: &'a mut aiNodeAnim,

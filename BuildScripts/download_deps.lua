@@ -181,7 +181,7 @@ do
 
         if os.exists(assimp_root_dir) == false then
             git.clone("https://github.com/assimp/assimp.git", { outputdir = assimp_root_dir })
-            git.checkout("v6.0.4", { repodir = assimp_root_dir })
+            git.checkout("v6.0.5", { repodir = assimp_root_dir })
         end
     end)
     set_menu {

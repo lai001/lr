@@ -1,6 +1,7 @@
 use glam::Vec3Swizzles;
 use rs_artifact::{
     mesh_vertex::MeshVertex,
+    node_anim::{EQuatAnimInterpolation, EVectorAnimInterpolation, CUBIC_SPLINE_CONTROL_KEYS_NUM},
     skin_mesh::{SkinMesh, SkinMeshVertex},
 };
 use rs_assimp::texture_type::TextureType;
@@ -620,32 +621,16 @@ impl ModelLoader {
     ) -> rs_artifact::skeleton_animation::SkeletonAnimation {
         let mut channels: Vec<rs_artifact::node_anim::NodeAnim> = vec![];
         for channel in &animation.channels {
+            // https://github.com/assimp/assimp/commit/8ef1461cb899e273ec30ee680df7e840e7f62834
+            let position_keys = organize_vector_keys(&channel.position_keys);
+            let scaling_keys = organize_vector_keys(&channel.scaling_keys);
+            let rotation_keys = organize_quat_keys(&channel.rotation_keys);
+
             let node_anim = rs_artifact::node_anim::NodeAnim {
                 node: channel.node.as_ref().unwrap().borrow().path.clone(),
-                position_keys: channel
-                    .position_keys
-                    .iter()
-                    .map(|x| rs_artifact::node_anim::VectorKey {
-                        time: x.time,
-                        value: x.value,
-                    })
-                    .collect(),
-                scaling_keys: channel
-                    .scaling_keys
-                    .iter()
-                    .map(|x| rs_artifact::node_anim::VectorKey {
-                        time: x.time,
-                        value: x.value,
-                    })
-                    .collect(),
-                rotation_keys: channel
-                    .rotation_keys
-                    .iter()
-                    .map(|x| rs_artifact::node_anim::QuatKey {
-                        time: x.time,
-                        value: x.value,
-                    })
-                    .collect(),
+                position_keys,
+                scaling_keys,
+                rotation_keys,
             };
             channels.push(node_anim);
         }
@@ -1025,4 +1010,146 @@ impl ModelLoader {
             scene_node,
         })
     }
+}
+
+fn organize_vector_keys(
+    vector_keys: &[rs_assimp::vector_key::VectorKey<'_>],
+) -> Vec<rs_artifact::node_anim::VectorKey> {
+    let mut organized_keys: Vec<rs_artifact::node_anim::VectorKey> =
+        Vec::with_capacity(vector_keys.len() * CUBIC_SPLINE_CONTROL_KEYS_NUM);
+    let mut iter = vector_keys.iter();
+    loop {
+        let next = iter.next();
+        match next {
+            Some(next) => {
+                if matches!(
+                    next.interpolation,
+                    rs_assimp::node_anim::EAnimInterpolation::CubicSpline
+                ) {
+                    let value = iter.next().expect("Valid");
+                    let out = iter.next().expect("Valid");
+                    debug_assert_eq!(next.time, value.time);
+                    debug_assert_eq!(out.time, value.time);
+                    debug_assert_eq!(next.interpolation, value.interpolation);
+                    debug_assert_eq!(out.interpolation, value.interpolation);
+                    let key = rs_artifact::node_anim::VectorKey {
+                        time: value.time,
+                        value: value.value,
+                        interpolation: EVectorAnimInterpolation::CubicSpline([
+                            next.value,
+                            value.value,
+                            out.value,
+                        ]),
+                    };
+                    organized_keys.push(key);
+                } else {
+                    match next.interpolation {
+                        rs_assimp::node_anim::EAnimInterpolation::Step => {
+                            let key = rs_artifact::node_anim::VectorKey {
+                                time: next.time,
+                                value: next.value,
+                                interpolation: EVectorAnimInterpolation::Step(next.value),
+                            };
+                            organized_keys.push(key);
+                        }
+                        rs_assimp::node_anim::EAnimInterpolation::Linear => {
+                            let key = rs_artifact::node_anim::VectorKey {
+                                time: next.time,
+                                value: next.value,
+                                interpolation: EVectorAnimInterpolation::Linear(next.value),
+                            };
+                            organized_keys.push(key);
+                        }
+                        rs_assimp::node_anim::EAnimInterpolation::SphericalLinear => {
+                            let key = rs_artifact::node_anim::VectorKey {
+                                time: next.time,
+                                value: next.value,
+                                interpolation: EVectorAnimInterpolation::SphericalLinear(
+                                    next.value,
+                                ),
+                            };
+                            organized_keys.push(key);
+                        }
+                        rs_assimp::node_anim::EAnimInterpolation::CubicSpline => {
+                            unreachable!()
+                        }
+                        rs_assimp::node_anim::EAnimInterpolation::Force32Bit => panic!(),
+                    }
+                }
+            }
+            None => break,
+        }
+    }
+
+    organized_keys
+}
+
+fn organize_quat_keys(
+    quat_keys: &[rs_assimp::quat_key::QuatKey<'_>],
+) -> Vec<rs_artifact::node_anim::QuatKey> {
+    let mut organized_keys: Vec<rs_artifact::node_anim::QuatKey> =
+        Vec::with_capacity(quat_keys.len() * CUBIC_SPLINE_CONTROL_KEYS_NUM);
+    let mut iter = quat_keys.iter();
+    loop {
+        let next = iter.next();
+        match next {
+            Some(next) => {
+                if matches!(
+                    next.interpolation,
+                    rs_assimp::node_anim::EAnimInterpolation::CubicSpline
+                ) {
+                    let value = iter.next().expect("Valid");
+                    let out = iter.next().expect("Valid");
+                    debug_assert_eq!(next.time, value.time);
+                    debug_assert_eq!(out.time, value.time);
+                    debug_assert_eq!(next.interpolation, value.interpolation);
+                    debug_assert_eq!(out.interpolation, value.interpolation);
+                    let key = rs_artifact::node_anim::QuatKey {
+                        time: value.time,
+                        value: value.value,
+                        interpolation: EQuatAnimInterpolation::CubicSpline([
+                            next.value,
+                            value.value,
+                            out.value,
+                        ]),
+                    };
+                    organized_keys.push(key);
+                } else {
+                    match next.interpolation {
+                        rs_assimp::node_anim::EAnimInterpolation::Step => {
+                            let key = rs_artifact::node_anim::QuatKey {
+                                time: next.time,
+                                value: next.value,
+                                interpolation: EQuatAnimInterpolation::Step(next.value),
+                            };
+                            organized_keys.push(key);
+                        }
+                        rs_assimp::node_anim::EAnimInterpolation::Linear => {
+                            let key = rs_artifact::node_anim::QuatKey {
+                                time: next.time,
+                                value: next.value,
+                                interpolation: EQuatAnimInterpolation::Linear(next.value),
+                            };
+                            organized_keys.push(key);
+                        }
+                        rs_assimp::node_anim::EAnimInterpolation::SphericalLinear => {
+                            let key = rs_artifact::node_anim::QuatKey {
+                                time: next.time,
+                                value: next.value,
+                                interpolation: EQuatAnimInterpolation::SphericalLinear(next.value),
+                            };
+                            organized_keys.push(key);
+                        }
+                        rs_assimp::node_anim::EAnimInterpolation::CubicSpline => {
+                            unreachable!()
+                        }
+                        rs_assimp::node_anim::EAnimInterpolation::Force32Bit => panic!(),
+                    }
+                }
+            }
+            None => break,
+        }
+    }
+
+    organized_keys
 }
