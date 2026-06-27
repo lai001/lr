@@ -13,6 +13,7 @@ use crate::ui::{
 use egui::*;
 use rs_engine::components::component::Component;
 use rs_engine::input_mode::EInputMode;
+use rs_localization::t;
 use rs_model_loader::model_loader::ModelLoader;
 use std::sync::Arc;
 use std::{path::PathBuf, rc::Rc};
@@ -100,7 +101,7 @@ impl EditorUI {
         let mut click = ClickEvent::default();
 
         if let Some(level) = &data_source.level {
-            let window = Self::new_window("Level", data_source.input_mode);
+            let window = Self::new_window(t!("Level"), "Level", data_source.input_mode);
             click.click_actor = crate::ui::level_view::draw(
                 window,
                 context,
@@ -108,7 +109,7 @@ impl EditorUI {
                 &level.as_ref().borrow(),
             );
         }
-        let window = Self::new_window("Asset", data_source.input_mode);
+        let window = Self::new_window(t!("Asset"), "Asset", data_source.input_mode);
         click.click_aseet = asset_view::draw(
             window,
             context,
@@ -183,7 +184,11 @@ impl EditorUI {
         );
         click.menu_event = self.top_menu.draw(context, &mut panel_ui, data_source);
 
-        let window = Self::new_window("Gizmo Settings", data_source.input_mode);
+        let window = Self::new_window(
+            t!("Gizmo Settings"),
+            "Gizmo Settings",
+            data_source.input_mode,
+        );
         gizmo_settings::draw(
             window,
             context,
@@ -194,7 +199,11 @@ impl EditorUI {
             &mut data_source.is_gizmo_setting_open,
         );
         if let Some(project_settings) = data_source.project_settings.clone() {
-            let window = Self::new_window("Project Settings", data_source.input_mode);
+            let window = Self::new_window(
+                t!("Project Settings"),
+                "Project Settings",
+                data_source.input_mode,
+            );
             click.project_settings_event = crate::ui::project_settings::draw(
                 window,
                 context,
@@ -204,7 +213,11 @@ impl EditorUI {
             );
         }
         if let Some(project_folder_path) = self.project_folder_path.as_ref() {
-            let window = Self::new_window("Content Browser", data_source.input_mode);
+            let window = Self::new_window(
+                t!("Content Browser"),
+                "Content Browser",
+                data_source.input_mode,
+            );
             click.content_browser_event = content_browser::draw(
                 window,
                 context,
@@ -215,7 +228,8 @@ impl EditorUI {
             );
         }
         if let Some(console_cmds) = &data_source.console_cmds {
-            let window = Self::new_window("Console Cmds", data_source.input_mode);
+            let window =
+                Self::new_window(t!("Console Cmds"), "Console Cmds", data_source.input_mode);
             console_cmds_view::draw(
                 window,
                 context,
@@ -224,17 +238,21 @@ impl EditorUI {
             );
         }
 
-        Self::new_window("Content Property", data_source.input_mode)
-            .open(&mut data_source.is_content_item_property_view_open)
-            .vscroll(true)
-            .hscroll(true)
-            .resizable(true)
-            .default_size([250.0, 500.0])
-            .show(context, |ui| {
-                self.content_item_property_view.draw(ui);
-            });
+        Self::new_window(
+            t!("Content Property"),
+            "Content Property",
+            data_source.input_mode,
+        )
+        .open(&mut data_source.is_content_item_property_view_open)
+        .vscroll(true)
+        .hscroll(true)
+        .resizable(true)
+        .default_size([250.0, 500.0])
+        .show(context, |ui| {
+            self.content_item_property_view.draw(ui);
+        });
 
-        Self::new_window("Detail", data_source.input_mode)
+        Self::new_window(t!("Detail"), "Detail", data_source.input_mode)
             .open(&mut data_source.is_object_property_view_open)
             .vscroll(true)
             .hscroll(true)
@@ -244,22 +262,26 @@ impl EditorUI {
                 click.object_property_view_event = self.object_property_view.draw(ui);
             });
 
-        Self::new_window("Debug Texture View", data_source.input_mode)
-            .open(&mut data_source.is_debug_texture_view_open)
-            .vscroll(true)
-            .hscroll(true)
-            .resizable(true)
-            .default_size([500.0, 500.0])
-            .show(context, |ui| {
-                click.debug_textures_view_event = self.debug_textures_view.draw(ui);
-            });
+        Self::new_window(
+            t!("Debug Texture View"),
+            "Debug Texture View",
+            data_source.input_mode,
+        )
+        .open(&mut data_source.is_debug_texture_view_open)
+        .vscroll(true)
+        .hscroll(true)
+        .resizable(true)
+        .default_size([500.0, 500.0])
+        .show(context, |ui| {
+            click.debug_textures_view_event = self.debug_textures_view.draw(ui);
+        });
 
         let mut is_open = data_source.model_scene_view_data.model_scene.is_some();
         let mut scene = None;
         if let Some(path) = data_source.model_scene_view_data.model_scene.clone() {
             scene = model_loader.get(&path);
         }
-        Self::new_window("Model Scene", data_source.input_mode)
+        Self::new_window(t!("Model Scene"), "Model Scene", data_source.input_mode)
             .open(&mut is_open)
             .vscroll(true)
             .hscroll(true)
@@ -282,15 +304,19 @@ impl EditorUI {
         if let Some(opend_curve) = data_source.opened_curve.clone() {
             let mut opend_curve = opend_curve.borrow_mut();
             let name = opend_curve.get_name();
-            Self::new_window(&format!("Curve({})", name), data_source.input_mode)
-                .open(&mut is_curve_open)
-                .vscroll(false)
-                .hscroll(false)
-                .resizable(true)
-                .default_size([500.0, 500.0])
-                .show(context, |ui| {
-                    curve_view::draw(&mut opend_curve, ui, &mut data_source.curve_data_source);
-                });
+            Self::new_window(
+                t!("Curve %{name}", name = name),
+                format!("Curve({})", name),
+                data_source.input_mode,
+            )
+            .open(&mut is_curve_open)
+            .vscroll(false)
+            .hscroll(false)
+            .resizable(true)
+            .default_size([500.0, 500.0])
+            .show(context, |ui| {
+                curve_view::draw(&mut opend_curve, ui, &mut data_source.curve_data_source);
+            });
         }
         if !is_curve_open {
             data_source.opened_curve = None;
@@ -299,8 +325,13 @@ impl EditorUI {
         click
     }
 
-    pub fn new_window(name: &str, input_mode: EInputMode) -> egui::Window<'static> {
+    pub fn new_window(
+        name: impl Into<WidgetText>,
+        id_source: impl std::hash::Hash,
+        input_mode: EInputMode,
+    ) -> egui::Window<'static> {
         Window::new(name)
+            .id(egui::Id::new(id_source))
             .enabled(input_mode.is_interact_ui())
             .interactable(input_mode.is_interact_ui())
     }

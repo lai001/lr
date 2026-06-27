@@ -1,4 +1,5 @@
 use egui::Ui;
+use rs_localization::t;
 use transform_gizmo_egui::{math::Transform, *};
 
 pub struct GizmoView {
@@ -123,7 +124,8 @@ impl GizmoView {
                 is_view_axis: _,
             } => {
                 format!(
-                    "Rotation axis: ({:.2}, {:.2}, {:.2}), Angle: {:.2} deg",
+                    "{} ({:.2}, {:.2}, {:.2}), Angle: {:.2} deg",
+                    t!("Rotation axis:"),
                     axis.x,
                     axis.y,
                     axis.z,
@@ -132,18 +134,28 @@ impl GizmoView {
             }
             GizmoResult::Translation { delta: _, total } => {
                 format!(
-                    "Translation: ({:.2}, {:.2}, {:.2})",
-                    total.x, total.y, total.z,
+                    "{} ({:.2}, {:.2}, {:.2})",
+                    t!("Translation:"),
+                    total.x,
+                    total.y,
+                    total.z,
                 )
             }
             GizmoResult::Scale { total } => {
-                format!("Scale: ({:.2}, {:.2}, {:.2})", total.x, total.y, total.z,)
+                format!(
+                    "{} ({:.2}, {:.2}, {:.2})",
+                    t!("Scale:"),
+                    total.x,
+                    total.y,
+                    total.z,
+                )
             }
             GizmoResult::Arcball { delta: _, total } => {
                 let (axis, angle) =
                     glam::dquat(total.v.x, total.v.y, total.v.z, total.s).to_axis_angle();
                 format!(
-                    "Rotation axis: ({:.2}, {:.2}, {:.2}), Angle: {:.2} deg",
+                    "{} ({:.2}, {:.2}, {:.2}), Angle: {:.2} deg",
+                    t!("Rotation axis:"),
                     axis.x,
                     axis.y,
                     axis.z,

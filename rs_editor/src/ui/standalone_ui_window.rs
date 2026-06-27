@@ -16,6 +16,7 @@ use rs_engine::{
     keys_detector::KeysDetector,
     standalone::application::Application,
 };
+use rs_localization::t;
 use rs_render::command::{RenderCommand, ScaleChangedInfo};
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
@@ -261,7 +262,7 @@ impl StandaloneUiWindow {
                         application.net_module.is_authority = false;
                         let client = rs_network::client::Client::bind(
                             multiple_player_options.server_socket_addr,
-                            Some("Client".to_string()),
+                            Some(t!("Client").to_string()),
                         );
                         if let Err(err) = &client {
                             log::warn!("{}", err);
@@ -296,9 +297,9 @@ impl StandaloneUiWindow {
             StandaloneSimulationType::Single => None,
             StandaloneSimulationType::MultiplePlayer(multiple_player_options) => {
                 if multiple_player_options.is_server {
-                    Some(format!("Standalone({})", "Server"))
+                    Some(format!("Standalone({})", t!("Server")))
                 } else {
-                    Some(format!("Standalone({})", "Client"))
+                    Some(format!("Standalone({})", t!("Client")))
                 }
             }
         }

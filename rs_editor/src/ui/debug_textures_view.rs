@@ -1,5 +1,6 @@
 use egui::{ImageSource, TextureId, Ui, load::SizedTexture};
 use rs_engine::resource_manager::ResourceManager;
+use rs_localization::t;
 
 pub enum EClickEventType {
     Selected(url::Url),
@@ -22,7 +23,7 @@ impl DebugTexturesView {
         let mut event: Option<EClickEventType> = None;
 
         if ui
-            .selectable_value(&mut self.current_ui_texture, None, "None")
+            .selectable_value(&mut self.current_ui_texture, None, t!("None"))
             .clicked()
         {}
         for selectable_texture_url in self.all_texture_urls.iter() {

@@ -97,7 +97,7 @@ pub fn draw(
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
-                        ui.menu_button("Material", |ui| {
+                        ui.menu_button(t!("Material"), |ui| {
                             ui.text_edit_singleline(&mut data_source.new_material_name);
                             if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateMaterial);
@@ -111,42 +111,42 @@ pub fn draw(
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
-                        ui.menu_button("Particle System", |ui| {
+                        ui.menu_button(t!("Particle System"), |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateParticleSystem);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
-                        ui.menu_button("Curve", |ui| {
+                        ui.menu_button(t!("Curve"), |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateCurve);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
-                        ui.menu_button("Blend Animation", |ui| {
+                        ui.menu_button(t!("Blend Animation"), |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateBlendAnimations);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
-                        ui.menu_button("Material Parameters Collection", |ui| {
+                        ui.menu_button(t!("Material Parameters Collection"), |ui| {
                             ui.text_edit_singleline(&mut data_source.new_content_name);
                             if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateMaterialParametersCollection);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
-                        ui.menu_button("Level", |ui| {
+                        ui.menu_button(t!("Level"), |ui| {
                             ui.text_edit_singleline(&mut data_source.new_level_name);
                             if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateLevel);
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         });
-                        ui.menu_button("RenderTarget2D", |ui| {
+                        ui.menu_button(t!("RenderTarget2D"), |ui| {
                             ui.text_edit_singleline(&mut data_source.new_level_name);
                             if ui.button(t!("Ok")).clicked() {
                                 click = Some(EClickEventType::CreateRenderTarget2D);
@@ -253,16 +253,16 @@ fn draw_content(
                                 click = Some(EClickEventType::OpenFile(file.clone()));
                             }
                             response.context_menu(|ui| {
-                                if ui.button("Detail").clicked() {
+                                if ui.button(t!("Detail")).clicked() {
                                     click = Some(EClickEventType::Detail(file.clone()));
                                     ui.close_kind(egui::UiKind::Menu);
                                 }
-                                if ui.button("Copy Reference").clicked() {
+                                if ui.button(t!("Copy Reference")).clicked() {
                                     ui.ctx().copy_text(url.to_string());
                                     // ui.output_mut(|p| p.copied_text = url.to_string());
                                     ui.close_kind(egui::UiKind::Menu);
                                 }
-                                if ui.button("Delete").clicked() {
+                                if ui.button(t!("Delete")).clicked() {
                                     click = Some(EClickEventType::DeleteFile(file.clone()));
                                     ui.close_kind(egui::UiKind::Menu);
                                 }

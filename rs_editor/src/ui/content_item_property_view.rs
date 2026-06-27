@@ -7,6 +7,7 @@ use rs_engine::content::{
     render_target_2d::RenderTarget2D, texture::TextureFile,
 };
 use rs_foundation::new::SingleThreadMutType;
+use rs_localization::t;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
 
 pub enum RenderTarget2DPropertyType {
@@ -71,7 +72,7 @@ impl ContentItemPropertyView {
             content.get_name(),
             content.get_type_text()
         ));
-        ui.label(format!("url: {}", content.get_url().to_string()));
+        ui.label(format!("Url:  {}", content.get_url().to_string()));
 
         match content {
             EContentFileType::StaticMesh(static_mesh) => {
@@ -83,7 +84,7 @@ impl ContentItemPropertyView {
                     "Asset url: {}",
                     static_mesh.asset_info.get_url().to_string()
                 ));
-                ui.checkbox(&mut new, "Is enable multiresolution");
+                ui.checkbox(&mut new, t!("Is enable multiresolution"));
                 if old != new {
                     self.click = Some(EEventType::UpdateStaticMeshEnableMultiresolution(
                         value, old, new,
@@ -97,7 +98,10 @@ impl ContentItemPropertyView {
                 let texture_file_clone = texture_file.clone();
                 let mut texture_file = texture_file.borrow_mut();
                 if ui
-                    .checkbox(&mut texture_file.is_virtual_texture, "Is Virtual Texture")
+                    .checkbox(
+                        &mut texture_file.is_virtual_texture,
+                        t!("Is Virtual Texture"),
+                    )
                     .changed()
                 {
                     self.click = Some(EEventType::IsVirtualTexture(
@@ -110,7 +114,10 @@ impl ContentItemPropertyView {
                 }
 
                 let mut is_compressed = texture_file.is_compressed;
-                if ui.checkbox(&mut is_compressed, "Is compressed").changed() {
+                if ui
+                    .checkbox(&mut is_compressed, t!("Is compressed"))
+                    .changed()
+                {
                     self.click = Some(EEventType::TextureFile(
                         texture_file_clone,
                         TextureFilePropertyType::IsCompressed(is_compressed),
@@ -127,57 +134,57 @@ impl ContentItemPropertyView {
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.brdf_sample_count)
                         .speed(1)
-                        .prefix("BRDF Sample Count: ")
+                        .prefix(t!("BRDF Sample Count: "))
                         .range(1..=8192),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.irradiance_sample_count)
                         .speed(1)
-                        .prefix("Irradiance Sample Count: ")
+                        .prefix(t!("Irradiance Sample Count: "))
                         .range(1..=8192),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.pre_filter_sample_count)
                         .speed(1)
-                        .prefix("Prefilter Sample Count: ")
+                        .prefix(t!("Prefilter Sample Count: "))
                         .range(1..=8192),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.brdflutmap_length)
                         .speed(1)
-                        .prefix("BRDF Length: ")
+                        .prefix(t!("BRDF Length: "))
                         .range(64..=2048),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.pre_filter_cube_map_max_mipmap_level)
                         .speed(1)
-                        .prefix("Prefilter Max Mipmap: ")
+                        .prefix(t!("Prefilter Max Mipmap: "))
                         .range(1..=64),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.irradiance_cube_map_length)
                         .speed(1)
-                        .prefix("Irradiance Length: ")
+                        .prefix(t!("Irradiance Length: "))
                         .range(4..=8192),
                 );
                 ui.add(
                     egui::DragValue::new(&mut ibl_bake_info.pre_filter_cube_map_length)
                         .speed(1)
-                        .prefix("Prefilter Cube Map Length: ")
+                        .prefix(t!("Prefilter Cube Map Length: "))
                         .range(4..=8192),
                 );
 
                 let selected_text = if let Some(image_reference) = &ibl.image_reference {
                     image_reference.to_str().unwrap().to_string()
                 } else {
-                    "None".to_string()
+                    t!("None").to_string()
                 };
-                egui::ComboBox::from_label("asset")
+                egui::ComboBox::from_label("Asset")
                     .selected_text(selected_text)
                     .show_ui(ui, |ui| {
                         let old = ibl.image_reference.clone();
                         if ui
-                            .selectable_value(&mut ibl.image_reference, None, "None")
+                            .selectable_value(&mut ibl.image_reference, None, t!("None"))
                             .clicked()
                         {
                             self.click =
@@ -218,7 +225,7 @@ impl ContentItemPropertyView {
 
                 let is_add = ui
                     .button(egui::WidgetText::RichText(Arc::new(
-                        egui::RichText::new("+").strong(),
+                        egui::RichText::new(t!("Add Field")).strong(),
                     )))
                     .clicked();
                 if is_add {
@@ -342,7 +349,7 @@ impl ContentItemPropertyView {
 
                         let is_delete = ui
                             .button(egui::WidgetText::RichText(Arc::new(
-                                egui::RichText::new("-").strong(),
+                                egui::RichText::new(t!("Remove Field")).strong(),
                             )))
                             .clicked();
                         if is_delete {
@@ -369,7 +376,7 @@ impl ContentItemPropertyView {
                 let response = ui.add(
                     egui::DragValue::new(&mut render_target_2d.width)
                         .speed(1)
-                        .prefix("Width: ")
+                        .prefix(t!("Width: "))
                         .range(1..=4096 * 4)
                         .update_while_editing(false),
                 );
@@ -382,7 +389,7 @@ impl ContentItemPropertyView {
                 let response = ui.add(
                     egui::DragValue::new(&mut render_target_2d.height)
                         .speed(1)
-                        .prefix("Height: ")
+                        .prefix(t!("Height: "))
                         .range(1..=4096 * 4)
                         .update_while_editing(false),
                 );
@@ -397,7 +404,13 @@ impl ContentItemPropertyView {
                     wgpu::TextureFormat::Rgba8Unorm,
                     wgpu::TextureFormat::R8Unorm,
                 ];
-                if render_combo_box_not_null(ui, "Format", "Format", format, candidate_items) {
+                if render_combo_box_not_null(
+                    ui,
+                    t!("Texture Format"),
+                    "TextureFormat",
+                    format,
+                    candidate_items,
+                ) {
                     self.click = Some(EEventType::RenderTarget2D(
                         object.clone(),
                         RenderTarget2DPropertyType::Format(render_target_2d.format),

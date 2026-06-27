@@ -1,6 +1,7 @@
 use egui::{Context, ScrollArea, Ui};
 use rs_engine::{actor::Actor, directional_light::DirectionalLight, scene_node::SceneNode};
 use rs_foundation::new::SingleThreadMutType;
+use rs_localization::t;
 use std::{cell::RefCell, rc::Rc};
 
 pub enum EClickEventType {
@@ -38,20 +39,20 @@ fn draw_scene_node(
                 *event = Some(EClickEventType::SingleClickSceneNode(scene_node.clone()));
             } else {
                 response.context_menu(|ui| {
-                    ui.menu_button("Add", |ui| {
-                        let response = ui.button("Scene");
+                    ui.menu_button(t!("Add"), |ui| {
+                        let response = ui.button(t!("Scene"));
                         if response.clicked() {
                             *event =
                                 Some(EClickEventType::CreateSceneComponent(scene_node.clone()));
                             ui.close_kind(egui::UiKind::Menu);
                         }
-                        let response = ui.button("Camera");
+                        let response = ui.button(t!("Camera"));
                         if response.clicked() {
                             *event =
                                 Some(EClickEventType::CreateCameraComponent(scene_node.clone()));
                             ui.close_kind(egui::UiKind::Menu);
                         }
-                        let response = ui.button("Collision");
+                        let response = ui.button(t!("Collision"));
                         if response.clicked() {
                             *event = Some(EClickEventType::CreateCollisionComponent(
                                 actor.clone(),
@@ -59,21 +60,21 @@ fn draw_scene_node(
                             ));
                             ui.close_kind(egui::UiKind::Menu);
                         }
-                        let response = ui.button("Spot Light");
+                        let response = ui.button(t!("Spot Light"));
                         if response.clicked() {
                             *event = Some(EClickEventType::CreateSpotLightComponent(
                                 scene_node.clone(),
                             ));
                             ui.close_kind(egui::UiKind::Menu);
                         }
-                        let response = ui.button("Point Light");
+                        let response = ui.button(t!("Point Light"));
                         if response.clicked() {
                             *event = Some(EClickEventType::CreatePointLightComponent(
                                 scene_node.clone(),
                             ));
                             ui.close_kind(egui::UiKind::Menu);
                         }
-                        let response = ui.button("Static Mesh");
+                        let response = ui.button(t!("Static Mesh"));
                         if response.clicked() {
                             *event = Some(EClickEventType::CreateStaticMeshComponent(
                                 scene_node.clone(),
@@ -81,15 +82,15 @@ fn draw_scene_node(
                             ui.close_kind(egui::UiKind::Menu);
                         }
                     });
-                    ui.menu_button("Copy", |ui| {
-                        let response = ui.button("Path");
+                    ui.menu_button(t!("Copy"), |ui| {
+                        let response = ui.button(t!("Path"));
                         if response.clicked() {
                             *event =
                                 Some(EClickEventType::CopyPath(actor.clone(), scene_node.clone()));
                             ui.close_kind(egui::UiKind::Menu);
                         }
                     });
-                    let response = ui.button("Delete");
+                    let response = ui.button(t!("Delete"));
                     if response.clicked() {
                         *event = Some(EClickEventType::DeleteNode(
                             actor.clone(),
@@ -122,13 +123,13 @@ fn level_node(
                 *event = Some(EClickEventType::SingleClickActor(actor.clone()));
             } else {
                 response.context_menu(|ui| {
-                    let response = ui.button("Duplicate");
+                    let response = ui.button(t!("Duplicate"));
                     if response.clicked() {
                         *event = Some(EClickEventType::DuplicateActor(actor.clone()));
                         ui.close_kind(egui::UiKind::Menu);
                     }
 
-                    let response = ui.button("Delete");
+                    let response = ui.button(t!("Delete"));
                     if response.clicked() {
                         *event = Some(EClickEventType::DeleteActor(actor.clone()));
                         ui.close_kind(egui::UiKind::Menu);
@@ -150,15 +151,15 @@ pub fn draw(
     let mut event: Option<EClickEventType> = None;
     window.open(is_open).show(context, |ui| {
         let response = ui.vertical(|ui| {
-            ui.label(format!("name: {}", level.get_name()));
+            ui.label(format!("{} {}", t!("Name: "), level.get_name()));
             ScrollArea::vertical().show(ui, |ui| {
                 for (index, light) in level.directional_lights.iter().enumerate() {
-                    let response = ui.button(format!("DirectionalLight_{}", index));
+                    let response = ui.button(t!("DirectionalLight [%{index}]", index = index));
                     if response.clicked() {
                         event = Some(EClickEventType::DirectionalLight(light.clone()));
                     }
                     response.context_menu(|ui| {
-                        let response = ui.button("Delete");
+                        let response = ui.button(t!("Delete"));
                         if response.clicked() {
                             event = Some(EClickEventType::DeleteDirectionalLight(light.clone()));
                             ui.close_kind(egui::UiKind::Menu);
@@ -172,17 +173,17 @@ pub fn draw(
         });
         let interacted_response = response.response.interact(egui::Sense::all());
         interacted_response.context_menu(|ui| {
-            ui.menu_button("Add", |ui| {
-                if ui.button("Directional Light").clicked() {
+            ui.menu_button(t!("Add"), |ui| {
+                if ui.button(t!("Directional Light")).clicked() {
                     event = Some(EClickEventType::CreateDirectionalLight);
                     ui.close_kind(egui::UiKind::Menu);
                 }
-                if ui.button("Actor").clicked() {
+                if ui.button(t!("Actor")).clicked() {
                     event = Some(EClickEventType::CreateActor);
                     ui.close_kind(egui::UiKind::Menu);
                 }
             });
-            if ui.button("Create camera here").clicked() {
+            if ui.button(t!("Create camera here")).clicked() {
                 event = Some(EClickEventType::CreateCameraHere);
                 ui.close_kind(egui::UiKind::Menu);
             }

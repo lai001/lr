@@ -16,6 +16,10 @@ impl Backend for SharedBackend {
     }
 }
 
+pub fn available_locales() -> Vec<&'static str> {
+    SharedBackend.available_locales()
+}
+
 #[macro_export]
 macro_rules! init {
     () => {

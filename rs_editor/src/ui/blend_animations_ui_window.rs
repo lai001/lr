@@ -18,6 +18,7 @@ use rs_engine::{
     skeleton_mesh_component::SkeletonMeshComponent,
 };
 use rs_foundation::new::SingleThreadMutType;
+use rs_localization::t;
 
 enum EventType {
     PreviewSkeletonUrl(Option<url::Url>),
@@ -172,7 +173,7 @@ impl BlendAnimationUIWindow {
         let mut current_value = self.preview_skeleton_url.as_ref();
         let is_changed = misc::render_combo_box(
             ui,
-            "Preview skeleton",
+            t!("Preview skeleton"),
             Some(egui::Id::new("Preview skeleton")),
             &mut current_value,
             &candidate_items,
@@ -182,7 +183,7 @@ impl BlendAnimationUIWindow {
             event_type = Some(EventType::PreviewSkeletonUrl(new));
         }
 
-        let is_add = ui.button("+").clicked();
+        let is_add = ui.button(t!("Add Animation Slot")).clicked();
         if is_add {
             if let Some(animation_url) = self.collect_animation_urls().first().cloned() {
                 event_type = Some(EventType::Add(animation_url));
@@ -198,8 +199,8 @@ impl BlendAnimationUIWindow {
 
                 let is_changed = render_combo_box_not_null(
                     ui,
-                    &format!("Animation {}", index),
-                    &format!("Animation {}", index),
+                    &format!("{} {}", t!("Animation"), index),
+                    &format!("{} {}", t!("Animation"), index),
                     current_value,
                     self.collect_animation_urls(),
                 );
@@ -208,14 +209,17 @@ impl BlendAnimationUIWindow {
                 }
                 match &mut channel.blend_type {
                     SkeletonAnimationBlendType::Combine(factor) => {
-                        let response =
-                            ui.add(egui::DragValue::new(factor).speed(0.01).prefix("factor: "));
+                        let response = ui.add(
+                            egui::DragValue::new(factor)
+                                .speed(0.01)
+                                .prefix(t!("factor: ")),
+                        );
                         if response.changed() {
                             event_type = Some(EventType::UpdateFactor(index, *factor));
                         }
                     }
                 }
-                let is_remove = ui.button("-").clicked();
+                let is_remove = ui.button(t!("Remove Animation Slot")).clicked();
                 if is_remove {
                     remove_index.push(index);
                 }
@@ -241,7 +245,7 @@ impl BlendAnimationUIWindow {
                         .map(|x| x.borrow().url.clone())
                         .collect();
                     let mut skeleton_mesh_component = SkeletonMeshComponent::new(
-                        format!("PreviewSkeletonMesh"),
+                        t!("PreviewSkeletonMesh").to_string(),
                         Some(skeleton_url.clone()),
                         skeleton_mesh_urls,
                         Some(self.blend_animation.borrow().url.clone()),
@@ -356,6 +360,7 @@ impl UIWindow for BlendAnimationUIWindow {
                 let ctx = self.egui_winit_state.egui_ctx().clone();
                 misc::ui_begin(&mut self.egui_winit_state, window);
                 egui::Window::new("")
+                    .id(egui::Id::new("BlendAnimationEditor"))
                     .default_open(true)
                     .open(&mut true)
                     .show(&ctx, |ui| {

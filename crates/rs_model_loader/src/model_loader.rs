@@ -1,7 +1,7 @@
 use glam::Vec3Swizzles;
 use rs_artifact::{
     mesh_vertex::MeshVertex,
-    node_anim::{EQuatAnimInterpolation, EVectorAnimInterpolation, CUBIC_SPLINE_CONTROL_KEYS_NUM},
+    node_anim::{CUBIC_SPLINE_CONTROL_KEYS_NUM, EQuatAnimInterpolation, EVectorAnimInterpolation},
     skin_mesh::{SkinMesh, SkinMeshVertex},
 };
 use rs_assimp::texture_type::TextureType;

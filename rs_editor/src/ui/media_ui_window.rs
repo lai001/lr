@@ -16,6 +16,7 @@ use rs_engine::{
     resource_manager::ResourceManager,
 };
 use rs_foundation::new::{MultipleThreadMut, MultipleThreadMutType};
+use rs_localization::t;
 use rs_media::{
     composition::{CompositionInfo, check_composition},
     video_frame_player::VideoFramePlayer,
@@ -94,9 +95,10 @@ impl UIWindow for MediaUIWindow {
                                     }
                                 });
                             });
-                        egui::Window::new("Control").default_width(1000.0).show(
-                            state.egui_ctx(),
-                            |ui| {
+                        egui::Window::new(t!("Control"))
+                            .id(egui::Id::new("Control"))
+                            .default_width(1000.0)
+                            .show(state.egui_ctx(), |ui| {
                                 if let Some(player) = self.video_frame_player.as_mut() {
                                     let duration = player.get_duration();
                                     let mut play_time = player.get_current_play_time();
@@ -119,8 +121,7 @@ impl UIWindow for MediaUIWindow {
                                         }
                                     });
                                 }
-                            },
-                        );
+                            });
                     });
                 engine.draw_gui(gui_render_output);
 

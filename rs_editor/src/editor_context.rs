@@ -1355,6 +1355,14 @@ impl EditorContext {
 
         {
             let settings = project_context.project.settings.borrow();
+            let locale = settings.editor_settings.locale.clone();
+            if !locale.is_empty() {
+                rs_localization::set_locale(&locale);
+            }
+        }
+
+        {
+            let settings = project_context.project.settings.borrow();
             let engine_settings = &settings.engine_settings;
             let default_level = engine_settings.default_level.clone();
             let find_level = all_content_files
@@ -2401,6 +2409,15 @@ impl EditorContext {
             crate::ui::project_settings::EEventType::AntialiasType(ty) => {
                 self.player_viewport
                     .on_antialias_type_changed(ty, &mut self.engine);
+            }
+            crate::ui::project_settings::EEventType::SetLocale(locale) => {
+                if locale.is_empty() {
+                    if let Some(sys_locale) = sys_locale::get_locale() {
+                        rs_localization::set_locale(&sys_locale);
+                    }
+                } else {
+                    rs_localization::set_locale(&locale);
+                }
             }
         }
     }

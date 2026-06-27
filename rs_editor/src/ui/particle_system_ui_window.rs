@@ -20,6 +20,7 @@ use rs_engine::{
     resource_manager::ResourceManager,
 };
 use rs_foundation::new::SingleThreadMutType;
+use rs_localization::t;
 use rs_render::command::{
     BufferCreateInfo, CreateBuffer, DrawObject, PresentInfo, RenderCommand, UpdateBuffer,
 };
@@ -366,6 +367,7 @@ impl ParticleSystemView {
         for (name, emiter) in &template.emiters {
             editor_ui::EditorUI::new_window(
                 &format!("{}", name),
+                format!("Emitter_{}", name),
                 rs_engine::input_mode::EInputMode::UI,
             )
             .open(&mut true)
@@ -374,9 +376,9 @@ impl ParticleSystemView {
             .resizable(true)
             .show(context, |ui| match emiter {
                 rs_engine::particle::emiter::ParticleEmiter::Spawn(emiter) => {
-                    ui.label(format!("Rate: {}", emiter.spawn_rate));
-                    ui.label(format!("Count: {}", emiter.count_per_spawn));
-                    ui.label(format!("Time Range: {}", emiter.time_range));
+                    ui.label(format!("{} {}", t!("Rate: "), emiter.spawn_rate));
+                    ui.label(format!("{} {}", t!("Count: "), emiter.count_per_spawn));
+                    ui.label(format!("{} {}", t!("Time Range: "), emiter.time_range));
                 }
             });
         }
@@ -412,7 +414,7 @@ impl ParticleSystemView {
         egui::Area::new(egui::Id::new("my_area")).show(context, |ui| {
             let response = ui.allocate_response(ui.available_size(), Sense::click());
             response.context_menu(|ui| {
-                if ui.button("Create Emiter").clicked() {
+                if ui.button(t!("Create Emiter")).clicked() {
                     let mut name_generator = name_generator::NameGenerator::new(
                         data_source
                             .particle_system_template
@@ -440,9 +442,10 @@ impl ParticleSystemView {
     }
 
     fn monitor(context: &egui::Context, emiter: &rs_engine::particle::emiter::ParticleSpawnEmiter) {
-        let name = format!("{} Monitor", emiter.name.clone());
+        let name = format!("{} {}", emiter.name.clone(), t!("Monitor"));
         editor_ui::EditorUI::new_window(
             &format!("{}", name),
+            format!("Monitor_{}", emiter.name),
             rs_engine::input_mode::EInputMode::UI,
         )
         .open(&mut true)
@@ -467,13 +470,13 @@ impl ParticleSystemView {
             table
                 .header(20.0, |mut header| {
                     header.col(|ui| {
-                        ui.strong("Index");
+                        ui.strong(t!("Index"));
                     });
                     header.col(|ui| {
-                        ui.strong("Lifetime");
+                        ui.strong(t!("Lifetime"));
                     });
                     header.col(|ui| {
-                        ui.strong("Is alive");
+                        ui.strong(t!("Is alive"));
                     });
                 })
                 .body(|body| {

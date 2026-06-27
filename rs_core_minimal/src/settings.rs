@@ -65,6 +65,8 @@ impl RenderSettings {
 pub struct EditorSettings {
     pub is_auto_open_last_project: bool,
     pub is_enable_log_to_file: bool,
+    #[serde(default)]
+    pub locale: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -111,6 +113,7 @@ impl Default for Settings {
             editor_settings: EditorSettings {
                 is_auto_open_last_project: true,
                 is_enable_log_to_file: false,
+                locale: String::new(),
             },
             engine_settings: EngineSettings::default(),
         }

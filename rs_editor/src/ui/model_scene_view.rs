@@ -1,6 +1,7 @@
 use egui::Ui;
 use rs_assimp::scene::Scene;
 use rs_foundation::new::SingleThreadMutType;
+use rs_localization::t;
 
 use super::object_property_view::ObjectPropertyView;
 
@@ -29,10 +30,10 @@ enum EColumnType {
 impl ToString for EColumnType {
     fn to_string(&self) -> String {
         match self {
-            EColumnType::Index => "Index".to_string(),
-            EColumnType::Vertex => "Vertex".to_string(),
+            EColumnType::Index => t!("Index").to_string(),
+            EColumnType::Vertex => t!("Vertex").to_string(),
             EColumnType::TextureCoord(index) => {
-                format!("TextureCoord{}", index)
+                format!("{}{}", t!("TextureCoord"), index)
             }
         }
     }
@@ -69,12 +70,12 @@ fn draw_node(
 }
 
 pub fn render(ui: &mut Ui, scene: &Scene, data_source: &mut DataSource) {
-    ui.label(format!("Name: {}", scene.name.clone()));
+    ui.label(format!("{} {}", t!("Name: "), scene.name.clone()));
     let mut event: Option<EEventType> = None;
 
     ui.horizontal(|ui| {
-        ui.radio_value(&mut data_source.page_type, EPageType::Scene, "Scene");
-        ui.radio_value(&mut data_source.page_type, EPageType::Mesh, "Mesh");
+        ui.radio_value(&mut data_source.page_type, EPageType::Scene, t!("Scene"));
+        ui.radio_value(&mut data_source.page_type, EPageType::Mesh, t!("Mesh"));
     });
 
     match data_source.page_type {
@@ -215,29 +216,31 @@ fn render_scene_page(
 
     for animation in &scene.animations {
         ui.label(format!(
-            "Animation: {}, {}",
-            animation.name, animation.duration
+            "{}: {}, {}",
+            t!("Animation"),
+            animation.name,
+            animation.duration
         ));
     }
 
     for (name, _) in &scene.armatures {
-        ui.label(format!("Armature: {}", name));
+        ui.label(format!("{}: {}", t!("Armature"), name));
     }
 
     for skeleton in &scene.skeletons {
-        ui.label(format!("Skeleton: {}", skeleton.name));
+        ui.label(format!("{}: {}", t!("Skeleton"), skeleton.name));
     }
 }
 
 fn render_node(ui: &mut Ui, node: SingleThreadMutType<rs_assimp::node::Node<'_>>) {
     let node = node.borrow();
-    ui.label("Transformation");
+    ui.label(t!("Transformation"));
     ObjectPropertyView::transformation_widget(&node.transformation, ui);
     for mesh in node.meshes.clone() {
         let mesh = mesh.borrow();
-        ui.label(format!("Mesh: {}", mesh.name));
+        ui.label(format!("{}: {}", t!("Mesh"), mesh.name));
         for bone in &mesh.bones {
-            ui.label(format!("Bone: {}", bone.borrow().name));
+            ui.label(format!("{}: {}", t!("Bone"), bone.borrow().name));
         }
     }
 }

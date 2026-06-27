@@ -2,6 +2,7 @@ use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use egui_winit::State;
 use rapier3d::prelude::RigidBodyType;
 use rs_engine::{engine::Engine, frame_sync::FrameSync, input_mode::EInputMode};
+use rs_localization::t;
 use rs_render::egui_render::EGUIRenderOutput;
 use std::collections::HashMap;
 use winit::{
@@ -131,7 +132,7 @@ pub fn on_window_event(
 
 pub fn render_combo_box2<'a, Value>(
     ui: &mut egui::Ui,
-    label: &str,
+    label: impl AsRef<str>,
     id_salt: Option<egui::Id>,
     current_value: &mut Option<&'a Value>,
     selected_collection: Vec<Option<&'a Value>>,
@@ -139,12 +140,13 @@ pub fn render_combo_box2<'a, Value>(
 where
     Value: ToUIString + std::cmp::PartialEq,
 {
+    let label = label.as_ref();
     let mut is_changed = false;
     let id_salt = id_salt.unwrap_or_else(|| egui::Id::new(label));
     let combo_box = egui::ComboBox::new(id_salt, label).selected_text(format!("{}", {
         match current_value {
             Some(current_url) => current_url.to_ui_string(),
-            None => "None".to_string(),
+            None => t!("None").to_string(),
         }
     }));
     combo_box.show_ui(ui, |ui| {
@@ -152,7 +154,7 @@ where
             let text = selected_value
                 .as_ref()
                 .map(|x| x.to_ui_string())
-                .unwrap_or("None".to_string());
+                .unwrap_or(t!("None").to_string());
             is_changed = ui
                 .selectable_value(current_value, selected_value, text)
                 .changed();
@@ -166,7 +168,7 @@ where
 
 pub fn render_combo_box<'a, Value>(
     ui: &mut egui::Ui,
-    label: &str,
+    label: impl AsRef<str>,
     id_salt: Option<egui::Id>,
     current_value: &mut Option<&'a Value>,
     candidate_items: &'a Vec<Value>,
@@ -178,12 +180,18 @@ where
         Vec::with_capacity(1 + candidate_items.len());
     selected_collection.push(None);
     selected_collection.append(&mut candidate_items.iter().map(|x| Some(x)).collect());
-    render_combo_box2(ui, label, id_salt, current_value, selected_collection)
+    render_combo_box2(
+        ui,
+        label.as_ref(),
+        id_salt,
+        current_value,
+        selected_collection,
+    )
 }
 
 pub fn render_combo_box_not_null<Value>(
     ui: &mut egui::Ui,
-    label: &str,
+    label: impl AsRef<str>,
     id_salt: impl std::hash::Hash,
     current_value: &mut Value,
     selected_collection: Vec<Value>,
@@ -191,6 +199,7 @@ pub fn render_combo_box_not_null<Value>(
 where
     Value: ToUIString + std::cmp::PartialEq,
 {
+    let label = label.as_ref();
     let mut is_changed = false;
     let combo_box = egui::ComboBox::new(id_salt, label)
         .selected_text(format!("{}", { current_value.to_ui_string() }));
@@ -208,10 +217,10 @@ where
     is_changed
 }
 
-pub fn vec4_widget_mut(value: &mut glam::Vec4, ui: &mut egui::Ui, label: &str) -> bool {
+pub fn vec4_widget_mut(value: &mut glam::Vec4, ui: &mut egui::Ui, label: impl AsRef<str>) -> bool {
     let mut is_changed = false;
     ui.horizontal(|ui| {
-        ui.label(label);
+        ui.label(label.as_ref());
         is_changed = is_changed
             || ui
                 .add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "))
@@ -232,10 +241,10 @@ pub fn vec4_widget_mut(value: &mut glam::Vec4, ui: &mut egui::Ui, label: &str) -
     is_changed
 }
 
-pub fn vec3_widget_mut(value: &mut glam::Vec3, ui: &mut egui::Ui, label: &str) -> bool {
+pub fn vec3_widget_mut(value: &mut glam::Vec3, ui: &mut egui::Ui, label: impl AsRef<str>) -> bool {
     let mut is_changed = false;
     ui.horizontal(|ui| {
-        ui.label(label);
+        ui.label(label.as_ref());
         is_changed = is_changed
             || ui
                 .add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "))
@@ -252,10 +261,10 @@ pub fn vec3_widget_mut(value: &mut glam::Vec3, ui: &mut egui::Ui, label: &str) -
     is_changed
 }
 
-pub fn vec2_widget_mut(value: &mut glam::Vec2, ui: &mut egui::Ui, label: &str) -> bool {
+pub fn vec2_widget_mut(value: &mut glam::Vec2, ui: &mut egui::Ui, label: impl AsRef<str>) -> bool {
     let mut is_changed = false;
     ui.horizontal(|ui| {
-        ui.label(label);
+        ui.label(label.as_ref());
         is_changed = is_changed
             || ui
                 .add(egui::DragValue::new(&mut value.x).speed(0.1).prefix("x: "))
@@ -271,11 +280,11 @@ pub fn vec2_widget_mut(value: &mut glam::Vec2, ui: &mut egui::Ui, label: &str) -
 pub fn f32_widget_mut<Num: egui::emath::Numeric>(
     value: &mut Num,
     ui: &mut egui::Ui,
-    label: &str,
+    label: impl AsRef<str>,
 ) -> bool {
     let mut is_changed = false;
     ui.horizontal(|ui| {
-        ui.label(label);
+        ui.label(label.as_ref());
         is_changed = ui.add(egui::DragValue::new(value).speed(0.1)).changed();
     });
     is_changed
@@ -294,10 +303,10 @@ impl ToUIString for wgpu::TextureFormat {
 impl ToUIString for RigidBodyType {
     fn to_ui_string(&self) -> String {
         match self {
-            RigidBodyType::Dynamic => "Dynamic".to_string(),
-            RigidBodyType::Fixed => "Fixed".to_string(),
-            RigidBodyType::KinematicPositionBased => "Kinematic position based".to_string(),
-            RigidBodyType::KinematicVelocityBased => "Kinematic velocity based".to_string(),
+            RigidBodyType::Dynamic => t!("Dynamic").to_string(),
+            RigidBodyType::Fixed => t!("Fixed").to_string(),
+            RigidBodyType::KinematicPositionBased => t!("Kinematic position based").to_string(),
+            RigidBodyType::KinematicVelocityBased => t!("Kinematic velocity based").to_string(),
         }
     }
 }

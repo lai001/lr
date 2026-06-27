@@ -1,15 +1,17 @@
 use egui::{Context, Widget, color_picker::Alpha};
+use rs_localization::t;
+use std::borrow::Cow;
 use transform_gizmo_egui::*;
 
-fn gizmo_mode_text(gizmo_mode: &EnumSet<GizmoMode>) -> &'static str {
+fn gizmo_mode_text(gizmo_mode: &EnumSet<GizmoMode>) -> Cow<'static, str> {
     if gizmo_mode == &GizmoMode::all_rotate() {
-        "Rotate"
+        t!("Rotate")
     } else if gizmo_mode == &GizmoMode::all_scale() {
-        "Scale"
+        t!("Scale")
     } else if gizmo_mode == &GizmoMode::all_translate() {
-        "Translate"
+        t!("Translate")
     } else if gizmo_mode == &GizmoMode::all() {
-        "All"
+        t!("All")
     } else {
         unreachable!()
     }
@@ -39,7 +41,7 @@ pub fn draw(
         .open(is_open)
         .default_open(false)
         .show(context, |ui| {
-            egui::ComboBox::from_label("Mode")
+            egui::ComboBox::from_label(t!("Mode"))
                 .selected_text(gizmo_mode_text(gizmo_mode))
                 .show_ui(ui, |ui| {
                     for mode in [
@@ -53,27 +55,27 @@ pub fn draw(
                 });
             ui.end_row();
 
-            egui::ComboBox::from_label("Orientation")
+            egui::ComboBox::from_label(t!("Orientation"))
                 .selected_text(format!("{gizmo_orientation:?}"))
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(gizmo_orientation, GizmoOrientation::Global, "Global");
-                    ui.selectable_value(gizmo_orientation, GizmoOrientation::Local, "Local");
+                    ui.selectable_value(gizmo_orientation, GizmoOrientation::Global, t!("Global"));
+                    ui.selectable_value(gizmo_orientation, GizmoOrientation::Local, t!("Local"));
                 });
             ui.end_row();
 
             ui.separator();
 
             egui::Slider::new(gizmo_size, 10.0f32..=500.0)
-                .text("Gizmo size")
+                .text(t!("Gizmo size"))
                 .ui(ui);
             egui::Slider::new(stroke_width, 0.1..=10.0)
-                .text("Stroke width")
+                .text(t!("Stroke width"))
                 .ui(ui);
             egui::Slider::new(inactive_alpha, 0.0..=1.0)
-                .text("Inactive alpha")
+                .text(t!("Inactive alpha"))
                 .ui(ui);
             egui::Slider::new(highlight_alpha, 0.0..=1.0)
-                .text("Highlighted alpha")
+                .text(t!("Highlighted alpha"))
                 .ui(ui);
 
             ui.horizontal(|ui| {
@@ -82,25 +84,25 @@ pub fn draw(
                     &mut highlight_color,
                     Alpha::Opaque,
                 );
-                egui::Checkbox::new(custom_highlight_color, "Custom highlight color").ui(ui);
+                egui::Checkbox::new(custom_highlight_color, t!("Custom highlight color")).ui(ui);
             });
 
             ui.horizontal(|ui| {
                 egui::color_picker::color_edit_button_srgba(ui, x_color, Alpha::Opaque);
-                egui::Label::new("X axis color").ui(ui);
+                egui::Label::new(t!("X axis color")).ui(ui);
             });
 
             ui.horizontal(|ui| {
                 egui::color_picker::color_edit_button_srgba(ui, y_color, Alpha::Opaque);
-                egui::Label::new("Y axis color").ui(ui);
+                egui::Label::new(t!("Y axis color")).ui(ui);
             });
             ui.horizontal(|ui| {
                 egui::color_picker::color_edit_button_srgba(ui, z_color, Alpha::Opaque);
-                egui::Label::new("Z axis color").ui(ui);
+                egui::Label::new(t!("Z axis color")).ui(ui);
             });
             ui.horizontal(|ui| {
                 egui::color_picker::color_edit_button_srgba(ui, s_color, Alpha::Opaque);
-                egui::Label::new("Screen axis color").ui(ui);
+                egui::Label::new(t!("Screen axis color")).ui(ui);
             });
             ui.end_row();
         });

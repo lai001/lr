@@ -197,15 +197,15 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             }
             EMaterialNodeType::Sink(attribute) => {
                 let names = vec![
-                    "Base Color",
-                    "Metallic",
-                    "Roughness",
-                    "Normal",
-                    "Opacity",
-                    "Clear Coat",
-                    "Clear Coat Roughness",
+                    t!("Base Color"),
+                    t!("Metallic"),
+                    t!("Roughness"),
+                    t!("Normal"),
+                    t!("Opacity"),
+                    t!("Clear Coat"),
+                    t!("Clear Coat Roughness"),
                 ];
-                ui.label(names[pin.id.input]);
+                ui.label(names[pin.id.input].as_str());
                 if !pin.remotes.is_empty() {
                     return PinInfo::square().with_fill(NODE_IO_COLOR);
                 }
@@ -248,13 +248,16 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                     let text = if let Some(current_value) = current_value.as_ref() {
                         current_value.to_string()
                     } else {
-                        "None".to_string()
+                        t!("None").to_string()
                     };
 
                     egui::ComboBox::from_label("")
                         .selected_text(format!("{}", text))
                         .show_ui(ui, |ui| {
-                            if ui.selectable_value(current_value, None, "None").clicked() {
+                            if ui
+                                .selectable_value(current_value, None, t!("None"))
+                                .clicked()
+                            {
                                 self.is_updated = true;
                             }
                             for selectable_texture_url in self.texture_urls.iter_mut() {
@@ -281,13 +284,16 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 let text = if let Some(current_value) = current_value.as_ref() {
                     current_value.to_string()
                 } else {
-                    "None".to_string()
+                    t!("None").to_string()
                 };
 
                 egui::ComboBox::from_label("")
                     .selected_text(format!("{}", text))
                     .show_ui(ui, |ui| {
-                        if ui.selectable_value(current_value, None, "None").clicked() {
+                        if ui
+                            .selectable_value(current_value, None, t!("None"))
+                            .clicked()
+                        {
                             self.is_updated = true;
                         }
                         for selectable_texture_url in self.virtual_texture_urls.iter_mut() {
@@ -327,7 +333,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                         let text = if let Some(current_value) = current_value.as_ref() {
                             current_value.borrow().url.to_string()
                         } else {
-                            "None".to_string()
+                            t!("None").to_string()
                         };
                         ui.push_id("value", |ui| {
                             egui::ComboBox::from_label("")
@@ -336,7 +342,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                                     if ui
                                         .add(egui::Button::selectable(
                                             current_value.is_none(),
-                                            "None",
+                                            t!("None"),
                                         ))
                                         .clicked()
                                     {
@@ -383,14 +389,14 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                         let text = if let Some(current_name) = current_name.as_ref() {
                             current_name.to_string()
                         } else {
-                            "None".to_string()
+                            t!("None").to_string()
                         };
                         ui.push_id("name", |ui| {
                             egui::ComboBox::from_label("")
                                 .selected_text(format!("{}", text))
                                 .show_ui(ui, |ui| {
                                     let mut names: Vec<Option<String>> =
-                                        vec![Some("None".to_string())];
+                                        vec![Some(t!("None").to_string())];
                                     let mut field_names = current_value
                                         .as_ref()
                                         .map(|x| {
@@ -407,7 +413,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                                         let text = selected_value
                                             .as_ref()
                                             .cloned()
-                                            .unwrap_or("None".to_string());
+                                            .unwrap_or(t!("None").to_string());
                                         self.is_updated = self.is_updated
                                             || ui
                                                 .selectable_value(
@@ -440,7 +446,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
             EMaterialNodeType::Sink(..) => PinInfo::default(),
             EMaterialNodeType::Texture(_) => PinInfo::square().with_fill(NODE_IO_COLOR),
             EMaterialNodeType::TexCoord(index) => {
-                let is_changed = egui::ComboBox::from_label("TexCoord")
+                let is_changed = egui::ComboBox::from_label(t!("TexCoord"))
                     .selected_text(format!("{}", index))
                     .show_ui(ui, |ui| {
                         if ui.selectable_value(index, 0, "0").clicked() {
@@ -540,7 +546,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 ui.close_kind(egui::UiKind::Menu);
             }
         }
-        ui.menu_button("Paramenter", |ui| {
+        ui.menu_button(t!("Paramenter"), |ui| {
             for field in self.paramenters.fields() {
                 if ui.button(field.name.clone()).clicked() {
                     let node = MaterialNode {
@@ -789,12 +795,12 @@ impl MaterialView {
 
         Panel::top("material_menu_bar").show_inside(&mut panel_ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                ui.menu_button("Tool", |ui| {
-                    if ui.add(Button::new("Debug Shader Code")).clicked() {
+                ui.menu_button(t!("Tool"), |ui| {
+                    if ui.add(Button::new(t!("Debug Shader Code"))).clicked() {
                         data_source.is_shader_code_window_open = true;
                     }
                 });
-                if ui.button("Apply").clicked() {
+                if ui.button(t!("Apply")).clicked() {
                     if let Some(current_resolve_result) = self.current_resolve_result.as_ref() {
                         self.event = Some(EEventType::Update(
                             material.clone(),
@@ -805,70 +811,84 @@ impl MaterialView {
             });
         });
 
-        editor_ui::EditorUI::new_window("Shader Code", rs_engine::input_mode::EInputMode::UI)
-            .open(&mut data_source.is_shader_code_window_open)
-            .vscroll(true)
-            .hscroll(true)
-            .resizable(true)
-            .show(context, |ui| {
-                let current_resolve_result = &mut self.current_resolve_result;
-                if let Some(current_resolve_result) = current_resolve_result {
-                    if ui.button(format!("Validate")).clicked() {
-                        let mut validates = HashMap::new();
-                        for (k,v) in current_resolve_result.iter() {
-                            let validate=rs_render::shader_library::ShaderLibrary::validate_shader_code(
+        editor_ui::EditorUI::new_window(
+            t!("Shader Code"),
+            "Shader Code",
+            rs_engine::input_mode::EInputMode::UI,
+        )
+        .open(&mut data_source.is_shader_code_window_open)
+        .vscroll(true)
+        .hscroll(true)
+        .resizable(true)
+        .show(context, |ui| {
+            let current_resolve_result = &mut self.current_resolve_result;
+            if let Some(current_resolve_result) = current_resolve_result {
+                if ui.button(format!("{}", t!("Validate"))).clicked() {
+                    let mut validates = HashMap::new();
+                    for (k, v) in current_resolve_result.iter() {
+                        let validate =
+                            rs_render::shader_library::ShaderLibrary::validate_shader_code(
                                 &v.shader_code,
                             );
-                            validates.insert(k.clone(), validate);
-                        }
-                        self.validate = Some(
-                                validates
-                        );
+                        validates.insert(k.clone(), validate);
                     }
-                    match &self.validate {
-                        Some(validates) => {
-
-                            for (_,validate) in validates {
-                                match validate {
-                                    Ok(_) => {
-                                        ui.label(format!("Ok"));
-                                    }
-                                    Err(err) => {
-                                        let theme =
-                                            egui_extras::syntax_highlighting::CodeTheme::from_memory(
-                                                ui.ctx(),
-                                                ui.style()
-                                            );
-                                        egui_extras::syntax_highlighting::code_view_ui(
-                                            ui,
-                                            &theme,
-                                            &err.to_string(),
-                                            "wgsl",
+                    self.validate = Some(validates);
+                }
+                match &self.validate {
+                    Some(validates) => {
+                        for (_, validate) in validates {
+                            match validate {
+                                Ok(_) => {
+                                    ui.label(t!("Ok"));
+                                }
+                                Err(err) => {
+                                    let theme =
+                                        egui_extras::syntax_highlighting::CodeTheme::from_memory(
+                                            ui.ctx(),
+                                            ui.style(),
                                         );
-                                    }
+                                    egui_extras::syntax_highlighting::code_view_ui(
+                                        ui,
+                                        &theme,
+                                        &err.to_string(),
+                                        "wgsl",
+                                    );
                                 }
                             }
-
-                        },
-                        None => {
-                            ui.label(format!("None"));
                         }
                     }
-                    ui.separator();
-                    let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx(), ui.style());
-                    let clicked = egui_extras::syntax_highlighting::code_view_ui(
-                        ui,
-                        &theme,
-                        &current_resolve_result.iter().find(|_|true).unwrap().1.shader_code,
-                        "wgsl",
-                    )
-                    .clicked_by(PointerButton::Secondary);
-                    if clicked {
-                        ui.ctx()
-                            .copy_text(current_resolve_result.iter().find(|_|true).unwrap().1.shader_code.clone());
+                    None => {
+                        ui.label(t!("None"));
                     }
                 }
-            });
+                ui.separator();
+                let theme =
+                    egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx(), ui.style());
+                let clicked = egui_extras::syntax_highlighting::code_view_ui(
+                    ui,
+                    &theme,
+                    &current_resolve_result
+                        .iter()
+                        .find(|_| true)
+                        .unwrap()
+                        .1
+                        .shader_code,
+                    "wgsl",
+                )
+                .clicked_by(PointerButton::Secondary);
+                if clicked {
+                    ui.ctx().copy_text(
+                        current_resolve_result
+                            .iter()
+                            .find(|_| true)
+                            .unwrap()
+                            .1
+                            .shader_code
+                            .clone(),
+                    );
+                }
+            }
+        });
 
         let material_clone = material.clone();
         let mut material = material.borrow_mut();
@@ -948,7 +968,7 @@ impl MaterialView {
                         let is_changed = render_combo_box_not_null(
                             ui,
                             "",
-                            format!("Data Type {index}"),
+                            format!("{}{index}", t!("Data Type ")),
                             &mut current_value,
                             selected_collection,
                         );

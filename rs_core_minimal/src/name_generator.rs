@@ -19,8 +19,8 @@ impl NameGenerator {
         }
     }
 
-    pub fn next(&mut self, name: &str) -> String {
-        let mut new_name = name.to_string();
+    pub fn next(&mut self, name: impl AsRef<str>) -> String {
+        let mut new_name = name.as_ref().to_string();
         loop {
             if !self.names.contains_key(&new_name) {
                 self.names.insert(new_name.clone(), 0);

@@ -66,7 +66,7 @@ impl TopMenu {
 
                     ui.menu_button(t!("New Project"), |ui| {
                         ui.text_edit_singleline(&mut self.new_project_name);
-                        if ui.add(Button::new(t!("OK"))).clicked() {
+                        if ui.add(Button::new(t!("Ok"))).clicked() {
                             click =
                                 Some(EClickEventType::NewProject(self.new_project_name.clone()));
                         }
@@ -112,7 +112,7 @@ impl TopMenu {
                     });
                     ui.menu_button(t!("Build"), |ui| {
                         ui.menu_button("Windows", |ui| {
-                            ui.menu_button("Debug", |ui| {
+                            ui.menu_button(t!("Debug"), |ui| {
                                 if ui.add(Button::new("x64")).clicked() {
                                     click = Some(EClickEventType::Build(BuildConfig {
                                         build_platform: EBuildPlatformType::Windows,
@@ -122,7 +122,7 @@ impl TopMenu {
                                     ui.close_kind(egui::UiKind::Menu);
                                 }
                             });
-                            ui.menu_button("Release", |ui| {
+                            ui.menu_button(t!("Release"), |ui| {
                                 if ui.add(Button::new("x64")).clicked() {
                                     click = Some(EClickEventType::Build(BuildConfig {
                                         build_platform: EBuildPlatformType::Windows,
@@ -212,7 +212,7 @@ impl TopMenu {
                             }
                         }
                     });
-                    ui.menu_button("Debug Flags", |ui| {
+                    ui.menu_button(t!("Debug Flags"), |ui| {
                         let mut init_flags = rs_engine::player_viewport::DebugFlags::empty();
                         for ty in rs_engine::player_viewport::DebugFlags::all() {
                             let mut checked = datasource.debug_flags.contains(ty);
@@ -231,22 +231,25 @@ impl TopMenu {
                         ui.add(
                             egui::DragValue::new(&mut datasource.multiple_players)
                                 .speed(1)
-                                .prefix("Players: ")
+                                .prefix(t!("Players: "))
                                 .range(1..=8),
                         );
-                        if ui.add(Button::new("Play As Server")).clicked() {
+                        if ui.add(Button::new(t!("Play As Server"))).clicked() {
                             click = Some(EClickEventType::PlayAsServer);
                             ui.close_kind(egui::UiKind::Menu);
                         }
-                        if ui.add(Button::new("Play")).clicked() {
+                        if ui.add(Button::new(t!("Play"))).clicked() {
                             click = Some(EClickEventType::PlayStandalone);
                             ui.close_kind(egui::UiKind::Menu);
                         }
                     });
-                    ui.checkbox(&mut datasource.is_simulate_real_time, "Simulate Real Time");
+                    ui.checkbox(
+                        &mut datasource.is_simulate_real_time,
+                        t!("Simulate Real Time"),
+                    );
                 });
                 ui.menu_button(t!("Test"), |ui| {
-                    if ui.add(Button::new("Multiple Draw")).clicked() {
+                    if ui.add(Button::new(t!("Multiple Draw"))).clicked() {
                         click = Some(EClickEventType::OpenWindow(EWindowType::MultipleDrawUi));
                         ui.close_kind(egui::UiKind::Menu);
                     }

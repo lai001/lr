@@ -1,6 +1,7 @@
 use egui::{Color32, Ui};
 use egui_plot::{Line, MarkerShape, Plot, PlotPoints, Points};
 use rs_engine::content::curve::{ControlPoint, Curve};
+use rs_localization::t;
 use uniform_cubic_splines::{basis::*, *};
 
 pub struct CurveViewDataSource {
@@ -62,7 +63,7 @@ pub fn draw(opend_curve: &mut Curve, ui: &mut Ui, data_source: &mut CurveViewDat
     let is_pointer_button_down_on = plot_response.response.is_pointer_button_down_on();
 
     plot_response.response.context_menu(|ui| {
-        let response = ui.button("Add");
+        let response = ui.button(t!("Add"));
         if response.clicked() {
             if let Some(last_hover_plot_pos) = plot_pos.or(data_source.last_hover_plot_pos) {
                 let index = opend_curve.control_points.len();
