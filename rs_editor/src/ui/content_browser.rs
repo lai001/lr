@@ -1,6 +1,6 @@
 use crate::thumbnail_cache::ThumbnailCache;
 use egui::{Color32, Context, RichText, Sense, Ui};
-use rs_content::content_folder::ContentFolder;
+use rs_content_manager::content_folder::ContentFolder;
 use rs_engine::content::content_file_type::EContentFileType;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_localization::t;

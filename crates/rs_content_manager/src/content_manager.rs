@@ -28,6 +28,12 @@ pub struct ContentMeta<T: Serialize> {
 type ContentCreator = Box<dyn Fn(Value) -> crate::error::Result<EContentFileType>>;
 type ContentSaver = Box<dyn Fn(EContentFileType) -> crate::error::Result<Value>>;
 
+enum LoadResult {
+    File(EContentFileType),
+    Folder,
+    Skip,
+}
+
 pub struct ContentManager {
     content_root_folder_path: PathBuf,
     content_files: Vec<EContentFileType>,
@@ -183,9 +189,12 @@ impl ContentManager {
                 &self.creators,
                 &mut self.content_folders,
             ) {
-                Ok(content_file) => {
-                    self.content_files.push(content_file);
-                }
+                Ok(load_result) => match load_result {
+                    LoadResult::File(content_file) => {
+                        self.content_files.push(content_file);
+                    }
+                    _ => {}
+                },
                 Err(err) => log::warn!("{err}"),
             }
         }
@@ -238,7 +247,7 @@ impl ContentManager {
         content_root_folder_path: &Path,
         creators: &HashMap<String, ContentCreator>,
         content_folders: &mut HashMap<PathBuf, ContentFolder>,
-    ) -> crate::error::Result<EContentFileType> {
+    ) -> crate::error::Result<LoadResult> {
         if path.is_file() {
             let file = File::open(path)?;
             let reader = BufReader::new(file);
@@ -258,29 +267,39 @@ impl ContentManager {
                     "No content field".to_string(),
                 ))?;
             let content = creator(content.clone())?;
-            if let Some(parent) = path.parent() {
-                let relative_path = Self::make_relative_path(parent, content_root_folder_path);
 
-                content_folders
-                    .entry(relative_path.clone())
-                    .or_insert_with(|| ContentFolder::new(relative_path))
-                    .insert_file(content.clone());
-            }
-            return Ok(content);
+            let parent = path
+                .parent()
+                .ok_or(crate::error::Error::Io(std::io::ErrorKind::NotFound.into()))?;
+            let relative_path = Self::make_relative_path(parent, content_root_folder_path);
+
+            content_folders
+                .entry(relative_path.clone())
+                .or_insert_with(|| ContentFolder::new(relative_path))
+                .insert_file(content.clone());
+            return Ok(LoadResult::File(content));
         } else if path.is_dir() {
             let relative_path = Self::make_relative_path(path, content_root_folder_path);
 
             content_folders
                 .entry(relative_path.clone())
                 .or_insert_with(|| ContentFolder::new(relative_path.clone()));
-            let parent = relative_path.parent();
-            if let Some(parent) = parent {
-                if let Some(content_folder) = content_folders.get_mut(parent) {
-                    content_folder.insert_sub_folder(relative_path);
-                }
-            }
+            let parent = relative_path
+                .parent()
+                .ok_or(crate::error::Error::Io(std::io::ErrorKind::NotFound.into()))?;
+
+            let content_folder =
+                content_folders
+                    .get_mut(parent)
+                    .ok_or(crate::error::Error::Other(format!(
+                        "Not contains {}",
+                        parent.display()
+                    )))?;
+
+            content_folder.insert_sub_folder(relative_path);
+            return Ok(LoadResult::Folder);
         }
-        Err(crate::error::Error::Other("Unknown error".to_string()))
+        return Ok(LoadResult::Skip);
     }
 
     pub fn content_root_relative_path() -> &'static Path {

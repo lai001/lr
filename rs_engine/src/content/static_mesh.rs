@@ -28,6 +28,7 @@ pub struct StaticMesh {
     pub asset_info: AssetInfo,
     pub is_enable_multiresolution: bool,
 }
+crate::impl_content!(StaticMesh);
 
 impl StaticMesh {
     pub fn get_name(&self) -> String {

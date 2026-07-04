@@ -12,6 +12,8 @@ pub struct IBL {
     pub image_reference: Option<PathBuf>,
 }
 
+crate::impl_content!(IBL);
+
 impl Asset for IBL {
     fn get_url(&self) -> url::Url {
         self.url.clone()

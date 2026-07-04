@@ -24,6 +24,8 @@ pub struct Curve {
     pub control_points: Vec<ControlPoint>,
 }
 
+crate::impl_content!(Curve);
+
 impl Curve {
     pub fn new(url: url::Url) -> Curve {
         Curve {

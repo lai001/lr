@@ -23,6 +23,7 @@ pub struct ParticleSystem {
     pub max_particles: usize,
     pub emiters: HashMap<String, EParticleEmiterType>,
 }
+crate::impl_content!(ParticleSystem);
 
 impl ParticleSystem {
     pub fn new(url: url::Url) -> ParticleSystem {

@@ -12,7 +12,7 @@ use egui_snarl::{
     ui::{Grid, PinInfo, SnarlStyle, SnarlViewer},
 };
 use rs_artifact::material_paramenters::{BaseDataValueType, StructField};
-use rs_content::content_manager::ContentManager;
+use rs_content_manager::content_manager::ContentManager;
 use rs_engine::content::{
     content_file_type::EContentFileType,
     material_paramenters_collection::MaterialParamentersCollection,

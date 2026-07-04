@@ -15,6 +15,8 @@ pub struct MaterialParamentersCollection {
     buffer_handle: Option<crate::handle::BufferHandle>,
 }
 
+crate::impl_content!(MaterialParamentersCollection);
+
 impl MaterialParamentersCollection {
     pub fn new(url: url::Url) -> MaterialParamentersCollection {
         MaterialParamentersCollection {

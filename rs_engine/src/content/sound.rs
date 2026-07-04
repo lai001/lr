@@ -23,6 +23,7 @@ pub struct Sound {
     pub url: url::Url,
     pub asset_info: AssetInfo,
 }
+crate::impl_content!(Sound);
 
 impl Sound {
     pub fn new(url: url::Url, relative_path: PathBuf) -> Sound {

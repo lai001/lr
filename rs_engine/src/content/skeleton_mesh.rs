@@ -8,6 +8,7 @@ pub struct SkeletonMesh {
     pub skeleton_url: url::Url,
     pub asset_url: url::Url,
 }
+crate::impl_content!(SkeletonMesh);
 
 impl SkeletonMesh {
     pub fn get_name(&self) -> String {

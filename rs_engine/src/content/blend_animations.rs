@@ -15,6 +15,8 @@ pub struct BlendAnimations {
     pub channels: Vec<Channel>,
 }
 
+crate::impl_content!(BlendAnimations);
+
 impl BlendAnimations {
     pub fn new(url: url::Url) -> BlendAnimations {
         BlendAnimations {

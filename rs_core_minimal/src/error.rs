@@ -2,6 +2,7 @@
 pub enum Error {
     NulError(std::ffi::NulError),
     IO(std::io::Error),
+    TypeMismatch(String),
 }
 
 impl std::fmt::Display for Error {

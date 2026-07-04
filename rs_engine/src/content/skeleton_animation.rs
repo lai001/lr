@@ -8,6 +8,7 @@ pub struct SkeletonAnimation {
     pub url: url::Url,
     pub asset_url: url::Url,
 }
+crate::impl_content!(SkeletonAnimation);
 
 impl SkeletonAnimation {
     pub fn get_name(&self) -> String {

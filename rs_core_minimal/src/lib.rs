@@ -16,6 +16,7 @@ pub mod serde_user_data;
 pub mod settings;
 pub mod sphere_3d;
 pub mod thread_pool;
+pub mod types;
 
 #[macro_export(local_inner_macros)]
 macro_rules! vec_ref {

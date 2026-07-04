@@ -314,6 +314,8 @@ pub struct Level {
     runtime: Option<Runtime>,
 }
 
+crate::impl_content!(Level);
+
 #[cfg(feature = "network")]
 impl crate::network::NetworkReplicated for Level {
     fn get_network_id(&self) -> &uuid::Uuid {

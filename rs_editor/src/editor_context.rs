@@ -33,7 +33,7 @@ use lazy_static::lazy_static;
 use rs_artifact::{
     derive_data::compressed_texture::CompressedTexture, material_paramenters::BaseDataValueType,
 };
-use rs_content::content_manager::ContentManager;
+use rs_content_manager::content_manager::ContentManager;
 use rs_core_minimal::{
     file_manager, name_generator::make_unique_name, path_ext::CanonicalizeSlashExt,
 };

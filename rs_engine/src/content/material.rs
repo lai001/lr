@@ -29,6 +29,8 @@ pub struct Material {
     run_time: Option<MaterialRuntime>,
 }
 
+crate::impl_content!(Material);
+
 impl Asset for Material {
     fn get_url(&self) -> url::Url {
         self.url.clone()

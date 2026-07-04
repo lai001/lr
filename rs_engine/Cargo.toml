@@ -18,7 +18,12 @@ standalone = [
     "rs_render/standalone",
     "rs_core_minimal/standalone",
 ]
-profiler = ["tracy-client/enable", "rs_render/profiler", "rapier3d/profiler", "rs_tracy_client_ext/profiler"]
+profiler = [
+    "tracy-client/enable",
+    "rs_render/profiler",
+    "rapier3d/profiler",
+    "rs_tracy_client_ext/profiler",
+]
 plugin_shared_crate = []
 network = ["dep:rs_network"]
 android-native-activity = ["winit/android-native-activity"]
@@ -29,6 +34,7 @@ bitflags = "2.13.0"
 md-5 = { version = "0.11.0" }
 anyhow = { version = "1.0.102", optional = true }
 serde = { version = "1.0.228", features = ["derive", "rc"] }
+typetag = "0.2.22"
 serde_json = "1.0.150"
 bincode = { version = "=2.0.1", features = ["serde"] }
 chrono = "0.4.45"
@@ -70,6 +76,7 @@ rs_render_types = { path = "../rs_render_types" }
 rs_render_core = { path = "../crates/rs_render_core" }
 rs_network = { path = "../crates/rs_network", optional = true }
 rs_tracy_client_ext = { path = "../crates/rs_tracy_client_ext" }
+rs_content = { path = "../crates/rs_content" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15.1"

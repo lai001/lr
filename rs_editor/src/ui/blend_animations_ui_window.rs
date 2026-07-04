@@ -6,7 +6,7 @@ use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui::Ui;
 use egui_winit::State;
-use rs_content::content_manager::ContentManager;
+use rs_content_manager::content_manager::ContentManager;
 use rs_engine::{
     content::{blend_animations::BlendAnimations, skeleton_mesh::SkeletonMesh},
     engine::Engine,

@@ -18,6 +18,8 @@ pub struct RenderTarget2D {
     pub run_time: Option<Runtime>,
 }
 
+crate::impl_content!(RenderTarget2D);
+
 impl RenderTarget2D {
     pub fn new(
         url: url::Url,

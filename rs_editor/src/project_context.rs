@@ -9,7 +9,7 @@ use rs_artifact::{
     EEndianType, artifact::ArtifactAssetEncoder, material::MaterialInfo,
     shader_source_code::ShaderSourceCode, sound::ESoundFileType,
 };
-use rs_content::content_manager::ContentManager;
+use rs_content_manager::content_manager::ContentManager;
 use rs_engine::{
     ASSET_SCHEME, content::content_file_type::EContentFileType, resource_manager::ResourceManager,
     thread_pool::ThreadPool,

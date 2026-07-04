@@ -2,7 +2,7 @@ use super::{material_view::MaterialView, ui_window::UIWindow};
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui_winit::State;
-use rs_content::content_manager::ContentManager;
+use rs_content_manager::content_manager::ContentManager;
 use rs_engine::engine::Engine;
 use rs_foundation::new::SingleThreadMutType;
 use winit::event::WindowEvent;

@@ -19,6 +19,7 @@ pub struct TextureFile {
     #[serde(default)]
     pub compressed_texture_url: Option<url::Url>,
 }
+crate::impl_content!(TextureFile);
 
 impl Asset for TextureFile {
     fn get_url(&self) -> url::Url {
