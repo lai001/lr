@@ -1,4 +1,6 @@
+use crate::components::component::Component;
 use crate::content::material::ParamentResource;
+use crate::drawable::Drawable;
 #[cfg(feature = "network")]
 use crate::network::NetworkReplicated;
 #[cfg(feature = "network")]
@@ -140,6 +142,382 @@ pub struct StaticMeshComponent {
     pub run_time: Option<StaticMeshComponentRuntime>,
 }
 
+#[typetag::serde]
+impl Component for StaticMeshComponent {
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn set_name(&mut self, new_name: String) {
+        self.name = new_name;
+    }
+
+    fn get_final_transformation(&self) -> glam::Mat4 {
+        self.run_time
+            .as_ref()
+            .map(|x| x.final_transformation)
+            .unwrap_or_default()
+    }
+
+    fn set_transformation(&mut self, transformation: glam::Mat4) {
+        self.transformation = transformation;
+    }
+
+    fn get_transformation(&self) -> glam::Mat4 {
+        self.transformation
+    }
+
+    fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
+        let _ = engine;
+        let _ = files;
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+
+        let Some(physics) = run_time.physics.as_mut() else {
+            return;
+        };
+        let Some(level_physics) = level_physics else {
+            return;
+        };
+        if !physics.is_valid() {
+            return;
+        }
+
+        let rigid_body = level_physics
+            .rigid_body_set
+            .get_mut(physics.rigid_body_handle)
+            .unwrap();
+        let collider = level_physics
+            .collider_set
+            .get_mut(physics.collider_handles[0])
+            .unwrap();
+
+        let (_, rotation, translation) = run_time
+            .final_transformation
+            .to_scale_rotation_translation();
+        rigid_body.set_translation(translation, false);
+        let (axis, angle) = rotation.to_axis_angle();
+        rigid_body.set_rotation(Rotation::from_axis_angle(axis.normalize(), angle), false);
+        rigid_body.set_angvel(glam::Vec3::ZERO, false);
+        rigid_body.set_linvel(glam::Vec3::ZERO, false);
+        rigid_body.reset_forces(false);
+        rigid_body.reset_torques(false);
+        rigid_body.wake_up(true);
+
+        collider.set_position(Pose3::from_translation(translation));
+        collider.set_rotation(Rotation::from_axis_angle(axis.normalize(), angle));
+    }
+
+    fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.final_transformation = final_transformation;
+    }
+
+    fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.parent_final_transformation = parent_final_transformation;
+    }
+
+    fn get_parent_final_transformation(&self) -> glam::Mat4 {
+        let Some(run_time) = self.run_time.as_ref() else {
+            return glam::Mat4::IDENTITY;
+        };
+        run_time.parent_final_transformation
+    }
+
+    fn initialize(
+        &mut self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
+        assert!(self.run_time.is_none());
+        #[cfg(feature = "network")]
+        if self.network_fields.net_id.is_none() {
+            self.set_network_id(crate::network::default_uuid());
+        }
+        let resource_manager = engine.get_resource_manager();
+        let mut find_static_mesh: Option<Arc<StaticMesh>> = None;
+
+        for file in files {
+            if let EContentFileType::StaticMesh(mesh) = file {
+                let mesh = mesh.borrow();
+                if Some(mesh.url.clone()) == self.static_mesh {
+                    find_static_mesh = resource_manager
+                        .get_static_mesh(&mesh.asset_info.get_url())
+                        .ok();
+                    if find_static_mesh.is_some() {
+                        break;
+                    }
+                }
+            }
+        }
+
+        let material = if let Some(material_url) = &self.material_url {
+            files.iter().find_map(|x| {
+                if let EContentFileType::Material(content_material) = x {
+                    if &content_material.borrow().url == material_url {
+                        return Some(content_material.clone());
+                    }
+                }
+                None
+            })
+        } else {
+            None
+        };
+
+        if let Some(url) = &self.static_mesh {
+            if find_static_mesh.is_none() {
+                log::warn!("Can not find static mesh {}", url);
+            }
+        }
+
+        if let Some(url) = &self.material_url {
+            if material.is_none() {
+                log::warn!("Can not find material {}", url);
+            }
+        }
+        let parament_resource = Self::create_parament_resource(engine, material.clone());
+
+        let (draw_object, mesh, aabb) = if let Some(find_static_mesh) = find_static_mesh {
+            let mut draw_object: EDrawObjectType;
+            if let Some(material) = material.clone() {
+                draw_object = engine.create_material_draw_object_from_static_mesh(
+                    &find_static_mesh.vertexes,
+                    &find_static_mesh.indexes,
+                    Some(format!("{} - {}", &self.name, &find_static_mesh.name)),
+                    material,
+                    player_viewport.global_constants_handle.clone(),
+                    player_viewport.point_lights_constants_handle.clone(),
+                    player_viewport.spot_lights_constants_handle.clone(),
+                );
+            } else {
+                draw_object = engine.create_draw_object_from_static_mesh(
+                    &find_static_mesh.vertexes,
+                    &find_static_mesh.indexes,
+                    Some(find_static_mesh.name.clone()),
+                    player_viewport.global_constants_handle.clone(),
+                );
+            }
+            match &mut draw_object {
+                EDrawObjectType::Static(draw_object) => {
+                    draw_object.constants.model = self.transformation;
+                }
+                EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                    draw_object.constants.model = self.transformation;
+                    if let Some(parament_resource) = &parament_resource {
+                        draw_object.user_paramenters.push(
+                            rs_render::command::EBindingResource::Constants(
+                                *parament_resource.handle,
+                            ),
+                        );
+                    }
+                }
+                _ => unimplemented!(),
+            }
+            let aabb = static_mesh_get_aabb(&find_static_mesh);
+            (Some(draw_object), Some(find_static_mesh), Some(aabb))
+        } else {
+            (None, None, None)
+        };
+        self.run_time = Some(StaticMeshComponentRuntime {
+            draw_objects: draw_object,
+            _mesh: mesh,
+            physics: None,
+            parent_final_transformation: glam::Mat4::IDENTITY,
+            final_transformation: glam::Mat4::IDENTITY,
+            aabb,
+            pending_rigid_body: None,
+            pending_agent_transformation: None,
+            parament_resource: parament_resource,
+            is_parament_resource_dirty: false,
+        });
+        self.on_is_enable_multiresolution_changed();
+    }
+
+    fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let Some(run_time) = &mut self.run_time else {
+            return;
+        };
+        if run_time.physics.is_some() {
+            log::warn!("Double initialize physics, {}", self.name);
+        }
+        let resource_manager = engine.get_resource_manager().clone();
+        let physics = physics_ability::PhysicsAbility::new(
+            &self.physics,
+            run_time.final_transformation,
+            true,
+            files,
+            resource_manager,
+            level_physics,
+        );
+        run_time.physics = Some(physics);
+    }
+
+    fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
+        let _ = time;
+        let _ = engine;
+        let Some(run_time) = &mut self.run_time else {
+            return;
+        };
+        let Some(mut draw_objects) = run_time.draw_objects.as_mut() else {
+            return;
+        };
+
+        if run_time.is_parament_resource_dirty {
+            run_time.is_parament_resource_dirty = false;
+            if let Some(parament_resource) = run_time.parament_resource.as_mut() {
+                let buffer_handle = engine
+                    .create_buffer(
+                        parament_resource.uniform_map.get_data().to_vec(),
+                        wgpu::BufferUsages::UNIFORM,
+                        None,
+                    )
+                    .expect("Valid");
+                parament_resource.handle = buffer_handle.clone();
+                match &mut draw_objects {
+                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                        draw_object.user_paramenters =
+                            vec![EBindingResource::Constants(*buffer_handle)];
+                    }
+                    _ => {}
+                }
+            };
+        }
+
+        if let Some(physics) = run_time.physics.as_mut() {
+            if let Some(pending_rigid_body) = run_time.pending_rigid_body.take() {
+                let handle = level_physics.rigid_body_set.insert(pending_rigid_body);
+                physics.collider_handles.clear();
+                for collider in physics.colliders.clone() {
+                    let collider_handle = level_physics.collider_set.insert_with_parent(
+                        collider,
+                        handle,
+                        &mut level_physics.rigid_body_set,
+                    );
+                    physics.collider_handles.push(collider_handle);
+                }
+                level_physics.remove_rigid_body(physics.rigid_body_handle);
+                physics.rigid_body_handle = handle;
+            }
+        }
+
+        let is_simulate = run_time
+            .physics
+            .as_mut()
+            .map(|x| x.is_apply_simulate)
+            .unwrap_or(false);
+
+        #[cfg(feature = "network")]
+        let mut send_agent_transformation: Option<AgentTransformation> = None;
+        match (run_time.physics.as_mut(), is_simulate) {
+            (Some(physics), true) => {
+                let transformation = if let Some(AgentTransformation {
+                    translation,
+                    rotation,
+                }) = &run_time.pending_agent_transformation
+                {
+                    let scale = run_time
+                        .final_transformation
+                        .to_scale_rotation_translation()
+                        .0;
+                    glam::Mat4::from_scale_rotation_translation(scale, *rotation, *translation)
+                } else {
+                    physics.tick(time, engine, level_physics);
+                    let translation = *physics.translation();
+                    let rotation = *physics.rotation();
+
+                    let scale = run_time
+                        .final_transformation
+                        .to_scale_rotation_translation()
+                        .0;
+                    #[cfg(feature = "network")]
+                    match &self.network_fields.net_mode {
+                        network::ENetMode::Server => {
+                            send_agent_transformation = Some(AgentTransformation {
+                                translation: translation,
+                                rotation: rotation,
+                            });
+                        }
+                        network::ENetMode::Client => {}
+                    }
+
+                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                };
+                run_time.final_transformation = transformation;
+                match draw_objects {
+                    EDrawObjectType::Static(draw_object) => {
+                        draw_object.constants.model = transformation;
+                    }
+                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                        draw_object.constants.model = transformation;
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+            _ => {
+                let transformation = run_time.final_transformation;
+                match draw_objects {
+                    EDrawObjectType::Static(draw_object) => {
+                        draw_object.constants.model = transformation;
+                    }
+                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
+                        draw_object.constants.model = transformation;
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+        }
+        #[cfg(feature = "network")]
+        if let Some(send_agent_transformation) = send_agent_transformation {
+            let _ = self.set_agent_transformation(send_agent_transformation);
+        }
+    }
+}
+
+impl Drawable for StaticMeshComponent {
+    fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
+        if !self.is_visible {
+            return vec![];
+        }
+        match &self.run_time {
+            Some(x) => match &x.draw_objects {
+                Some(draw_objects) => vec![draw_objects],
+                None => vec![],
+            },
+            None => vec![],
+        }
+    }
+
+    fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
+        if !self.is_visible {
+            return vec![];
+        }
+        match &mut self.run_time {
+            Some(x) => match &mut x.draw_objects {
+                Some(draw_objects) => vec![draw_objects],
+                None => vec![],
+            },
+            None => vec![],
+        }
+    }
+}
+
 #[cfg(feature = "network")]
 impl crate::network::NetworkReplicated for StaticMeshComponent {
     fn get_network_id(&self) -> &uuid::Uuid {
@@ -265,38 +643,6 @@ impl StaticMeshComponent {
         &mut self.transformation
     }
 
-    pub fn get_transformation(&self) -> &glam::Mat4 {
-        &self.transformation
-    }
-
-    pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.parent_final_transformation = parent_final_transformation;
-    }
-
-    pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
-        let Some(run_time) = self.run_time.as_ref() else {
-            return glam::Mat4::IDENTITY;
-        };
-        run_time.parent_final_transformation
-    }
-
-    pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.final_transformation = final_transformation;
-    }
-
-    pub fn get_final_transformation(&self) -> glam::Mat4 {
-        self.run_time
-            .as_ref()
-            .map(|x| x.final_transformation)
-            .unwrap_or_default()
-    }
-
     pub fn new(
         name: String,
         static_mesh_url: Option<url::Url>,
@@ -336,116 +682,6 @@ impl StaticMeshComponent {
             material_url,
             transformation,
         ))
-    }
-
-    pub fn initialize(
-        &mut self,
-        engine: &mut Engine,
-        files: &[EContentFileType],
-        player_viewport: &mut PlayerViewport,
-    ) {
-        assert!(self.run_time.is_none());
-        #[cfg(feature = "network")]
-        if self.network_fields.net_id.is_none() {
-            self.set_network_id(crate::network::default_uuid());
-        }
-        let resource_manager = engine.get_resource_manager();
-        let mut find_static_mesh: Option<Arc<StaticMesh>> = None;
-
-        for file in files {
-            if let EContentFileType::StaticMesh(mesh) = file {
-                let mesh = mesh.borrow();
-                if Some(mesh.url.clone()) == self.static_mesh {
-                    find_static_mesh = resource_manager
-                        .get_static_mesh(&mesh.asset_info.get_url())
-                        .ok();
-                    if find_static_mesh.is_some() {
-                        break;
-                    }
-                }
-            }
-        }
-
-        let material = if let Some(material_url) = &self.material_url {
-            files.iter().find_map(|x| {
-                if let EContentFileType::Material(content_material) = x {
-                    if &content_material.borrow().url == material_url {
-                        return Some(content_material.clone());
-                    }
-                }
-                None
-            })
-        } else {
-            None
-        };
-
-        if let Some(url) = &self.static_mesh {
-            if find_static_mesh.is_none() {
-                log::warn!("Can not find static mesh {}", url);
-            }
-        }
-
-        if let Some(url) = &self.material_url {
-            if material.is_none() {
-                log::warn!("Can not find material {}", url);
-            }
-        }
-        let parament_resource = Self::create_parament_resource(engine, material.clone());
-
-        let (draw_object, mesh, aabb) = if let Some(find_static_mesh) = find_static_mesh {
-            let mut draw_object: EDrawObjectType;
-            if let Some(material) = material.clone() {
-                draw_object = engine.create_material_draw_object_from_static_mesh(
-                    &find_static_mesh.vertexes,
-                    &find_static_mesh.indexes,
-                    Some(format!("{} - {}", &self.name, &find_static_mesh.name)),
-                    material,
-                    player_viewport.global_constants_handle.clone(),
-                    player_viewport.point_lights_constants_handle.clone(),
-                    player_viewport.spot_lights_constants_handle.clone(),
-                );
-            } else {
-                draw_object = engine.create_draw_object_from_static_mesh(
-                    &find_static_mesh.vertexes,
-                    &find_static_mesh.indexes,
-                    Some(find_static_mesh.name.clone()),
-                    player_viewport.global_constants_handle.clone(),
-                );
-            }
-            match &mut draw_object {
-                EDrawObjectType::Static(draw_object) => {
-                    draw_object.constants.model = self.transformation;
-                }
-                EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                    draw_object.constants.model = self.transformation;
-                    if let Some(parament_resource) = &parament_resource {
-                        draw_object.user_paramenters.push(
-                            rs_render::command::EBindingResource::Constants(
-                                *parament_resource.handle,
-                            ),
-                        );
-                    }
-                }
-                _ => unimplemented!(),
-            }
-            let aabb = static_mesh_get_aabb(&find_static_mesh);
-            (Some(draw_object), Some(find_static_mesh), Some(aabb))
-        } else {
-            (None, None, None)
-        };
-        self.run_time = Some(StaticMeshComponentRuntime {
-            draw_objects: draw_object,
-            _mesh: mesh,
-            physics: None,
-            parent_final_transformation: glam::Mat4::IDENTITY,
-            final_transformation: glam::Mat4::IDENTITY,
-            aabb,
-            pending_rigid_body: None,
-            pending_agent_transformation: None,
-            parament_resource: parament_resource,
-            is_parament_resource_dirty: false,
-        });
-        self.on_is_enable_multiresolution_changed();
     }
 
     fn create_parament_resource(
@@ -507,152 +743,6 @@ impl StaticMeshComponent {
         return is_success;
     }
 
-    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
-        let _ = time;
-        let _ = engine;
-        let Some(run_time) = &mut self.run_time else {
-            return;
-        };
-        let Some(mut draw_objects) = run_time.draw_objects.as_mut() else {
-            return;
-        };
-
-        if run_time.is_parament_resource_dirty {
-            run_time.is_parament_resource_dirty = false;
-            if let Some(parament_resource) = run_time.parament_resource.as_mut() {
-                let buffer_handle = engine
-                    .create_buffer(
-                        parament_resource.uniform_map.get_data().to_vec(),
-                        wgpu::BufferUsages::UNIFORM,
-                        None,
-                    )
-                    .expect("Valid");
-                parament_resource.handle = buffer_handle.clone();
-                match &mut draw_objects {
-                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                        draw_object.user_paramenters =
-                            vec![EBindingResource::Constants(*buffer_handle)];
-                    }
-                    _ => {}
-                }
-            };
-        }
-
-        if let Some(physics) = run_time.physics.as_mut() {
-            if let Some(pending_rigid_body) = run_time.pending_rigid_body.take() {
-                let handle = level_physics.rigid_body_set.insert(pending_rigid_body);
-                physics.collider_handles.clear();
-                for collider in physics.colliders.clone() {
-                    let collider_handle = level_physics.collider_set.insert_with_parent(
-                        collider,
-                        handle,
-                        &mut level_physics.rigid_body_set,
-                    );
-                    physics.collider_handles.push(collider_handle);
-                }
-                level_physics.remove_rigid_body(physics.rigid_body_handle);
-                physics.rigid_body_handle = handle;
-            }
-        }
-
-        let is_simulate = run_time
-            .physics
-            .as_mut()
-            .map(|x| x.is_apply_simulate)
-            .unwrap_or(false);
-
-        #[cfg(feature = "network")]
-        let mut send_agent_transformation: Option<AgentTransformation> = None;
-        match (run_time.physics.as_mut(), is_simulate) {
-            (Some(physics), true) => {
-                let transformation = if let Some(AgentTransformation {
-                    translation,
-                    rotation,
-                }) = &run_time.pending_agent_transformation
-                {
-                    let scale = run_time
-                        .final_transformation
-                        .to_scale_rotation_translation()
-                        .0;
-                    glam::Mat4::from_scale_rotation_translation(scale, *rotation, *translation)
-                } else {
-                    physics.tick(time, engine, level_physics);
-                    let translation = *physics.translation();
-                    let rotation = *physics.rotation();
-
-                    let scale = run_time
-                        .final_transformation
-                        .to_scale_rotation_translation()
-                        .0;
-                    #[cfg(feature = "network")]
-                    match &self.network_fields.net_mode {
-                        network::ENetMode::Server => {
-                            send_agent_transformation = Some(AgentTransformation {
-                                translation: translation,
-                                rotation: rotation,
-                            });
-                        }
-                        network::ENetMode::Client => {}
-                    }
-
-                    glam::Mat4::from_scale_rotation_translation(scale, rotation, translation)
-                };
-                run_time.final_transformation = transformation;
-                match draw_objects {
-                    EDrawObjectType::Static(draw_object) => {
-                        draw_object.constants.model = transformation;
-                    }
-                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                        draw_object.constants.model = transformation;
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-            _ => {
-                let transformation = run_time.final_transformation;
-                match draw_objects {
-                    EDrawObjectType::Static(draw_object) => {
-                        draw_object.constants.model = transformation;
-                    }
-                    EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                        draw_object.constants.model = transformation;
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-        }
-        #[cfg(feature = "network")]
-        if let Some(send_agent_transformation) = send_agent_transformation {
-            let _ = self.set_agent_transformation(send_agent_transformation);
-        }
-    }
-
-    pub fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
-        if !self.is_visible {
-            return vec![];
-        }
-        match &self.run_time {
-            Some(x) => match &x.draw_objects {
-                Some(draw_objects) => vec![draw_objects],
-                None => vec![],
-            },
-            None => vec![],
-        }
-    }
-
-    pub fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
-        if !self.is_visible {
-            return vec![];
-        }
-        match &mut self.run_time {
-            Some(x) => match &mut x.draw_objects {
-                Some(draw_objects) => vec![draw_objects],
-                None => vec![],
-            },
-            None => vec![],
-        }
-    }
-
     pub fn set_material(
         &mut self,
         engine: &mut Engine,
@@ -703,82 +793,11 @@ impl StaticMeshComponent {
         run_time.draw_objects = Some(draw_object);
     }
 
-    pub fn initialize_physics(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
-    ) {
-        let Some(run_time) = &mut self.run_time else {
-            return;
-        };
-        if run_time.physics.is_some() {
-            log::warn!("Double initialize physics, {}", self.name);
-        }
-        let resource_manager = engine.get_resource_manager().clone();
-        let physics = physics_ability::PhysicsAbility::new(
-            &self.physics,
-            run_time.final_transformation,
-            true,
-            files,
-            resource_manager,
-            level_physics,
-        );
-        run_time.physics = Some(physics);
-    }
-
     pub fn set_apply_simulate(&mut self, is_apply_simulate: bool) {
         let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
             return;
         };
         physics.is_apply_simulate = is_apply_simulate;
-    }
-
-    pub fn on_post_update_transformation(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
-    ) {
-        let _ = engine;
-        let _ = files;
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-
-        let Some(physics) = run_time.physics.as_mut() else {
-            return;
-        };
-        let Some(level_physics) = level_physics else {
-            return;
-        };
-        if !physics.is_valid() {
-            return;
-        }
-
-        let rigid_body = level_physics
-            .rigid_body_set
-            .get_mut(physics.rigid_body_handle)
-            .unwrap();
-        let collider = level_physics
-            .collider_set
-            .get_mut(physics.collider_handles[0])
-            .unwrap();
-
-        let (_, rotation, translation) = run_time
-            .final_transformation
-            .to_scale_rotation_translation();
-        rigid_body.set_translation(translation, false);
-        let (axis, angle) = rotation.to_axis_angle();
-        rigid_body.set_rotation(Rotation::from_axis_angle(axis.normalize(), angle), false);
-        rigid_body.set_angvel(glam::Vec3::ZERO, false);
-        rigid_body.set_linvel(glam::Vec3::ZERO, false);
-        rigid_body.reset_forces(false);
-        rigid_body.reset_torques(false);
-        rigid_body.wake_up(true);
-
-        collider.set_position(Pose3::from_translation(translation));
-        collider.set_rotation(Rotation::from_axis_angle(axis.normalize(), angle));
     }
 
     pub fn get_physics_mut(&mut self) -> Option<&mut physics_ability::PhysicsAbility> {

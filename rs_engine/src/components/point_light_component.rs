@@ -1,6 +1,6 @@
 use crate::{
     content::{content_file_type::EContentFileType, level::LevelPhysics},
-    drawable::{CustomDrawObject, EDrawObjectType},
+    drawable::{CustomDrawObject, Drawable, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
     scene_node::{EComponentType, SceneNode},
@@ -137,16 +137,6 @@ impl PointLightComponent {
         (draw_object, constants_handle)
     }
 
-    pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
-        let Some(run_time) = &self.run_time else {
-            return vec![];
-        };
-        if !run_time.is_show_preview {
-            return vec![];
-        }
-        vec![&run_time.draw_object]
-    }
-
     pub fn get_radius(&self) -> f32 {
         point_light_radius(
             self.point_light.quadratic,
@@ -163,6 +153,7 @@ impl PointLightComponent {
     }
 }
 
+#[typetag::serde]
 impl super::component::Component for PointLightComponent {
     fn get_name(&self) -> String {
         self.name.clone()
@@ -281,5 +272,27 @@ impl super::component::Component for PointLightComponent {
             run_time.constants_handle.clone(),
             rs_foundation::cast_any_as_u8_slice(&run_time.constants),
         );
+    }
+}
+
+impl Drawable for PointLightComponent {
+    fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
+        let Some(run_time) = &self.run_time else {
+            return vec![];
+        };
+        if !run_time.is_show_preview {
+            return vec![];
+        }
+        vec![&run_time.draw_object]
+    }
+
+    fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
+        let Some(run_time) = &mut self.run_time else {
+            return vec![];
+        };
+        if !run_time.is_show_preview {
+            return vec![];
+        }
+        vec![&mut run_time.draw_object]
     }
 }

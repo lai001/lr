@@ -85,6 +85,110 @@ pub struct SceneComponent {
     network_fields: NetworkFields,
 }
 
+#[typetag::serde]
+impl Component for SceneComponent {
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn set_name(&mut self, new_name: String) {
+        self.name = new_name;
+    }
+
+    fn get_final_transformation(&self) -> glam::Mat4 {
+        let final_transformation = self
+            .run_time
+            .as_ref()
+            .map(|x| x.final_transformation)
+            .unwrap_or_default();
+        final_transformation
+    }
+
+    fn set_transformation(&mut self, transformation: glam::Mat4) {
+        self.transformation = transformation;
+    }
+
+    fn get_transformation(&self) -> glam::Mat4 {
+        self.transformation
+    }
+
+    fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
+        let _ = level_physics;
+    }
+
+    fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.final_transformation = final_transformation;
+    }
+
+    fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.parent_final_transformation = parent_final_transformation;
+    }
+
+    fn get_parent_final_transformation(&self) -> glam::Mat4 {
+        let Some(run_time) = self.run_time.as_ref() else {
+            return glam::Mat4::IDENTITY;
+        };
+        run_time.parent_final_transformation
+    }
+
+    fn initialize(
+        &mut self,
+        engine: &mut Engine,
+        files: &[EContentFileType],
+        player_viewport: &mut PlayerViewport,
+    ) {
+        #[cfg(feature = "network")]
+        if self.network_fields.net_id.is_none() {
+            self.set_network_id(network::default_uuid());
+        }
+        let _ = player_viewport;
+        let _ = files;
+        let _ = engine;
+        self.run_time = Some(SceneComponentRuntime {
+            final_transformation: glam::Mat4::IDENTITY,
+            parent_final_transformation: glam::Mat4::IDENTITY,
+            net_transformation: None,
+            changed_state: ChangedStateFlags::empty(),
+        });
+    }
+
+    fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
+        let _ = level_physics;
+    }
+
+    fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
+        let _ = engine;
+        let _ = time;
+        let _ = level_physics;
+        if let Some(run_time) = self.run_time.as_mut() {
+            if let Some(transformation) = run_time.net_transformation.take() {
+                self.transformation = transformation;
+                self.insert_changed_state(ChangedStateFlags::Transformation);
+            }
+        }
+    }
+}
+
 #[cfg(feature = "network")]
 impl SceneComponent {
     pub fn network_set_transformation(
@@ -195,101 +299,12 @@ impl SceneComponent {
         }
     }
 
-    pub fn initialize(
-        &mut self,
-        engine: &mut Engine,
-        files: &[EContentFileType],
-        player_viewport: &mut PlayerViewport,
-    ) {
-        #[cfg(feature = "network")]
-        if self.network_fields.net_id.is_none() {
-            self.set_network_id(network::default_uuid());
-        }
-        let _ = player_viewport;
-        let _ = files;
-        let _ = engine;
-        self.run_time = Some(SceneComponentRuntime {
-            final_transformation: glam::Mat4::IDENTITY,
-            parent_final_transformation: glam::Mat4::IDENTITY,
-            net_transformation: None,
-            changed_state: ChangedStateFlags::empty(),
-        });
-    }
-
-    pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.parent_final_transformation = parent_final_transformation;
-    }
-
-    pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
-        let Some(run_time) = self.run_time.as_ref() else {
-            return glam::Mat4::IDENTITY;
-        };
-        run_time.parent_final_transformation
-    }
-
     pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
         &mut self.transformation
     }
 
-    pub fn get_transformation(&self) -> &glam::Mat4 {
-        &self.transformation
-    }
-
-    pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.final_transformation = final_transformation;
-    }
-
-    pub fn get_final_transformation(&self) -> glam::Mat4 {
-        let final_transformation = self
-            .run_time
-            .as_ref()
-            .map(|x| x.final_transformation)
-            .unwrap_or_default();
-        final_transformation
-    }
-
-    pub fn on_post_update_transformation(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
-    ) {
-        let _ = files;
-        let _ = engine;
-        let _ = level_physics;
-    }
-
     pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
         vec![]
-    }
-
-    pub fn initialize_physics(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
-    ) {
-        let _ = files;
-        let _ = engine;
-        let _ = level_physics;
-    }
-
-    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
-        let _ = engine;
-        let _ = time;
-        let _ = level_physics;
-        if let Some(run_time) = self.run_time.as_mut() {
-            if let Some(transformation) = run_time.net_transformation.take() {
-                self.transformation = transformation;
-                self.insert_changed_state(ChangedStateFlags::Transformation);
-            }
-        }
     }
 
     pub fn changed_state(&self) -> Option<ChangedStateFlags> {

@@ -1,7 +1,16 @@
 use crate::{handle::BufferHandle, player_viewport::PlayerViewport};
+use downcast_rs::{Downcast, impl_downcast};
 use rs_artifact::material::GroupBinding;
 use rs_render::command::{DrawObject, EBindingResource};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+pub trait Drawable: Downcast {
+    fn get_draw_objects(&self) -> Vec<&EDrawObjectType>;
+
+    fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType>;
+}
+
+impl_downcast!(Drawable);
 
 #[derive(Clone)]
 pub enum EDrawObjectType {

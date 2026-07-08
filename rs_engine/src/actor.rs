@@ -4,7 +4,7 @@ use crate::network;
 use crate::network::NetworkReplicated;
 use crate::{
     content::{content_file_type::EContentFileType, level::LevelPhysics},
-    drawable::EDrawObjectType,
+    drawable::{Drawable, EDrawObjectType},
     engine::Engine,
     misc,
     player_viewport::PlayerViewport,

@@ -64,6 +64,8 @@ impl SpotLightComponent {
         scene_node
     }
 }
+
+#[typetag::serde]
 impl super::component::Component for SpotLightComponent {
     fn get_name(&self) -> String {
         self.name.clone()

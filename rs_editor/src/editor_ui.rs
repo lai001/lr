@@ -135,7 +135,7 @@ impl EditorUI {
                         }
                         rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
                             let component = component.borrow();
-                            Some(*component.get_transformation())
+                            Some(component.get_transformation())
                         }
                         rs_engine::scene_node::EComponentType::CameraComponent(component) => {
                             let component = component.borrow();

@@ -1,6 +1,7 @@
 use crate::{
+    components::component::Component,
     content::{content_file_type::EContentFileType, level::LevelPhysics},
-    drawable::{CustomDrawObject, EDrawObjectType},
+    drawable::{CustomDrawObject, Drawable, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
     scene_node::{EComponentType, SceneNode},
@@ -56,47 +57,65 @@ pub struct CollisionComponent {
     pub run_time: Option<CollisionComponentRuntime>,
 }
 
-impl CollisionComponent {
-    pub fn new_scene_node(
-        name: String,
-        transformation: glam::Mat4,
-    ) -> SingleThreadMutType<SceneNode> {
-        let collision_component = Self::new(name, transformation);
-        let collision_component = SingleThreadMut::new(collision_component);
-        let scene_node = SceneNode {
-            component: EComponentType::CollisionComponent(collision_component),
-            childs: vec![],
-        };
-        let scene_node = SingleThreadMut::new(scene_node);
-        scene_node
+#[typetag::serde]
+impl Component for CollisionComponent {
+    fn get_name(&self) -> String {
+        self.name.clone()
     }
 
-    pub fn new(name: String, transformation: glam::Mat4) -> CollisionComponent {
-        CollisionComponent {
-            name,
-            transformation,
-            run_time: None,
-            collision_type: ECollisionType::Cube,
-            is_show_preview: true,
-        }
+    fn set_name(&mut self, new_name: String) {
+        self.name = new_name;
     }
 
-    pub fn get_final_transformation(&self) -> glam::Mat4 {
+    fn get_final_transformation(&self) -> glam::Mat4 {
         self.run_time
             .as_ref()
             .map(|x| x.final_transformation)
             .unwrap_or_default()
     }
 
-    pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
-        &mut self.transformation
+    fn set_transformation(&mut self, transformation: glam::Mat4) {
+        self.transformation = transformation;
     }
 
-    pub fn get_transformation(&self) -> &glam::Mat4 {
-        &self.transformation
+    fn get_transformation(&self) -> glam::Mat4 {
+        self.transformation
     }
 
-    pub fn initialize(
+    fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
+        let Some(level_physics) = level_physics else {
+            return;
+        };
+        self.recreate_physics(engine, level_physics, files);
+    }
+
+    fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.final_transformation = final_transformation;
+    }
+
+    fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.parent_final_transformation = parent_final_transformation;
+    }
+
+    fn get_parent_final_transformation(&self) -> glam::Mat4 {
+        let Some(run_time) = self.run_time.as_ref() else {
+            return glam::Mat4::IDENTITY;
+        };
+        run_time.parent_final_transformation
+    }
+
+    fn initialize(
         &mut self,
         engine: &mut Engine,
         files: &[EContentFileType],
@@ -157,6 +176,106 @@ impl CollisionComponent {
         }
     }
 
+    fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
+        let Some(run_time) = &mut self.run_time else {
+            return;
+        };
+        let Ok(mut physics) =
+            Self::build_physics(&self.collision_type, run_time.final_transformation)
+        else {
+            return;
+        };
+        let handle = level_physics
+            .rigid_body_set
+            .insert(physics.rigid_body.clone());
+        for collider in physics.colliders.clone() {
+            let collider_handle = level_physics.collider_set.insert_with_parent(
+                collider,
+                handle,
+                &mut level_physics.rigid_body_set,
+            );
+            physics.collider_handles.push(collider_handle);
+        }
+        physics.rigid_body_handle = handle;
+
+        run_time.physics = Some(physics);
+    }
+
+    fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
+        let _ = level_physics;
+        let _ = time;
+        if let Some(run_time) = self.run_time.as_mut() {
+            run_time.constants.model = run_time.final_transformation;
+            engine.update_buffer(
+                run_time.constants_handle.clone(),
+                rs_foundation::cast_any_as_u8_slice(&run_time.constants),
+            );
+        }
+    }
+}
+
+impl Drawable for CollisionComponent {
+    fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
+        if !self.is_show_preview {
+            return vec![];
+        }
+        self.run_time
+            .as_ref()
+            .map(|x| vec![&x.draw_object])
+            .unwrap_or(vec![])
+    }
+
+    fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
+        if !self.is_show_preview {
+            return vec![];
+        }
+        self.run_time
+            .as_mut()
+            .map(|x| vec![&mut x.draw_object])
+            .unwrap_or(vec![])
+    }
+}
+
+impl CollisionComponent {
+    pub fn new_scene_node(
+        name: String,
+        transformation: glam::Mat4,
+    ) -> SingleThreadMutType<SceneNode> {
+        let collision_component = Self::new(name, transformation);
+        let collision_component = SingleThreadMut::new(collision_component);
+        let scene_node = SceneNode {
+            component: EComponentType::CollisionComponent(collision_component),
+            childs: vec![],
+        };
+        let scene_node = SingleThreadMut::new(scene_node);
+        scene_node
+    }
+
+    pub fn new(name: String, transformation: glam::Mat4) -> CollisionComponent {
+        CollisionComponent {
+            name,
+            transformation,
+            run_time: None,
+            collision_type: ECollisionType::Cube,
+            is_show_preview: true,
+        }
+    }
+
+    pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
+        &mut self.transformation
+    }
+
+    pub fn get_transformation(&self) -> &glam::Mat4 {
+        &self.transformation
+    }
+
     fn default_rad() -> f32 {
         1.0
     }
@@ -192,38 +311,6 @@ impl CollisionComponent {
         })
     }
 
-    pub fn initialize_physics(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
-    ) {
-        let _ = files;
-        let _ = engine;
-        let Some(run_time) = &mut self.run_time else {
-            return;
-        };
-        let Ok(mut physics) =
-            Self::build_physics(&self.collision_type, run_time.final_transformation)
-        else {
-            return;
-        };
-        let handle = level_physics
-            .rigid_body_set
-            .insert(physics.rigid_body.clone());
-        for collider in physics.colliders.clone() {
-            let collider_handle = level_physics.collider_set.insert_with_parent(
-                collider,
-                handle,
-                &mut level_physics.rigid_body_set,
-            );
-            physics.collider_handles.push(collider_handle);
-        }
-        physics.rigid_body_handle = handle;
-
-        run_time.physics = Some(physics);
-    }
-
     pub fn recreate_physics(
         &mut self,
         engine: &mut Engine,
@@ -233,63 +320,8 @@ impl CollisionComponent {
         self.initialize_physics(engine, level_physics, files);
     }
 
-    pub fn get_draw_objects(&self) -> Vec<&crate::drawable::EDrawObjectType> {
-        if !self.is_show_preview {
-            return vec![];
-        }
-        self.run_time
-            .as_ref()
-            .map(|x| vec![&x.draw_object])
-            .unwrap_or(vec![])
-    }
-
-    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
-        let _ = level_physics;
-        let _ = time;
-        if let Some(run_time) = self.run_time.as_mut() {
-            run_time.constants.model = run_time.final_transformation;
-            engine.update_buffer(
-                run_time.constants_handle.clone(),
-                rs_foundation::cast_any_as_u8_slice(&run_time.constants),
-            );
-        }
-    }
-
-    pub fn on_post_update_transformation(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
-    ) {
-        let Some(level_physics) = level_physics else {
-            return;
-        };
-        self.recreate_physics(engine, level_physics, files);
-    }
-
     pub fn get_physics_mut(&mut self) -> Option<&mut Physics> {
         self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten()
-    }
-
-    pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
-        let Some(run_time) = self.run_time.as_ref() else {
-            return glam::Mat4::IDENTITY;
-        };
-        run_time.parent_final_transformation
-    }
-
-    pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.parent_final_transformation = parent_final_transformation;
-    }
-
-    pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.final_transformation = final_transformation;
     }
 
     pub fn get_physics(&self) -> Option<&Physics> {

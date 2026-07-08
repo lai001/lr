@@ -34,8 +34,9 @@ bitflags = "2.13.0"
 md-5 = { version = "0.11.0" }
 anyhow = { version = "1.0.102", optional = true }
 serde = { version = "1.0.228", features = ["derive", "rc"] }
-typetag = "0.2.22"
 serde_json = "1.0.150"
+erased-serde = "0.4.10"
+typetag = "0.2.22"
 bincode = { version = "=2.0.1", features = ["serde"] }
 chrono = "0.4.45"
 log = "0.4.32"
@@ -65,6 +66,7 @@ dyn-clone = "1.0.20"
 downcast-rs = "2.0.2"
 meshopt = "0.6.2"
 winit = { version = "0.30.13" }
+slotmap = { version = "1.1.1", features = ["serde"] }
 rs_foundation = { path = "../rs_foundation" }
 rs_audio = { path = "../rs_audio" }
 rs_artifact = { path = "../rs_artifact" }

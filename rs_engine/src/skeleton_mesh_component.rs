@@ -1,6 +1,7 @@
 use crate::{
+    components::component::Component,
     content::{content_file_type::EContentFileType, level::LevelPhysics},
-    drawable::EDrawObjectType,
+    drawable::{Drawable, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
     resource_manager::ResourceManager,
@@ -39,86 +40,64 @@ pub struct SkeletonMeshComponent {
     run_time: Option<SkeletonMeshComponentRuntime>,
 }
 
-impl SkeletonMeshComponent {
-    pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
-        &mut self.transformation
+#[typetag::serde]
+impl Component for SkeletonMeshComponent {
+    fn get_name(&self) -> String {
+        self.name.clone()
     }
 
-    pub fn get_transformation(&self) -> &glam::Mat4 {
-        &self.transformation
+    fn set_name(&mut self, new_name: String) {
+        self.name = new_name;
     }
 
-    pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.parent_final_transformation = parent_final_transformation;
-    }
-
-    pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
-        let Some(run_time) = self.run_time.as_ref() else {
-            return glam::Mat4::IDENTITY;
-        };
-        run_time.parent_final_transformation
-    }
-
-    pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.final_transformation = final_transformation;
-    }
-
-    pub fn get_final_transformation(&self) -> glam::Mat4 {
+    fn get_final_transformation(&self) -> glam::Mat4 {
         self.run_time
             .as_ref()
             .map(|x| x.final_transformation)
             .unwrap_or_default()
     }
 
-    pub fn new(
-        name: String,
-        skeleton_url: Option<url::Url>,
-        skeleton_mesh_urls: Vec<url::Url>,
-        animation_url: Option<url::Url>,
-        material_url: Option<url::Url>,
-        transformation: glam::Mat4,
-    ) -> SkeletonMeshComponent {
-        SkeletonMeshComponent {
-            name,
-            skeleton_url,
-            skeleton_mesh_urls,
-            animation_url,
-            transformation,
-            material_url,
-            run_time: None,
-        }
+    fn set_transformation(&mut self, transformation: glam::Mat4) {
+        self.transformation = transformation;
     }
 
-    fn find_animation_provider(
-        &self,
+    fn get_transformation(&self) -> glam::Mat4 {
+        self.transformation
+    }
+
+    fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
         files: &[EContentFileType],
-    ) -> Option<Box<dyn SkeletonAnimationProvider>> {
-        let Some(skeleton_url) = &self.skeleton_url else {
-            return None;
-        };
-        let Some(animation_url) = &self.animation_url else {
-            return None;
-        };
-        let blend_skeleton_animation_provider =
-            BlendSkeletonAnimationsProvider::from(skeleton_url, animation_url, files);
-        if let Some(blend_skeleton_animation_provider) = blend_skeleton_animation_provider {
-            return Some(Box::new(blend_skeleton_animation_provider));
-        }
-        let single_skeleton_animation_provider =
-            SingleSkeletonAnimationProvider::from(skeleton_url, animation_url, files);
-        if let Some(single_skeleton_animation_provider) = single_skeleton_animation_provider {
-            return Some(Box::new(single_skeleton_animation_provider));
-        }
-        None
+    ) {
+        let _ = files;
+        let _ = engine;
+        let _ = level_physics;
     }
 
-    pub fn initialize(
+    fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.final_transformation = final_transformation;
+    }
+
+    fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.parent_final_transformation = parent_final_transformation;
+    }
+
+    fn get_parent_final_transformation(&self) -> glam::Mat4 {
+        let Some(run_time) = self.run_time.as_ref() else {
+            return glam::Mat4::IDENTITY;
+        };
+        run_time.parent_final_transformation
+    }
+
+    fn initialize(
         &mut self,
         engine: &mut Engine,
         files: &[EContentFileType],
@@ -239,7 +218,32 @@ impl SkeletonMeshComponent {
         self.run_time.as_mut().unwrap().physics = physics;
     }
 
-    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
+    fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
+        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
+            return;
+        };
+        let handle = level_physics
+            .rigid_body_set
+            .insert(physics.rigid_body.clone());
+        for collider in physics.colliders.clone() {
+            let collider_handle = level_physics.collider_set.insert_with_parent(
+                collider,
+                handle,
+                &mut level_physics.rigid_body_set,
+            );
+            physics.collider_handles.push(collider_handle);
+        }
+        physics.rigid_body_handle = handle;
+    }
+
+    fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
         let _ = level_physics;
         let _ = engine;
         let Some(run_time) = self.run_time.as_mut() else {
@@ -296,19 +300,69 @@ impl SkeletonMeshComponent {
             }
         }
     }
+}
 
-    pub fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
+impl Drawable for SkeletonMeshComponent {
+    fn get_draw_objects(&self) -> Vec<&EDrawObjectType> {
         match &self.run_time {
             Some(x) => x.draw_objects.values().map(|x| x).collect(),
             None => vec![],
         }
     }
 
-    pub fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
+    fn get_draw_objects_mut(&mut self) -> Vec<&mut EDrawObjectType> {
         match &mut self.run_time {
             Some(x) => x.draw_objects.values_mut().map(|x| x).collect(),
             None => vec![],
         }
+    }
+}
+
+impl SkeletonMeshComponent {
+    pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
+        &mut self.transformation
+    }
+
+    pub fn new(
+        name: String,
+        skeleton_url: Option<url::Url>,
+        skeleton_mesh_urls: Vec<url::Url>,
+        animation_url: Option<url::Url>,
+        material_url: Option<url::Url>,
+        transformation: glam::Mat4,
+    ) -> SkeletonMeshComponent {
+        SkeletonMeshComponent {
+            name,
+            skeleton_url,
+            skeleton_mesh_urls,
+            animation_url,
+            transformation,
+            material_url,
+            run_time: None,
+        }
+    }
+
+    fn find_animation_provider(
+        &self,
+        files: &[EContentFileType],
+    ) -> Option<Box<dyn SkeletonAnimationProvider>> {
+        let Some(skeleton_url) = &self.skeleton_url else {
+            return None;
+        };
+        let Some(animation_url) = &self.animation_url else {
+            return None;
+        };
+        let blend_skeleton_animation_provider =
+            BlendSkeletonAnimationsProvider::from(skeleton_url, animation_url, files);
+        if let Some(blend_skeleton_animation_provider) = blend_skeleton_animation_provider {
+            return Some(Box::new(blend_skeleton_animation_provider));
+        }
+        let single_skeleton_animation_provider =
+            SingleSkeletonAnimationProvider::from(skeleton_url, animation_url, files);
+        if let Some(single_skeleton_animation_provider) = single_skeleton_animation_provider {
+            return Some(Box::new(single_skeleton_animation_provider));
+        }
+        None
     }
 
     pub fn set_material(
@@ -409,31 +463,6 @@ impl SkeletonMeshComponent {
         })
     }
 
-    pub fn initialize_physics(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
-    ) {
-        let _ = files;
-        let _ = engine;
-        let Some(physics) = self.run_time.as_mut().map(|x| x.physics.as_mut()).flatten() else {
-            return;
-        };
-        let handle = level_physics
-            .rigid_body_set
-            .insert(physics.rigid_body.clone());
-        for collider in physics.colliders.clone() {
-            let collider_handle = level_physics.collider_set.insert_with_parent(
-                collider,
-                handle,
-                &mut level_physics.rigid_body_set,
-            );
-            physics.collider_handles.push(collider_handle);
-        }
-        physics.rigid_body_handle = handle;
-    }
-
     pub fn update_physics(
         &mut self,
         rigid_body_set: &mut RigidBodySet,
@@ -475,17 +504,6 @@ impl SkeletonMeshComponent {
             return;
         };
         run_time.skeleton_animation_provider = animation_provider;
-    }
-
-    pub fn on_post_update_transformation(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
-    ) {
-        let _ = files;
-        let _ = engine;
-        let _ = level_physics;
     }
 
     pub fn on_post_update_animation(&mut self, files: &[EContentFileType]) {

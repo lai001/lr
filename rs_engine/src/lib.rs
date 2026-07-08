@@ -26,6 +26,7 @@ pub mod mipmap_generator;
 pub mod misc;
 #[cfg(feature = "network")]
 pub mod network;
+pub mod node_tree;
 pub mod particle;
 pub mod physics_ability;
 pub mod physics_debug_render;

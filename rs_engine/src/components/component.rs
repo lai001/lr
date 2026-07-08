@@ -3,8 +3,10 @@ use crate::{
     engine::Engine,
     player_viewport::PlayerViewport,
 };
+use downcast_rs::{Downcast, impl_downcast};
 
-pub trait Component {
+#[typetag::serde]
+pub trait Component: erased_serde::Serialize + Downcast {
     fn get_name(&self) -> String;
 
     fn set_name(&mut self, new_name: String);
@@ -44,3 +46,5 @@ pub trait Component {
 
     fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics);
 }
+
+impl_downcast!(Component);

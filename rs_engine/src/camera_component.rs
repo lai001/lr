@@ -1,6 +1,7 @@
 use crate::{
     build_built_in_resouce_url,
     camera::Camera,
+    components::component::Component,
     content::{content_file_type::EContentFileType, level::LevelPhysics},
     drawable::{CustomDrawObject, EDrawObjectType},
     engine::Engine,
@@ -44,56 +45,64 @@ pub struct CameraComponent {
     pub run_time: Option<CameraComponentRuntime>,
 }
 
-impl CameraComponent {
-    pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
-        &mut self.transformation
+#[typetag::serde]
+impl Component for CameraComponent {
+    fn get_name(&self) -> String {
+        self.name.clone()
     }
 
-    pub fn get_transformation(&self) -> &glam::Mat4 {
-        &self.transformation
+    fn set_name(&mut self, new_name: String) {
+        self.name = new_name;
     }
 
-    pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.parent_final_transformation = parent_final_transformation;
-    }
-
-    pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
-        let Some(run_time) = self.run_time.as_ref() else {
-            return glam::Mat4::IDENTITY;
-        };
-        run_time.parent_final_transformation
-    }
-
-    pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
-        let Some(run_time) = self.run_time.as_mut() else {
-            return;
-        };
-        run_time.final_transformation = final_transformation;
-    }
-
-    pub fn get_final_transformation(&self) -> glam::Mat4 {
+    fn get_final_transformation(&self) -> glam::Mat4 {
         self.run_time
             .as_ref()
             .map(|x| x.final_transformation)
             .unwrap_or_default()
     }
 
-    pub fn new(name: String, transformation: glam::Mat4) -> CameraComponent {
-        CameraComponent {
-            name,
-            transformation,
-            run_time: None,
-            width: 1024,
-            height: 1024,
-            is_enable: true,
-            is_show_preview: true,
-        }
+    fn set_transformation(&mut self, transformation: glam::Mat4) {
+        self.transformation = transformation;
     }
 
-    pub fn initialize(
+    fn get_transformation(&self) -> glam::Mat4 {
+        self.transformation
+    }
+
+    fn on_post_update_transformation(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: Option<&mut LevelPhysics>,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
+        let _ = level_physics;
+    }
+
+    fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.final_transformation = final_transformation;
+    }
+
+    fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
+        let Some(run_time) = self.run_time.as_mut() else {
+            return;
+        };
+        run_time.parent_final_transformation = parent_final_transformation;
+    }
+
+    fn get_parent_final_transformation(&self) -> glam::Mat4 {
+        let Some(run_time) = self.run_time.as_ref() else {
+            return glam::Mat4::IDENTITY;
+        };
+        run_time.parent_final_transformation
+    }
+
+    fn initialize(
         &mut self,
         engine: &mut Engine,
         files: &[EContentFileType],
@@ -178,6 +187,62 @@ impl CameraComponent {
             player_viewport: SingleThreadMut::new(player_viewport),
             bundles,
         })
+    }
+
+    fn initialize_physics(
+        &mut self,
+        engine: &mut Engine,
+        level_physics: &mut LevelPhysics,
+        files: &[EContentFileType],
+    ) {
+        let _ = files;
+        let _ = engine;
+        let _ = level_physics;
+    }
+
+    fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
+        let _ = level_physics;
+        let _ = time;
+        let _ = engine;
+        let Some(run_time) = &mut self.run_time else {
+            return;
+        };
+        let mut player_viewport = run_time.player_viewport.borrow_mut();
+        let camera = &mut player_viewport.camera;
+        let final_transformation = run_time.final_transformation;
+        camera.set_world_location(final_transformation.to_scale_rotation_translation().2);
+        camera.set_forward_vector(
+            final_transformation.transform_vector3(Camera::default_forward_vector()),
+        );
+        for bundle in run_time.bundles.iter_mut() {
+            bundle.constants.model = final_transformation;
+            engine.update_buffer(
+                bundle.constants_handle.clone(),
+                rs_foundation::cast_any_as_u8_slice(&bundle.constants),
+            );
+        }
+    }
+}
+
+impl CameraComponent {
+    pub fn get_transformation_mut(&mut self) -> &mut glam::Mat4 {
+        &mut self.transformation
+    }
+
+    pub fn get_transformation(&self) -> &glam::Mat4 {
+        &self.transformation
+    }
+
+    pub fn new(name: String, transformation: glam::Mat4) -> CameraComponent {
+        CameraComponent {
+            name,
+            transformation,
+            run_time: None,
+            width: 1024,
+            height: 1024,
+            is_enable: true,
+            is_show_preview: true,
+        }
     }
 
     fn make_draw_object(
@@ -280,29 +345,6 @@ impl CameraComponent {
         (draw_object, constants_handle)
     }
 
-    pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
-        let _ = level_physics;
-        let _ = time;
-        let _ = engine;
-        let Some(run_time) = &mut self.run_time else {
-            return;
-        };
-        let mut player_viewport = run_time.player_viewport.borrow_mut();
-        let camera = &mut player_viewport.camera;
-        let final_transformation = run_time.final_transformation;
-        camera.set_world_location(final_transformation.to_scale_rotation_translation().2);
-        camera.set_forward_vector(
-            final_transformation.transform_vector3(Camera::default_forward_vector()),
-        );
-        for bundle in run_time.bundles.iter_mut() {
-            bundle.constants.model = final_transformation;
-            engine.update_buffer(
-                bundle.constants_handle.clone(),
-                rs_foundation::cast_any_as_u8_slice(&bundle.constants),
-            );
-        }
-    }
-
     pub fn get_player_viewport(&self) -> Option<SingleThreadMutType<PlayerViewport>> {
         if !self.is_enable {
             return None;
@@ -321,28 +363,6 @@ impl CameraComponent {
             return vec![];
         };
         run_time.bundles.iter().map(|x| &x.draw_object).collect()
-    }
-
-    pub fn on_post_update_transformation(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
-    ) {
-        let _ = files;
-        let _ = engine;
-        let _ = level_physics;
-    }
-
-    pub fn initialize_physics(
-        &mut self,
-        engine: &mut Engine,
-        level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
-    ) {
-        let _ = files;
-        let _ = engine;
-        let _ = level_physics;
     }
 
     pub fn set_is_show_preview(&mut self, is_show_preview: bool) {
