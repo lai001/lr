@@ -3,20 +3,15 @@ use crate::network;
 #[cfg(feature = "network")]
 use crate::network::NetworkReplicated;
 use crate::{
-    camera_component::CameraComponent,
-    collision_componenet::CollisionComponent,
-    components::{
-        component::Component, point_light_component::PointLightComponent,
-        spot_light_component::SpotLightComponent,
-    },
+    components::component::Component,
     content::{content_file_type::EContentFileType, level::LevelPhysics},
     engine::Engine,
     player_viewport::PlayerViewport,
-    skeleton_mesh_component::SkeletonMeshComponent,
     static_mesh_component::StaticMeshComponent,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 
 bitflags::bitflags! {
     #[derive(Clone)]
@@ -325,208 +320,74 @@ impl SceneComponent {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub enum EComponentType {
-    SceneComponent(SingleThreadMutType<SceneComponent>),
-    StaticMeshComponent(SingleThreadMutType<StaticMeshComponent>),
-    SkeletonMeshComponent(SingleThreadMutType<SkeletonMeshComponent>),
-    CameraComponent(SingleThreadMutType<CameraComponent>),
-    CollisionComponent(SingleThreadMutType<CollisionComponent>),
-    SpotLightComponent(SingleThreadMutType<SpotLightComponent>),
-    PointLightComponent(SingleThreadMutType<PointLightComponent>),
-}
-
-macro_rules! copy_fn {
-    ($($x:tt),*) => {
-        pub fn copy(&self) -> EComponentType {
-            match self {
-                $(
-                    EComponentType::$x(component) => {
-                        let component = component.borrow();
-                        let copy_component = component.clone();
-                        EComponentType::$x(SingleThreadMut::new(copy_component))
-                    }
-                )*
-            }
-        }
-    }
-}
-
-impl EComponentType {
-    copy_fn!(
-        SceneComponent,
-        StaticMeshComponent,
-        SkeletonMeshComponent,
-        CameraComponent,
-        CollisionComponent,
-        SpotLightComponent,
-        PointLightComponent
-    );
-}
-
-#[derive(Serialize, Deserialize, Clone)]
 pub struct SceneNode {
-    pub component: EComponentType,
-    pub childs: Vec<SingleThreadMutType<SceneNode>>,
+    component: SingleThreadMutType<Box<dyn Component>>,
+    childs: Vec<SingleThreadMutType<SceneNode>>,
 }
 
-macro_rules! common_fn {
-    ($($x:tt),*) => {
-        pub fn get_name(&self) -> String {
-            match &self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let component = component.borrow();
-                        component.name.clone()
-                    }
-                )*
-            }
-        }
+impl SceneNode {
+    pub fn component(&self) -> std::cell::Ref<'_, Box<dyn Component>> {
+        let refe = self.component.borrow();
+        refe
+    }
 
-        pub fn set_name(&self, new_name: String) {
-            match &self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let mut component = component.borrow_mut();
-                        component.name = new_name;
-                    }
-                )*
-            }
-        }
+    pub fn component_mut(&mut self) -> std::cell::RefMut<'_, Box<dyn Component>> {
+        let refe = self.component.borrow_mut();
+        refe
+    }
 
-        pub fn get_final_transformation(&self) -> glam::Mat4 {
-            match &self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let component = component.borrow();
-                        component.get_final_transformation()
-                    }
-                )*
-            }
-        }
+    pub fn typed_component<T: Component>(&self) -> Option<std::cell::Ref<'_, T>> {
+        std::cell::Ref::filter_map(self.component.borrow(), |component| {
+            component.downcast_ref::<T>()
+        })
+        .ok()
+    }
 
+    pub fn is_typed_component<T: Component>(&self) -> bool {
+        self.typed_component::<T>().is_some()
+    }
 
-        pub fn set_transformation(&mut self, transformation: glam::Mat4) {
-            match &mut self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let mut component = component.borrow_mut();
-                        component.transformation = transformation;
-                    }
-                )*
-            }
-        }
+    pub fn typed_component_mut<T: Component>(&mut self) -> Option<std::cell::RefMut<'_, T>> {
+        std::cell::RefMut::filter_map(self.component.borrow_mut(), |component| {
+            component.downcast_mut::<T>()
+        })
+        .ok()
+    }
 
-        pub fn get_transformation(&self) -> glam::Mat4 {
-            match &self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let component = component.borrow();
-                        component.transformation
-                    }
-                )*
-            }
-        }
+    pub fn childs(&self) -> &[SingleThreadMutType<SceneNode>] {
+        &self.childs
+    }
 
-        pub fn on_post_update_transformation(&mut self, engine: &mut Engine, level_physics: Option<&mut LevelPhysics>, files: &[EContentFileType]) {
-            match &mut self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let mut component = component.borrow_mut();
-                        component.on_post_update_transformation(engine, level_physics, files);
-                    }
-                )*
-            }
-        }
+    pub fn underlying_component(&self) -> SingleThreadMutType<Box<dyn Component>> {
+        self.component.clone()
+    }
 
-        pub fn set_final_transformation(&mut self, final_transformation: glam::Mat4) {
-            match &mut self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let mut component = component.borrow_mut();
-                        component.set_final_transformation(final_transformation);
-                    }
-                )*
-            }
-        }
+    pub fn set_childs(
+        &mut self,
+        new_childs: Vec<SingleThreadMutType<SceneNode>>,
+    ) -> Vec<SingleThreadMutType<SceneNode>> {
+        let old = self.childs.clone();
+        self.childs = new_childs;
+        old
+    }
 
-        pub fn set_parent_final_transformation(&mut self, parent_final_transformation: glam::Mat4) {
-            match &mut self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let mut component = component.borrow_mut();
-                        component.set_parent_final_transformation(parent_final_transformation);
-                    }
-                )*
-            }
+    pub fn add_child(&mut self, child: SingleThreadMutType<SceneNode>) -> bool {
+        if self.childs.iter().find(|x| Rc::ptr_eq(x, &child)).is_some() {
+            return false;
         }
-
-        pub fn get_parent_final_transformation(&self) -> glam::Mat4 {
-            match &self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let component = component.borrow();
-                        component.get_parent_final_transformation()
-                    }
-                )*
-            }
-        }
-
-        pub fn initialize(&mut self,
-            engine: &mut Engine,
-            files: &[EContentFileType],
-            player_viewport: &mut PlayerViewport,
-        ) {
-            match &mut self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let mut component = component.borrow_mut();
-                        component.initialize(engine, files, player_viewport);
-                    }
-                )*
-            }
-        }
-
-        pub fn initialize_physics(
-            &mut self,
-            engine: &mut Engine,
-            level_physics: &mut LevelPhysics,
-            files: &[EContentFileType],
-        ) {
-            match &mut self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let mut component = component.borrow_mut();
-                        component.initialize_physics(engine, level_physics, files);
-                    }
-                )*
-            }
-        }
-
-        pub fn tick(
-            &mut self,
-            time: f32,
-            engine: &mut Engine,
-            level_physics: &mut LevelPhysics,
-        ) {
-            match &mut self.component {
-                $(
-                    EComponentType::$x(component) => {
-                        let mut component = component.borrow_mut();
-                        component.tick(time, engine, level_physics);
-                    }
-                )*
-            }
-        }
-    };
+        self.childs.push(child);
+        return true;
+    }
 }
 
 impl SceneNode {
     pub fn new(name: String) -> SceneNode {
+        let component = SingleThreadMut::new(Box::new(SceneComponent::new(
+            name,
+            glam::Mat4::IDENTITY,
+        )) as Box<dyn Component>);
         SceneNode {
-            component: EComponentType::SceneComponent(SingleThreadMut::new(SceneComponent::new(
-                name,
-                glam::Mat4::IDENTITY,
-            ))),
+            component,
             childs: vec![],
         }
     }
@@ -535,25 +396,24 @@ impl SceneNode {
         SingleThreadMut::new(Self::new(name))
     }
 
-    pub fn static_mesh_component_node(
-        component: SingleThreadMutType<StaticMeshComponent>,
-    ) -> SingleThreadMutType<SceneNode> {
-        SingleThreadMut::new(SceneNode {
-            component: EComponentType::StaticMeshComponent(component),
+    pub fn from_component(component: impl Component) -> SceneNode {
+        SceneNode {
+            component: SingleThreadMut::new(Box::new(component)),
             childs: vec![],
-        })
+        }
+    }
+
+    pub fn from_component_box(component: Box<dyn Component>) -> SceneNode {
+        SceneNode {
+            component: SingleThreadMut::new(component),
+            childs: vec![],
+        }
     }
 
     pub fn get_aabb(&self) -> Option<rapier3d::prelude::Aabb> {
-        match &self.component {
-            EComponentType::SceneComponent(_) => None,
-            EComponentType::StaticMeshComponent(component) => component.borrow().get_aabb(),
-            EComponentType::SkeletonMeshComponent(_) => None,
-            EComponentType::CameraComponent(_) => None,
-            EComponentType::CollisionComponent(_) => None,
-            EComponentType::SpotLightComponent(_) => None,
-            EComponentType::PointLightComponent(_) => None,
-        }
+        self.typed_component::<StaticMeshComponent>()
+            .map(|component| component.get_aabb().clone())
+            .flatten()
     }
 
     pub fn notify_transformation_updated(
@@ -562,17 +422,23 @@ impl SceneNode {
         mut level_physics: Option<&mut LevelPhysics>,
         files: &[EContentFileType],
     ) {
-        let parent_final_transformation = self.get_parent_final_transformation();
-        let final_transformation = parent_final_transformation * self.get_transformation();
-        self.set_final_transformation(final_transformation);
+        let parent_transformation = {
+            let mut this_component = self.component_mut();
+            let parent_final_transformation = this_component.get_parent_final_transformation();
+            let final_transformation =
+                parent_final_transformation * this_component.get_transformation();
+            this_component.set_final_transformation(final_transformation);
 
-        if let Some(level_physics) = level_physics.as_mut() {
-            self.on_post_update_transformation(engine, Some(level_physics), files);
-        } else {
-            self.on_post_update_transformation(engine, None, files);
-        }
+            if let Some(level_physics) = level_physics.as_mut() {
+                this_component.on_post_update_transformation(engine, Some(level_physics), files);
+            } else {
+                this_component.on_post_update_transformation(engine, None, files);
+            }
+            let parent_transformation = this_component.get_final_transformation();
+            parent_transformation
+        };
+
         for child in self.childs.clone() {
-            let parent_transformation = self.get_final_transformation();
             crate::actor::Actor::set_world_transformation_recursion(
                 &mut child.borrow_mut(),
                 parent_transformation,
@@ -600,37 +466,20 @@ impl SceneNode {
     }
 
     pub fn changed_state(&self) -> Option<ChangedStateFlags> {
-        match &self.component {
-            EComponentType::SceneComponent(component) => component.borrow().changed_state(),
-            _ => None,
-        }
+        self.typed_component::<SceneComponent>()
+            .map(|component| component.changed_state())
+            .flatten()
     }
 
     pub fn insert_changed_state(&mut self, state: ChangedStateFlags) {
-        match &mut self.component {
-            EComponentType::SceneComponent(component) => {
-                component.borrow_mut().insert_changed_state(state);
-            }
-            _ => {}
+        if let Some(mut component) = self.typed_component_mut::<SceneComponent>() {
+            component.insert_changed_state(state);
         }
     }
 
     pub fn set_changed_state(&mut self, state: ChangedStateFlags) {
-        match &mut self.component {
-            EComponentType::SceneComponent(component) => {
-                component.borrow_mut().set_changed_state(state);
-            }
-            _ => {}
+        if let Some(mut component) = self.typed_component_mut::<SceneComponent>() {
+            component.set_changed_state(state);
         }
     }
-
-    common_fn!(
-        SceneComponent,
-        StaticMeshComponent,
-        SkeletonMeshComponent,
-        CameraComponent,
-        CollisionComponent,
-        SpotLightComponent,
-        PointLightComponent
-    );
 }

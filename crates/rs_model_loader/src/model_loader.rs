@@ -7,10 +7,8 @@ use rs_artifact::{
 use rs_assimp::texture_type::TextureType;
 use rs_core_minimal::name_generator::NameGenerator;
 use rs_engine::{
-    build_content_file_url,
-    resource_manager::ResourceManager,
-    scene_node::{EComponentType, SceneComponent},
-    static_mesh_component::StaticMeshComponent,
+    build_content_file_url, components::component::Component, resource_manager::ResourceManager,
+    scene_node::SceneComponent, static_mesh_component::StaticMeshComponent,
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_render::vertex_data_type::skin_mesh_vertex::INVALID_BONE;
@@ -770,15 +768,13 @@ impl ModelLoader {
     fn node_to_component_type(
         node: SingleThreadMutType<rs_assimp::node::Node>,
         static_meshes: &[SingleThreadMutType<rs_engine::content::static_mesh::StaticMesh>],
-    ) -> EComponentType {
+    ) -> Box<dyn Component> {
         let node = node.borrow_mut();
         let name = node.name.clone();
         let transformation = node.transformation.clone();
         match node.get_node_type() {
             rs_assimp::node::ENodeType::Axis => {
-                let scene_component =
-                    SingleThreadMut::new(SceneComponent::new(name, transformation));
-                return EComponentType::SceneComponent(scene_component);
+                return Box::new(SceneComponent::new(name, transformation));
             }
             rs_assimp::node::ENodeType::Bone => unimplemented!(),
             rs_assimp::node::ENodeType::Mesh => {
@@ -799,8 +795,7 @@ impl ModelLoader {
                     .map(|x| x.borrow().url.clone());
                 let static_mesh_component =
                     StaticMeshComponent::new(name, static_mesh_url, None, transformation);
-                let static_mesh_component = SingleThreadMut::new(static_mesh_component);
-                return EComponentType::StaticMeshComponent(static_mesh_component);
+                return Box::new(static_mesh_component);
             }
             rs_assimp::node::ENodeType::Armature => unimplemented!(),
         }
@@ -810,17 +805,16 @@ impl ModelLoader {
         node: SingleThreadMutType<rs_assimp::node::Node>,
         static_meshes: &[SingleThreadMutType<rs_engine::content::static_mesh::StaticMesh>],
     ) -> SingleThreadMutType<rs_engine::scene_node::SceneNode> {
-        let component_type = Self::node_to_component_type(node.clone(), static_meshes);
-        let scene_node = SingleThreadMut::new(rs_engine::scene_node::SceneNode {
-            component: component_type,
-            childs: vec![],
-        });
+        let component = Self::node_to_component_type(node.clone(), static_meshes);
+
+        let mut scene_node = rs_engine::scene_node::SceneNode::from_component_box(component);
         let node = node.borrow();
         for child in node.children.clone() {
             let child_scene_node = Self::node_to_scene_node_recursion(child, static_meshes);
-            scene_node.borrow_mut().childs.push(child_scene_node);
+
+            scene_node.add_child(child_scene_node);
         }
-        scene_node
+        SingleThreadMut::new(scene_node)
     }
 
     pub fn load_from_file_as_actor(
@@ -979,13 +973,10 @@ impl ModelLoader {
                     None,
                     glam::Mat4::IDENTITY,
                 );
+            scene_node = SingleThreadMut::new(rs_engine::scene_node::SceneNode::from_component(
+                skeleton_mesh_component,
+            ));
 
-            scene_node = SingleThreadMut::new(rs_engine::scene_node::SceneNode {
-                component: rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
-                    SingleThreadMut::new(skeleton_mesh_component),
-                ),
-                childs: vec![],
-            });
             appropriate_name = actor_name_generator.next(&scene.name);
         } else {
             scene_node = Self::node_to_scene_node_recursion(scene_root_node, &static_meshes);

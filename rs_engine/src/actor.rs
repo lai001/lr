@@ -4,11 +4,11 @@ use crate::network;
 use crate::network::NetworkReplicated;
 use crate::{
     content::{content_file_type::EContentFileType, level::LevelPhysics},
-    drawable::{Drawable, EDrawObjectType},
+    drawable::EDrawObjectType,
     engine::Engine,
     misc,
     player_viewport::PlayerViewport,
-    scene_node::{EComponentType, SceneNode},
+    scene_node::SceneNode,
 };
 use rs_core_minimal::serde_user_data::SerdeUserData;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
@@ -149,7 +149,7 @@ impl Actor {
     ) {
         walk(node.clone());
         let node = node.borrow();
-        for child in node.childs.clone() {
+        for child in node.childs().iter().cloned() {
             Self::walk_node_mut(child, walk);
         }
     }
@@ -160,7 +160,7 @@ impl Actor {
     ) {
         walk(node.clone());
         let node = node.borrow();
-        for child in node.childs.clone() {
+        for child in node.childs().iter().cloned() {
             Self::walk_node(child, walk);
         }
     }
@@ -176,7 +176,9 @@ impl Actor {
             self.set_network_id(crate::network::default_uuid());
         }
         Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
-            node.borrow_mut().initialize(engine, files, player_viewport);
+            node.borrow_mut()
+                .component_mut()
+                .initialize(engine, files, player_viewport);
         });
         self.update_components_world_transformation();
     }
@@ -189,64 +191,26 @@ impl Actor {
     ) {
         Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
             node.borrow_mut()
+                .component_mut()
                 .initialize_physics(engine, level_physics, files);
         });
     }
 
     pub fn collect_draw_objects(&self) -> Vec<EDrawObjectType> {
         let mut draw_objects = vec![];
-        Actor::walk_node_mut(
-            self.scene_node.clone(),
-            &mut |node| match &node.borrow().component {
-                EComponentType::SceneComponent(_) => {}
-                EComponentType::StaticMeshComponent(component) => {
-                    let component = component.borrow();
-                    let mut sub_draw_objects: Vec<_> = component
-                        .get_draw_objects()
-                        .iter()
-                        .map(|x| (*x).clone())
-                        .collect();
-                    draw_objects.append(&mut sub_draw_objects);
-                }
-                EComponentType::SkeletonMeshComponent(component) => {
-                    let component = component.borrow();
-                    let mut sub_draw_objects: Vec<_> = component
-                        .get_draw_objects()
-                        .iter()
-                        .map(|x| (*x).clone())
-                        .collect();
-                    draw_objects.append(&mut sub_draw_objects);
-                }
-                EComponentType::CameraComponent(component) => {
-                    let component = component.borrow();
-                    let mut sub_draw_objects: Vec<_> = component
-                        .get_draw_objects()
-                        .iter()
-                        .map(|x| (*x).clone())
-                        .collect();
-                    draw_objects.append(&mut sub_draw_objects);
-                }
-                EComponentType::CollisionComponent(component) => {
-                    let component = component.borrow();
-                    let mut sub_draw_objects: Vec<_> = component
-                        .get_draw_objects()
-                        .iter()
-                        .map(|x| (*x).clone())
-                        .collect();
-                    draw_objects.append(&mut sub_draw_objects);
-                }
-                EComponentType::SpotLightComponent(_) => {}
-                EComponentType::PointLightComponent(component) => {
-                    let component = component.borrow();
-                    let mut sub_draw_objects: Vec<_> = component
-                        .get_draw_objects()
-                        .iter()
-                        .map(|x| (*x).clone())
-                        .collect();
-                    draw_objects.append(&mut sub_draw_objects);
-                }
-            },
-        );
+        Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
+            let node = node.borrow();
+            let component = node.component();
+            let drawable = component.as_drawable();
+            if let Some(drawable) = drawable {
+                let mut sub_draw_objects = drawable
+                    .get_draw_objects()
+                    .iter()
+                    .map(|x| (**x).clone())
+                    .collect::<Vec<EDrawObjectType>>();
+                draw_objects.append(&mut sub_draw_objects);
+            }
+        });
         draw_objects
     }
 
@@ -256,7 +220,7 @@ impl Actor {
         Actor::walk_node_mut(self.scene_node.clone(), {
             &mut |node| {
                 let mut node = node.borrow_mut();
-                node.tick(time, engine, level_physics);
+                node.component_mut().tick(time, engine, level_physics);
             }
         });
     }
@@ -287,13 +251,16 @@ impl Actor {
         scene_node: &mut SceneNode,
         parent_transformation: glam::Mat4,
     ) {
-        let current_transformation = scene_node.get_transformation();
-        let final_transformation = parent_transformation * current_transformation;
-        scene_node.set_parent_final_transformation(parent_transformation);
-        scene_node.set_final_transformation(final_transformation);
+        let parent_transformation = {
+            let mut component = scene_node.component_mut();
+            let current_transformation = component.get_transformation();
+            let final_transformation = parent_transformation * current_transformation;
+            component.set_parent_final_transformation(parent_transformation);
+            component.set_final_transformation(final_transformation);
+            final_transformation
+        };
 
-        for child in scene_node.childs.clone() {
-            let parent_transformation = final_transformation;
+        for child in scene_node.childs() {
             Self::set_world_transformation_recursion(
                 &mut child.borrow_mut(),
                 parent_transformation,
@@ -316,8 +283,12 @@ impl Actor {
         files: &[EContentFileType],
     ) {
         if let Some(level_physics) = level_physics {
-            scene_node.on_post_update_transformation(engine, Some(level_physics), files);
-            for child in scene_node.childs.clone() {
+            scene_node.component_mut().on_post_update_transformation(
+                engine,
+                Some(level_physics),
+                files,
+            );
+            for child in scene_node.childs() {
                 Self::on_post_update_transformation_recursion(
                     &mut child.borrow_mut(),
                     engine,
@@ -326,8 +297,10 @@ impl Actor {
                 );
             }
         } else {
-            scene_node.on_post_update_transformation(engine, None, files);
-            for child in scene_node.childs.clone() {
+            scene_node
+                .component_mut()
+                .on_post_update_transformation(engine, None, files);
+            for child in scene_node.childs() {
                 Self::on_post_update_transformation_recursion(
                     &mut child.borrow_mut(),
                     engine,
@@ -340,12 +313,18 @@ impl Actor {
 
     pub fn remove_node(&mut self, node_will_remove: SingleThreadMutType<SceneNode>) {
         if Rc::ptr_eq(&self.scene_node, &node_will_remove) {
+            log::warn!("Can not remove root node");
             return;
         }
         Actor::walk_node_mut(self.scene_node.clone(), &mut move |node| {
             let mut node = node.borrow_mut();
-            node.childs
-                .retain(|element| !Rc::ptr_eq(element, &node_will_remove));
+            let mut new_childs = vec![];
+            for child in node.childs() {
+                if !Rc::ptr_eq(child, &node_will_remove) {
+                    new_childs.push(child.clone());
+                }
+            }
+            node.set_childs(new_childs);
         });
     }
 
@@ -380,11 +359,11 @@ impl Actor {
     ) {
         let path = {
             let node = node.borrow();
-            format!("{}/{}", parent_path.as_ref(), node.get_name())
+            format!("{}/{}", parent_path.as_ref(), node.component().get_name())
         };
         node_map.insert(path.clone(), node.clone());
         let node = node.borrow();
-        for child in node.childs.clone() {
+        for child in node.childs() {
             Self::collect_node_map_internal(&path, child.clone(), node_map);
         }
     }
@@ -400,45 +379,10 @@ impl Actor {
             }
             let is_contain: bool = (|| {
                 let scene_node = scene_node.borrow();
-                match &scene_node.component {
-                    EComponentType::SceneComponent(_) => {
-                        return false;
-                    }
-                    EComponentType::StaticMeshComponent(component) => {
-                        let component = component.borrow();
-                        let collider_handles = component
-                            .get_physics()
-                            .map(|x| x.collider_handles.clone())
-                            .unwrap_or_default();
-                        if collider_handles.contains(collider) {
-                            return true;
-                        }
-                    }
-                    EComponentType::SkeletonMeshComponent(component) => {
-                        let component = component.borrow();
-                        let collider_handles = component
-                            .get_physics()
-                            .map(|x| x.collider_handles.clone())
-                            .unwrap_or_default();
-                        if collider_handles.contains(collider) {
-                            return true;
-                        }
-                    }
-                    EComponentType::CameraComponent(_) => {
-                        return false;
-                    }
-                    EComponentType::CollisionComponent(component) => {
-                        let component = component.borrow();
-                        let collider_handles = component
-                            .get_physics()
-                            .map(|x| x.collider_handles.clone())
-                            .unwrap_or_default();
-                        if collider_handles.contains(collider) {
-                            return true;
-                        }
-                    }
-                    EComponentType::SpotLightComponent(_) => return false,
-                    EComponentType::PointLightComponent(_) => return false,
+                let component = scene_node.component();
+                let collider_handles = component.collider_handles();
+                if collider_handles.contains(collider) {
+                    return true;
                 }
                 false
             })();
@@ -477,13 +421,15 @@ impl Actor {
     }
 
     fn copy_recursion(scene_node: &SceneNode) -> SceneNode {
-        let mut copy_scene_node = scene_node.clone();
-        copy_scene_node.component = copy_scene_node.component.copy();
-        copy_scene_node.childs.clear();
-        for child in &scene_node.childs {
+        let component = scene_node.underlying_component();
+        let component = component.borrow().clone();
+        let mut copy_scene_node = SceneNode::from_component_box(component);
+        let mut new_childs = vec![];
+        for child in scene_node.childs() {
             let copy_node = Self::copy_recursion(&child.borrow());
-            copy_scene_node.childs.push(SingleThreadMut::new(copy_node));
+            new_childs.push(SingleThreadMut::new(copy_node));
         }
+        copy_scene_node.set_childs(new_childs);
         copy_scene_node
     }
 }
@@ -497,18 +443,12 @@ impl Actor {
         Actor::walk_node_mut(self.scene_node.clone(), {
             &mut |node| {
                 let mut node = node.borrow_mut();
-                match &mut node.component {
-                    EComponentType::StaticMeshComponent(component) => {
-                        visit(&mut *component.borrow_mut());
-                    }
-                    EComponentType::SceneComponent(component) => {
-                        visit(&mut *component.borrow_mut());
-                    }
-                    EComponentType::SkeletonMeshComponent(_) => {}
-                    EComponentType::CameraComponent(_) => {}
-                    EComponentType::CollisionComponent(_) => {}
-                    EComponentType::SpotLightComponent(_) => {}
-                    EComponentType::PointLightComponent(_) => {}
+                let mut component = node.component_mut();
+                let network_replicated = component
+                    .as_any_mut()
+                    .downcast_mut::<&mut dyn NetworkReplicated>();
+                if let Some(network_replicated) = network_replicated {
+                    visit(*network_replicated);
                 }
             }
         });
@@ -518,18 +458,11 @@ impl Actor {
         Actor::walk_node(self.scene_node.clone(), {
             &|node| {
                 let node = node.borrow();
-                match &node.component {
-                    EComponentType::StaticMeshComponent(component) => {
-                        visit(&*component.borrow());
-                    }
-                    EComponentType::SceneComponent(component) => {
-                        visit(&*component.borrow());
-                    }
-                    EComponentType::SkeletonMeshComponent(_) => {}
-                    EComponentType::CameraComponent(_) => {}
-                    EComponentType::CollisionComponent(_) => {}
-                    EComponentType::SpotLightComponent(_) => {}
-                    EComponentType::PointLightComponent(_) => {}
+                let component = node.component();
+                let network_replicated =
+                    component.as_any().downcast_ref::<&dyn NetworkReplicated>();
+                if let Some(network_replicated) = network_replicated {
+                    visit(*network_replicated);
                 }
             }
         });

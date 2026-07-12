@@ -1,8 +1,5 @@
 use super::point_light_component::PointLight;
-use crate::{
-    content::level::LevelPhysics,
-    scene_node::{EComponentType, SceneNode},
-};
+use crate::{content::level::LevelPhysics, scene_node::SceneNode};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 
@@ -55,13 +52,7 @@ impl SpotLightComponent {
         transformation: glam::Mat4,
     ) -> SingleThreadMutType<SceneNode> {
         let component = Self::new(name, transformation);
-        let component = SingleThreadMut::new(component);
-        let scene_node = SceneNode {
-            component: EComponentType::SpotLightComponent(component),
-            childs: vec![],
-        };
-        let scene_node = SingleThreadMut::new(scene_node);
-        scene_node
+        SingleThreadMut::new(SceneNode::from_component(component))
     }
 }
 

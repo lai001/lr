@@ -1,5 +1,7 @@
 use crate::camera::Camera;
 use crate::components::component::Component;
+use crate::components::point_light_component::PointLightComponent;
+use crate::components::spot_light_component::SpotLightComponent;
 use crate::content::content_file_type::EContentFileType;
 use crate::directional_light::DirectionalLight;
 use crate::drawable::{EDrawObjectType, PBRBindingResources};
@@ -28,7 +30,6 @@ use rs_render::virtual_texture_source::TVirtualTextureSource;
 use rs_render::{antialias_type::EAntialiasType, scene_viewport::SceneViewport};
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
-use std::ops::Deref;
 
 bitflags::bitflags! {
     #[derive(PartialEq, Debug, Copy, Clone, Hash, Eq)]
@@ -1459,28 +1460,27 @@ impl PlayerViewport {
         }
     }
 
-    pub fn update_point_lights(
+    pub fn update_point_lights<'a>(
         &mut self,
         engine: &mut Engine,
-        lights: Vec<
-            SingleThreadMutType<crate::components::point_light_component::PointLightComponent>,
-        >,
+        lights: impl ExactSizeIterator<Item = &'a PointLightComponent> + Clone,
     ) {
-        rs_core_minimal::vec_ref!(lights_ref, lights);
         self.cluster_light = crate::cluster_light::ClusterLight::new(
             engine,
             &self.camera,
-            lights_ref,
+            lights.clone(),
             self.settings
                 .render_setting
                 .is_enable_light_culling_acceleration,
         )
         .ok();
+        let lights_iter = lights;
+        self.point_lights_constants.available = lights_iter.len() as u32;
+        let num = lights_iter
+            .len()
+            .min(self.point_lights_constants.lights.len());
 
-        self.point_lights_constants.available = lights.len() as u32;
-        let num = lights.len().min(self.point_lights_constants.lights.len());
-        for i in 0..num {
-            let light = lights[i].borrow();
+        for (i, light) in lights_iter.take(num).enumerate() {
             let point_light_attributes = light.point_light;
             self.point_lights_constants.lights[i].ambient = point_light_attributes.ambient;
             self.point_lights_constants.lights[i].diffuse = point_light_attributes.diffuse;
@@ -1495,16 +1495,17 @@ impl PlayerViewport {
         }
     }
 
-    pub fn update_spot_lights(
+    pub fn update_spot_lights<'a>(
         &mut self,
-        lights: Vec<
-            SingleThreadMutType<crate::components::spot_light_component::SpotLightComponent>,
-        >,
+        lights: impl ExactSizeIterator<Item = &'a SpotLightComponent> + Clone,
     ) {
-        self.spot_lights_constants.available = lights.len() as u32;
-        let num = lights.len().min(self.spot_lights_constants.lights.len());
-        for i in 0..num {
-            let light = lights[i].borrow();
+        let lights_iter = lights;
+
+        self.spot_lights_constants.available = lights_iter.len() as u32;
+        let num = lights_iter
+            .len()
+            .min(self.spot_lights_constants.lights.len());
+        for (i, light) in lights_iter.take(num).enumerate() {
             let spot_light_attributes = &light.spot_light;
             self.spot_lights_constants.lights[i].light.ambient =
                 spot_light_attributes.light.ambient;

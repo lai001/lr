@@ -488,6 +488,29 @@ impl Component for StaticMeshComponent {
             let _ = self.set_agent_transformation(send_agent_transformation);
         }
     }
+
+    fn as_drawable(&self) -> Option<&dyn Drawable> {
+        Some(self)
+    }
+
+    fn collider_handles(&self) -> Vec<ColliderHandle> {
+        let collider_handles = self.get_physics().map(|x| x.collider_handles());
+        collider_handles.unwrap_or_default()
+    }
+
+    fn rigid_body_handle(&self) -> Option<RigidBodyHandle> {
+        let rigid_body_handle = self.get_physics().map(|x| x.rigid_body_handle);
+        rigid_body_handle
+    }
+
+    fn gizmo(&mut self, gizmo_final_transformation: Option<glam::Mat4>) {
+        self.gizmo_default(gizmo_final_transformation);
+        if gizmo_final_transformation.is_some() {
+            self.set_apply_simulate(false);
+        } else {
+            self.set_apply_simulate(true);
+        }
+    }
 }
 
 impl Drawable for StaticMeshComponent {

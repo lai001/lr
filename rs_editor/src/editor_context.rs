@@ -58,6 +58,7 @@ use rs_engine::{
     logger::SlotFlags,
     player_viewport::PlayerViewport,
     scene_node::SceneNode,
+    skeleton_mesh_component::SkeletonMeshComponent,
     static_mesh_component::StaticMeshComponent,
     url_extension::UrlExtension,
 };
@@ -1677,7 +1678,10 @@ impl EditorContext {
             let mut draw_objects = active_level.collect_draw_objects();
 
             for camera_componenet in active_level.collect_camera_componenets() {
-                let camera_componenet = camera_componenet.borrow();
+                let componenet = camera_componenet.borrow();
+                let camera_componenet = componenet
+                    .downcast_ref::<CameraComponent>()
+                    .expect("Type missmatch");
                 if let Some(player_viewport) = camera_componenet.get_player_viewport() {
                     let mut player_viewport = player_viewport.borrow_mut();
                     player_viewport.update_global_constants(&mut self.engine);
@@ -2484,14 +2488,10 @@ impl EditorContext {
                     content_files,
                     &mut self.player_viewport,
                 );
-                let camera_component = SingleThreadMut::new(camera_component);
                 let mut parent_node = parent_node.borrow_mut();
-                parent_node.childs.push(SingleThreadMut::new(SceneNode {
-                    component: rs_engine::scene_node::EComponentType::CameraComponent(
-                        camera_component,
-                    ),
-                    childs: vec![],
-                }));
+                parent_node.add_child(SingleThreadMut::new(
+                    rs_engine::scene_node::SceneNode::from_component(camera_component),
+                ));
             }
             crate::ui::level_view::EClickEventType::DeleteNode(actor, node) => {
                 actor.borrow_mut().remove_node(node);
@@ -2505,12 +2505,12 @@ impl EditorContext {
             crate::ui::level_view::EClickEventType::CreateSceneComponent(parent_node) => {
                 let mut parent_node = parent_node.borrow_mut();
                 let names = parent_node
-                    .childs
+                    .childs()
                     .iter()
-                    .map(|x| x.borrow().get_name())
+                    .map(|x| x.borrow().component().get_name())
                     .collect();
                 let new_name = make_unique_name(names, "Scene");
-                parent_node.childs.push(SceneNode::new_sp(new_name));
+                parent_node.add_child(SceneNode::new_sp(new_name));
             }
             crate::ui::level_view::EClickEventType::CopyPath(actor, node) => {
                 if let Some(node_path) = actor.borrow_mut().find_path_by_node(node) {
@@ -2538,6 +2538,7 @@ impl EditorContext {
                 let new_actor = new_actor.borrow_mut();
                 let mut scene_node = new_actor.scene_node.borrow_mut();
                 scene_node
+                    .component_mut()
                     .set_transformation(self.player_viewport.camera.get_world_transformation());
                 let mut camera_component =
                     CameraComponent::new("Camera".to_string(), glam::Mat4::IDENTITY);
@@ -2546,13 +2547,9 @@ impl EditorContext {
                     content_files,
                     &mut self.player_viewport,
                 );
-                let camera_component = SingleThreadMut::new(camera_component);
-                scene_node.childs.push(SingleThreadMut::new(SceneNode {
-                    component: rs_engine::scene_node::EComponentType::CameraComponent(
-                        camera_component,
-                    ),
-                    childs: vec![],
-                }));
+                scene_node.add_child(SingleThreadMut::new(SceneNode::from_component(
+                    camera_component,
+                )));
             }
             crate::ui::level_view::EClickEventType::CreateCollisionComponent(_, parent_node) => {
                 let Some(project_context) = self.project_context.as_mut() else {
@@ -2562,22 +2559,22 @@ impl EditorContext {
                 let content_files = content_manager.content_files();
                 let mut parent_node = parent_node.borrow_mut();
                 let names = parent_node
-                    .childs
+                    .childs()
                     .iter()
-                    .map(|x| x.borrow().get_name())
+                    .map(|x| x.borrow().component().get_name())
                     .collect();
                 let new_name = make_unique_name(names, "Collision");
-                let collision_component =
+                let collision_node =
                     CollisionComponent::new_scene_node(new_name, glam::Mat4::IDENTITY);
                 {
-                    let mut collision_component = collision_component.borrow_mut();
-                    collision_component.initialize(
+                    let mut collision_component = collision_node.borrow_mut();
+                    collision_component.component_mut().initialize(
                         &mut self.engine,
                         content_files,
                         &mut self.player_viewport,
                     );
                 }
-                parent_node.childs.push(collision_component);
+                parent_node.add_child(collision_node);
             }
             crate::ui::level_view::EClickEventType::DuplicateActor(actor) => {
                 let Some(active_level) = self.data_source.level.as_mut() else {
@@ -2605,22 +2602,22 @@ impl EditorContext {
                 let content_files = content_manager.content_files();
                 let mut parent_node = parent_node.borrow_mut();
                 let names = parent_node
-                    .childs
+                    .childs()
                     .iter()
-                    .map(|x| x.borrow().get_name())
+                    .map(|x| x.borrow().component().get_name())
                     .collect();
                 let new_name = make_unique_name(names, "SpotLight");
-                let spot_light_component =
+                let spot_light_node =
                     SpotLightComponent::new_scene_node(new_name, glam::Mat4::IDENTITY);
                 {
-                    let mut spot_light_component = spot_light_component.borrow_mut();
-                    spot_light_component.initialize(
+                    let mut spot_light_component = spot_light_node.borrow_mut();
+                    spot_light_component.component_mut().initialize(
                         &mut self.engine,
                         content_files,
                         &mut self.player_viewport,
                     );
                 }
-                parent_node.childs.push(spot_light_component);
+                parent_node.add_child(spot_light_node);
             }
             crate::ui::level_view::EClickEventType::CreatePointLightComponent(parent_node) => {
                 let Some(project_context) = self.project_context.as_mut() else {
@@ -2630,22 +2627,22 @@ impl EditorContext {
                 let content_files = content_manager.content_files();
                 let mut parent_node = parent_node.borrow_mut();
                 let names = parent_node
-                    .childs
+                    .childs()
                     .iter()
-                    .map(|x| x.borrow().get_name())
+                    .map(|x| x.borrow().component().get_name())
                     .collect();
                 let new_name = make_unique_name(names, "PointLight");
-                let point_light_component =
+                let point_light_node =
                     PointLightComponent::new_scene_node(new_name, glam::Mat4::IDENTITY);
                 {
-                    let mut point_light_component = point_light_component.borrow_mut();
-                    point_light_component.initialize(
+                    let mut point_light_component = point_light_node.borrow_mut();
+                    point_light_component.component_mut().initialize(
                         &mut self.engine,
                         content_files,
                         &mut self.player_viewport,
                     );
                 }
-                parent_node.childs.push(point_light_component);
+                parent_node.add_child(point_light_node);
             }
             crate::ui::level_view::EClickEventType::CreateStaticMeshComponent(parent_node) => {
                 let Some(project_context) = self.project_context.as_mut() else {
@@ -2654,23 +2651,16 @@ impl EditorContext {
                 let content_manager = project_context.content_manager.borrow();
                 let content_files = content_manager.content_files();
                 let mut parent_node = parent_node.borrow_mut();
-                let component = StaticMeshComponent::new_sp(
-                    format!("Untitled"),
-                    None,
-                    None,
-                    glam::Mat4::IDENTITY,
-                );
+                let mut component =
+                    StaticMeshComponent::new(format!("Untitled"), None, None, glam::Mat4::IDENTITY);
                 {
-                    let mut component = component.borrow_mut();
                     component.initialize(
                         &mut self.engine,
                         content_files,
                         &mut self.player_viewport,
                     );
                 }
-                parent_node
-                    .childs
-                    .push(SceneNode::static_mesh_component_node(component));
+                parent_node.add_child(SingleThreadMut::new(SceneNode::from_component(component)));
             }
         }
     }
@@ -3402,39 +3392,36 @@ impl EditorContext {
                     ESelectedObjectType::Actor(_) => unimplemented!(),
                     ESelectedObjectType::DirectionalLight(_) => unimplemented!(),
                     ESelectedObjectType::SceneNode(scene_node) => {
-                        let scene_node = scene_node.borrow_mut();
-                        match &scene_node.component {
-                            rs_engine::scene_node::EComponentType::SceneComponent(_) => {
-                                unimplemented!()
-                            }
-                            rs_engine::scene_node::EComponentType::StaticMeshComponent(
-                                static_mesh_component,
-                            ) => {
+                        let mut scene_node = scene_node.borrow_mut();
+                        {
+                            let static_mesh_opt =
+                                scene_node.typed_component_mut::<StaticMeshComponent>();
+                            if let Some(mut static_mesh_component) = static_mesh_opt {
                                 let Some(project_context) = self.project_context.as_ref() else {
                                     return;
                                 };
                                 let content_manager = project_context.content_manager.clone();
                                 let content_manager = content_manager.borrow();
                                 let files = content_manager.content_files();
-                                let mut static_mesh_component = static_mesh_component.borrow_mut();
                                 static_mesh_component.set_material(
                                     &mut self.engine,
-                                    update_material.new,
+                                    update_material.new.clone(),
                                     files,
                                     &mut self.player_viewport,
                                 );
                             }
-                            rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
-                                skeleton_mesh_component,
-                            ) => {
+                        }
+                        {
+                            let skeleton_mesh_opt =
+                                scene_node.typed_component_mut::<SkeletonMeshComponent>();
+                            if let Some(mut skeleton_mesh_component) = skeleton_mesh_opt {
                                 let Some(project_context) = self.project_context.as_ref() else {
                                     return;
                                 };
                                 let content_manager = project_context.content_manager.clone();
                                 let content_manager = content_manager.borrow();
                                 let files = content_manager.content_files();
-                                let mut skeleton_mesh_component =
-                                    skeleton_mesh_component.borrow_mut();
+
                                 if let Some(url) = update_material.new {
                                     skeleton_mesh_component.set_material(
                                         &mut self.engine,
@@ -3443,18 +3430,6 @@ impl EditorContext {
                                         &mut self.player_viewport,
                                     );
                                 }
-                            }
-                            rs_engine::scene_node::EComponentType::CameraComponent(_) => {
-                                unimplemented!()
-                            }
-                            rs_engine::scene_node::EComponentType::CollisionComponent(_) => {
-                                unimplemented!()
-                            }
-                            rs_engine::scene_node::EComponentType::SpotLightComponent(_) => {
-                                unimplemented!()
-                            }
-                            rs_engine::scene_node::EComponentType::PointLightComponent(_) => {
-                                unimplemented!()
                             }
                         }
                     }
@@ -3481,28 +3456,21 @@ impl EditorContext {
                     ESelectedObjectType::Actor(_) => unimplemented!(),
                     ESelectedObjectType::DirectionalLight(_) => unimplemented!(),
                     ESelectedObjectType::SceneNode(scene_node) => {
-                        let scene_node = scene_node.borrow_mut();
-                        match &scene_node.component {
-                            rs_engine::scene_node::EComponentType::SkeletonMeshComponent(
-                                skeleton_mesh_component,
-                            ) => {
-                                let Some(project_context) = self.project_context.as_ref() else {
-                                    return;
-                                };
-                                let content_manager = project_context.content_manager.clone();
-                                let content_manager = content_manager.borrow();
-                                let files = content_manager.content_files();
-                                let mut skeleton_mesh_component =
-                                    skeleton_mesh_component.borrow_mut();
-                                skeleton_mesh_component.set_animation(
-                                    update_animation.new,
-                                    self.engine.get_resource_manager().clone(),
-                                    &files,
-                                );
-                            }
-                            _ => {
-                                unimplemented!()
-                            }
+                        let mut scene_node = scene_node.borrow_mut();
+                        let skeleton_mesh_opt =
+                            scene_node.typed_component_mut::<SkeletonMeshComponent>();
+                        if let Some(mut skeleton_mesh_component) = skeleton_mesh_opt {
+                            let Some(project_context) = self.project_context.as_ref() else {
+                                return;
+                            };
+                            let content_manager = project_context.content_manager.clone();
+                            let content_manager = content_manager.borrow();
+                            let files = content_manager.content_files();
+                            skeleton_mesh_component.set_animation(
+                                update_animation.new,
+                                self.engine.get_resource_manager().clone(),
+                                &files,
+                            );
                         }
                     }
                 }
@@ -3517,7 +3485,7 @@ impl EditorContext {
                         actor.borrow_mut().name = new_name;
                     }
                     ESelectedObjectType::SceneNode(scene_node) => {
-                        scene_node.borrow_mut().set_name(new_name);
+                        scene_node.borrow_mut().component_mut().set_name(new_name);
                     }
                     ESelectedObjectType::DirectionalLight(componenet) => {
                         componenet.borrow_mut().name = new_name;
@@ -3528,36 +3496,32 @@ impl EditorContext {
                 match update_static_mesh.selected_object {
                     ESelectedObjectType::SceneNode(scene_node) => {
                         let mut scene_node = scene_node.borrow_mut();
-                        match &mut scene_node.component {
-                            rs_engine::scene_node::EComponentType::StaticMeshComponent(
-                                static_mesh_component,
-                            ) => {
-                                let Some(project_context) = self.project_context.as_ref() else {
-                                    return;
-                                };
-                                let content_manager = project_context.content_manager.clone();
-                                let content_manager = content_manager.borrow();
-                                let files = content_manager.content_files();
-                                let mut static_mesh_component = static_mesh_component.borrow_mut();
-                                let static_mesh_url = update_static_mesh.new;
-                                static_mesh_component.set_static_mesh_url(
-                                    static_mesh_url,
-                                    self.engine.get_resource_manager().clone(),
+                        let static_mesh_opt =
+                            scene_node.typed_component_mut::<StaticMeshComponent>();
+                        if let Some(mut static_mesh_component) = static_mesh_opt {
+                            let Some(project_context) = self.project_context.as_ref() else {
+                                return;
+                            };
+                            let content_manager = project_context.content_manager.clone();
+                            let content_manager = content_manager.borrow();
+                            let files = content_manager.content_files();
+                            let static_mesh_url = update_static_mesh.new;
+                            static_mesh_component.set_static_mesh_url(
+                                static_mesh_url,
+                                self.engine.get_resource_manager().clone(),
+                                &mut self.engine,
+                                &files,
+                                &mut self.player_viewport,
+                            );
+                            let mut active_level = active_level.borrow_mut();
+                            let physics = active_level.get_physics_mut();
+                            if let Some(physics) = physics {
+                                static_mesh_component.initialize_physics(
                                     &mut self.engine,
+                                    physics,
                                     &files,
-                                    &mut self.player_viewport,
                                 );
-                                let mut active_level = active_level.borrow_mut();
-                                let physics = active_level.get_physics_mut();
-                                if let Some(physics) = physics {
-                                    static_mesh_component.initialize_physics(
-                                        &mut self.engine,
-                                        physics,
-                                        &files,
-                                    );
-                                }
                             }
-                            _ => unimplemented!(),
                         }
                     }
                     _ => {
@@ -3574,14 +3538,10 @@ impl EditorContext {
                 match selected_object_type {
                     ESelectedObjectType::SceneNode(scene_node) => {
                         let mut scene_node = scene_node.borrow_mut();
-                        match &mut scene_node.component {
-                            rs_engine::scene_node::EComponentType::StaticMeshComponent(
-                                static_mesh_component,
-                            ) => {
-                                let mut static_mesh_component = static_mesh_component.borrow_mut();
-                                static_mesh_component.is_enable_multiresolution = new;
-                            }
-                            _ => unimplemented!(),
+                        let static_mesh_opt =
+                            scene_node.typed_component_mut::<StaticMeshComponent>();
+                        if let Some(mut static_mesh_component) = static_mesh_opt {
+                            static_mesh_component.is_enable_multiresolution = new;
                         }
                     }
                     _ => unimplemented!(),
@@ -3603,7 +3563,11 @@ impl EditorContext {
                         let content_manager = project_context.content_manager.clone();
                         let content_manager = content_manager.borrow();
                         let files = content_manager.content_files();
-                        scene_node.initialize_physics(&mut self.engine, level_physics, &files);
+                        scene_node.component_mut().initialize_physics(
+                            &mut self.engine,
+                            level_physics,
+                            &files,
+                        );
                     }
                 }
                 _ => {
@@ -3638,78 +3602,11 @@ impl EditorContext {
             ESelectedObjectType::Actor(_) => {}
             ESelectedObjectType::SceneNode(secne_node) => {
                 let mut secne_node = secne_node.borrow_mut();
-                let component = &mut secne_node.component;
-                match component {
-                    rs_engine::scene_node::EComponentType::SceneComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                            let parent_final_transformation =
-                                component.get_parent_final_transformation();
-                            let model_matrix = component.get_transformation_mut();
-                            *model_matrix =
-                                parent_final_transformation.inverse() * gizmo_final_transformation;
-                        }
-                    }
-                    rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                            let parent_final_transformation =
-                                component.get_parent_final_transformation();
-                            let model_matrix = component.get_transformation_mut();
-                            *model_matrix =
-                                parent_final_transformation.inverse() * gizmo_final_transformation;
-                            component.set_apply_simulate(false);
-                        } else {
-                            component.set_apply_simulate(true);
-                        }
-                    }
-                    rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                            let mut component = component.borrow_mut();
-                            *component.get_transformation_mut() = gizmo_final_transformation;
-                        }
-                    }
-                    rs_engine::scene_node::EComponentType::CameraComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                            let parent_final_transformation =
-                                component.get_parent_final_transformation();
-                            let model_matrix = component.get_transformation_mut();
-                            *model_matrix =
-                                parent_final_transformation.inverse() * gizmo_final_transformation;
-                        }
-                    }
-                    rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                            let parent_final_transformation =
-                                component.get_parent_final_transformation();
-                            let model_matrix = component.get_transformation_mut();
-                            *model_matrix =
-                                parent_final_transformation.inverse() * gizmo_final_transformation;
-                        }
-                    }
-                    rs_engine::scene_node::EComponentType::SpotLightComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                            let parent_final_transformation =
-                                component.get_parent_final_transformation();
-                            let model_matrix =
-                                parent_final_transformation.inverse() * gizmo_final_transformation;
-                            component.set_transformation(model_matrix);
-                        }
-                    }
-                    rs_engine::scene_node::EComponentType::PointLightComponent(component) => {
-                        let mut component = component.borrow_mut();
-                        if let Some(gizmo_final_transformation) = gizmo_final_transformation {
-                            let parent_final_transformation =
-                                component.get_parent_final_transformation();
-                            let model_matrix =
-                                parent_final_transformation.inverse() * gizmo_final_transformation;
-                            component.set_transformation(model_matrix);
-                        }
-                    }
+                {
+                    let mut component_mut = secne_node.component_mut();
+                    component_mut.gizmo(gizmo_final_transformation);
                 }
+
                 let Some(project_context) = self.project_context.as_ref() else {
                     return;
                 };

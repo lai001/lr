@@ -23,20 +23,21 @@ pub struct ClusterLight {
 }
 
 impl ClusterLight {
-    pub fn new(
+    pub fn new<'a>(
         engine: &mut Engine,
         camera: &Camera,
-        point_light_components: Vec<&PointLightComponent>,
+        lights: impl ExactSizeIterator<Item = &'a PointLightComponent> + Clone,
         is_enable_light_culling_acceleration: bool,
     ) -> crate::error::Result<ClusterLight> {
         let frustum = camera.get_frustum_apply_tramsformation();
+        let point_light_components = lights.clone();
         let mut point_light_shapes = Vec::with_capacity(point_light_components.len());
         let ResolveResult {
             cluster_light_handle,
             cluster_light_index_handle,
         } = if is_enable_light_culling_acceleration {
-            for point_light_component in &point_light_components {
-                let shape = Self::get_sphere_of_point_light(point_light_component);
+            for point_light_component in point_light_components {
+                let shape = Self::get_sphere_of_point_light(&point_light_component);
                 let render_shape = rs_render::constants::Sphere3D::new(shape.center, shape.radius);
                 point_light_shapes.push(render_shape);
             }
@@ -48,7 +49,7 @@ impl ClusterLight {
                 cluster_light_index_handle,
             }
         } else {
-            let result = Self::resolve(engine, camera, point_light_components.clone());
+            let result = Self::resolve(engine, camera, lights.clone());
             let fallback = Self::no_lights_fall_back(engine);
             result.or(fallback)?
         };
@@ -73,8 +74,7 @@ impl ClusterLight {
             None
         };
 
-        let point_lights_handle =
-            Self::get_point_lights_buffer_handle(engine, point_light_components)?;
+        let point_lights_handle = Self::get_point_lights_buffer_handle(engine, lights)?;
         Ok(ClusterLight {
             point_lights_handle,
             cluster_light_handle,
@@ -110,16 +110,16 @@ impl ClusterLight {
         })
     }
 
-    fn get_point_lights_buffer_handle(
+    fn get_point_lights_buffer_handle<'a>(
         engine: &mut Engine,
-        point_light_components: Vec<&PointLightComponent>,
+        lights: impl ExactSizeIterator<Item = &'a PointLightComponent> + Clone,
     ) -> crate::error::Result<crate::handle::BufferHandle> {
-        let point_lights = if point_light_components.is_empty() {
+        let point_light_components = lights;
+        let point_lights = if point_light_components.len() == 0 {
             let point_lights = vec![rs_render::constants::PointLight::default()];
             point_lights
         } else {
             let point_lights = point_light_components
-                .iter()
                 .map(|x| {
                     let mut p = rs_render::constants::PointLight::default();
                     p.ambient = x.point_light.ambient;
@@ -146,14 +146,16 @@ impl ClusterLight {
         Ok(point_lights_handle)
     }
 
-    fn resolve(
+    fn resolve<'a>(
         engine: &mut Engine,
         camera: &Camera,
-        point_light_components: Vec<&PointLightComponent>,
+        lights: impl ExactSizeIterator<Item = &'a PointLightComponent> + Clone,
     ) -> crate::error::Result<ResolveResult> {
         let _ = tracy_client::span!();
 
-        if point_light_components.is_empty() {
+        let point_light_components = lights.clone();
+
+        if point_light_components.len() == 0 {
             return Self::no_lights_fall_back(engine);
         }
 
@@ -166,7 +168,7 @@ impl ClusterLight {
 
         for frustum in frustums.iter() {
             let mut cluster = vec![];
-            for (light_index, point_light_component) in point_light_components.iter().enumerate() {
+            for (light_index, point_light_component) in lights.clone().enumerate() {
                 let sphere = Self::get_sphere_of_point_light(&point_light_component);
                 let is_visible = is_sphere_visible_to_frustum(&sphere, frustum);
                 if is_visible {

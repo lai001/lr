@@ -30,7 +30,7 @@ fn draw_scene_node(
     scene_node: SingleThreadMutType<SceneNode>,
     event: &mut Option<EClickEventType>,
 ) {
-    let name = { scene_node.borrow().get_name() };
+    let name = { scene_node.borrow().component().get_name() };
     let id = ui.make_persistent_id(name.clone());
     egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
         .show_header(ui, |ui| {
@@ -102,7 +102,7 @@ fn draw_scene_node(
             }
         })
         .body(|ui| {
-            for child in &scene_node.borrow().childs {
+            for child in scene_node.borrow().childs() {
                 draw_scene_node(ui, actor.clone(), child.clone(), event);
             }
         });

@@ -4,7 +4,7 @@ use crate::{
     drawable::{CustomDrawObject, Drawable, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
-    scene_node::{EComponentType, SceneNode},
+    scene_node::SceneNode,
 };
 use rapier3d::prelude::*;
 use rs_core_minimal::primitive_data::PrimitiveData;
@@ -219,6 +219,10 @@ impl Component for CollisionComponent {
             );
         }
     }
+
+    fn as_drawable(&self) -> Option<&dyn Drawable> {
+        Some(self)
+    }
 }
 
 impl Drawable for CollisionComponent {
@@ -249,13 +253,7 @@ impl CollisionComponent {
         transformation: glam::Mat4,
     ) -> SingleThreadMutType<SceneNode> {
         let collision_component = Self::new(name, transformation);
-        let collision_component = SingleThreadMut::new(collision_component);
-        let scene_node = SceneNode {
-            component: EComponentType::CollisionComponent(collision_component),
-            childs: vec![],
-        };
-        let scene_node = SingleThreadMut::new(scene_node);
-        scene_node
+        SingleThreadMut::new(SceneNode::from_component(collision_component))
     }
 
     pub fn new(name: String, transformation: glam::Mat4) -> CollisionComponent {

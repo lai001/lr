@@ -300,6 +300,10 @@ impl Component for SkeletonMeshComponent {
             }
         }
     }
+
+    fn as_drawable(&self) -> Option<&dyn Drawable> {
+        Some(self)
+    }
 }
 
 impl Drawable for SkeletonMeshComponent {

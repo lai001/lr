@@ -1,6 +1,7 @@
 use super::content_file_type::EContentFileType;
 use crate::actor::Actor;
 use crate::camera_component::CameraComponent;
+use crate::components::component::Component;
 use crate::components::point_light_component::PointLightComponent;
 use crate::components::spot_light_component::SpotLightComponent;
 use crate::directional_light::DirectionalLight;
@@ -10,7 +11,7 @@ use crate::misc::{compute_appropriate_offset_look_and_projection_matrix, merge_a
 #[cfg(feature = "network")]
 use crate::network::NetworkReplicated;
 use crate::player_viewport::PlayerViewport;
-use crate::scene_node::{EComponentType, SceneNode};
+use crate::scene_node::SceneNode;
 use crate::{build_content_file_url, url_extension::UrlExtension};
 use rapier3d::prelude::*;
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
@@ -18,6 +19,7 @@ use rs_core_minimal::name_generator::make_unique_name;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::ops::Deref;
 use std::rc::Rc;
 
 pub struct LevelPhysics {
@@ -635,9 +637,39 @@ impl Level {
         }
 
         let light_components = self.collect_point_light_components();
-        player_viewport.update_point_lights(engine, light_components);
+
+        let mut light_component_refs: Vec<std::cell::Ref<'_, Box<dyn Component>>> = vec![];
+        let mut lights: Vec<&PointLightComponent> = vec![];
+        for light_component in &light_components {
+            light_component_refs.push(light_component.borrow());
+        }
+        for itme in &light_component_refs {
+            lights.push(
+                itme.deref()
+                    .as_ref()
+                    .downcast_ref::<PointLightComponent>()
+                    .unwrap(),
+            );
+        }
+
+        player_viewport.update_point_lights(engine, lights.iter().copied());
         let spot_light_components = self.collect_spot_light_components();
-        player_viewport.update_spot_lights(spot_light_components);
+
+        let mut light_component_refs: Vec<std::cell::Ref<'_, Box<dyn Component>>> = vec![];
+        let mut lights: Vec<&SpotLightComponent> = vec![];
+        for light_component in &spot_light_components {
+            light_component_refs.push(light_component.borrow());
+        }
+        for itme in &light_component_refs {
+            lights.push(
+                itme.deref()
+                    .as_ref()
+                    .downcast_ref::<SpotLightComponent>()
+                    .unwrap(),
+            );
+        }
+
+        player_viewport.update_spot_lights(lights.iter().copied());
     }
 
     pub fn get_rigid_body_set_mut(&mut self) -> Option<&mut RigidBodySet> {
@@ -759,58 +791,12 @@ impl Level {
         let scene_node_clone = scene_node.clone();
 
         let scene_node = scene_node.borrow();
-        match &scene_node.component {
-            EComponentType::SceneComponent(_) => {}
-            EComponentType::StaticMeshComponent(static_mesh_component) => {
-                let is_find = (|| {
-                    let mut component = static_mesh_component.borrow_mut();
-                    if let Some(physics) = component.get_physics_mut() {
-                        if physics.collider_handles().contains(&handle) {
-                            return true;
-                        }
-                    }
-                    false
-                })();
-                if is_find {
-                    *search_node = Some(scene_node_clone);
-                    return;
-                }
-            }
-            EComponentType::SkeletonMeshComponent(static_mesh_component) => {
-                let is_find = (|| {
-                    let mut component = static_mesh_component.borrow_mut();
-                    if let Some(physics) = component.get_physics_mut() {
-                        if physics.get_collider_handles().contains(&handle) {
-                            return true;
-                        }
-                    }
-                    false
-                })();
-                if is_find {
-                    *search_node = Some(scene_node_clone);
-                    return;
-                }
-            }
-            EComponentType::CameraComponent(_) => {}
-            EComponentType::CollisionComponent(collision_component) => {
-                let is_find = (|| {
-                    let mut component = collision_component.borrow_mut();
-                    if let Some(physics) = component.get_physics_mut() {
-                        if physics.get_collider_handles().contains(&handle) {
-                            return true;
-                        }
-                    }
-                    false
-                })();
-                if is_find {
-                    *search_node = Some(scene_node_clone);
-                    return;
-                }
-            }
-            EComponentType::SpotLightComponent(_) => {}
-            EComponentType::PointLightComponent(_) => {}
+        let collider_handles = scene_node.component().collider_handles();
+        if collider_handles.contains(&handle) {
+            *search_node = Some(scene_node_clone);
+            return;
         }
-        for child in scene_node.childs.clone() {
+        for child in scene_node.childs().iter().cloned() {
             self.find_node(child, handle, search_node);
         }
     }
@@ -834,18 +820,24 @@ impl Level {
         draw_objects
     }
 
-    pub fn collect_camera_componenets(&self) -> Vec<SingleThreadMutType<CameraComponent>> {
+    pub fn collect_typed_componenets<T: Component>(
+        &self,
+    ) -> Vec<SingleThreadMutType<Box<dyn Component>>> {
         let mut camera_componenets = vec![];
         for actor in self.actors.clone() {
             let actor = actor.borrow_mut();
             Actor::walk_node_mut(actor.scene_node.clone(), &mut |node| {
                 let node = node.borrow();
-                if let EComponentType::CameraComponent(rc) = &node.component {
-                    camera_componenets.push(rc.clone());
+                if node.is_typed_component::<T>() {
+                    camera_componenets.push(node.underlying_component());
                 }
             });
         }
         camera_componenets
+    }
+
+    pub fn collect_camera_componenets(&self) -> Vec<SingleThreadMutType<Box<dyn Component>>> {
+        self.collect_typed_componenets::<CameraComponent>()
     }
 
     pub fn delete_light(&mut self, light: SingleThreadMutType<DirectionalLight>) {
@@ -894,29 +886,9 @@ impl Level {
         let node = actor.scene_node.clone();
         Actor::walk_node_mut(node, &mut |node| {
             let node = node.borrow();
-            match &node.component {
-                EComponentType::SceneComponent(_) => {}
-                EComponentType::StaticMeshComponent(component) => {
-                    let component = component.borrow();
-                    if let Some(component_physics) = component.get_physics() {
-                        level_physics.remove_rigid_body(component_physics.rigid_body_handle);
-                    }
-                }
-                EComponentType::SkeletonMeshComponent(component) => {
-                    let component = component.borrow();
-                    if let Some(component_physics) = component.get_physics() {
-                        level_physics.remove_rigid_body(component_physics.rigid_body_handle);
-                    }
-                }
-                EComponentType::CameraComponent(_) => {}
-                EComponentType::CollisionComponent(component) => {
-                    let component = component.borrow();
-                    if let Some(component_physics) = component.get_physics() {
-                        level_physics.remove_rigid_body(component_physics.rigid_body_handle);
-                    }
-                }
-                EComponentType::SpotLightComponent(_) => {}
-                EComponentType::PointLightComponent(_) => {}
+            let rigid_body_handle = node.component().rigid_body_handle();
+            if let Some(rigid_body_handle) = rigid_body_handle {
+                level_physics.remove_rigid_body(rigid_body_handle);
             }
         });
     }
@@ -968,40 +940,12 @@ impl Level {
         self.add_new_actors(engine, vec![duplicated_actor], files, player_viewport);
     }
 
-    pub fn collect_point_light_components(&self) -> Vec<SingleThreadMutType<PointLightComponent>> {
-        let mut lights = vec![];
-        for actor in self.actors.clone() {
-            let actor = actor.borrow();
-            let scene_node = actor.scene_node.clone();
-            Actor::walk_node_mut(scene_node, &mut |node| {
-                let node = node.borrow();
-                match &node.component {
-                    EComponentType::PointLightComponent(component) => {
-                        lights.push(component.clone());
-                    }
-                    _ => {}
-                }
-            });
-        }
-        lights
+    pub fn collect_point_light_components(&self) -> Vec<SingleThreadMutType<Box<dyn Component>>> {
+        self.collect_typed_componenets::<PointLightComponent>()
     }
 
-    pub fn collect_spot_light_components(&self) -> Vec<SingleThreadMutType<SpotLightComponent>> {
-        let mut lights = vec![];
-        for actor in self.actors.clone() {
-            let actor = actor.borrow();
-            let scene_node = actor.scene_node.clone();
-            Actor::walk_node_mut(scene_node, &mut |node| {
-                let node = node.borrow();
-                match &node.component {
-                    EComponentType::SpotLightComponent(component) => {
-                        lights.push(component.clone());
-                    }
-                    _ => {}
-                }
-            });
-        }
-        lights
+    pub fn collect_spot_light_components(&self) -> Vec<SingleThreadMutType<Box<dyn Component>>> {
+        self.collect_typed_componenets::<SpotLightComponent>()
     }
 
     pub fn set_debug_show_flag(&mut self, flag: crate::debug_show_flag::DebugShowFlag) {
@@ -1009,21 +953,24 @@ impl Level {
             let actor = actor.borrow_mut();
             let scene_node = actor.scene_node.clone();
             Actor::walk_node_mut(scene_node, &mut |node| {
-                let mut node = node.borrow_mut();
-                match &mut node.component {
-                    EComponentType::PointLightComponent(component) => {
-                        let mut component = component.borrow_mut();
+                {
+                    if let Some(mut component) = node
+                        .borrow_mut()
+                        .typed_component_mut::<PointLightComponent>()
+                    {
                         component.set_is_show_preview(
                             flag.contains(crate::debug_show_flag::DebugShowFlag::PointLightSphere),
                         );
                     }
-                    EComponentType::CameraComponent(component) => {
-                        let mut component = component.borrow_mut();
+                }
+                {
+                    if let Some(mut component) =
+                        node.borrow_mut().typed_component_mut::<CameraComponent>()
+                    {
                         component.set_is_show_preview(
                             flag.contains(crate::debug_show_flag::DebugShowFlag::CameraFrustum),
                         );
                     }
-                    _ => {}
                 }
             });
         }

@@ -3,7 +3,7 @@ use crate::{
     drawable::{CustomDrawObject, Drawable, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
-    scene_node::{EComponentType, SceneNode},
+    scene_node::SceneNode,
 };
 use rs_core_minimal::misc::point_light_radius;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
@@ -75,13 +75,7 @@ impl PointLightComponent {
         transformation: glam::Mat4,
     ) -> SingleThreadMutType<SceneNode> {
         let component = Self::new(name, transformation);
-        let component = SingleThreadMut::new(component);
-        let scene_node = SceneNode {
-            component: EComponentType::PointLightComponent(component),
-            childs: vec![],
-        };
-        let scene_node = SingleThreadMut::new(scene_node);
-        scene_node
+        SingleThreadMut::new(SceneNode::from_component(component))
     }
 
     fn make_draw_object(
@@ -272,6 +266,10 @@ impl super::component::Component for PointLightComponent {
             run_time.constants_handle.clone(),
             rs_foundation::cast_any_as_u8_slice(&run_time.constants),
         );
+    }
+
+    fn as_drawable(&self) -> Option<&dyn Drawable> {
+        Some(self)
     }
 }
 

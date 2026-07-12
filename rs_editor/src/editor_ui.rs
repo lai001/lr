@@ -11,7 +11,6 @@ use crate::ui::{
     project_settings, top_menu,
 };
 use egui::*;
-use rs_engine::components::component::Component;
 use rs_engine::input_mode::EInputMode;
 use rs_localization::t;
 use rs_model_loader::model_loader::ModelLoader;
@@ -124,36 +123,9 @@ impl EditorUI {
                 ESelectedObjectType::Actor(_) => None,
                 ESelectedObjectType::SceneNode(scene_node) => {
                     let scene_node = scene_node.borrow();
-                    match &scene_node.component {
-                        rs_engine::scene_node::EComponentType::SceneComponent(component) => {
-                            let component = component.borrow();
-                            Some(component.get_final_transformation())
-                        }
-                        rs_engine::scene_node::EComponentType::StaticMeshComponent(component) => {
-                            let component = component.borrow();
-                            Some(component.get_final_transformation())
-                        }
-                        rs_engine::scene_node::EComponentType::SkeletonMeshComponent(component) => {
-                            let component = component.borrow();
-                            Some(component.get_transformation())
-                        }
-                        rs_engine::scene_node::EComponentType::CameraComponent(component) => {
-                            let component = component.borrow();
-                            Some(component.get_final_transformation())
-                        }
-                        rs_engine::scene_node::EComponentType::CollisionComponent(component) => {
-                            let component = component.borrow();
-                            Some(component.get_final_transformation())
-                        }
-                        rs_engine::scene_node::EComponentType::SpotLightComponent(component) => {
-                            let component = component.borrow();
-                            Some(component.get_final_transformation())
-                        }
-                        rs_engine::scene_node::EComponentType::PointLightComponent(component) => {
-                            let component = component.borrow();
-                            Some(component.get_final_transformation())
-                        }
-                    }
+                    let final_transformation =
+                        Some(scene_node.component().get_final_transformation());
+                    final_transformation
                 }
                 ESelectedObjectType::DirectionalLight(component) => {
                     let component = component.borrow();
