@@ -5,6 +5,7 @@ use egui_winit::State;
 use rs_content_manager::content_manager::ContentManager;
 use rs_engine::engine::Engine;
 use rs_foundation::new::SingleThreadMutType;
+use rs_render::{command::RenderUIOptions, egui_render::UICanvasType};
 use winit::event::WindowEvent;
 
 pub struct DataSource {
@@ -42,7 +43,6 @@ impl MaterialUIWindow {
                 window,
                 window_context.get_width(),
                 window_context.get_height(),
-                window.scale_factor() as f32,
             )
             .map_err(|err| anyhow!("{err}"))?;
         let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());
@@ -102,9 +102,11 @@ impl UIWindow for MaterialUIWindow {
                     &self.context,
                     &mut self.data_source,
                 );
-                let gui_render_output =
-                    crate::ui::misc::ui_end(&mut self.egui_winit_state, window, window_id);
-                engine.draw_gui(gui_render_output);
+                let gui_render_output = crate::ui::misc::ui_end(&mut self.egui_winit_state, window);
+                engine.draw_gui(RenderUIOptions::new(
+                    UICanvasType::Window(window_id),
+                    gui_render_output,
+                ));
                 window.request_redraw();
                 engine.window_redraw_requested_end(window_id);
             }

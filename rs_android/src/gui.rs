@@ -2,7 +2,7 @@ use crate::{
     egui_state::update_viewport_info,
     motion_event::{EActionType, Geometry, MotionEvent},
 };
-use rs_render::egui_render::EGUIRenderOutput;
+use rs_egui_ext::egui_render::EGUIRenderOutput;
 use std::collections::VecDeque;
 use winit::{dpi::PhysicalPosition, event::DeviceId};
 
@@ -127,14 +127,14 @@ impl GUI {
         egui_ctx.clear_animations();
     }
 
-    pub fn end_ui(&mut self, window_id: isize) -> EGUIRenderOutput {
+    pub fn end_ui(&mut self) -> EGUIRenderOutput {
         let context = &self.egui_context;
         let full_output = context.end_pass();
-        let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+        let gui_render_output = EGUIRenderOutput {
             textures_delta: full_output.textures_delta,
             clipped_primitives: context
                 .tessellate(full_output.shapes, full_output.pixels_per_point),
-            window_id,
+            pixels_per_point: self.scale_factor,
         };
         gui_render_output
     }

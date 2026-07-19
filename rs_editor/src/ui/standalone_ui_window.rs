@@ -17,7 +17,7 @@ use rs_engine::{
     standalone::application::Application,
 };
 use rs_localization::t;
-use rs_render::command::{RenderCommand, ScaleChangedInfo};
+use rs_render::{command::RenderUIOptions, egui_render::UICanvasType};
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 pub struct StandaloneUiWindow {
@@ -141,19 +141,11 @@ impl UIWindow for StandaloneUiWindow {
                     window,
                     &mut self.keys_detector,
                 );
-                engine.send_render_command(RenderCommand::UiOutput(super::misc::ui_end(
-                    &mut self.egui_winit_state,
-                    window,
-                    window_id,
-                )));
-
+                engine.draw_gui(RenderUIOptions::new(
+                    UICanvasType::Window(window_id),
+                    super::misc::ui_end(&mut self.egui_winit_state, window),
+                ));
                 engine.window_redraw_requested_end(window_id);
-            }
-            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                engine.send_render_command(RenderCommand::ScaleChanged(ScaleChangedInfo {
-                    window_id,
-                    new_factor: *scale_factor as f32,
-                }));
             }
             _ => {}
         }
@@ -200,7 +192,6 @@ impl StandaloneUiWindow {
                 window,
                 window_context.get_width(),
                 window_context.get_height(),
-                window.scale_factor() as f32,
             )
             .map_err(|err| anyhow!("{err}"))?;
         let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());

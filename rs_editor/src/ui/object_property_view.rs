@@ -1,5 +1,7 @@
 use super::misc::{render_combo_box, render_combo_box_not_null};
+use crate::ui::component_edit::ComponentEdit;
 use rapier3d::prelude::{Ball, Cuboid, HalfSpace, RigidBodyType};
+use rs_content_manager::content_manager::ContentManager;
 use rs_engine::{
     actor::Actor,
     camera_component::CameraComponent,
@@ -9,6 +11,7 @@ use rs_engine::{
         spot_light_component::SpotLightComponent,
     },
     directional_light::DirectionalLight,
+    engine::Engine,
     physics_ability::{EShapeType, MeshOptions},
     scene_node::*,
     skeleton_mesh_component::SkeletonMeshComponent,
@@ -81,7 +84,7 @@ impl ObjectPropertyView {
         }
     }
 
-    fn edit_name(name: &str, ui: &mut egui::Ui) -> Option<String> {
+    pub fn edit_name(name: &str, ui: &mut egui::Ui) -> Option<String> {
         let mut edit_name = name.to_string();
         let mut is_changed = false;
         ui.horizontal(|ui| {
@@ -95,7 +98,13 @@ impl ObjectPropertyView {
         }
     }
 
-    pub fn draw(&mut self, ui: &mut egui::Ui) -> Option<EEventType> {
+    pub fn draw(
+        &mut self,
+        ui: &mut egui::Ui,
+        component_edit: &mut ComponentEdit,
+        engine: &mut Engine,
+        content_manager: &mut ContentManager,
+    ) -> Option<EEventType> {
         let Some(selected_object) = self.selected_object.as_mut() else {
             return None;
         };
@@ -112,18 +121,16 @@ impl ObjectPropertyView {
             ESelectedObjectType::SceneNode(scene_node) => {
                 let scene_node = scene_node.clone();
                 let mut scene_node = scene_node.borrow_mut();
-                if let Some(mut component) = scene_node.typed_component_mut::<SceneComponent>() {
-                    ui.label(format!("{}", t!("Type: SceneComponent")));
-
-                    if let Some(new_name) = Self::edit_name(&component.name, ui) {
-                        event = Some(EEventType::ChangeName(
-                            selected_object_clone.clone(),
-                            new_name,
-                        ));
+                {
+                    let editable = component_edit.editable(scene_node.component_mut().as_mut());
+                    if let Some(editable) = editable {
+                        editable.edit(
+                            ui,
+                            scene_node.component_mut().as_mut(),
+                            engine,
+                            content_manager,
+                        );
                     }
-
-                    Self::transformation_widget_mut(component.get_transformation_mut(), ui);
-                    Self::transformation_widget(&component.get_final_transformation(), ui);
                 }
                 if let Some(mut component) = scene_node.typed_component_mut::<StaticMeshComponent>()
                 {

@@ -1,10 +1,11 @@
 use crate::{
     bake_info::BakeInfo, base_render_pipeline_pool::BaseRenderPipelineBuilder,
-    egui_render::EGUIRenderOutput, misc::find_most_compatible_texture_usages,
-    renderer::EPipelineType, scene_viewport::SceneViewport, view_mode::EViewModeType,
+    egui_render::UICanvasType, misc::find_most_compatible_texture_usages, renderer::EPipelineType,
+    scene_viewport::SceneViewport, view_mode::EViewModeType,
     virtual_texture_source::TVirtualTextureSource,
 };
 use rs_core_minimal::settings::{RenderSettings, VirtualTextureSetting};
+use rs_egui_ext::egui_render::EGUIRenderOutput;
 use rs_metis::cluster::ClusterCollection;
 use rs_render_types::MaterialOptions;
 use std::{
@@ -293,12 +294,6 @@ pub struct ResizeInfo {
 }
 
 #[derive(Clone)]
-pub struct ScaleChangedInfo {
-    pub window_id: isize,
-    pub new_factor: f32,
-}
-
-#[derive(Clone)]
 pub struct UpdateTexture {
     pub handle: TextureHandle,
     pub texture_data: InitTextureData,
@@ -449,6 +444,26 @@ pub struct CreateRenderPipeline {
 }
 
 #[derive(Clone)]
+pub struct RenderUIOptions {
+    pub ops: Operations<Color>,
+    pub uicanvas_type: UICanvasType,
+    pub eguirender_output: EGUIRenderOutput,
+}
+
+impl RenderUIOptions {
+    pub fn new(uicanvas_type: UICanvasType, eguirender_output: EGUIRenderOutput) -> Self {
+        Self {
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            },
+            uicanvas_type,
+            eguirender_output,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub enum RenderCommand {
     CreateIBLBake(CreateIBLBake),
     CreateTexture(CreateTexture),
@@ -456,9 +471,8 @@ pub enum RenderCommand {
     CreateBuffer(CreateBuffer),
     UpdateBuffer(UpdateBuffer),
     UpdateTexture(UpdateTexture),
-    UiOutput(EGUIRenderOutput),
+    UiOutput(RenderUIOptions),
     Resize(ResizeInfo),
-    ScaleChanged(ScaleChangedInfo),
     CreateVirtualTextureSource(CreateVirtualTexture),
     CreateVirtualTexturePass(CreateVirtualTexturePass),
     VirtualTexturePassResize(VirtualTexturePassResize),

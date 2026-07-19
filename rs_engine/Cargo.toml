@@ -79,6 +79,7 @@ rs_render_core = { path = "../crates/rs_render_core" }
 rs_network = { path = "../crates/rs_network", optional = true }
 rs_tracy_client_ext = { path = "../crates/rs_tracy_client_ext" }
 rs_content = { path = "../crates/rs_content" }
+rs_egui_ext = { path = "../crates/rs_egui_ext" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15.1"

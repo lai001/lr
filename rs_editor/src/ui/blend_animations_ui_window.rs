@@ -21,6 +21,7 @@ use rs_engine::{
 };
 use rs_foundation::new::SingleThreadMutType;
 use rs_localization::t;
+use rs_render::{command::RenderUIOptions, egui_render::UICanvasType};
 
 enum EventType {
     PreviewSkeletonUrl(Option<url::Url>),
@@ -71,7 +72,6 @@ impl BlendAnimationUIWindow {
                 window,
                 window_context.get_width(),
                 window_context.get_height(),
-                window.scale_factor() as f32,
             )
             .map_err(|err| anyhow!("{err}"))?;
         let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());
@@ -371,7 +371,7 @@ impl UIWindow for BlendAnimationUIWindow {
                             self.process_event(event, engine);
                         }
                     });
-                let gui_render_output = misc::ui_end(&mut self.egui_winit_state, window, window_id);
+                let gui_render_output = misc::ui_end(&mut self.egui_winit_state, window);
 
                 if let Some(preview_skeleton_mesh_component) =
                     self.preview_skeleton_mesh_component.as_mut()
@@ -398,7 +398,7 @@ impl UIWindow for BlendAnimationUIWindow {
                 engine.present_player_viewport(&mut self.player_view_port);
 
                 engine.send_render_command(rs_render::command::RenderCommand::UiOutput(
-                    gui_render_output,
+                    RenderUIOptions::new(UICanvasType::Window(window_id), gui_render_output),
                 ));
                 engine.window_redraw_requested_end(window_id);
                 window.request_redraw();

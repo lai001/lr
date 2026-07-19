@@ -25,10 +25,9 @@ use rs_render::bake_info::BakeInfo;
 use rs_render::command::{
     BufferCreateInfo, CreateBuffer, CreateIBLBake, CreateMaterialRenderPipeline, CreateSampler,
     CreateTexture, CreateUITexture, CreateVirtualTexture, CreateVirtualTexturePass,
-    EBindingResource, InitTextureData, PresentInfo, RenderCommand, TextureDescriptorCreateInfo,
-    UpdateBuffer, UploadPrebakeIBL, VirtualTexturePassKey,
+    EBindingResource, InitTextureData, PresentInfo, RenderCommand, RenderUIOptions,
+    TextureDescriptorCreateInfo, UpdateBuffer, UploadPrebakeIBL, VirtualTexturePassKey,
 };
-use rs_render::egui_render::EGUIRenderOutput;
 use rs_render::global_uniform::{self};
 use rs_render::renderer::Renderer;
 use rs_render::sdf2d_generator;
@@ -83,6 +82,7 @@ pub struct Engine {
     default_textures: DefaultTextures,
     virtual_pass_handle: Option<VirtualPassHandle>,
     _audio_device: Option<AudioDevice>,
+    ctx: egui::Context,
 }
 
 impl Engine {
@@ -91,11 +91,11 @@ impl Engine {
         window: &W,
         surface_width: u32,
         surface_height: u32,
-        scale_factor: f32,
         mut logger: Logger,
         mut artifact_reader: Option<ArtifactReader>,
         mut shaders: HashMap<String, String>,
         shader_naga_modules: HashMap<String, wgpu::naga::Module>,
+        ctx: egui::Context,
     ) -> Result<Engine>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -143,7 +143,6 @@ impl Engine {
             window,
             surface_width,
             surface_height,
-            scale_factor,
             shaders,
             shader_naga_modules,
             settings.render_setting.clone(),
@@ -215,6 +214,7 @@ impl Engine {
             virtual_pass_handle,
             // shadow_depth_texture_handle: None,
             _audio_device: Some(audio_device),
+            ctx,
         };
 
         ResourceManager::default().create_builtin_resources(&mut engine);
@@ -655,9 +655,9 @@ impl Engine {
             .send_command(RenderCommand::WindowRedrawRequestedEnd(window_id));
     }
 
-    pub fn draw_gui(&mut self, gui_render_output: EGUIRenderOutput) {
+    pub fn draw_gui(&mut self, render_ui_options: RenderUIOptions) {
         self.render_thread_mode
-            .send_command(RenderCommand::UiOutput(gui_render_output));
+            .send_command(RenderCommand::UiOutput(render_ui_options));
     }
 
     pub fn present_player_viewport(&mut self, player_viewport: &mut PlayerViewport) {
@@ -737,18 +737,12 @@ impl Engine {
         window: &W,
         surface_width: u32,
         surface_height: u32,
-        scale_factor: f32,
     ) -> Result<()>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
-        self.render_thread_mode.set_new_window(
-            window_id,
-            window,
-            surface_width,
-            surface_height,
-            scale_factor,
-        )
+        self.render_thread_mode
+            .set_new_window(window_id, window, surface_width, surface_height)
     }
 
     fn next_draw_object_id(&mut self) -> u32 {
@@ -1824,6 +1818,10 @@ impl Engine {
                 window.set_cursor_visible(true);
             }
         }
+    }
+
+    pub fn egui_context(&self) -> &egui::Context {
+        &self.ctx
     }
 }
 

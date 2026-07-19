@@ -402,6 +402,7 @@ impl ContentItemPropertyView {
                 let format = &mut render_target_2d.format;
                 let candidate_items = vec![
                     wgpu::TextureFormat::Rgba8Unorm,
+                    wgpu::TextureFormat::Rgba8UnormSrgb,
                     wgpu::TextureFormat::R8Unorm,
                 ];
                 if render_combo_box_not_null(

@@ -1,6 +1,8 @@
+use crate::component_factory::ComponentFactory;
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
 use crate::thumbnail_cache::ThumbnailCache;
+use crate::ui::component_edit::ComponentEdit;
 use crate::ui::content_item_property_view::ContentItemPropertyView;
 use crate::ui::debug_textures_view::{self, DebugTexturesView};
 use crate::ui::gizmo_view::GizmoView;
@@ -11,6 +13,8 @@ use crate::ui::{
     project_settings, top_menu,
 };
 use egui::*;
+use rs_content_manager::content_manager::ContentManager;
+use rs_engine::engine::Engine;
 use rs_engine::input_mode::EInputMode;
 use rs_localization::t;
 use rs_model_loader::model_loader::ModelLoader;
@@ -96,6 +100,10 @@ impl EditorUI {
         context: &Context,
         data_source: &mut DataSource,
         model_loader: &mut ModelLoader,
+        component_factory: &ComponentFactory,
+        component_edit: &mut ComponentEdit,
+        engine: &mut Engine,
+        content_manager: &mut ContentManager,
     ) -> ClickEvent {
         let mut click = ClickEvent::default();
 
@@ -106,6 +114,7 @@ impl EditorUI {
                 context,
                 &mut data_source.is_level_view_open,
                 &level.as_ref().borrow(),
+                component_factory,
             );
         }
         let window = Self::new_window(t!("Asset"), "Asset", data_source.input_mode);
@@ -231,7 +240,9 @@ impl EditorUI {
             .resizable(true)
             .default_size([250.0, 500.0])
             .show(context, |ui| {
-                click.object_property_view_event = self.object_property_view.draw(ui);
+                click.object_property_view_event =
+                    self.object_property_view
+                        .draw(ui, component_edit, engine, content_manager);
             });
 
         Self::new_window(

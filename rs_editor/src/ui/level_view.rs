@@ -1,3 +1,4 @@
+use crate::component_factory::ComponentFactory;
 use egui::{Context, ScrollArea, Ui};
 use rs_engine::{actor::Actor, directional_light::DirectionalLight, scene_node::SceneNode};
 use rs_foundation::new::SingleThreadMutType;
@@ -22,6 +23,7 @@ pub enum EClickEventType {
     CreateCollisionComponent(SingleThreadMutType<Actor>, SingleThreadMutType<SceneNode>),
     CreateSpotLightComponent(SingleThreadMutType<SceneNode>),
     CreatePointLightComponent(SingleThreadMutType<SceneNode>),
+    CreateComponent(String, SingleThreadMutType<SceneNode>),
 }
 
 fn draw_scene_node(
@@ -29,6 +31,7 @@ fn draw_scene_node(
     actor: SingleThreadMutType<rs_engine::actor::Actor>,
     scene_node: SingleThreadMutType<SceneNode>,
     event: &mut Option<EClickEventType>,
+    component_factory: &ComponentFactory,
 ) {
     let name = { scene_node.borrow().component().get_name() };
     let id = ui.make_persistent_id(name.clone());
@@ -40,46 +43,16 @@ fn draw_scene_node(
             } else {
                 response.context_menu(|ui| {
                     ui.menu_button(t!("Add"), |ui| {
-                        let response = ui.button(t!("Scene"));
-                        if response.clicked() {
-                            *event =
-                                Some(EClickEventType::CreateSceneComponent(scene_node.clone()));
-                            ui.close_kind(egui::UiKind::Menu);
-                        }
-                        let response = ui.button(t!("Camera"));
-                        if response.clicked() {
-                            *event =
-                                Some(EClickEventType::CreateCameraComponent(scene_node.clone()));
-                            ui.close_kind(egui::UiKind::Menu);
-                        }
-                        let response = ui.button(t!("Collision"));
-                        if response.clicked() {
-                            *event = Some(EClickEventType::CreateCollisionComponent(
-                                actor.clone(),
-                                scene_node.clone(),
-                            ));
-                            ui.close_kind(egui::UiKind::Menu);
-                        }
-                        let response = ui.button(t!("Spot Light"));
-                        if response.clicked() {
-                            *event = Some(EClickEventType::CreateSpotLightComponent(
-                                scene_node.clone(),
-                            ));
-                            ui.close_kind(egui::UiKind::Menu);
-                        }
-                        let response = ui.button(t!("Point Light"));
-                        if response.clicked() {
-                            *event = Some(EClickEventType::CreatePointLightComponent(
-                                scene_node.clone(),
-                            ));
-                            ui.close_kind(egui::UiKind::Menu);
-                        }
-                        let response = ui.button(t!("Static Mesh"));
-                        if response.clicked() {
-                            *event = Some(EClickEventType::CreateStaticMeshComponent(
-                                scene_node.clone(),
-                            ));
-                            ui.close_kind(egui::UiKind::Menu);
+                        for (name, creator) in component_factory.creators() {
+                            let display_name = creator.display_name();
+                            let response = ui.button(display_name);
+                            if response.clicked() {
+                                *event = Some(EClickEventType::CreateComponent(
+                                    name.clone(),
+                                    scene_node.clone(),
+                                ));
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
                         }
                     });
                     ui.menu_button(t!("Copy"), |ui| {
@@ -103,7 +76,7 @@ fn draw_scene_node(
         })
         .body(|ui| {
             for child in scene_node.borrow().childs() {
-                draw_scene_node(ui, actor.clone(), child.clone(), event);
+                draw_scene_node(ui, actor.clone(), child.clone(), event, component_factory);
             }
         });
 }
@@ -112,6 +85,7 @@ fn level_node(
     ui: &mut Ui,
     actor: Rc<RefCell<rs_engine::actor::Actor>>,
     event: &mut Option<EClickEventType>,
+    component_factory: &ComponentFactory,
 ) {
     let _actor = actor.as_ref().borrow();
     let name = &_actor.name;
@@ -138,7 +112,13 @@ fn level_node(
             }
         })
         .body(|ui| {
-            draw_scene_node(ui, actor.clone(), actor.borrow().scene_node.clone(), event);
+            draw_scene_node(
+                ui,
+                actor.clone(),
+                actor.borrow().scene_node.clone(),
+                event,
+                component_factory,
+            );
         });
 }
 
@@ -147,6 +127,7 @@ pub fn draw(
     context: &Context,
     is_open: &mut bool,
     level: &rs_engine::content::level::Level,
+    component_factory: &ComponentFactory,
 ) -> Option<EClickEventType> {
     let mut event: Option<EClickEventType> = None;
     window.open(is_open).show(context, |ui| {
@@ -167,7 +148,7 @@ pub fn draw(
                     });
                 }
                 for actor in &level.actors {
-                    level_node(ui, actor.clone(), &mut event);
+                    level_node(ui, actor.clone(), &mut event, component_factory);
                 }
             });
         });

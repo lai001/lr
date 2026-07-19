@@ -1,5 +1,6 @@
 use crate::custom_event::ECustomEventType;
 use rs_artifact::{EEndianType, artifact::ArtifactReader};
+use rs_egui_ext::egui_render::EGUIRenderOutput;
 use rs_engine::{
     engine::Engine,
     frame_sync::{EOptions, FrameSync},
@@ -8,7 +9,7 @@ use rs_engine::{
     keys_detector::KeysDetector,
     logger::{Logger, LoggerConfiguration, SlotFlags},
 };
-use rs_render::{command::RenderCommand, egui_render::EGUIRenderOutput};
+use rs_render::{command::RenderUIOptions, egui_render::UICanvasType};
 use std::{collections::HashMap, path::Path};
 use winit::event::{Event, WindowEvent};
 
@@ -34,7 +35,6 @@ impl ApplicationContext {
             slot_flags: SlotFlags::empty(),
         });
         let window_size = window.inner_size();
-        let scale_factor = window.scale_factor() as f32;
         let window_width = window_size.width;
         let window_height = window_size.height;
 
@@ -42,7 +42,7 @@ impl ApplicationContext {
         egui_context.set_fonts(egui::FontDefinitions::default());
         egui_context.set_global_style(egui::Style::default());
         let egui_winit_state = egui_winit::State::new(
-            egui_context,
+            egui_context.clone(),
             egui::ViewportId::ROOT,
             window,
             Some(window.scale_factor() as f32),
@@ -60,11 +60,11 @@ impl ApplicationContext {
             window,
             window_width,
             window_height,
-            scale_factor,
             logger,
             artifact_reader,
             HashMap::new(),
             HashMap::new(),
+            egui_context,
         )
         .unwrap();
 
@@ -200,9 +200,11 @@ impl ApplicationContext {
                             &mut self.keys_detector,
                         );
 
-                        let output = self.ui_end(window, window_id);
-                        self.engine
-                            .send_render_command(RenderCommand::UiOutput(output));
+                        let output = self.ui_end(window);
+                        self.engine.draw_gui(RenderUIOptions::new(
+                            UICanvasType::Window(window_id),
+                            output,
+                        ));
                         self.sync(window);
                         self.engine.window_redraw_requested_end(window_id);
                     }
@@ -239,19 +241,19 @@ impl ApplicationContext {
         egui_winit_state.egui_ctx().clear_animations();
     }
 
-    fn ui_end(&mut self, window: &mut winit::window::Window, window_id: isize) -> EGUIRenderOutput {
+    fn ui_end(&mut self, window: &mut winit::window::Window) -> EGUIRenderOutput {
         let egui_winit_state = &mut self.egui_winit_state;
 
         let full_output = egui_winit_state.egui_ctx().end_pass();
 
         egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
 
-        let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+        let gui_render_output = EGUIRenderOutput {
             textures_delta: full_output.textures_delta,
             clipped_primitives: egui_winit_state
                 .egui_ctx()
                 .tessellate(full_output.shapes, full_output.pixels_per_point),
-            window_id,
+            pixels_per_point: window.scale_factor() as f32,
         };
         gui_render_output
     }

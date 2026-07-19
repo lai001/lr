@@ -13,7 +13,8 @@ use rs_engine::frame_sync::FrameSync;
 use rs_engine::input_mode::EInputMode;
 use rs_engine::keys_detector::KeysDetector;
 use rs_engine::logger::{Logger, SlotFlags};
-use rs_render::command::ResizeInfo;
+use rs_render::command::{RenderUIOptions, ResizeInfo};
+use rs_render::egui_render::UICanvasType;
 
 const WINDOW_ID: isize = 0;
 
@@ -48,11 +49,11 @@ impl ApplicationContext {
             &native_window,
             width,
             height,
-            scale_factor,
             logger,
             Some(artifact_reader),
             std::collections::HashMap::new(),
             std::collections::HashMap::new(),
+            gui.egui_context().clone(),
         )
         .map_err(|err| crate::error::Error::Engine(err))?;
         engine.init_resources();
@@ -106,9 +107,11 @@ impl ApplicationContext {
             });
         self.app
             .on_redraw_requested(&mut self.engine, self.gui.egui_context().clone());
-        let gui_render_output = self.gui.end_ui(WINDOW_ID);
+        let gui_render_output = self.gui.end_ui();
         self.engine.tick();
-        self.engine.draw_gui(gui_render_output);
+        let render_ui_options =
+            RenderUIOptions::new(UICanvasType::Window(WINDOW_ID), gui_render_output);
+        self.engine.draw_gui(render_ui_options);
         self.engine.window_redraw_requested_end(WINDOW_ID);
         self.frame_sync.sync();
     }
@@ -131,13 +134,7 @@ impl ApplicationContext {
         let surface_width = native_window.get_width();
         let surface_height = native_window.get_height();
         self.engine
-            .set_new_window(
-                WINDOW_ID,
-                &native_window,
-                surface_width,
-                surface_height,
-                self.gui.scale_factor(),
-            )
+            .set_new_window(WINDOW_ID, &native_window, surface_width, surface_height)
             .map_err(|err| crate::error::Error::Engine(err))?;
         self.native_window = native_window;
         self.is_window_available = true;

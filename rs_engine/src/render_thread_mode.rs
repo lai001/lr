@@ -96,7 +96,6 @@ impl ERenderThreadMode {
         window: &W,
         surface_width: u32,
         surface_height: u32,
-        scale_factor: f32,
     ) -> Result<()>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -104,25 +103,13 @@ impl ERenderThreadMode {
         match self {
             ERenderThreadMode::Single(renderer) => Ok(renderer
                 .renderer
-                .set_new_window(
-                    window_id,
-                    window,
-                    surface_width,
-                    surface_height,
-                    scale_factor,
-                )
+                .set_new_window(window_id, window, surface_width, surface_height)
                 .map_err(|err| crate::error::Error::RendererError(err))?),
             ERenderThreadMode::Multiple(renderer) => Ok(renderer
                 .renderer
                 .lock()
                 .unwrap()
-                .set_new_window(
-                    window_id,
-                    window,
-                    surface_width,
-                    surface_height,
-                    scale_factor,
-                )
+                .set_new_window(window_id, window, surface_width, surface_height)
                 .map_err(|err| crate::error::Error::RendererError(err))?),
         }
     }

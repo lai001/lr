@@ -5,7 +5,6 @@ use crate::base_render_pipeline::BaseRenderPipeline;
 use crate::base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool};
 use crate::compute_pipeline::light_culling::LightCullingComputePipeline;
 use crate::depth_texture::DepthTexture;
-use crate::egui_render::EGUIRenderer;
 use crate::error::Result;
 use crate::gpu_vertex_buffer::GpuVertexBufferImp;
 use crate::light_culling::LightCulling;
@@ -29,6 +28,7 @@ use crate::virtual_texture_source::VirtualTextureSource;
 use crate::{command::*, shadow_pass};
 use rs_core_minimal::settings::{self, RenderSettings};
 use rs_core_minimal::thread_pool::ThreadPool;
+use rs_egui_ext::egui_render::EGUIRenderer;
 use rs_render_core::wgpu_context::{WGPUContext, WindowTarget};
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
@@ -128,7 +128,6 @@ impl Renderer {
         wgpu_context: WGPUContext,
         surface_width: u32,
         surface_height: u32,
-        scale_factor: f32,
         shaders: HashMap<String, String>,
         shader_naga_modules: HashMap<String, naga::Module>,
         settings: RenderSettings,
@@ -140,15 +139,10 @@ impl Renderer {
             *binding.first().expect("Not null")
         };
         let current_swapchain_format = wgpu_context.get_current_swapchain_format(main_window_id);
-        let screen_descriptor = egui_wgpu::ScreenDescriptor {
-            size_in_pixels: [surface_width, surface_height],
-            pixels_per_point: scale_factor,
-        };
         let egui_render_pass = EGUIRenderer::new(
             wgpu_context.get_device(),
             current_swapchain_format,
             egui_wgpu::RendererOptions::PREDICTABLE,
-            HashMap::from([(main_window_id, screen_descriptor)]),
         );
 
         let mut shader_library = ShaderLibrary::new();
@@ -303,7 +297,6 @@ impl Renderer {
         window: &W,
         surface_width: u32,
         surface_height: u32,
-        scale_factor: f32,
         shaders: HashMap<String, String>,
         shader_naga_modules: HashMap<String, wgpu::naga::Module>,
         settings: RenderSettings,
@@ -358,7 +351,6 @@ impl Renderer {
             wgpu_context,
             surface_width,
             surface_height,
-            scale_factor,
             shaders,
             shader_naga_modules,
             settings,
@@ -371,7 +363,6 @@ impl Renderer {
         window: &W,
         surface_width: u32,
         surface_height: u32,
-        scale_factor: f32,
     ) -> Result<()>
     where
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -385,12 +376,6 @@ impl Renderer {
         );
         self.depth_textures.insert(window_id, depth_texture);
 
-        let screen_descriptor = egui_wgpu::ScreenDescriptor {
-            size_in_pixels: [surface_width, surface_height],
-            pixels_per_point: scale_factor,
-        };
-        self.gui_renderer
-            .add_screen_descriptor(window_id, screen_descriptor);
         self.wgpu_context
             .set_new_window(window_id, window, surface_width, surface_height)
             .map_err(|err| crate::error::Error::RenderCore(err))
@@ -1049,21 +1034,10 @@ impl Renderer {
                     );
                 }
             }
-            RenderCommand::UiOutput(command) => {
-                let _span = tracy_client::span!("egui render");
-                let output_view = match self.surface_textures.get(&command.window_id) {
-                    Some(surface_texture) => {
-                        let mut desc = wgpu::TextureViewDescriptor::default();
-                        desc.usage = Some(TextureUsages::RENDER_ATTACHMENT);
-                        let output_view = surface_texture.texture.create_view(&desc);
-                        output_view
-                    }
-                    None => return None,
-                };
-                let device = self.wgpu_context.get_device();
-                let queue = self.wgpu_context.get_queue();
-                self.gui_renderer
-                    .render(&command, queue, device, &output_view);
+            RenderCommand::UiOutput(render_ui_options) => {
+                if let Err(err) = self.render_ui(&render_ui_options) {
+                    log::warn!("{}", err);
+                }
             }
             RenderCommand::Resize(resize_command) => {
                 //
@@ -1127,7 +1101,6 @@ impl Renderer {
             RenderCommand::RemoveWindow(window_id) => {
                 self.wgpu_context.remove_window(window_id);
                 self.depth_textures.remove(&window_id);
-                self.gui_renderer.remove_screen_descriptor(window_id);
             }
             RenderCommand::CreateMaterialRenderPipeline(create_render_pipeline) => {
                 let all_options = MaterialOptions::all();
@@ -1343,10 +1316,6 @@ impl Renderer {
             RenderCommand::DestroyTextures(textures) => {
                 self.textures.retain(|k, _| !textures.contains(k));
             }
-            RenderCommand::ScaleChanged(info) => {
-                self.gui_renderer
-                    .change_scale_factor(info.window_id, info.new_factor);
-            }
             RenderCommand::WindowRedrawRequestedBegin(window_id) => {
                 let current_texture = self.wgpu_context.get_current_surface_texture(window_id);
                 let surface_texture = if let wgpu::CurrentSurfaceTexture::Success(surface_texture) =
@@ -1416,6 +1385,61 @@ impl Renderer {
             }
         }
         return None;
+    }
+
+    fn render_ui(
+        &mut self,
+        render_ui_options: &RenderUIOptions,
+    ) -> std::result::Result<(), String> {
+        let _span = tracy_client::span!();
+        match render_ui_options.uicanvas_type {
+            crate::egui_render::UICanvasType::FrameBuffer(texture_handle) => {
+                let output_view = if let Some(texture) = self.textures.get(&texture_handle) {
+                    let mut desc = wgpu::TextureViewDescriptor::default();
+                    desc.usage = Some(TextureUsages::RENDER_ATTACHMENT);
+                    let output_view = texture.create_view(&desc);
+                    output_view
+                } else {
+                    return Err(format!(
+                        "No texture to be an output attachment of a render pass"
+                    ));
+                };
+                let device = self.wgpu_context.get_device();
+                let queue = self.wgpu_context.get_queue();
+                self.gui_renderer.render(
+                    *&render_ui_options.ops,
+                    &render_ui_options.eguirender_output,
+                    queue,
+                    device,
+                    &output_view,
+                );
+            }
+            crate::egui_render::UICanvasType::Window(window_id) => {
+                let output_view = match self.surface_textures.get(&window_id) {
+                    Some(surface_texture) => {
+                        let mut desc = wgpu::TextureViewDescriptor::default();
+                        desc.usage = Some(TextureUsages::RENDER_ATTACHMENT);
+                        let output_view = surface_texture.texture.create_view(&desc);
+                        output_view
+                    }
+                    None => {
+                        return Err(format!(
+                            "No texture to be an output attachment of a render pass"
+                        ));
+                    }
+                };
+                let device = self.wgpu_context.get_device();
+                let queue = self.wgpu_context.get_queue();
+                self.gui_renderer.render(
+                    *&render_ui_options.ops,
+                    &render_ui_options.eguirender_output,
+                    queue,
+                    device,
+                    &output_view,
+                );
+            }
+        }
+        Ok(())
     }
 
     fn vt_pass(&mut self, present_info: &PresentInfo) {
@@ -2510,7 +2534,6 @@ impl Renderer {
     fn surface_size_will_change(&mut self, window_id: isize, new_size: glam::UVec2) {
         let width = new_size.x;
         let height = new_size.y;
-        self.gui_renderer.change_size(window_id, width, height);
         self.wgpu_context.window_resized(window_id, width, height);
         let device = self.wgpu_context.get_device();
         let depth_texture = DepthTexture::new(

@@ -21,8 +21,12 @@ use rs_engine::{
 };
 use rs_foundation::new::SingleThreadMutType;
 use rs_localization::t;
-use rs_render::command::{
-    BufferCreateInfo, CreateBuffer, DrawObject, PresentInfo, RenderCommand, UpdateBuffer,
+use rs_render::{
+    command::{
+        BufferCreateInfo, CreateBuffer, DrawObject, PresentInfo, RenderCommand, RenderUIOptions,
+        UpdateBuffer,
+    },
+    egui_render::UICanvasType,
 };
 use std::collections::HashMap;
 use winit::{
@@ -65,7 +69,6 @@ impl BaseUIWindow {
                 window,
                 window_context.get_width(),
                 window_context.get_height(),
-                window.scale_factor() as f32,
             )
             .map_err(|err| anyhow!("{err}"))?;
         let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());
@@ -260,11 +263,8 @@ impl UIWindow for ParticleSystemUIWindow {
 
                 self.data_source.particle_system_template.tick(1.0 / 60.0);
 
-                let gui_render_output = crate::ui::misc::ui_end(
-                    &mut self.base_ui_window.egui_winit_state,
-                    window,
-                    window_id,
-                );
+                let gui_render_output =
+                    crate::ui::misc::ui_end(&mut self.base_ui_window.egui_winit_state, window);
 
                 let mut emiter_draw_objects = self
                     .emiter_render
@@ -279,7 +279,10 @@ impl UIWindow for ParticleSystemUIWindow {
                     draw_objects,
                 )));
 
-                engine.send_render_command(RenderCommand::UiOutput(gui_render_output));
+                engine.draw_gui(RenderUIOptions::new(
+                    UICanvasType::Window(window_id),
+                    gui_render_output,
+                ));
 
                 engine.window_redraw_requested_end(window_id);
                 window.request_redraw();

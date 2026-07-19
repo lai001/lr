@@ -1,9 +1,9 @@
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use egui_winit::State;
 use rapier3d::prelude::RigidBodyType;
+use rs_egui_ext::egui_render::EGUIRenderOutput;
 use rs_engine::{engine::Engine, frame_sync::FrameSync, input_mode::EInputMode};
 use rs_localization::t;
-use rs_render::egui_render::EGUIRenderOutput;
 use std::collections::HashMap;
 use winit::{
     event::{ElementState, WindowEvent},
@@ -29,7 +29,6 @@ pub fn update_window_with_input_mode(window: &Window, input_mode: EInputMode) {
 }
 
 pub fn gui_render_output(
-    window_id: isize,
     window: &Window,
     egui_winit_state: &mut State,
     add_contents: impl FnOnce(&mut State),
@@ -57,12 +56,12 @@ pub fn gui_render_output(
 
     egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
 
-    let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+    let gui_render_output = EGUIRenderOutput {
         textures_delta: full_output.textures_delta,
         clipped_primitives: egui_winit_state
             .egui_ctx()
             .tessellate(full_output.shapes, full_output.pixels_per_point),
-        window_id,
+        pixels_per_point: window.scale_factor() as f32,
     };
     gui_render_output
 }
@@ -85,18 +84,17 @@ pub fn ui_begin(egui_winit_state: &mut State, window: &mut winit::window::Window
 pub fn ui_end(
     egui_winit_state: &mut State,
     window: &mut winit::window::Window,
-    window_id: isize,
 ) -> EGUIRenderOutput {
     let full_output = egui_winit_state.egui_ctx().end_pass();
 
     egui_winit_state.handle_platform_output(window, full_output.platform_output.clone());
 
-    let gui_render_output = rs_render::egui_render::EGUIRenderOutput {
+    let gui_render_output = EGUIRenderOutput {
         textures_delta: full_output.textures_delta,
         clipped_primitives: egui_winit_state
             .egui_ctx()
             .tessellate(full_output.shapes, full_output.pixels_per_point),
-        window_id,
+        pixels_per_point: window.scale_factor() as f32,
     };
     gui_render_output
 }

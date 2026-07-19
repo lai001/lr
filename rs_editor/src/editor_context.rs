@@ -1,5 +1,6 @@
 use crate::{
     build_config::EBuildType,
+    component_factory::ComponentFactory,
     custom_event::{ECustomEventType, EFileDialogType},
     data_source::{AssetFile, AssetFolder, DataSource},
     editor_ui::{EditorUI, GizmoEvent},
@@ -12,6 +13,7 @@ use crate::{
     ui::{
         asset_view,
         blend_animations_ui_window::BlendAnimationUIWindow,
+        component_edit::ComponentEdit,
         content_browser, content_item_property_view, debug_textures_view,
         material_ui_window::MaterialUIWindow,
         material_view::{self, EMaterialNodeType, MaterialNode},
@@ -72,7 +74,8 @@ use rs_metis::{cluster::ClusterCollection, vertex_position::VertexPosition};
 use rs_model_loader::model_loader::ModelLoader;
 use rs_proc_macros::plugin_project_file_path;
 use rs_render::{
-    command::{InitTextureData, RenderCommand, ScaleChangedInfo, TextureDescriptorCreateInfo},
+    command::{InitTextureData, RenderCommand, RenderUIOptions, TextureDescriptorCreateInfo},
+    egui_render::UICanvasType,
     get_buildin_shader_dir,
 };
 use rs_render_core::buffer_dimensions::BufferDimensions;
@@ -185,6 +188,8 @@ pub struct EditorContext {
     donet_host: Option<rs_dotnet_host::dotnet_runtime::DotnetRuntime>,
     mosue_state: MouseState,
     player_viewport: PlayerViewport,
+    component_factory: SingleThreadMutType<ComponentFactory>,
+    component_edit: SingleThreadMutType<ComponentEdit>,
 }
 
 impl EditorContext {
@@ -272,10 +277,10 @@ impl EditorContext {
         let style = egui::Style::default().clone();
         egui_context.set_global_style(style);
         let egui_winit_state = egui_winit::State::new(
-            egui_context,
+            egui_context.clone(),
             egui::ViewportId::ROOT,
             window,
-            Some(window.scale_factor() as f32),
+            Some(scale_factor),
             None,
             None,
         );
@@ -285,11 +290,11 @@ impl EditorContext {
             window,
             window_width,
             window_height,
-            scale_factor,
             logger,
             artifact_reader,
             HashMap::new(),
             ProjectContext::load_shader_naga_modules(),
+            egui_context,
         )?;
         sys_locale::get_locale().inspect(|locale| {
             rs_localization::set_locale(locale);
@@ -337,7 +342,8 @@ impl EditorContext {
             }
             None => {}
         }
-
+        let component_factory = SingleThreadMut::new(ComponentFactory::new());
+        let component_edit = SingleThreadMut::new(ComponentEdit::new());
         let mut editor_context = EditorContext {
             event_loop_proxy,
             engine,
@@ -369,6 +375,8 @@ impl EditorContext {
             donet_host,
             #[cfg(feature = "plugin_v8")]
             v8_plugin: None,
+            component_factory,
+            component_edit,
         };
 
         if let Some(file_path) = last_project_path {
@@ -448,13 +456,6 @@ impl EditorContext {
                     .size_changed(size.width, size.height, &mut self.engine);
 
                 self.engine.resize(window_id, size.width, size.height);
-            }
-            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                self.engine
-                    .send_render_command(RenderCommand::ScaleChanged(ScaleChangedInfo {
-                        window_id,
-                        new_factor: *scale_factor as f32,
-                    }));
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.player_viewport
@@ -1724,8 +1725,7 @@ impl EditorContext {
             log::warn!("{err}");
         }
 
-        let gui_render_output =
-            crate::ui::misc::ui_end(&mut self.egui_winit_state, window, window_id);
+        let gui_render_output = crate::ui::misc::ui_end(&mut self.egui_winit_state, window);
 
         self.engine.send_render_task({
             move |renderer| {
@@ -1764,7 +1764,10 @@ impl EditorContext {
         });
         self.engine
             .present_player_viewport(&mut self.player_viewport);
-        self.engine.draw_gui(gui_render_output);
+        self.engine.draw_gui(RenderUIOptions::new(
+            UICanvasType::Window(window_id),
+            gui_render_output,
+        ));
     }
 
     pub fn prepreocess_shader() -> anyhow::Result<()> {
@@ -2098,13 +2101,23 @@ impl EditorContext {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
     ) {
         let _span = tracy_client::span!();
+        let Some(content_manager) = self
+            .project_context
+            .as_ref()
+            .map(|x| x.content_manager.clone())
+        else {
+            return;
+        };
 
         let egui_winit_state = &mut self.egui_winit_state;
-
         let click_event = self.editor_ui.build(
             egui_winit_state.egui_ctx(),
             &mut self.data_source,
             &mut self.model_loader,
+            &self.component_factory.borrow(),
+            &mut self.component_edit.borrow_mut(),
+            &mut self.engine,
+            &mut content_manager.borrow_mut(),
         );
 
         self.process_top_menu_event(window, click_event.menu_event, event_loop_window_target);
@@ -2661,6 +2674,36 @@ impl EditorContext {
                     );
                 }
                 parent_node.add_child(SingleThreadMut::new(SceneNode::from_component(component)));
+            }
+            crate::ui::level_view::EClickEventType::CreateComponent(ty_name, parent_node) => {
+                let Some(project_context) = self.project_context.as_mut() else {
+                    return;
+                };
+                let content_manager = project_context.content_manager.borrow();
+                let content_files = content_manager.content_files();
+                let mut parent_node = parent_node.borrow_mut();
+                let names = parent_node
+                    .childs()
+                    .iter()
+                    .map(|x| x.borrow().component().get_name())
+                    .collect();
+                let new_name = make_unique_name(names, "Untitled");
+
+                let component_factory = self.component_factory.borrow_mut();
+                let creator = component_factory.creators().get(&ty_name);
+                if let Some(creator) = creator {
+                    let component = creator.create(new_name, glam::Mat4::IDENTITY);
+                    if let Ok(mut component) = component {
+                        component.initialize(
+                            &mut self.engine,
+                            content_files,
+                            &mut self.player_viewport,
+                        );
+                        parent_node.add_child(SingleThreadMut::new(SceneNode::from_component_box(
+                            component,
+                        )));
+                    }
+                }
             }
         }
     }

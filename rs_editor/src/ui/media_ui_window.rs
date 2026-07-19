@@ -21,9 +21,12 @@ use rs_media::{
     composition::{CompositionInfo, check_composition},
     video_frame_player::VideoFramePlayer,
 };
-use rs_render::command::{
-    CreateTexture, CreateUITexture, InitTextureData, RenderCommand::*, TextureDescriptorCreateInfo,
-    UpdateTexture,
+use rs_render::{
+    command::{
+        CreateTexture, CreateUITexture, InitTextureData, RenderCommand::*, RenderUIOptions,
+        TextureDescriptorCreateInfo, UpdateTexture,
+    },
+    egui_render::UICanvasType,
 };
 use rs_render_core::{buffer_dimensions::BufferDimensions, texture_readback::get_bytes_per_pixel};
 use std::{collections::HashMap, iter::zip, path::Path};
@@ -73,7 +76,7 @@ impl UIWindow for MediaUIWindow {
                 engine.window_redraw_requested_begin(window_id);
 
                 let gui_render_output =
-                    gui_render_output(window_id, window, &mut self.egui_winit_state, |state| {
+                    gui_render_output(window, &mut self.egui_winit_state, |state| {
                         egui::Area::new("FrameBackground".into())
                             .interactable(false)
                             .show(state.egui_ctx(), |ui| {
@@ -123,7 +126,10 @@ impl UIWindow for MediaUIWindow {
                                 }
                             });
                     });
-                engine.draw_gui(gui_render_output);
+                engine.draw_gui(RenderUIOptions::new(
+                    UICanvasType::Window(window_id),
+                    gui_render_output,
+                ));
 
                 engine.window_redraw_requested_end(window_id);
 
@@ -164,7 +170,6 @@ impl MediaUIWindow {
                 window,
                 window_context.get_width(),
                 window_context.get_height(),
-                window.scale_factor() as f32,
             )
             .map_err(|err| anyhow!("{err}"))?;
         let viewport_id = egui::ViewportId::from_hash_of(window_context.get_id());
