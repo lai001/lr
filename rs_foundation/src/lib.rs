@@ -5,6 +5,7 @@ use std::{
 
 pub mod bandwidth_meter;
 pub mod channel;
+pub mod dyn_cast;
 pub mod fps_counter;
 pub mod id_generator;
 pub mod math;
@@ -242,16 +243,17 @@ pub fn round_up_to_multiple(value: f32, multiple: f32) -> f32 {
 }
 
 pub fn full_cmd_from_command(command: &std::process::Command) -> String {
-    let program = command.get_program().to_string_lossy();
-    let args = command
-        .get_args()
-        .map(|a| a.to_string_lossy())
-        .collect::<Vec<_>>();
-    let full_cmd = std::iter::once(program)
-        .chain(args)
-        .collect::<Vec<_>>()
-        .join(" ");
-    full_cmd
+    format!("{:?}", command)
+    // let program = command.get_program().to_string_lossy();
+    // let args = command
+    //     .get_args()
+    //     .map(|a| a.to_string_lossy())
+    //     .collect::<Vec<_>>();
+    // let full_cmd = std::iter::once(program)
+    //     .chain(args)
+    //     .collect::<Vec<_>>()
+    //     .join(" ");
+    // full_cmd
 }
 
 #[cfg(test)]

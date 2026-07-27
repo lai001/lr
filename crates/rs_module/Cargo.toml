@@ -1,0 +1,19 @@
+[package]
+name = "rs_module"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["editor"]
+editor = []
+standalone = []
+
+[dependencies]
+downcast-rs = "2.0.2"
+uuid = { version = "1.23.3", features = [
+    "v4",
+    "fast-rng",
+    "macro-diagnostics",
+    "serde",
+] }
+rs_foundation = { path = "../../rs_foundation" }
