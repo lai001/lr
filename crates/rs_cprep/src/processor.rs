@@ -481,13 +481,18 @@ fn process_internal(
         if let Some(resolve_definition_mut) = &mut resolve_definition {
             let is_stop = resolve_definition_mut.push(lexer.previous(), &item);
             if is_stop {
-                contents.push_str(&resolve_definition_mut.content);
+                let new_contents =
+                    process_internal(&resolve_definition_mut.content, macros, custom_include);
+                contents.push_str(&new_contents);
                 resolve_definition = None;
+                lexer.enqueue_last(item);
+                continue;
             } else {
                 lexer.enqueue_last(item);
                 continue;
             }
         }
+
         match item.ty {
             crate::c_lexer::TokType::KwDefine => {
                 if let Some(last) = lexer.last() {
@@ -508,7 +513,13 @@ fn process_internal(
             }
             crate::c_lexer::TokType::Ident => {
                 if let Some(def) = macros.get(item.str) {
-                    resolve_definition = Some(ResolveDefinition::new(def.clone()));
+                    if def.args.is_empty() {
+                        let content = def.content.clone();
+                        let new_contents = process_internal(&content, macros, custom_include);
+                        contents.push_str(&new_contents);
+                    } else {
+                        resolve_definition = Some(ResolveDefinition::new(def.clone()));
+                    }
                 } else {
                     contents.push_str(item.str);
                 }
@@ -587,9 +598,9 @@ impl Preprocessor {
         self.include_dirs.insert(dir);
     }
 
-    pub fn add_define(&mut self, name: String, value: String) {
+    pub fn add_define<S: ToString>(&mut self, name: S, value: &str) {
         self.defines
-            .insert(name.clone(), Definition::input(name, &value));
+            .insert(name.to_string(), Definition::input(name.to_string(), value));
     }
 
     pub fn process(&mut self, contents: &str) -> crate::error::Result<String> {
@@ -664,8 +675,28 @@ GROUP_BINDING(    GLOBAL_CONSTANTS    )";
         });
         assert_eq!(
             contents,
-            "\n\n 1\nqwe\n\n\"abc\"\n\n @group(GLOBAL_CONSTANTS_GROUP) \n@binding(GLOBAL_CONSTANTS_BINDING))"
+            "\n\n 1\nqwe\n\n\"abc\"\n\n @group(GLOBAL_CONSTANTS_GROUP) \n@binding(GLOBAL_CONSTANTS_BINDING)"
         );
+    }
+
+    #[test]
+    pub fn test19() {
+        let code = "#define GROUP_BINDING(x) @group(x ## _GROUP) @binding(x ## _BINDING)
+GROUP_BINDING(    GLOBAL_CONSTANTS    )";
+
+        let mut macros: HashMap<String, Definition> = HashMap::new();
+        macros.insert(
+            format!("GLOBAL_CONSTANTS_GROUP"),
+            Definition::input(format!("GLOBAL_CONSTANTS_GROUP"), "1"),
+        );
+        macros.insert(
+            format!("GLOBAL_CONSTANTS_BINDING"),
+            Definition::input(format!("GLOBAL_CONSTANTS_BINDING"), "2"),
+        );
+        let contents = crate::processor::process_internal(code, &mut macros, &mut |_| {
+            todo!();
+        });
+        assert_eq!(contents, "\n @group(1) @binding(2)");
     }
 
     #[test]
