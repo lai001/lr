@@ -30,6 +30,7 @@ do
             "crates/rs_cprep",
             "crates/rs_manifest",
             "crates/rs_network",
+            "crates/rs_slang_compiler",
         }
         for k, v in ipairs(folders) do
             os.cd(path.join(engine_root_dir, v))
