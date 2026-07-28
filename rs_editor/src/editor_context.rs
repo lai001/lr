@@ -661,10 +661,18 @@ impl EditorContext {
         };
         for material_editor in project_context.project.materials.clone() {
             let material_editor = material_editor.borrow();
+            let material_url = material_editor
+                .get_associated_material()
+                .map(|x| x.borrow().url.clone());
             let snarl = &material_editor.snarl;
             let paramenters = &material_editor.paramenters;
-            let resolve_result =
-                material_resolve::resolve(snarl, MaterialOptions::all(), paramenters);
+            let resolve_result = material_resolve::resolve(
+                project_context.module_manager.clone(),
+                material_url.as_ref(),
+                snarl,
+                MaterialOptions::all(),
+                paramenters,
+            );
             let Ok(resolve_result) = resolve_result else {
                 continue;
             };
@@ -1323,6 +1331,29 @@ impl EditorContext {
         let _span = tracy_client::span!();
         let project_context = ProjectContext::open(&file_path)?;
         file_manager::set_current_project_dir(&project_context.get_project_folder_path());
+
+        #[cfg(feature = "plugin_shared_crate")]
+        {
+            let plugins = {
+                let static_plugins = rs_proc_macros::load_static_plugins!(rs_editor);
+                if static_plugins.is_empty() {
+                    let dynamic_plugins = self.try_create_plugin().map_or(vec![], |x| vec![x]);
+                    dynamic_plugins
+                } else {
+                    static_plugins
+                }
+            };
+            let mut module_manager = project_context.module_manager.borrow_mut();
+            let mut modules = vec![];
+            for mut plugin in plugins {
+                modules.append(&mut plugin.create_modules());
+            }
+            for module in &mut modules {
+                log::trace!("Load module: {}", module.display_name());
+            }
+            module_manager.set_modules(modules);
+        }
+
         self.engine
             .get_logger_mut()
             .add_white_list(project_context.project.project_name.clone());
@@ -1903,21 +1934,24 @@ impl EditorContext {
     fn open_material_window(
         &mut self,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
-        open_material: Option<Rc<RefCell<rs_engine::content::material::Material>>>,
+        open_material: Rc<RefCell<rs_engine::content::material::Material>>,
     ) {
         let Some(project_context) = &mut self.project_context else {
             return;
         };
         let content_manager = project_context.content_manager.clone();
+        let module_manager = project_context.module_manager.clone();
         let mut ui_window = MaterialUIWindow::new(
             self.editor_ui.egui_context.clone(),
             &mut *self.window_manager.borrow_mut(),
             event_loop_window_target,
             &mut self.engine,
             content_manager,
+            module_manager,
+            open_material.borrow().url.clone(),
         )
         .expect("Should be opened");
-        if let Some(open_material) = open_material {
+        {
             let url = &open_material.borrow().asset_url;
             log::trace!("open material: {}", url.to_string());
             if let Some(project_context) = &self.project_context {
@@ -2788,7 +2822,7 @@ impl EditorContext {
                         }
                     }
                     EContentFileType::Material(material) => {
-                        self.open_material_window(event_loop_window_target, Some(material.clone()));
+                        self.open_material_window(event_loop_window_target, material.clone());
                     }
                     EContentFileType::IBL(_) => {}
                     EContentFileType::ParticleSystem(particle_system) => {
@@ -2825,7 +2859,10 @@ impl EditorContext {
                 let asset_url = crate::material::Material::make_url(&content_url);
                 let mut material =
                     rs_engine::content::material::Material::new(content_url, asset_url);
-                let resolve_result = material_view::MaterialView::default_resolve().unwrap();
+                let resolve_result = material_view::MaterialView::default_resolve(
+                    project_context.module_manager.clone(),
+                )
+                .unwrap();
                 {
                     let mut shader_code = HashMap::new();
                     let mut material_info = HashMap::new();

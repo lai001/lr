@@ -2,9 +2,9 @@ use super::types::{PostLoading, PostLoadingContext, PreLoadingContext};
 use crate::editor_context::EditorContext;
 use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
+use crate::material_resolve::resolve_task;
 use crate::ui::material_view::MaterialNode;
 use rs_artifact::bincode_legacy;
-use rs_engine::thread_pool::ThreadPool;
 use rs_foundation::new::SingleThreadMutType;
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
@@ -39,8 +39,6 @@ impl SnarlWrapper {
         value
     }
 }
-
-unsafe impl Send for SnarlWrapper {}
 
 type ResultType =
     Result<HashMap<MaterialOptions, crate::material_resolve::ResolveResult>, anyhow::Error>;
@@ -112,20 +110,21 @@ impl<'a> LoadMaterial<'a> {
         else {
             return None;
         };
-        let snarl_wrapper = SnarlWrapper::copy_snarl_from(url, &material_editor.borrow().snarl);
+        let snarl_wrapper =
+            SnarlWrapper::copy_snarl_from(url.clone(), &material_editor.borrow().snarl);
         let paramenters = material_editor.borrow().paramenters.clone();
-
+        let module_manager = loading_context.module_manager.clone();
+        // TODO:
+        let mut task = resolve_task(
+            module_manager,
+            url,
+            snarl_wrapper.get(),
+            MaterialOptions::all(),
+            paramenters,
+        );
         let (sender, receiver) = std::sync::mpsc::channel();
-        ThreadPool::global().spawn({
-            move || {
-                let resolve_result = crate::material_resolve::resolve(
-                    &snarl_wrapper.get(),
-                    MaterialOptions::all(),
-                    &paramenters,
-                );
-                let _ = sender.send(resolve_result);
-            }
-        });
+        let resolve_result = task.run();
+        let _ = sender.send(resolve_result);
         Some(Self {
             material_content,
             material_editor,

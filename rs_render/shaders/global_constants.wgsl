@@ -16,6 +16,7 @@ struct GlobalConstants {
     projection: mat4x4<f32>,
     view_projection: mat4x4<f32>,
     light_space_matrix: mat4x4<f32>,
+    camera_frustum_apply_transformation: Frustum,
     view_position: vec3<f32>,
     physical_texture_size: f32,
     tile_size: f32,
@@ -24,7 +25,6 @@ struct GlobalConstants {
     feedback_bias: f32,
     debug_shading: i32,
     time: f32,
-    camera_frustum_apply_transformation: Frustum,
 };
 
 #endif

@@ -84,6 +84,7 @@ pub struct Constants {
     pub projection: glam::Mat4,
     pub view_projection: glam::Mat4,
     pub light_space_matrix: glam::Mat4,
+    pub camera_frustum: CameraFrustum,
     pub view_position: glam::Vec3,
     pub physical_texture_size: f32,
     pub tile_size: f32,
@@ -93,7 +94,6 @@ pub struct Constants {
     debug_shading: i32,
     pub time: f32,
     _pad_0: [i32; 2],
-    pub camera_frustum: CameraFrustum,
 }
 
 impl Constants {

@@ -1,9 +1,11 @@
 use crate::ui::material_view::{EMaterialNodeType, MaterialNode};
+use anyhow::anyhow;
 use egui_snarl::{InPinId, NodeId, OutPinId, Snarl};
 use rs_artifact::{
     material::{GroupBinding, MaterialInfo, MaterialParamentersCollectionBinding, TextureBinding},
     material_paramenters::{BaseDataValueType, StructField},
 };
+use rs_editor_core::types::CreationTask;
 use rs_engine::{
     content::material_paramenters_collection::MaterialParamentersCollection,
     url_extension::UrlExtension,
@@ -40,13 +42,13 @@ struct ResolveContext<'a> {
     current_group: usize,
     current_binding: usize,
     used_material_paramenters_collections: Vec<SingleThreadMutType<MaterialParamentersCollection>>,
-    material_paramenters: &'a crate::material::Paramenters,
+    material_paramenters: &'a rs_editor_core::material::Paramenters,
 }
 
 impl<'a> ResolveContext<'a> {
     fn new(
         snarl: &'a Snarl<MaterialNode>,
-        material_paramenters: &'a crate::material::Paramenters,
+        material_paramenters: &'a rs_editor_core::material::Paramenters,
     ) -> ResolveContext<'a> {
         let mut node_io_infos: HashMap<NodeId, NodeIOInfo> = HashMap::new();
         for (out_pin_id, in_pin_id) in snarl.wires() {
@@ -579,11 +581,145 @@ impl<'a> ResolveContext<'a> {
     }
 }
 
+fn resolve_by_proxy(
+    module_manager: SingleThreadMutType<rs_module::types::ModuleManager>,
+    url: &url::Url,
+    options: Vec<MaterialOptions>,
+    material_paramenters: &rs_editor_core::material::Paramenters,
+) -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
+    type MCP = dyn rs_editor_core::types::MaterialCreationProxyModule;
+
+    let mut module_manager = module_manager.borrow_mut();
+    let modules = module_manager.modules_mut();
+
+    let proxy = modules
+        .iter_mut()
+        .find_map(|module| MCP::from_dyn_cast_mut(module.as_mut()).ok())
+        .ok_or(anyhow!(""))?;
+
+    let mut reuslts = HashMap::new();
+    for options in options.clone() {
+        let mut task = proxy
+            .create_task(url.clone(), options.clone(), material_paramenters.clone())
+            .ok_or(anyhow!("not implemented"))?;
+        let result = task.run()?;
+        reuslts.insert(
+            options,
+            ResolveResult {
+                shader_code: result.0,
+                material_info: result.1,
+            },
+        );
+    }
+
+    Ok(reuslts)
+}
+
+pub struct ResolveTask {
+    snarl: Snarl<MaterialNode>,
+    options: Vec<MaterialOptions>,
+    material_paramenters: rs_editor_core::material::Paramenters,
+    tasks: HashMap<MaterialOptions, Box<dyn CreationTask>>,
+}
+
+impl ResolveTask {
+    fn new(
+        module_manager: SingleThreadMutType<rs_module::types::ModuleManager>,
+        snarl: Snarl<MaterialNode>,
+        material_url: url::Url,
+        options: Vec<MaterialOptions>,
+        material_paramenters: rs_editor_core::material::Paramenters,
+    ) -> Self {
+        type MCP = dyn rs_editor_core::types::MaterialCreationProxyModule;
+        let mut module_manager = module_manager.borrow_mut();
+        let modules = module_manager.modules_mut();
+        let mut tasks = HashMap::new();
+        let proxy = modules
+            .iter_mut()
+            .find_map(|module| MCP::from_dyn_cast_mut(module.as_mut()).ok());
+        if let Some(proxy) = proxy {
+            for options in options.clone() {
+                let task = proxy.create_task(
+                    material_url.clone(),
+                    options.clone(),
+                    material_paramenters.clone(),
+                );
+                if let Some(task) = task {
+                    tasks.insert(options, task);
+                }
+            }
+        }
+
+        Self {
+            snarl,
+            options,
+            material_paramenters,
+            tasks,
+        }
+    }
+
+    pub fn run(&mut self) -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
+        if !self.tasks.is_empty() {
+            let mut results: HashMap<MaterialOptions, ResolveResult> = HashMap::new();
+            for (option, task) in &mut self.tasks {
+                let result = task.run()?;
+                results.insert(
+                    option.clone(),
+                    ResolveResult {
+                        shader_code: result.0,
+                        material_info: result.1,
+                    },
+                );
+            }
+            Ok(results)
+        } else {
+            let mut results: HashMap<MaterialOptions, ResolveResult> = HashMap::new();
+            for option in &self.options {
+                let mut resolve_context =
+                    ResolveContext::new(&self.snarl, &self.material_paramenters);
+                let result = resolve_context.resolve(&option)?;
+                // let result = resolve_internal(snarl, &option)?;
+                results.insert(option.clone(), result);
+            }
+            Ok(results)
+        }
+    }
+}
+
+pub fn resolve_task(
+    module_manager: SingleThreadMutType<rs_module::types::ModuleManager>,
+    material_url: url::Url,
+    snarl: Snarl<MaterialNode>,
+    options: Vec<MaterialOptions>,
+    material_paramenters: rs_editor_core::material::Paramenters,
+) -> ResolveTask {
+    ResolveTask::new(
+        module_manager,
+        snarl,
+        material_url,
+        options,
+        material_paramenters,
+    )
+}
+
 pub fn resolve(
+    module_manager: SingleThreadMutType<rs_module::types::ModuleManager>,
+    material_url: Option<&url::Url>,
     snarl: &Snarl<MaterialNode>,
     options: Vec<MaterialOptions>,
-    material_paramenters: &crate::material::Paramenters,
+    material_paramenters: &rs_editor_core::material::Paramenters,
 ) -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
+    if let Some(material_url) = &material_url {
+        if let Ok(results) = resolve_by_proxy(
+            module_manager,
+            material_url,
+            options.clone(),
+            material_paramenters,
+        ) {
+            return Ok(results);
+        }
+    }
+
     let mut results: HashMap<MaterialOptions, ResolveResult> = HashMap::new();
     for option in options {
         let mut resolve_context = ResolveContext::new(snarl, material_paramenters);
@@ -607,7 +743,7 @@ fn material_paramenters_collection_to_struct_string(
 
 fn material_paramenters_to_struct_string(
     name: &str,
-    material_paramenters: &crate::material::Paramenters,
+    material_paramenters: &rs_editor_core::material::Paramenters,
 ) -> Option<String> {
     let code = fields_to_struct_string(name, material_paramenters.fields());
     if code.is_empty() {

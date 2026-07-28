@@ -697,11 +697,11 @@ impl PlayerViewport {
 
                 let material_info = object.material.borrow().get_material_info().clone();
                 let map_textures = &material_info
-                    .get(&MaterialOptions { is_skin: true })
+                    .get(&MaterialOptions { is_skin: false })
                     .unwrap()
                     .map_textures;
                 for virtual_texture_url in &material_info
-                    .get(&MaterialOptions { is_skin: true })
+                    .get(&MaterialOptions { is_skin: false })
                     .unwrap()
                     .virtual_textures
                 {

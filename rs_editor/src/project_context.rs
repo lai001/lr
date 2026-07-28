@@ -17,6 +17,7 @@ use rs_engine::{
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_hotreload_plugin::hot_reload::HotReload;
 use rs_model_loader::model_loader::ModelLoader;
+use rs_module::types::ModuleManager;
 use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -69,6 +70,7 @@ pub struct ProjectContext {
         Option<std::sync::mpsc::Receiver<std::result::Result<Vec<DebouncedEvent>, notify::Error>>>,
     folder_debouncer: Option<Debouncer<ReadDirectoryChangesWatcher>>,
     pub content_manager: SingleThreadMutType<ContentManager>,
+    pub module_manager: SingleThreadMutType<ModuleManager>,
 }
 
 impl ProjectContext {
@@ -90,6 +92,7 @@ impl ProjectContext {
         // let lib_folder = project_folder_path.join("target").join("release");
         let lib_folder = std::env::current_dir()?.join("deps");
         let hot_reload = HotReload::new(&lib_folder, &lib_folder, &project.project_name)?;
+        let module_manager = SingleThreadMut::new(ModuleManager::new());
         let mut context = ProjectContext {
             project,
             project_file_path: project_file_path.to_path_buf(),
@@ -101,6 +104,7 @@ impl ProjectContext {
             content_manager: SingleThreadMut::new(ContentManager::from_path(
                 project_folder_path.join(CONTENT_FOLDER_NAME),
             )),
+            module_manager,
         };
         context.watch_project_folder()?;
         Ok(context)
@@ -500,6 +504,8 @@ impl ProjectContext {
                         let snarl = &material_editor.snarl;
                         let paramenters = &material_editor.paramenters;
                         if let Ok(resolve_result) = crate::material_resolve::resolve(
+                            self.module_manager.clone(),
+                            Some(&material_content.borrow().url),
                             snarl,
                             MaterialOptions::all(),
                             paramenters,

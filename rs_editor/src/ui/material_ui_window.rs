@@ -5,6 +5,7 @@ use egui_winit::State;
 use rs_content_manager::content_manager::ContentManager;
 use rs_engine::engine::Engine;
 use rs_foundation::new::SingleThreadMutType;
+use rs_module::types::ModuleManager;
 use rs_render::{command::RenderUIOptions, egui_render::UICanvasType};
 use winit::event::WindowEvent;
 
@@ -28,6 +29,8 @@ impl MaterialUIWindow {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         content_manager: SingleThreadMutType<ContentManager>,
+        module_manager: SingleThreadMutType<ModuleManager>,
+        material_url: url::Url,
     ) -> anyhow::Result<MaterialUIWindow> {
         let window_context = window_manager.spwan_new_window(
             EWindowType::Material,
@@ -59,7 +62,7 @@ impl MaterialUIWindow {
         egui_winit_state.egui_input_mut().viewport_id = viewport_id;
         egui_winit_state.egui_input_mut().viewports =
             std::iter::once((viewport_id, Default::default())).collect();
-        let material_view = MaterialView::new(content_manager);
+        let material_view = MaterialView::new(content_manager, module_manager, material_url);
         let data_source = DataSource {
             current_open_material: None,
             is_shader_code_window_open: false,

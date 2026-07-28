@@ -337,7 +337,7 @@ impl Renderer {
                         fence_behavior: GlFenceBehavior::Normal,
                         debug_fns: GlDebugFns::Auto,
                     },
-                    dx12: Dx12BackendOptions::default(),
+                    dx12: Dx12BackendOptions::from_env_or_default(),
                     noop: NoopBackendOptions::default(),
                 },
                 memory_budget_thresholds: MemoryBudgetThresholds::default(),

@@ -49,4 +49,8 @@ pub trait Plugin {
     fn as_network_module(&mut self) -> Option<&mut dyn crate::network::NetworkModule> {
         unimplemented!();
     }
+
+    fn create_modules(&mut self) -> Vec<Box<dyn rs_module::types::Module>> {
+        vec![]
+    }
 }

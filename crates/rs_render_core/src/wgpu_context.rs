@@ -4,6 +4,25 @@ use std::fmt::Debug;
 #[cfg(feature = "wgpu28")]
 use wgpu28 as wgpu;
 
+#[derive(Debug, Clone)]
+struct InstanceDescriptorCache {
+    _backends: wgpu::Backends,
+    _flags: wgpu::InstanceFlags,
+    _memory_budget_thresholds: wgpu::MemoryBudgetThresholds,
+    _backend_options: wgpu::BackendOptions,
+}
+
+impl InstanceDescriptorCache {
+    fn from(value: &wgpu::InstanceDescriptor) -> Self {
+        Self {
+            _backends: value.backends,
+            _flags: value.flags,
+            _memory_budget_thresholds: value.memory_budget_thresholds,
+            _backend_options: value.backend_options.clone(),
+        }
+    }
+}
+
 pub struct WindowTarget<
     'a,
     W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
@@ -25,11 +44,13 @@ pub struct WGPUContext {
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    instance_desc: InstanceDescriptorCache,
 }
 
 impl Debug for WGPUContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut debug_struct = f.debug_struct("WGPUContext");
+        debug_struct.field("instance descriptor", &self.instance_desc);
         debug_struct
             .field("device", &self.device)
             .field("adapter info", &self.adapter.get_info())
@@ -167,12 +188,13 @@ impl WGPUContext {
         W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle,
     {
         let _span = tracy_client::span!();
-        let instance = wgpu::Instance::new(
-            #[cfg(feature = "wgpu_latest")]
-            instance_desc.unwrap_or(wgpu::InstanceDescriptor::new_without_display_handle()),
-            #[cfg(not(feature = "wgpu_latest"))]
-            &instance_desc.unwrap_or_default(),
-        );
+        #[cfg(feature = "wgpu_latest")]
+        let instance_desc =
+            instance_desc.unwrap_or(wgpu::InstanceDescriptor::new_without_display_handle());
+        #[cfg(not(feature = "wgpu_latest"))]
+        let instance_desc = &instance_desc.unwrap_or_default();
+        let cache = InstanceDescriptorCache::from(&instance_desc);
+        let instance = wgpu::Instance::new(instance_desc);
         let mut wgpu_surfaces = Vec::with_capacity(window_targets.len());
         for (_, window_target) in window_targets.iter() {
             let surface = Self::new_surface(&instance, window_target.window)?;
@@ -210,6 +232,7 @@ impl WGPUContext {
             device,
             queue,
             surfaces,
+            instance_desc: cache,
         })
     }
 
@@ -219,12 +242,13 @@ impl WGPUContext {
         device_debug_label: Option<&str>,
     ) -> Result<WGPUContext> {
         let _span = tracy_client::span!();
-        let instance = wgpu::Instance::new(
-            #[cfg(feature = "wgpu_latest")]
-            instance_desc.unwrap_or(wgpu::InstanceDescriptor::new_without_display_handle()),
-            #[cfg(not(feature = "wgpu_latest"))]
-            &instance_desc.unwrap_or_default(),
-        );
+        #[cfg(feature = "wgpu_latest")]
+        let instance_desc =
+            instance_desc.unwrap_or(wgpu::InstanceDescriptor::new_without_display_handle());
+        #[cfg(not(feature = "wgpu_latest"))]
+        let instance_desc = &instance_desc.unwrap_or_default();
+        let cache = InstanceDescriptorCache::from(&instance_desc);
+        let instance = wgpu::Instance::new(instance_desc);
         let (adapter, device, queue) =
             Self::adapter_device_queue(&instance, None, power_preference, device_debug_label)?;
         Ok(WGPUContext {
@@ -233,6 +257,7 @@ impl WGPUContext {
             device,
             queue,
             surfaces: HashMap::new(),
+            instance_desc: cache,
         })
     }
 

@@ -19,6 +19,7 @@ use rs_engine::content::{
 };
 use rs_foundation::new::SingleThreadMutType;
 use rs_localization::t;
+use rs_module::types::ModuleManager;
 use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
@@ -30,7 +31,7 @@ pub struct GraphViewer {
     pub virtual_texture_urls: Vec<url::Url>,
     pub is_updated: bool,
     pub content_manager: SingleThreadMutType<ContentManager>,
-    pub paramenters: crate::material::Paramenters,
+    pub paramenters: rs_editor_core::material::Paramenters,
 }
 
 impl GraphViewer {
@@ -726,10 +727,16 @@ pub struct MaterialView {
     pub event: Option<EEventType>,
     pub current_resolve_result: Option<HashMap<MaterialOptions, ResolveResult>>,
     pub validate: Option<HashMap<MaterialOptions, rs_render::error::Result<()>>>,
+    material_url: url::Url,
+    module_manager: SingleThreadMutType<ModuleManager>,
 }
 
 impl MaterialView {
-    pub fn new(content_manager: SingleThreadMutType<ContentManager>) -> MaterialView {
+    pub fn new(
+        content_manager: SingleThreadMutType<ContentManager>,
+        module_manager: SingleThreadMutType<ModuleManager>,
+        material_url: url::Url,
+    ) -> MaterialView {
         let mut snarl = Snarl::new();
         let mut style = SnarlStyle::new();
         style.bg_pattern = Some(egui_snarl::ui::BackgroundPattern::Grid(Grid {
@@ -743,7 +750,7 @@ impl MaterialView {
             virtual_texture_urls: vec![],
             is_updated: false,
             content_manager: content_manager,
-            paramenters: crate::material::Paramenters::empty(),
+            paramenters: rs_editor_core::material::Paramenters::empty(),
         };
 
         let node = MaterialNode {
@@ -759,19 +766,25 @@ impl MaterialView {
             event: None,
             current_resolve_result: None,
             validate: None,
+            material_url,
+            module_manager,
         }
     }
 
-    pub fn default_resolve() -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
+    pub fn default_resolve(
+        module_manager: SingleThreadMutType<ModuleManager>,
+    ) -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
         let mut snarl = Snarl::new();
         let node = MaterialNode {
             node_type: EMaterialNodeType::Sink(Default::default()),
         };
         let _ = snarl.insert_node(egui::pos2(0.0, 0.0), node);
         material_resolve::resolve(
+            module_manager,
+            None,
             &snarl,
             MaterialOptions::all(),
-            &crate::material::Paramenters::empty(),
+            &rs_editor_core::material::Paramenters::empty(),
         )
     }
 
@@ -901,7 +914,14 @@ impl MaterialView {
             self.event = Some(event);
         }
 
-        let result = Self::do_draw(&mut self.viewer, &self.style, &mut panel_ui, &mut material);
+        let result = Self::do_draw(
+            &mut self.viewer,
+            &self.style,
+            &mut panel_ui,
+            &mut material,
+            &self.material_url,
+            self.module_manager.clone(),
+        );
         if let Some(result) = result {
             if let Ok(result) = result {
                 self.current_resolve_result = Some(result.clone());
@@ -915,6 +935,8 @@ impl MaterialView {
         style: &SnarlStyle,
         panel_ui: &mut Ui,
         material: &mut crate::material::Material,
+        material_url: &url::Url,
+        module_manager: SingleThreadMutType<ModuleManager>,
     ) -> Option<anyhow::Result<HashMap<MaterialOptions, ResolveResult>>> {
         {
             let snarl = &mut material.snarl;
@@ -930,6 +952,8 @@ impl MaterialView {
         let snarl = &mut material.snarl;
         let material_paramenters = &material.paramenters;
         Some(material_resolve::resolve(
+            module_manager,
+            Some(material_url),
             snarl,
             MaterialOptions::all(),
             material_paramenters,

@@ -16,6 +16,7 @@ impl LoadContents {
         model_loader: &mut ModelLoader,
         files: Vec<EContentFileType>,
     ) -> anyhow::Result<()> {
+        let module_manager = project_context.module_manager.clone();
         let _span = tracy_client::span!();
         {
             let resource_manager = engine.get_resource_manager().clone();
@@ -24,6 +25,7 @@ impl LoadContents {
             let cx = PreLoadingContext {
                 resource_manager: &resource_manager,
                 project_context,
+                module_manager,
             };
             let scenes: MultipleThreadMutType<HashMap<PathBuf, SceneWrapper>> =
                 MultipleThreadMut::new(HashMap::new());

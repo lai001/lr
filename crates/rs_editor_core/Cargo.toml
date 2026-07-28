@@ -1,0 +1,18 @@
+[package]
+name = "rs_editor_core"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["editor"]
+editor = ["rs_core_minimal/editor", "rs_module/editor"]
+
+[dependencies]
+url = { version = "2.5.8", features = ["serde"] }
+serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.18"
+rs_module = { path = "../rs_module" }
+rs_artifact = { path = "../../rs_artifact" }
+rs_foundation = { path = "../../rs_foundation" }
+rs_render_types = { path = "../../rs_render_types" }
+rs_core_minimal = { path = "../../rs_core_minimal" }
