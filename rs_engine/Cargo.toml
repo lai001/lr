@@ -30,17 +30,17 @@ android-native-activity = ["winit/android-native-activity"]
 network_debug_trace = []
 
 [dependencies]
-bitflags = "2.13.0"
+bitflags = "2.13.1"
 md-5 = { version = "0.11.0" }
-anyhow = { version = "1.0.102", optional = true }
-serde = { version = "1.0.228", features = ["derive", "rc"] }
-serde_json = "1.0.150"
+anyhow = { version = "1.0.104", optional = true }
+serde = { version = "1.0.229", features = ["derive", "rc"] }
+serde_json = "1.0.151"
 erased-serde = "0.4.10"
-typetag = "0.2.22"
+typetag = "0.2.23"
 bincode = { version = "=2.0.1", features = ["serde"] }
 chrono = "0.4.45"
-log = "0.4.32"
-env_logger = "0.11.10"
+log = "0.4.33"
+env_logger = "0.11.11"
 moka = { version = "0.12.15", default-features = false, features = ["sync"] }
 image = "0.25.10"
 lazy_static = "1.5.0"
@@ -50,15 +50,15 @@ egui = { version = "0.34.3" }
 raw-window-handle = "0.6.2"
 url = { version = "2.5.8", features = ["serde"] }
 percent-encoding = "2.3.2"
-wgpu = { version = "29.0.3", features = ["spirv", "naga-ir"] }
+wgpu = { version = "29.0.4", features = ["spirv", "naga-ir"] }
 glam = { version = "0.30.10", features = ["mint", "serde"] }
-uuid = { version = "1.23.3", features = [
+uuid = { version = "1.24.0", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
     "serde",
 ] }
-rand = { version = "0.10.1" }
+rand = { version = "0.10.2" }
 tracy-client = { version = "0.18.4", default-features = false }
 rapier3d = { version = "0.32.0", features = ["simd-stable", "serde-serialize"] }
 uniform-cubic-splines = { version = "=0.3.1" }

@@ -11,4 +11,4 @@ winit = { version = "0.30.13" }
 egui = { version = "0.34.3" }
 egui-winit = { version = "0.34.3" }
 egui-wgpu = { version = "0.34.3" }
-wgpu = { version = "29.0.3" }
+wgpu = { version = "29.0.4" }

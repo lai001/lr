@@ -13,7 +13,7 @@ image = "0.25.10"
 parley = "0.8.0"
 harfrust = "0.6.2"
 linebender_resource_handle = { version = "0.1.1", default-features = false }
-log = "0.4.32"
+log = "0.4.33"
 rs_foundation = { path = "../../rs_foundation" }
 rs_core_minimal = { path = "../../rs_core_minimal" }
 rs_pack = { path = "../rs_pack" }
@@ -21,7 +21,7 @@ rs_pack = { path = "../rs_pack" }
 [dev-dependencies]
 lyon = "1.0.19"
 vello = "0.8.0"
-rand = "0.10.1"
+rand = "0.10.2"
 rs_render_core = { path = "../rs_render_core", default-features = false, features = [
     "wgpu28",
 ] }

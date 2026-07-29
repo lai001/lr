@@ -6,11 +6,11 @@ edition = "2021"
 [dependencies]
 lazy_static = "1.5.0"
 glam = { version = "0.30.10", features = ["mint"] }
-wgpu = "29.0.3"
+wgpu = "29.0.4"
 notify = "8.2.0"
 notify-debouncer-mini = { version = "0.7.0" }
 walkdir = "2.5.0"
-log = "0.4.32"
+log = "0.4.33"
 rs_render = { path = "../rs_render" }
 rs_engine = { path = "../rs_engine" }
 rs_dotnet = { path = "../rs_dotnet" }

@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-slotmap = "1.0"
+slotmap = "1.1"
 petgraph = "0.8.3"
 rs_foundation = { path = "../../rs_foundation" }

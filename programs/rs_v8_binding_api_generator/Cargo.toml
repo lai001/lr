@@ -20,16 +20,16 @@ ra_ap_salsa = "0.0.269"
 ra_ap_hir_ty = "0.0.326"
 ra_ap_stdx = "0.0.326"
 ra_ap_hir_def = "0.0.326"
-proc-macro2 = "1.0.106"
-syn = { version = "2.0.117", features = ["full", "extra-traits"] }
-quote = "1.0.45"
+proc-macro2 = "1.0.107"
+syn = { version = "2.0.119", features = ["full", "extra-traits"] }
+quote = "1.0.47"
 prettyplease = "0.2.37"
-log = "0.4.32"
-env_logger = "0.11.10"
-anyhow = { version = "1.0.102" }
+log = "0.4.33"
+env_logger = "0.11.11"
+anyhow = { version = "1.0.104" }
 rowan = "0.16.1"
 convert_case = "0.11.0"
-clap = { version = "4.6.1", features = ["derive"] }
+clap = { version = "4.6.4", features = ["derive"] }
 walkdir = "2.5.0"
 rs_core_minimal = { path = "../../rs_core_minimal" }
 rs_manifest = { path = "../../crates/rs_manifest" }

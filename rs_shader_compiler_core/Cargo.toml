@@ -12,14 +12,14 @@ force_builtin_processor = []
 detect_encoding = ["dep:encoding_rs", "dep:chardetng"]
 
 [dependencies]
-wgpu = "29.0.3"
-naga = "29.0.3"
+wgpu = "29.0.4"
+naga = "29.0.4"
 pollster = "0.4.0"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 walkdir = "2.5.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 chardetng = { version = "1.0.0", optional = true }
 encoding_rs = { version = "0.8.35", optional = true }
 rs_foundation = { path = "../rs_foundation" }

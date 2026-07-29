@@ -7,14 +7,14 @@ edition = "2024"
 network_debug_trace = []
 
 [dependencies]
-log = "0.4.32"
-uuid = { version = "1.23.3", features = [
+log = "0.4.33"
+uuid = { version = "1.24.0", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",
     "serde",
 ] }
-serde = { version = "1.0.228", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
 rs_artifact = { path = "../../rs_artifact" }
 rs_core_minimal = { path = "../../rs_core_minimal" }
 rs_foundation = { path = "../../rs_foundation" }

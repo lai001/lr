@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-build-rs = "0.3.4"
+build-rs = "0.3.5"
 build-print = "1.0.1"
-serde = { version = "1.0.228", features = ["derive", "rc"] }
-serde_json = "1.0.150"
+serde = { version = "1.0.229", features = ["derive", "rc"] }
+serde_json = "1.0.151"
 rs_core_minimal = { path = "../../rs_core_minimal" }
