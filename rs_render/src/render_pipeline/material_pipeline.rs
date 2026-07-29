@@ -1,5 +1,4 @@
 use crate::{
-    VertexBufferType,
     base_render_pipeline::{BaseRenderPipeline, ColorAttachment},
     base_render_pipeline_pool::{BaseRenderPipelineBuilder, BaseRenderPipelinePool},
     command::{MaterialRenderPipelineHandle, Viewport},
@@ -7,34 +6,19 @@ use crate::{
     shader_library::ShaderLibrary,
     vertex_data_type::mesh_vertex::{MeshVertex0, MeshVertex1, MeshVertex2, MeshVertex5},
     view_mode::EViewModeType,
+    VertexBufferType,
 };
-use rs_render_types::MaterialOptions;
+use rs_render_types::{EBlendModeType, MaterialOptions};
 use std::{collections::HashMap, sync::Arc};
 use type_layout::TypeLayout;
 use wgpu::*;
 
 pub struct MaterialRenderPipeline {
-    pub base_render_pipeline: Arc<BaseRenderPipeline>,
+    base_render_pipeline: Arc<BaseRenderPipeline>,
     builder: BaseRenderPipelineBuilder,
 }
 
 impl MaterialRenderPipeline {
-    pub fn new(
-        material_render_pipeline_handle: MaterialRenderPipelineHandle,
-        device: &Device,
-        shader_library: &ShaderLibrary,
-        texture_format: &TextureFormat,
-        pool: &mut BaseRenderPipelinePool,
-    ) -> crate::error::Result<MaterialRenderPipeline> {
-        Self::skin(
-            material_render_pipeline_handle,
-            device,
-            shader_library,
-            texture_format,
-            pool,
-        )
-    }
-
     fn new_internal(
         material_render_pipeline_handle: MaterialRenderPipelineHandle,
         device: &Device,
@@ -42,6 +26,7 @@ impl MaterialRenderPipeline {
         texture_format: &TextureFormat,
         pool: &mut BaseRenderPipelinePool,
         is_skin: bool,
+        blend_mode: EBlendModeType,
     ) -> crate::error::Result<MaterialRenderPipeline> {
         let shader_name = ShaderLibrary::get_material_shader_name(
             material_render_pipeline_handle,
@@ -52,17 +37,27 @@ impl MaterialRenderPipeline {
             },
         );
 
+        let depth_write_enabled = match blend_mode {
+            EBlendModeType::Opaque => true,
+            EBlendModeType::Transparent => false,
+        };
+
+        let blend_state = match blend_mode {
+            EBlendModeType::Opaque => None,
+            EBlendModeType::Transparent => Some(BlendState::ALPHA_BLENDING),
+        };
+
         let mut builder = BaseRenderPipelineBuilder::default();
         builder.targets = vec![Some(ColorTargetState {
             format: texture_format.clone(),
-            blend: Some(BlendState::ALPHA_BLENDING),
+            blend: blend_state,
             write_mask: ColorWrites::ALL,
         })];
         builder.shader_name = shader_name;
         builder.depth_stencil = Some(DepthStencilState {
             depth_compare: Some(CompareFunction::Less),
             format: TextureFormat::Depth32Float,
-            depth_write_enabled: Some(true),
+            depth_write_enabled: Some(depth_write_enabled),
             stencil: StencilState::default(),
             bias: DepthBiasState::default(),
         });
@@ -101,6 +96,7 @@ impl MaterialRenderPipeline {
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
+        blend_mode: EBlendModeType,
         pool: &mut BaseRenderPipelinePool,
     ) -> crate::error::Result<MaterialRenderPipeline> {
         Self::new_internal(
@@ -110,6 +106,7 @@ impl MaterialRenderPipeline {
             texture_format,
             pool,
             true,
+            blend_mode,
         )
     }
 
@@ -118,6 +115,7 @@ impl MaterialRenderPipeline {
         device: &Device,
         shader_library: &ShaderLibrary,
         texture_format: &TextureFormat,
+        blend_mode: EBlendModeType,
         pool: &mut BaseRenderPipelinePool,
     ) -> crate::error::Result<MaterialRenderPipeline> {
         Self::new_internal(
@@ -127,6 +125,7 @@ impl MaterialRenderPipeline {
             texture_format,
             pool,
             false,
+            blend_mode,
         )
     }
 
@@ -187,10 +186,20 @@ impl MaterialRenderPipeline {
 
         self.base_render_pipeline = pool.get(device, shader_library, &self.builder);
     }
+
+    pub fn base_render_pipeline(&self) -> &Arc<BaseRenderPipeline> {
+        &self.base_render_pipeline
+    }
+}
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+pub struct PipelineKey {
+    pub options: MaterialOptions,
+    pub blend_mode: EBlendModeType,
 }
 
 pub struct VariantMaterialRenderPipeline {
-    pipelines: HashMap<MaterialOptions, MaterialRenderPipeline>,
+    pipelines: HashMap<PipelineKey, MaterialRenderPipeline>,
 }
 
 impl VariantMaterialRenderPipeline {
@@ -205,39 +214,53 @@ impl VariantMaterialRenderPipeline {
         let mut variant_material_render_pipeline = VariantMaterialRenderPipeline {
             pipelines: HashMap::new(),
         };
-        for option in options {
-            let pipeline = if option.is_skin {
-                MaterialRenderPipeline::skin(handle, device, shader_library, texture_format, pool)
-            } else {
-                MaterialRenderPipeline::static_mesh(
-                    handle,
-                    device,
-                    shader_library,
-                    texture_format,
-                    pool,
-                )
-            };
-            match pipeline {
-                Ok(pipeline) => {
-                    let old_value = variant_material_render_pipeline
-                        .pipelines
-                        .insert(option, pipeline);
-                    debug_assert!(old_value.is_none());
-                }
-                Err(err) => {
-                    log::warn!("{}", err);
+        for option in &options {
+            for blend_mode in vec![EBlendModeType::Opaque, EBlendModeType::Transparent] {
+                let pipeline = if option.is_skin {
+                    MaterialRenderPipeline::skin(
+                        handle,
+                        device,
+                        shader_library,
+                        texture_format,
+                        blend_mode,
+                        pool,
+                    )
+                } else {
+                    MaterialRenderPipeline::static_mesh(
+                        handle,
+                        device,
+                        shader_library,
+                        texture_format,
+                        blend_mode,
+                        pool,
+                    )
+                };
+                match pipeline {
+                    Ok(pipeline) => {
+                        let old_value = variant_material_render_pipeline.pipelines.insert(
+                            PipelineKey {
+                                options: option.clone(),
+                                blend_mode,
+                            },
+                            pipeline,
+                        );
+                        debug_assert!(old_value.is_none());
+                    }
+                    Err(err) => {
+                        log::warn!("{}", err);
+                    }
                 }
             }
         }
         variant_material_render_pipeline
     }
 
-    pub fn get(&self, options: &MaterialOptions) -> Option<&MaterialRenderPipeline> {
-        self.pipelines.get(options)
+    pub fn get(&self, key: &PipelineKey) -> Option<&MaterialRenderPipeline> {
+        self.pipelines.get(key)
     }
 
-    pub fn get_mut(&mut self, options: &MaterialOptions) -> Option<&mut MaterialRenderPipeline> {
-        self.pipelines.get_mut(options)
+    pub fn get_mut(&mut self, key: &PipelineKey) -> Option<&mut MaterialRenderPipeline> {
+        self.pipelines.get_mut(key)
     }
 
     pub fn set_view_mode(

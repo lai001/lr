@@ -4,7 +4,7 @@ use crate::uniform_map::UniformMap;
 use crate::{handle::MaterialRenderPipelineHandle, url_extension::UrlExtension};
 use rs_artifact::material::MaterialInfo;
 use rs_artifact::{asset::Asset, resource_type::EResourceType};
-use rs_render_types::MaterialOptions;
+use rs_render_types::{EBlendModeType, MaterialOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -25,6 +25,8 @@ struct MaterialRuntime {
 pub struct Material {
     pub url: url::Url,
     pub asset_url: url::Url,
+    #[serde(default)]
+    pub blend_mode: EBlendModeType,
     #[serde(skip)]
     run_time: Option<MaterialRuntime>,
 }
@@ -51,6 +53,7 @@ impl Material {
             url,
             asset_url,
             run_time: None,
+            blend_mode: EBlendModeType::Opaque,
         }
     }
 

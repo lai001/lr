@@ -28,7 +28,7 @@ use rs_render::renderer::{EBuiltinPipelineType, EPipelineType, MaterialPipelineT
 use rs_render::vertex_data_type::mesh_vertex::MeshVertex3;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
 use rs_render::{antialias_type::EAntialiasType, scene_viewport::SceneViewport};
-use rs_render_types::MaterialOptions;
+use rs_render_types::{MaterialOptions, RenderPipelineOptions};
 use std::collections::HashMap;
 
 bitflags::bitflags! {
@@ -981,6 +981,7 @@ impl PlayerViewport {
             EDrawObjectType::SkinMaterial(skin_objcet) => {
                 let skin_objcet = skin_objcet.clone();
                 let material = skin_objcet.material.borrow();
+                let blend_mode = material.blend_mode;
                 let pipeline_handle = material
                     .get_pipeline_handle()
                     .ok_or(crate::error::Error::Other(None))?;
@@ -1024,6 +1025,7 @@ impl PlayerViewport {
                     EPipelineType::Material(MaterialPipelineType {
                         handle: *pipeline_handle,
                         options: MaterialOptions { is_skin: true },
+                        render_pipeline_options: RenderPipelineOptions { blend_mode },
                     }),
                     skin_objcet.index_buffer.clone().map(|x| *x),
                     skin_objcet.index_count,
@@ -1062,6 +1064,7 @@ impl PlayerViewport {
             EDrawObjectType::StaticMeshMaterial(static_mesh_draw_objcet) => {
                 let static_mesh_draw_objcet = static_mesh_draw_objcet.clone();
                 let material = static_mesh_draw_objcet.material.borrow();
+                let blend_mode = material.blend_mode;
                 let pipeline_handle = material
                     .get_pipeline_handle()
                     .ok_or(crate::error::Error::Other(None))?;
@@ -1106,6 +1109,7 @@ impl PlayerViewport {
                     EPipelineType::Material(MaterialPipelineType {
                         handle: *pipeline_handle,
                         options: MaterialOptions { is_skin: false },
+                        render_pipeline_options: RenderPipelineOptions { blend_mode },
                     }),
                     static_mesh_draw_objcet.index_buffer.clone().map(|x| *x),
                     static_mesh_draw_objcet.index_count,

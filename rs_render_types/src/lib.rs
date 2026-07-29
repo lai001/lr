@@ -13,3 +13,15 @@ impl MaterialOptions {
         ]
     }
 }
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, Default, Serialize, Deserialize)]
+pub enum EBlendModeType {
+    #[default]
+    Opaque,
+    Transparent,
+}
+
+#[derive(Debug, Clone)]
+pub struct RenderPipelineOptions {
+    pub blend_mode: EBlendModeType,
+}

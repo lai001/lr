@@ -8,6 +8,7 @@ use rs_engine::content::{
 };
 use rs_foundation::new::SingleThreadMutType;
 use rs_localization::t;
+use rs_render_types::EBlendModeType;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
 
 pub enum RenderTarget2DPropertyType {
@@ -125,7 +126,16 @@ impl ContentItemPropertyView {
                 }
             }
             EContentFileType::Level(_) => {}
-            EContentFileType::Material(_) => {}
+            EContentFileType::Material(material) => {
+                let mut material = material.borrow_mut();
+                render_combo_box_not_null(
+                    ui,
+                    t!("Blend Mode"),
+                    "Blend Mode",
+                    &mut material.blend_mode,
+                    vec![EBlendModeType::Opaque, EBlendModeType::Transparent],
+                );
+            }
             EContentFileType::IBL(ibl) => {
                 let ibl_clone = ibl.clone();
                 let mut ibl = ibl.borrow_mut();

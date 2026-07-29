@@ -4,6 +4,7 @@ use rapier3d::prelude::RigidBodyType;
 use rs_egui_ext::egui_render::EGUIRenderOutput;
 use rs_engine::{engine::Engine, frame_sync::FrameSync, input_mode::EInputMode};
 use rs_localization::t;
+use rs_render_types::EBlendModeType;
 use std::collections::HashMap;
 use winit::{
     event::{ElementState, WindowEvent},
@@ -324,5 +325,14 @@ impl ToUIString for &str {
 impl ToUIString for String {
     fn to_ui_string(&self) -> String {
         self.clone()
+    }
+}
+
+impl ToUIString for EBlendModeType {
+    fn to_ui_string(&self) -> String {
+        match self {
+            EBlendModeType::Opaque => t!("Opaque").to_string(),
+            EBlendModeType::Transparent => t!("Transparent").to_string(),
+        }
     }
 }

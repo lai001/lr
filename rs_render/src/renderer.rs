@@ -14,7 +14,7 @@ use crate::prebake_ibl::PrebakeIBL;
 use crate::render_pipeline::attachment_pipeline::{AttachmentPipeline, ClearDepth, EClearType};
 use crate::render_pipeline::fxaa::FXAAPipeline;
 use crate::render_pipeline::grid_pipeline::GridPipeline;
-use crate::render_pipeline::material_pipeline::VariantMaterialRenderPipeline;
+use crate::render_pipeline::material_pipeline::{PipelineKey, VariantMaterialRenderPipeline};
 use crate::render_pipeline::mesh_view::MeshViewPipeline;
 use crate::render_pipeline::mesh_view_multiple_draw::MeshViewMultipleDrawPipeline;
 use crate::render_pipeline::particle_pipeline::ParticlePipeline;
@@ -30,7 +30,7 @@ use rs_core_minimal::settings::{self, RenderSettings};
 use rs_core_minimal::thread_pool::ThreadPool;
 use rs_egui_ext::egui_render::EGUIRenderer;
 use rs_render_core::wgpu_context::{WGPUContext, WindowTarget};
-use rs_render_types::MaterialOptions;
+use rs_render_types::{MaterialOptions, RenderPipelineOptions};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
@@ -55,6 +55,7 @@ pub enum EBuiltinPipelineType {
 pub struct MaterialPipelineType {
     pub handle: MaterialRenderPipelineHandle,
     pub options: MaterialOptions,
+    pub render_pipeline_options: RenderPipelineOptions,
 }
 
 #[derive(Clone)]
@@ -1799,11 +1800,15 @@ impl Renderer {
                 }
             },
             EPipelineType::Material(material_pipeline) => {
+                let key = PipelineKey {
+                    options: material_pipeline.options.clone(),
+                    blend_mode: material_pipeline.render_pipeline_options.blend_mode,
+                };
                 match self
                     .material_render_pipelines
                     .get(&material_pipeline.handle)
                 {
-                    Some(pipeline) => match pipeline.get(&material_pipeline.options) {
+                    Some(pipeline) => match pipeline.get(&key) {
                         Some(render_pipeline) => {
                             render_pipeline.draw(
                                 device,
@@ -2062,14 +2067,18 @@ impl Renderer {
                             }
                         },
                         EPipelineType::Material(material_pipeline) => {
+                            let key = PipelineKey {
+                                options: material_pipeline.options.clone(),
+                                blend_mode: material_pipeline.render_pipeline_options.blend_mode,
+                            };
                             match self
                                 .material_render_pipelines
                                 .get(&material_pipeline.handle)
                             {
                                 Some(pipeline) => {
-                                    match pipeline.get(&material_pipeline.options) {
+                                    match pipeline.get(&key) {
                                         Some(render_pipeline) => {
-                                            Some(render_pipeline.base_render_pipeline.as_ref())
+                                            Some(render_pipeline.base_render_pipeline().as_ref())
                                         }
                                         None => {
                                             log::warn!(
@@ -2146,13 +2155,17 @@ impl Renderer {
                         }
                     },
                     EPipelineType::Material(material_pipeline) => {
+                        let key = PipelineKey {
+                            options: material_pipeline.options.clone(),
+                            blend_mode: material_pipeline.render_pipeline_options.blend_mode,
+                        };
                         match self
                             .material_render_pipelines
                             .get(&material_pipeline.handle)
                         {
-                            Some(pipeline) => match pipeline.get(&material_pipeline.options) {
+                            Some(pipeline) => match pipeline.get(&key) {
                                 Some(render_pipeline) => {
-                                    Some(render_pipeline.base_render_pipeline.as_ref())
+                                    Some(render_pipeline.base_render_pipeline().as_ref())
                                 }
                                 None => {
                                     log::warn!("{} no match options", &material_pipeline.handle);
@@ -2239,12 +2252,16 @@ impl Renderer {
                     _ => unimplemented!(),
                 },
                 EPipelineType::Material(material_pipeline) => {
+                    let key = PipelineKey {
+                        options: material_pipeline.options.clone(),
+                        blend_mode: material_pipeline.render_pipeline_options.blend_mode,
+                    };
                     match self
                         .material_render_pipelines
                         .get(&material_pipeline.handle)
                     {
-                        Some(pipeline) => match pipeline.get(&material_pipeline.options) {
-                            Some(render_pipeline) => render_pipeline.base_render_pipeline.clone(),
+                        Some(pipeline) => match pipeline.get(&key) {
+                            Some(render_pipeline) => render_pipeline.base_render_pipeline().clone(),
                             None => {
                                 log::warn!("{} no match options", &material_pipeline.handle);
                                 continue;
