@@ -444,11 +444,9 @@ impl Actor {
             &mut |node| {
                 let mut node = node.borrow_mut();
                 let mut component = node.component_mut();
-                let network_replicated = component
-                    .as_any_mut()
-                    .downcast_mut::<&mut dyn NetworkReplicated>();
+                let network_replicated = component.as_network_replicated_mut();
                 if let Some(network_replicated) = network_replicated {
-                    visit(*network_replicated);
+                    visit(network_replicated);
                 }
             }
         });
@@ -459,10 +457,9 @@ impl Actor {
             &|node| {
                 let node = node.borrow();
                 let component = node.component();
-                let network_replicated =
-                    component.as_any().downcast_ref::<&dyn NetworkReplicated>();
+                let network_replicated = component.as_network_replicated();
                 if let Some(network_replicated) = network_replicated {
-                    visit(*network_replicated);
+                    visit(network_replicated);
                 }
             }
         });

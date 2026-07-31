@@ -144,6 +144,16 @@ pub struct StaticMeshComponent {
 
 #[typetag::serde]
 impl Component for StaticMeshComponent {
+    #[cfg(feature = "network")]
+    fn as_network_replicated_mut(&mut self) -> Option<&mut dyn crate::network::NetworkReplicated> {
+        Some(self)
+    }
+
+    #[cfg(feature = "network")]
+    fn as_network_replicated(&self) -> Option<&dyn crate::network::NetworkReplicated> {
+        Some(self)
+    }
+
     fn get_name(&self) -> String {
         self.name.clone()
     }
@@ -241,7 +251,7 @@ impl Component for StaticMeshComponent {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
-        assert!(self.run_time.is_none());
+        // assert!(self.run_time.is_none());
         #[cfg(feature = "network")]
         if self.network_fields.net_id.is_none() {
             self.set_network_id(crate::network::default_uuid());

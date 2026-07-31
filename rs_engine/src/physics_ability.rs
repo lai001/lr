@@ -45,7 +45,7 @@ pub struct PhysicsAbility {
     pub scale: glam::Vec3,
     translation: glam::Vec3,
     rotation: glam::Quat,
-    controller_desired_movement: glam::Vec3,
+    controller_desired_movement: Option<glam::Vec3>,
 }
 
 impl PhysicsAbility {
@@ -199,7 +199,7 @@ impl PhysicsAbility {
             scale: glam::Vec3::ONE,
             translation,
             rotation,
-            controller_desired_movement: glam::Vec3::ZERO,
+            controller_desired_movement: None,
         }
     }
 
@@ -262,7 +262,7 @@ impl PhysicsAbility {
         controller_desired_movement: glam::Vec3,
     ) -> bool {
         if let Some(_) = &self.controller {
-            self.controller_desired_movement = controller_desired_movement;
+            self.controller_desired_movement = Some(controller_desired_movement);
             return true;
         }
         return false;
@@ -298,6 +298,9 @@ impl PhysicsAbility {
         }
 
         if let Some(controller) = &mut self.controller {
+            let Some(controller_desired_movement) = self.controller_desired_movement.take() else {
+                return;
+            };
             debug_assert_eq!(self.collider_handles.len(), 1);
             let character_collider = &level_physics.collider_set[self.collider_handles[0]];
             let character_pose = *character_collider.position();
@@ -314,7 +317,7 @@ impl PhysicsAbility {
                 &query_pipeline.as_ref(),
                 &*character_shape,
                 &character_pose,
-                self.controller_desired_movement,
+                controller_desired_movement,
                 |c| collisions.push(c),
             );
 

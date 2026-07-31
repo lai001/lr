@@ -182,6 +182,16 @@ impl Component for SceneComponent {
             }
         }
     }
+
+    #[cfg(feature = "network")]
+    fn as_network_replicated_mut(&mut self) -> Option<&mut dyn crate::network::NetworkReplicated> {
+        Some(self)
+    }
+
+    #[cfg(feature = "network")]
+    fn as_network_replicated(&self) -> Option<&dyn crate::network::NetworkReplicated> {
+        Some(self)
+    }
 }
 
 #[cfg(feature = "network")]

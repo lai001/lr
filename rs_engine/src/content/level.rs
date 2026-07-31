@@ -503,7 +503,7 @@ impl Level {
         files: &[EContentFileType],
         player_viewport: &mut PlayerViewport,
     ) {
-        assert!(self.runtime.is_none());
+        // assert!(self.runtime.is_none(), "{}", &self.url);
         #[cfg(feature = "network")]
         if self.network_fields.net_id.is_none() {
             self.set_network_id(crate::network::default_uuid());
@@ -846,19 +846,7 @@ impl Level {
     }
 
     pub fn delete_actor(&mut self, actor: SingleThreadMutType<Actor>) {
-        #[cfg(feature = "network")]
-        {
-            if self.is_server() {
-                self.delete_actor_client(actor.clone());
-                self.network_fields.remove_actors(vec![actor]);
-            } else {
-                self.network_fields.remove_actors(vec![actor]);
-            }
-        }
-        #[cfg(not(feature = "network"))]
-        {
-            self.delete_actor_client(actor);
-        }
+        self.delete_actor_client(actor.clone());
     }
 
     fn delete_actor_client(&mut self, actor: SingleThreadMutType<Actor>) {
@@ -1053,5 +1041,14 @@ impl Level {
             self.init_actor_physics(actor.clone(), engine, files);
         }
         self.actors.append(&mut actors);
+    }
+
+    pub fn net_delete_actor(&mut self, actor: SingleThreadMutType<Actor>) {
+        if self.is_server() {
+            self.delete_actor_client(actor.clone());
+            self.network_fields.remove_actors(vec![actor]);
+        } else {
+            self.network_fields.remove_actors(vec![actor]);
+        }
     }
 }

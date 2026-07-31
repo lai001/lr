@@ -73,6 +73,16 @@ pub trait Component: erased_serde::Serialize + Downcast + dyn_clone::DynClone {
     fn gizmo(&mut self, gizmo_final_transformation: Option<glam::Mat4>) {
         self.gizmo_default(gizmo_final_transformation);
     }
+
+    #[cfg(feature = "network")]
+    fn as_network_replicated_mut(&mut self) -> Option<&mut dyn crate::network::NetworkReplicated> {
+        None
+    }
+
+    #[cfg(feature = "network")]
+    fn as_network_replicated(&self) -> Option<&dyn crate::network::NetworkReplicated> {
+        None
+    }
 }
 
 impl_downcast!(Component);
