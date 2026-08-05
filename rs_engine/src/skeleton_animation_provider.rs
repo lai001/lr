@@ -1,11 +1,14 @@
 use crate::{
-    content::content_file_type::EContentFileType, misc::Mat4Extension,
+    content::{
+        blend_animations::BlendAnimations,
+        content_file_type::{EContentFileType, find_content_by_type_ref_map},
+    },
+    misc::Mat4Extension,
     resource_manager::ResourceManager,
 };
 use downcast_rs::Downcast;
 use dyn_clone::DynClone;
 use rs_artifact::{
-    asset::Asset,
     skeleton::{Skeleton, SkeletonBone},
     skeleton_animation::SkeletonAnimation,
 };
@@ -271,39 +274,24 @@ impl SingleSkeletonAnimationProvider {
     pub fn from(
         skeleton_url: &url::Url,
         animation_url: &url::Url,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) -> Option<SingleSkeletonAnimationProvider> {
-        let Some(animation_content) = files.iter().find_map(|x| {
-            if let EContentFileType::SkeletonAnimation(x) = x {
-                if &x.borrow().get_url() != animation_url {
-                    return None;
-                }
-                return Some(x);
-            } else {
-                return None;
-            };
-        }) else {
+        let Some(animation_content) = find_content_by_type_ref_map::<
+            crate::content::skeleton_animation::SkeletonAnimation,
+        >(files, animation_url) else {
             return None;
         };
-        let Some(skeleton_content) = files.iter().find_map(|x| {
-            if let EContentFileType::Skeleton(x) = x {
-                if &x.borrow().get_url() != skeleton_url {
-                    return None;
-                }
-                return Some(x);
-            } else {
-                return None;
-            };
-        }) else {
-            return None;
-        };
-        let resource_manager = ResourceManager::default();
-        let Some(skeleton) = resource_manager.get_skeleton(&skeleton_content.borrow().asset_url)
+        let Some(skeleton_content) =
+            find_content_by_type_ref_map::<crate::content::skeleton::Skeleton>(files, skeleton_url)
         else {
             return None;
         };
+        let resource_manager = ResourceManager::default();
+        let Some(skeleton) = resource_manager.get_skeleton(&skeleton_content.asset_url) else {
+            return None;
+        };
         let Some(skeleton_animation) =
-            resource_manager.get_skeleton_animation(&animation_content.borrow().asset_url)
+            resource_manager.get_skeleton_animation(&animation_content.asset_url)
         else {
             return None;
         };
@@ -350,39 +338,22 @@ impl BlendSkeletonAnimationsProvider {
     pub fn from(
         skeleton_url: &url::Url,
         blend_animation_url: &url::Url,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) -> Option<BlendSkeletonAnimationsProvider> {
-        let Some(blend_animation_content) = files.iter().find_map(|x| {
-            if let EContentFileType::BlendAnimations(x) = x {
-                if &x.borrow().get_url() != blend_animation_url {
-                    return None;
-                }
-                return Some(x);
-            } else {
-                return None;
-            };
-        }) else {
-            return None;
-        };
-
-        let blend_animation = blend_animation_content.borrow();
-
-        let Some(skeleton_content) = files.iter().find_map(|x| {
-            if let EContentFileType::Skeleton(x) = x {
-                if &x.borrow().get_url() != skeleton_url {
-                    return None;
-                }
-                return Some(x);
-            } else {
-                return None;
-            };
-        }) else {
-            return None;
-        };
-        let resource_manager = ResourceManager::default();
-
-        let Some(skeleton) = resource_manager.get_skeleton(&skeleton_content.borrow().asset_url)
+        let Some(blend_animation) =
+            find_content_by_type_ref_map::<BlendAnimations>(files, blend_animation_url)
         else {
+            return None;
+        };
+
+        let Some(content_skeleton) =
+            find_content_by_type_ref_map::<crate::content::skeleton::Skeleton>(files, skeleton_url)
+        else {
+            return None;
+        };
+
+        let resource_manager = ResourceManager::default();
+        let Some(skeleton) = resource_manager.get_skeleton(&content_skeleton.asset_url) else {
             return None;
         };
 
@@ -391,20 +362,11 @@ impl BlendSkeletonAnimationsProvider {
             Vec::with_capacity(blend_animation.channels.len());
 
         for channel in blend_animation.channels.iter() {
-            let search_url = &channel.animation_url;
-            let find_animation_content = files.iter().find(|x| match x {
-                EContentFileType::SkeletonAnimation(rc) => &rc.borrow().url == search_url,
-                _ => false,
-            });
-            let Some(find_animation_content) = find_animation_content else {
+            let Some(find_animation_content) = find_content_by_type_ref_map::<
+                crate::content::skeleton_animation::SkeletonAnimation,
+            >(files, &channel.animation_url) else {
                 return None;
             };
-            let EContentFileType::SkeletonAnimation(find_animation_content) =
-                find_animation_content
-            else {
-                return None;
-            };
-            let find_animation_content = find_animation_content.borrow();
             let skeleton_animation_asset =
                 resource_manager.get_skeleton_animation(&find_animation_content.asset_url);
             let Some(skeleton_animation_asset) = skeleton_animation_asset else {

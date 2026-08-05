@@ -1,4 +1,6 @@
+use std::any::TypeId;
 use crate::{
+    content_edit::ContentEdit,
     data_source::{AssetFile, AssetFolder},
     thumbnail_cache::ThumbnailCache,
 };
@@ -11,12 +13,10 @@ pub enum EClickItemType {
     Folder(AssetFolder),
     File(AssetFile),
     SingleClickFile(AssetFile),
-    CreateTexture(AssetFile),
-    CreateMediaSource(AssetFile),
     PlaySound(AssetFile),
-    CreateSound(AssetFile),
     ImportAsActor(AssetFile),
     Back,
+    CreateContent(TypeId, AssetFile),
 }
 
 pub fn draw(
@@ -26,6 +26,7 @@ pub fn draw(
     asset_folder: Option<&AssetFolder>,
     highlight_file: Option<&AssetFile>,
     thumbnail_cache: &mut ThumbnailCache,
+    content_edit: &mut ContentEdit,
 ) -> Option<EClickItemType> {
     let mut click_back: Option<EClickItemType> = None;
     let mut click_asset: Option<EClickItemType> = None;
@@ -62,8 +63,13 @@ pub fn draw(
                                 },
                             );
                         });
-                        click_asset =
-                            draw_content(ui, asset_folder, highlight_file, thumbnail_cache);
+                        click_asset = draw_content(
+                            ui,
+                            asset_folder,
+                            highlight_file,
+                            thumbnail_cache,
+                            content_edit,
+                        );
                     });
                 });
             }
@@ -82,6 +88,7 @@ fn draw_content(
     asset_folder: &AssetFolder,
     highlight_file: Option<&AssetFile>,
     thumbnail_cache: &mut ThumbnailCache,
+    content_edit: &mut ContentEdit,
 ) -> Option<EClickItemType> {
     let mut total_items: Vec<EAssetItem> = vec![];
     for folder in &asset_folder.folders {
@@ -119,6 +126,16 @@ fn draw_content(
                         });
                     }
                     EAssetItem::AssetFile(file) => {
+                        let mut supported: Vec<(std::any::TypeId, String)> = vec![];
+                        for (type_id, editable) in content_edit.editables() {
+                            if editable.is_support_asset_file(*file)
+                                && let Some(display_name) = editable.display_name_for_creation()
+                            {
+                                supported.push((type_id.clone(), display_name.to_string()));
+                                break;
+                            }
+                        }
+
                         let file = *file;
                         ui.push_id(file.name.clone(), |ui| {
                             ui.vertical(|ui| {
@@ -142,62 +159,53 @@ fn draw_content(
                                 if response.double_clicked() {
                                     click_item = Some(EClickItemType::File(file.clone()));
                                 }
-                                match file.get_file_type() {
-                                    EFileType::Fbx
-                                    | EFileType::Glb
-                                    | EFileType::Blend
-                                    | EFileType::Dae => {
-                                        response.context_menu(|ui| {
-                                            highlight_item =
-                                                Some(EClickItemType::SingleClickFile(file.clone()));
-                                            if ui.button(t!("Import as actor")).clicked() {
-                                                click_item = Some(EClickItemType::ImportAsActor(
-                                                    file.clone(),
-                                                ));
-                                                ui.close_kind(egui::UiKind::Menu);
-                                            }
-                                        });
-                                    }
-                                    EFileType::WAV | EFileType::MP3 => {
-                                        response.context_menu(|ui| {
-                                            highlight_item =
-                                                Some(EClickItemType::SingleClickFile(file.clone()));
-                                            if ui.button(t!("Create sound")).clicked() {
-                                                click_item =
-                                                    Some(EClickItemType::CreateSound(file.clone()));
-                                                ui.close_kind(egui::UiKind::Menu);
-                                            }
-                                        });
-                                    }
-                                    EFileType::Jpeg
-                                    | EFileType::Jpg
-                                    | EFileType::Png
-                                    | EFileType::Exr
-                                    | EFileType::Hdr => {
-                                        response.context_menu(|ui| {
-                                            highlight_item =
-                                                Some(EClickItemType::SingleClickFile(file.clone()));
-                                            if ui.button(t!("Create texture")).clicked() {
-                                                click_item = Some(EClickItemType::CreateTexture(
-                                                    file.clone(),
-                                                ));
-                                                ui.close_kind(egui::UiKind::Menu);
-                                            }
-                                        });
-                                    }
-                                    EFileType::Mp4 => {
-                                        response.context_menu(|ui| {
-                                            highlight_item =
-                                                Some(EClickItemType::SingleClickFile(file.clone()));
-                                            if ui.button(t!("Create media source")).clicked() {
-                                                click_item = Some(
-                                                    EClickItemType::CreateMediaSource(file.clone()),
+                                if supported.is_empty() {
+                                    match file.get_file_type() {
+                                        EFileType::Fbx
+                                        | EFileType::Glb
+                                        | EFileType::Blend
+                                        | EFileType::Dae => {
+                                            response.context_menu(|ui| {
+                                                highlight_item = Some(
+                                                    EClickItemType::SingleClickFile(file.clone()),
                                                 );
-                                                ui.close_kind(egui::UiKind::Menu);
+                                                if ui.button(t!("Import as actor")).clicked() {
+                                                    click_item = Some(
+                                                        EClickItemType::ImportAsActor(file.clone()),
+                                                    );
+                                                    ui.close_kind(egui::UiKind::Menu);
+                                                }
+                                            });
+                                        }
+                                        EFileType::WAV
+                                        | EFileType::MP3
+                                        | EFileType::Jpeg
+                                        | EFileType::Jpg
+                                        | EFileType::Png
+                                        | EFileType::Exr
+                                        | EFileType::Hdr
+                                        | EFileType::Mp4
+                                        | EFileType::Texture(_) => {}
+                                    }
+                                } else {
+                                    response.context_menu(|ui| {
+                                        ui.menu_button(t!("Create"), |ui| {
+                                            for (id, display_name) in supported {
+                                                highlight_item = Some(
+                                                    EClickItemType::SingleClickFile(file.clone()),
+                                                );
+                                                if ui.button(display_name).clicked() {
+                                                    click_item =
+                                                        Some(EClickItemType::CreateContent(
+                                                            id,
+                                                            file.clone(),
+                                                        ));
+                                                    ui.close_kind(egui::UiKind::Menu);
+                                                }
+                                                break;
                                             }
                                         });
-                                    }
-                                    EFileType::Texture(_) => unimplemented!(),
+                                    });
                                 }
                             });
                         });

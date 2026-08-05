@@ -4,8 +4,10 @@ use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
 use anyhow::Context;
 use anyhow::anyhow;
+use rs_content::TypedContent;
+use rs_engine::content::skeleton_mesh::SkeletonMesh;
 use rs_engine::thread_pool::ThreadPool;
-use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
+use rs_foundation::new::MultipleThreadMutType;
 use rs_model_loader::model_loader::ModelLoader;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
@@ -14,7 +16,7 @@ type ResultType = Result<rs_artifact::skin_mesh::SkinMesh, anyhow::Error>;
 
 pub(crate) struct LoadSkeletonMesh<'a> {
     _loading_context: PreLoadingContext<'a>,
-    _content: SingleThreadMutType<rs_engine::content::skeleton_mesh::SkeletonMesh>,
+    _content: TypedContent<SkeletonMesh>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -40,7 +42,7 @@ impl<'a> PostLoading for LoadSkeletonMesh<'a> {
 impl<'a> LoadSkeletonMesh<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        content: SingleThreadMutType<rs_engine::content::skeleton_mesh::SkeletonMesh>,
+        content: TypedContent<SkeletonMesh>,
         scenes: MultipleThreadMutType<HashMap<PathBuf, SceneWrapper>>,
     ) -> Option<LoadSkeletonMesh<'a>> {
         let maintain = content.clone();

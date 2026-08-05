@@ -29,7 +29,7 @@ impl Engine {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rs_engine_Engine_set_view_mode(engine: *mut std::ffi::c_void, mode: i32) {
     let engine: &mut Engine = unsafe { std::mem::transmute(engine) };
     let engine: &mut crate::engine::Engine = unsafe { std::mem::transmute(engine.borrow_mut) };

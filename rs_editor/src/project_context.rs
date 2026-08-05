@@ -1,29 +1,24 @@
 use crate::{
     build_config::{BuildConfig, EArchType, EBuildPlatformType, EBuildType},
+    content_edit::ContentEdit,
     project::{ASSET_FOLDER_NAME, CONTENT_FOLDER_NAME, Project},
 };
 use anyhow::{Context, anyhow};
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_mini::{DebouncedEvent, Debouncer};
 use rs_artifact::{
-    EEndianType, artifact::ArtifactAssetEncoder, material::MaterialInfo,
-    shader_source_code::ShaderSourceCode, sound::ESoundFileType,
+    EEndianType, artifact::ArtifactAssetEncoder, shader_source_code::ShaderSourceCode,
 };
 use rs_content_manager::content_manager::ContentManager;
-use rs_engine::{
-    ASSET_SCHEME, content::content_file_type::EContentFileType, resource_manager::ResourceManager,
-    thread_pool::ThreadPool,
-};
+use rs_engine::{ASSET_SCHEME, thread_pool::ThreadPool};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use rs_hotreload_plugin::hot_reload::HotReload;
 use rs_model_loader::model_loader::ModelLoader;
 use rs_module::types::ModuleManager;
-use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     io::Write,
-    ops::Deref,
     path::{Path, PathBuf},
 };
 
@@ -340,7 +335,11 @@ impl ProjectContext {
         Ok(path)
     }
 
-    pub fn export(&mut self, model_loader: &mut ModelLoader) -> anyhow::Result<PathBuf> {
+    pub fn export(
+        &mut self,
+        model_loader: &mut ModelLoader,
+        content_edit: &mut ContentEdit,
+    ) -> anyhow::Result<PathBuf> {
         let _span = tracy_client::span!();
 
         let output_folder_path = self.try_create_build_dir()?;
@@ -348,7 +347,6 @@ impl ProjectContext {
             std::fs::create_dir(output_folder_path.clone())?;
         }
         let output_filename = "main.rs";
-        let project_folder_path = self.get_project_folder_path();
 
         let mut artifact_asset_encoder = ArtifactAssetEncoder::new(
             Some(EEndianType::Little),
@@ -356,260 +354,23 @@ impl ProjectContext {
             &output_folder_path.join(output_filename),
         );
 
-        let mut images: HashMap<url::Url, rs_artifact::image::Image> = HashMap::new();
         let mut shader_source_codes: HashMap<
             url::Url,
             rs_artifact::shader_source_code::ShaderSourceCode,
         > = HashMap::new();
-        let mut static_meshes: HashMap<url::Url, rs_artifact::static_mesh::StaticMesh> =
+        let mut associated_assets: HashMap<url::Url, Box<dyn rs_artifact::asset::Asset>> =
             HashMap::new();
-        let mut skin_meshes: HashMap<url::Url, rs_artifact::skin_mesh::SkinMesh> = HashMap::new();
-        let mut skeletons: HashMap<url::Url, rs_artifact::skeleton::Skeleton> = HashMap::new();
-        let mut skeleton_animations: HashMap<
-            url::Url,
-            rs_artifact::skeleton_animation::SkeletonAnimation,
-        > = HashMap::new();
-        let mut ibl_bakings: HashMap<url::Url, rs_artifact::ibl_baking::IBLBaking> = HashMap::new();
-        let mut materials: HashMap<url::Url, rs_artifact::material::Material> = HashMap::new();
-        let mut material_contents: HashMap<url::Url, rs_engine::content::material::Material> =
-            HashMap::new();
-        let mut particle_systems: HashMap<
-            url::Url,
-            rs_engine::content::particle_system::ParticleSystem,
-        > = HashMap::new();
-        let mut sound_resources: HashMap<url::Url, rs_artifact::sound::Sound> = HashMap::new();
-        let mut sounds: HashMap<url::Url, rs_engine::content::sound::Sound> = HashMap::new();
 
-        let mut curves: HashMap<url::Url, rs_engine::content::curve::Curve> = HashMap::new();
-        let mut blend_animations: HashMap<
-            url::Url,
-            rs_engine::content::blend_animations::BlendAnimations,
-        > = HashMap::new();
-
-        let mut material_paramenters_collections: HashMap<
-            url::Url,
-            rs_engine::content::material_paramenters_collection::MaterialParamentersCollection,
-        > = HashMap::new();
-
-        for file in self.content_manager.borrow().content_files() {
-            match file {
-                EContentFileType::StaticMesh(asset) => {
-                    {
-                        let asset = asset.borrow();
-                        let file_path = self
-                            .get_asset_folder_path()
-                            .join(&asset.asset_info.relative_path);
-                        model_loader
-                            .load_scene_from_file_and_cache(&file_path)
-                            .unwrap();
-                        let loaded_static_mesh = model_loader
-                            .to_runtime_cache_static_mesh(
-                                &asset,
-                                &self.get_asset_folder_path(),
-                                ResourceManager::default(),
-                            )
-                            .expect("Loaded");
-                        static_meshes.insert(
-                            loaded_static_mesh.url.clone(),
-                            loaded_static_mesh.deref().clone(),
-                        );
-                    }
-                    artifact_asset_encoder.encode(&*asset.borrow());
-                }
-                EContentFileType::SkeletonMesh(asset) => {
-                    let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
-                    model_loader
-                        .load_scene_from_file_and_cache(&file_path)
-                        .unwrap();
-                    let loaded_skin_mesh = model_loader.to_runtime_cache_skin_mesh(
-                        &asset.borrow(),
-                        &project_folder_path,
-                        ResourceManager::default(),
-                    );
-                    skin_meshes.insert(
-                        loaded_skin_mesh.url.clone(),
-                        loaded_skin_mesh.deref().clone(),
-                    );
-
-                    artifact_asset_encoder.encode(&*asset.borrow());
-                }
-                EContentFileType::SkeletonAnimation(asset) => {
-                    let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
-                    model_loader
-                        .load_scene_from_file_and_cache(&file_path)
-                        .unwrap();
-                    let loaded_skeleton_animation = model_loader
-                        .to_runtime_cache_skeleton_animation(
-                            asset.clone(),
-                            &project_folder_path,
-                            ResourceManager::default(),
-                        );
-                    skeleton_animations.insert(
-                        loaded_skeleton_animation.url.clone(),
-                        loaded_skeleton_animation.deref().clone(),
-                    );
-
-                    artifact_asset_encoder.encode(&*asset.borrow());
-                }
-                EContentFileType::Skeleton(asset) => {
-                    let file_path = project_folder_path.join(&asset.borrow().get_relative_path());
-                    model_loader
-                        .load_scene_from_file_and_cache(&file_path)
-                        .unwrap();
-                    let loaded_skeleton = model_loader.to_runtime_cache_skeleton(
-                        asset.clone(),
-                        &project_folder_path,
-                        ResourceManager::default(),
-                    );
-                    skeletons.insert(loaded_skeleton.url.clone(), loaded_skeleton.deref().clone());
-
-                    artifact_asset_encoder.encode(&*asset.borrow());
-                }
-                EContentFileType::Texture(asset) => {
-                    let asset = asset.borrow();
-                    if let Some(image_reference) = &asset.image_reference {
-                        let absolute_image_file_path = self.get_asset_path_by_url(image_reference);
-
-                        let buffer = std::fs::read(absolute_image_file_path.clone()).context(
-                            format!("Failed to read from {:?}", absolute_image_file_path),
-                        )?;
-                        let _ = image::load_from_memory(&buffer).context(format!(
-                            "{:?} is not a valid image file.",
-                            absolute_image_file_path
-                        ))?;
-                        let format = image::guess_format(&buffer)?;
-                        let image = rs_artifact::image::Image {
-                            url: image_reference.clone(),
-                            image_format: rs_artifact::image::ImageFormat::from_external_format(
-                                format,
-                            ),
-                            data: buffer,
-                        };
-                        images.insert(image_reference.clone(), image);
-                    }
-                    artifact_asset_encoder.encode(&*asset);
-                }
-                EContentFileType::Level(asset) => {
-                    artifact_asset_encoder.encode(&*asset.borrow());
-                }
-                EContentFileType::Material(material_content) => {
-                    let find = self
-                        .project
-                        .materials
-                        .iter()
-                        .find(|x| x.borrow().url == material_content.borrow().asset_url)
-                        .cloned();
-                    if let Some(material_editor) = find {
-                        let material_editor = material_editor.borrow();
-                        let snarl = &material_editor.snarl;
-                        let paramenters = &material_editor.paramenters;
-                        if let Ok(resolve_result) = crate::material_resolve::resolve(
-                            self.module_manager.clone(),
-                            Some(&material_content.borrow().url),
-                            snarl,
-                            MaterialOptions::all(),
-                            paramenters,
-                        ) {
-                            let mut shader_code: HashMap<MaterialOptions, String> = HashMap::new();
-                            let mut material_info: HashMap<MaterialOptions, MaterialInfo> =
-                                HashMap::new();
-
-                            for (option, result) in resolve_result {
-                                shader_code.insert(option.clone(), result.shader_code);
-                                material_info.insert(option, result.material_info);
-                            }
-
-                            materials.insert(
-                                material_content.borrow().asset_url.clone(),
-                                rs_artifact::material::Material {
-                                    url: material_content.borrow().asset_url.clone(),
-                                    code: shader_code,
-                                    material_info: material_info,
-                                },
-                            );
-                            material_contents.insert(
-                                material_content.borrow().url.clone(),
-                                rs_engine::content::material::Material::new(
-                                    material_content.borrow().url.clone(),
-                                    material_content.borrow().asset_url.clone(),
-                                ),
-                            );
-                        }
-                    }
-                }
-                EContentFileType::IBL(ibl) => {
-                    let ibl_baking = (|| {
-                        let url = ibl.borrow().url.clone();
-                        let image_reference = &ibl.borrow().image_reference;
-                        let Some(image_reference) = image_reference.as_ref() else {
-                            return Ok(None);
-                        };
-                        let file_path = project_folder_path.join(image_reference);
-                        if !file_path.exists() {
-                            return Err(anyhow!("The file is not exist"));
-                        }
-                        if !self.get_ibl_bake_cache_dir(image_reference).exists() {
-                            return Err(anyhow!("The file is not exist"));
-                        }
-                        let name = rs_engine::url_extension::UrlExtension::get_name_in_editor(&url);
-                        let ibl_baking = rs_artifact::ibl_baking::IBLBaking {
-                            name,
-                            url: url.clone(),
-                            brdf_data: std::fs::read(
-                                self.get_ibl_bake_cache_dir(image_reference)
-                                    .join("brdf.dds"),
-                            )?,
-                            pre_filter_data: std::fs::read(
-                                self.get_ibl_bake_cache_dir(image_reference)
-                                    .join("pre_filter.dds"),
-                            )?,
-                            irradiance_data: std::fs::read(
-                                self.get_ibl_bake_cache_dir(image_reference)
-                                    .join("irradiance.dds"),
-                            )?,
-                        };
-                        Ok(Some(ibl_baking))
-                    })()?;
-                    if let Some(ibl_baking) = ibl_baking {
-                        ibl_bakings.insert(ibl_baking.url.clone(), ibl_baking);
-                    }
-                }
-                EContentFileType::ParticleSystem(particle_system) => {
-                    let particle_system = particle_system.borrow();
-                    particle_systems.insert(particle_system.url.clone(), particle_system.clone());
-                }
-                EContentFileType::Sound(sound) => {
-                    let sound = sound.borrow();
-                    sounds.insert(sound.url.clone(), sound.clone());
-                    let path = self
-                        .get_asset_folder_path()
-                        .join(&sound.asset_info.relative_path);
-                    let data = std::fs::read(path)?;
-                    let sound_resource = rs_artifact::sound::Sound {
-                        url: sound.asset_info.get_url(),
-                        sound_file_type: ESoundFileType::Unknow,
-                        data,
-                    };
-                    sound_resources.insert(sound.asset_info.get_url(), sound_resource);
-                }
-                EContentFileType::Curve(curve) => {
-                    let curve = curve.borrow();
-                    curves.insert(curve.url.clone(), curve.clone());
-                }
-                EContentFileType::BlendAnimations(blend_animation) => {
-                    let blend_animation = blend_animation.borrow();
-                    blend_animations.insert(blend_animation.url.clone(), blend_animation.clone());
-                }
-                EContentFileType::MaterialParamentersCollection(
-                    material_paramenters_collection,
-                ) => {
-                    let material_paramenters_collection = material_paramenters_collection.borrow();
-                    material_paramenters_collections.insert(
-                        material_paramenters_collection.url.clone(),
-                        material_paramenters_collection.clone(),
-                    );
-                }
-                EContentFileType::RenderTarget2D(_) => todo!(),
+        for content in self.content_manager.borrow().content_files() {
+            let editable = content_edit.editable(content.borrow().as_ref());
+            if let Some(editable) = editable {
+                let _ = editable.export(
+                    content.clone(),
+                    &mut artifact_asset_encoder,
+                    &mut associated_assets,
+                    model_loader,
+                    self,
+                )?;
             }
         }
 
@@ -625,49 +386,7 @@ impl ProjectContext {
         }
 
         // FIXME: Out of memory
-        for asset in images.values() {
-            artifact_asset_encoder.encode(asset);
-        }
         for asset in shader_source_codes.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in static_meshes.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in skin_meshes.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in skeletons.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in skeleton_animations.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in ibl_bakings.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in materials.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in material_contents.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in particle_systems.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in sound_resources.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in sounds.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in curves.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in blend_animations.values() {
-            artifact_asset_encoder.encode(asset);
-        }
-        for asset in material_paramenters_collections.values() {
             artifact_asset_encoder.encode(asset);
         }
         let _ = artifact_asset_encoder.finish()?;

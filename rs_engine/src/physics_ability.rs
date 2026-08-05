@@ -1,5 +1,8 @@
 use crate::{
-    content::{content_file_type::EContentFileType, level::LevelPhysics},
+    content::{
+        content_file_type::{EContentFileType, find_content_by_type_ref_map},
+        level::LevelPhysics,
+    },
     engine::Engine,
     resource_manager::ResourceManager,
 };
@@ -12,7 +15,7 @@ use rapier3d::{
     },
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MeshOptions {
@@ -66,7 +69,7 @@ impl PhysicsAbility {
 
     fn shared_shape(
         initialization: &Initialization,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         resource_manager: ResourceManager,
     ) -> std::result::Result<SharedShape, String> {
         let shape: std::result::Result<SharedShape, String> = match &initialization.shape_type {
@@ -82,29 +85,33 @@ impl PhysicsAbility {
                 is_use_convex_decomposition,
             }) => {
                 let shape: std::result::Result<SharedShape, String>;
-                let mut static_mesh: Option<Arc<rs_artifact::static_mesh::StaticMesh>> = None;
 
-                for file in files {
-                    if let EContentFileType::StaticMesh(mesh) = file {
-                        let mesh = mesh.borrow();
-                        if Some(mesh.url.clone()) == *mesh_url {
-                            static_mesh = resource_manager
-                                .get_static_mesh(&mesh.asset_info.get_url())
-                                .ok();
-                            break;
-                        }
-                    }
-                }
+                let static_mesh = if let Some(static_mesh) = &mesh_url
+                    && let Some(mesh) = find_content_by_type_ref_map::<
+                        crate::content::static_mesh::StaticMesh,
+                    >(files, static_mesh)
+                {
+                    resource_manager
+                        .get_static_mesh(&mesh.asset_info.get_url())
+                        .ok()
+                } else {
+                    None
+                };
+
                 if let Some(static_mesh) = static_mesh {
                     shape = Self::shape_from_mesh(&static_mesh, *is_use_convex_decomposition)
                         .map_err(|err| format!("{}, url: {:?}", err.to_string(), *mesh_url));
                 } else {
                     let mut source_urls = vec![];
-                    for file in files {
-                        if let EContentFileType::StaticMesh(mesh) = file {
-                            let mesh = mesh.borrow();
-                            if Some(mesh.url.clone()) == *mesh_url {
-                                source_urls.push(mesh.asset_info.get_url());
+                    if let Some(mesh_url) = mesh_url {
+                        for (file_url, _) in files {
+                            if file_url == mesh_url {
+                                let mesh = find_content_by_type_ref_map::<
+                                    crate::content::static_mesh::StaticMesh,
+                                >(files, file_url);
+                                if let Some(mesh) = mesh {
+                                    source_urls.push(mesh.asset_info.get_url());
+                                }
                             }
                         }
                     }
@@ -123,7 +130,7 @@ impl PhysicsAbility {
         initialization: &Initialization,
         transformation: glam::Mat4,
         is_apply_simulate: bool,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         resource_manager: ResourceManager,
         level_physics: &mut LevelPhysics,
     ) -> PhysicsAbility {

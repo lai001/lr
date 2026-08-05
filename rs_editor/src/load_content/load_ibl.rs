@@ -3,14 +3,15 @@ use crate::{
     impl_default_load_future, impl_default_load_future_body, project_context::ProjectContext,
 };
 use anyhow::anyhow;
+use rs_content::TypedContent;
+use rs_engine::content::ibl::IBL;
 use rs_engine::thread_pool::ThreadPool;
-use rs_foundation::new::SingleThreadMutType;
 
 type ResultType = Result<rs_artifact::ibl_baking::IBLBaking, anyhow::Error>;
 
 pub struct LoadIBL<'a> {
     _loading_context: PreLoadingContext<'a>,
-    _content: SingleThreadMutType<rs_engine::content::ibl::IBL>,
+    _content: TypedContent<IBL>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -36,7 +37,7 @@ impl<'a> PostLoading for LoadIBL<'a> {
 impl<'a> LoadIBL<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        content: SingleThreadMutType<rs_engine::content::ibl::IBL>,
+        content: TypedContent<IBL>,
     ) -> Option<LoadIBL<'a>> {
         let maintain = content.clone();
         let ibl = content.borrow();

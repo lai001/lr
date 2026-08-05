@@ -1,8 +1,9 @@
 use crate::{handle::BufferHandle, player_viewport::PlayerViewport};
 use downcast_rs::{Downcast, impl_downcast};
 use rs_artifact::material::GroupBinding;
+use rs_content::TypedContent;
 use rs_render::command::{DrawObject, EBindingResource};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 pub trait Drawable: Downcast {
     fn get_draw_objects(&self) -> Vec<&EDrawObjectType>;
@@ -112,7 +113,7 @@ pub struct PBRBindingResources {
     pub(crate) material_parameters_collection_resources: HashMap<GroupBinding, EBindingResource>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MaterialDrawObject {
     pub(crate) id: u32,
     pub(crate) vertex_buffers: Vec<BufferHandle>,
@@ -126,7 +127,7 @@ pub struct MaterialDrawObject {
     pub(crate) user_textures_resources: Vec<EBindingResource>,
     pub(crate) user_paramenters: Vec<EBindingResource>,
 
-    pub(crate) material: Rc<RefCell<crate::content::material::Material>>,
+    pub(crate) material: TypedContent<crate::content::material::Material>,
     pub(crate) constants_buffer_handle: BufferHandle,
     pub(crate) skin_constants_buffer_handle: BufferHandle,
     pub(crate) virtual_texture_constants_buffer_handle: BufferHandle,
@@ -138,7 +139,7 @@ pub struct MaterialDrawObject {
     pub debug_group_label: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct StaticMeshMaterialDrawObject {
     pub(crate) id: u32,
     pub(crate) vertex_buffers: Vec<BufferHandle>,
@@ -150,7 +151,7 @@ pub struct StaticMeshMaterialDrawObject {
     pub(crate) user_textures_resources: Vec<EBindingResource>,
     pub(crate) user_paramenters: Vec<EBindingResource>,
 
-    pub(crate) material: Rc<RefCell<crate::content::material::Material>>,
+    pub(crate) material: TypedContent<crate::content::material::Material>,
     pub(crate) constants_buffer_handle: BufferHandle,
     pub(crate) virtual_texture_constants_buffer_handle: BufferHandle,
 

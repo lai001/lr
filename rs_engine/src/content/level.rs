@@ -18,7 +18,7 @@ use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use rs_core_minimal::name_generator::make_unique_name;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -360,7 +360,7 @@ impl crate::network::NetworkReplicated for Level {
         replicated: &Vec<u8>,
         calls: &Vec<u8>,
         engine: &mut crate::engine::Engine,
-        contents: &[crate::content::content_file_type::EContentFileType],
+        contents: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut crate::player_viewport::PlayerViewport,
     ) {
         let _ = replicated;
@@ -500,7 +500,7 @@ impl Level {
     pub fn initialize(
         &mut self,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         // assert!(self.runtime.is_none(), "{}", &self.url);
@@ -569,7 +569,7 @@ impl Level {
         &mut self,
         engine: &mut crate::engine::Engine,
         actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         for actor in actors {
@@ -582,7 +582,7 @@ impl Level {
         &mut self,
         actor: SingleThreadMutType<Actor>,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let Some(physics) = self.get_physics_mut() else {
             return;
@@ -691,11 +691,11 @@ impl Level {
     pub fn make_copy_for_standalone(
         &self,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        contents: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) -> Level {
         let _ = engine;
-        let _ = files;
+        let _ = contents;
         let _ = player_viewport;
         let ser_level = serde_json::to_string(self).unwrap();
         let copy_level: Level = serde_json::from_str(&ser_level).unwrap();
@@ -730,7 +730,7 @@ impl Level {
         &mut self,
         engine: &mut crate::engine::Engine,
         mut actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         self.init_actors(engine, actors.clone(), files, player_viewport);
@@ -919,7 +919,7 @@ impl Level {
         &mut self,
         actor: SingleThreadMutType<Actor>,
         engine: &mut crate::engine::Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         let actor = actor.borrow();
@@ -1015,7 +1015,7 @@ impl Level {
         &mut self,
         engine: &mut crate::engine::Engine,
         mut actors: Vec<SingleThreadMutType<crate::actor::Actor>>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         // FIXME: A network ID generated locally should not be used

@@ -119,6 +119,7 @@ task("code_workspace")
             local host = (get_config("host") and { get_config("host") } or { "windows" })[1]
             extraEnv["TARGET_CC"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android%d-clang.cmd", host, android_platform))
             extraEnv["TARGET_CXX"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/aarch64-linux-android%d-clang++.cmd", host, android_platform))
+            extraEnv["CLANG_PATH"] = path.join(ndk_path, format("toolchains/llvm/prebuilt/%s-x86_64/bin/clang.exe", host))
         end
 
         if launch_type == "editor" then

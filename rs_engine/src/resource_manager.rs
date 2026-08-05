@@ -13,6 +13,7 @@ use rs_artifact::{
 };
 use rs_core_minimal::name_generator;
 use rs_render::command::IBLTexturesKey;
+use serde::de::DeserializeOwned;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::{collections::HashMap, sync::Mutex};
@@ -265,7 +266,7 @@ impl STResourceManager {
         Ok(reader.get_artifact_file_header().resource_map.clone())
     }
 
-    fn get_resource<T: Asset>(
+    fn get_resource<T: Asset + DeserializeOwned>(
         &mut self,
         url: &url::Url,
         expected_resource_type: Option<EResourceType>,

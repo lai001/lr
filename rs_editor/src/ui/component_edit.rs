@@ -1,9 +1,10 @@
 use crate::ui::object_property_view::ObjectPropertyView;
 use egui::Ui;
 use rs_content_manager::content_manager::ContentManager;
+use rs_core_minimal::types::HasUrl;
 use rs_engine::{
     components::{component::Component, text_component::TextComponent},
-    content::content_file_type::EContentFileType,
+    content::render_target_2d::RenderTarget2D,
     engine::Engine,
     scene_node::SceneComponent,
 };
@@ -69,7 +70,7 @@ impl ComponentEditable for TextComponentEdit {
                 .content_files()
                 .iter()
                 .map(|rt| {
-                    if matches!(rt, EContentFileType::RenderTarget2D(_)) {
+                    if let Some(rt) = rt.borrow().downcast_ref::<RenderTarget2D>() {
                         return Some(rt.get_url());
                     }
                     return None;
@@ -87,7 +88,7 @@ impl ComponentEditable for TextComponentEdit {
                 component.set_render_target(
                     current_url.cloned(),
                     engine,
-                    content_manager.content_files(),
+                    &content_manager.content_map(),
                 );
             }
         }

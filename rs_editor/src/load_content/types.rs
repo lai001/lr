@@ -1,4 +1,5 @@
 use anyhow::Context;
+use rs_content_manager::content_manager::ContentManager;
 use rs_engine::resource_manager::ResourceManager;
 use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
 use rs_model_loader::model_loader::ModelLoader;
@@ -19,9 +20,10 @@ pub struct PreLoadingContext<'a> {
     pub resource_manager: &'a ResourceManager,
     pub project_context: &'a crate::project_context::ProjectContext,
     pub module_manager: SingleThreadMutType<rs_module::types::ModuleManager>,
+    pub content_manager: SingleThreadMutType<ContentManager>,
 }
 
-pub(crate) struct SceneWrapper(pub(crate) Arc<rs_assimp::scene::Scene<'static>>);
+pub struct SceneWrapper(pub Arc<rs_assimp::scene::Scene<'static>>);
 
 impl Debug for SceneWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

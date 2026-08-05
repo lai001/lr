@@ -26,7 +26,7 @@ impl Camera {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rs_engine_Camera_set_window_size(
     camera: *mut std::ffi::c_void,
     window_width: u32,
@@ -37,7 +37,7 @@ pub extern "C" fn rs_engine_Camera_set_window_size(
     camera.set_window_size(window_width, window_height);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rs_engine_Camera_drop(camera: *mut std::ffi::c_void) {
     unsafe {
         let _ = Box::from_raw(camera);

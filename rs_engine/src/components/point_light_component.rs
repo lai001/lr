@@ -14,7 +14,7 @@ use rs_render::{
     vertex_data_type::mesh_vertex::MeshVertex3,
 };
 use serde::{Deserialize, Serialize};
-use std::num::NonZeroUsize;
+use std::{collections::HashMap, num::NonZeroUsize};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct PointLight {
@@ -176,7 +176,7 @@ impl super::component::Component for PointLightComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;
@@ -207,7 +207,7 @@ impl super::component::Component for PointLightComponent {
     fn initialize(
         &mut self,
         engine: &mut crate::engine::Engine,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut crate::player_viewport::PlayerViewport,
     ) {
         let _ = files;
@@ -234,7 +234,7 @@ impl super::component::Component for PointLightComponent {
         &mut self,
         engine: &mut crate::engine::Engine,
         level_physics: &mut LevelPhysics,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;

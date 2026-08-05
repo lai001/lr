@@ -4,8 +4,9 @@ use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
 use anyhow::Context;
 use anyhow::anyhow;
+use rs_content::TypedContent;
 use rs_engine::thread_pool::ThreadPool;
-use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
+use rs_foundation::new::MultipleThreadMutType;
 use rs_metis::cluster::ClusterCollection;
 use rs_model_loader::model_loader::ModelLoader;
 use rs_render::command::{CreateMultipleResolutionMesh, RenderCommand};
@@ -21,7 +22,7 @@ type ResultType = Output;
 
 pub(crate) struct LoadStaticMesh<'a> {
     _loading_context: PreLoadingContext<'a>,
-    content: SingleThreadMutType<rs_engine::content::static_mesh::StaticMesh>,
+    content: TypedContent<rs_engine::content::static_mesh::StaticMesh>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -74,7 +75,7 @@ impl<'a> PostLoading for LoadStaticMesh<'a> {
 impl<'a> LoadStaticMesh<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        content: SingleThreadMutType<rs_engine::content::static_mesh::StaticMesh>,
+        content: TypedContent<rs_engine::content::static_mesh::StaticMesh>,
         scenes: MultipleThreadMutType<HashMap<PathBuf, SceneWrapper>>,
     ) -> Option<LoadStaticMesh<'a>> {
         let maintain = content.clone();

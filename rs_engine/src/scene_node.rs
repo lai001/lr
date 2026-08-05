@@ -11,7 +11,7 @@ use crate::{
 };
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 bitflags::bitflags! {
     #[derive(Clone)]
@@ -111,7 +111,7 @@ impl Component for SceneComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;
@@ -142,7 +142,7 @@ impl Component for SceneComponent {
     fn initialize(
         &mut self,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         #[cfg(feature = "network")]
@@ -164,7 +164,7 @@ impl Component for SceneComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;
@@ -430,7 +430,7 @@ impl SceneNode {
         &mut self,
         engine: &mut Engine,
         mut level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let parent_transformation = {
             let mut this_component = self.component_mut();

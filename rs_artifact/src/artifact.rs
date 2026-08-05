@@ -13,6 +13,7 @@ use crate::{
     static_mesh::StaticMesh,
 };
 use rs_core_minimal::settings::Settings;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{
@@ -111,7 +112,7 @@ pub fn encode_artifact_assets_disk<T>(
     target_path: &Path,
 ) -> Result<()>
 where
-    T: Asset,
+    T: Asset + Serialize,
 {
     let mut tasks: Vec<ResourceEncodeTask<Cursor<Vec<u8>>>> = Vec::new();
     for asset in assets {
@@ -143,7 +144,7 @@ impl ArtifactAssetEncoder {
 
     pub fn encode<T>(&mut self, asset: &T)
     where
-        T: Asset,
+        T: Asset + Serialize,
     {
         let asset_encoded_data =
             asset::encode_asset(asset.get_resource_type(), self.endian_type, asset).unwrap();
@@ -253,7 +254,7 @@ impl ArtifactReader {
         expected_resource_type: Option<EResourceType>,
     ) -> Result<T>
     where
-        T: Asset,
+        T: Asset + DeserializeOwned,
     {
         let resource_info = self.artifact_file_header.resource_map.get(url).ok_or(
             crate::error::Error::NotFound(Some(format!("Resource does not contain {}.", url))),

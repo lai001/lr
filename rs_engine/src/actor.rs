@@ -168,7 +168,7 @@ impl Actor {
     pub fn initialize(
         &mut self,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         #[cfg(feature = "network")]
@@ -187,7 +187,7 @@ impl Actor {
         &mut self,
         engine: &mut Engine,
         level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
             node.borrow_mut()
@@ -217,11 +217,9 @@ impl Actor {
     pub fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics) {
         self.update_components_world_transformation();
 
-        Actor::walk_node_mut(self.scene_node.clone(), {
-            &mut |node| {
-                let mut node = node.borrow_mut();
-                node.component_mut().tick(time, engine, level_physics);
-            }
+        Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
+            let mut node = node.borrow_mut();
+            node.component_mut().tick(time, engine, level_physics);
         });
     }
 
@@ -280,7 +278,7 @@ impl Actor {
         scene_node: &mut SceneNode,
         engine: &mut Engine,
         level_physics: Option<&mut crate::content::level::LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         if let Some(level_physics) = level_physics {
             scene_node.component_mut().on_post_update_transformation(
@@ -440,27 +438,23 @@ impl Actor {
         &mut self,
         visit: &mut impl FnMut(&mut dyn NetworkReplicated),
     ) {
-        Actor::walk_node_mut(self.scene_node.clone(), {
-            &mut |node| {
-                let mut node = node.borrow_mut();
-                let mut component = node.component_mut();
-                let network_replicated = component.as_network_replicated_mut();
-                if let Some(network_replicated) = network_replicated {
-                    visit(network_replicated);
-                }
+        Actor::walk_node_mut(self.scene_node.clone(), &mut |node| {
+            let mut node = node.borrow_mut();
+            let mut component = node.component_mut();
+            let network_replicated = component.as_network_replicated_mut();
+            if let Some(network_replicated) = network_replicated {
+                visit(network_replicated);
             }
         });
     }
 
     pub fn visit_network_replicated(&self, visit: &impl Fn(&dyn NetworkReplicated)) {
-        Actor::walk_node(self.scene_node.clone(), {
-            &|node| {
-                let node = node.borrow();
-                let component = node.component();
-                let network_replicated = component.as_network_replicated();
-                if let Some(network_replicated) = network_replicated {
-                    visit(network_replicated);
-                }
+        Actor::walk_node(self.scene_node.clone(), &|node| {
+            let node = node.borrow();
+            let component = node.component();
+            let network_replicated = component.as_network_replicated();
+            if let Some(network_replicated) = network_replicated {
+                visit(network_replicated);
             }
         });
     }

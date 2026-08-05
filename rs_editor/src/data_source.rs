@@ -3,6 +3,7 @@ use crate::{
     standalone_simulation_options::MultiplePlayerOptions,
     ui::{content_browser, curve_view::CurveViewDataSource, model_scene_view},
 };
+use rs_content::TypedContent;
 use rs_core_minimal::settings::Settings;
 use rs_engine::{
     console_cmd::ConsoleCmd, content::curve::Curve, file_type::EFileType, input_mode::EInputMode,
@@ -57,7 +58,7 @@ pub struct DataSource {
     pub current_asset_folder: Option<AssetFolder>,
     pub highlight_asset_file: Option<AssetFile>,
     pub is_level_view_open: bool,
-    pub level: Option<Rc<RefCell<rs_engine::content::level::Level>>>,
+    pub level: Option<TypedContent<rs_engine::content::level::Level>>,
     pub camera_view_matrix: glam::Mat4,
     pub camera_projection_matrix: glam::Mat4,
     pub content_data_source: content_browser::DataSource,
@@ -76,7 +77,7 @@ pub struct DataSource {
     pub is_debug_texture_view_open: bool,
     pub is_simulate_real_time: bool,
     pub model_scene_view_data: model_scene_view::DataSource,
-    pub opened_curve: Option<SingleThreadMutType<Curve>>,
+    pub opened_curve: Option<TypedContent<Curve>>,
     pub curve_data_source: CurveViewDataSource,
     pub is_gizmo_focused: bool,
     pub is_gizmo_setting_open: bool,

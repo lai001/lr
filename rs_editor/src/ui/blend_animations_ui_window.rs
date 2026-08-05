@@ -6,7 +6,9 @@ use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use anyhow::anyhow;
 use egui::Ui;
 use egui_winit::State;
+use rs_content::TypedContent;
 use rs_content_manager::content_manager::ContentManager;
+use rs_core_minimal::types::HasUrl;
 use rs_engine::{
     components::component::Component,
     content::{blend_animations::BlendAnimations, skeleton_mesh::SkeletonMesh},
@@ -37,10 +39,10 @@ pub struct BlendAnimationUIWindow {
     keys_detector: KeysDetector,
     input_mode: EInputMode,
     player_view_port: PlayerViewport,
-    blend_animation: SingleThreadMutType<BlendAnimations>,
+    blend_animation: TypedContent<BlendAnimations>,
     preview_skeleton_mesh_component: Option<SkeletonMeshComponent>,
     preview_skeleton_url: Option<url::Url>,
-    skeleton_meshes: Vec<SingleThreadMutType<SkeletonMesh>>,
+    skeleton_meshes: Vec<TypedContent<SkeletonMesh>>,
     content_manager: SingleThreadMutType<ContentManager>,
     start: std::time::Instant,
     level: rs_engine::content::level::Level,
@@ -54,7 +56,7 @@ impl BlendAnimationUIWindow {
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
         content_manager: SingleThreadMutType<ContentManager>,
-        blend_animation: SingleThreadMutType<BlendAnimations>,
+        blend_animation: TypedContent<BlendAnimations>,
     ) -> anyhow::Result<BlendAnimationUIWindow> {
         let window_context = window_manager.spwan_new_window(
             EWindowType::BlendAnimation,
@@ -119,7 +121,10 @@ impl BlendAnimationUIWindow {
         let files = content_manager.content_files();
         let mut urls = vec![];
         for file in files {
-            if let rs_engine::content::content_file_type::EContentFileType::Skeleton(_) = file {
+            if let Some(file) = file
+                .borrow()
+                .downcast_ref::<rs_engine::content::skeleton::Skeleton>()
+            {
                 let url = file.get_url();
                 urls.push(url);
             }
@@ -132,8 +137,9 @@ impl BlendAnimationUIWindow {
         let files = content_manager.content_files();
         let mut urls = vec![];
         for file in files {
-            if let rs_engine::content::content_file_type::EContentFileType::SkeletonAnimation(_) =
-                file
+            if let Some(file) =
+                file.borrow()
+                    .downcast_ref::<rs_engine::content::skeleton_animation::SkeletonAnimation>()
             {
                 let url = file.get_url();
                 urls.push(url);
@@ -145,18 +151,15 @@ impl BlendAnimationUIWindow {
     fn collect_skeleton_meshes_with_skeleton_url(
         &self,
         skeleton_url: &url::Url,
-    ) -> Vec<SingleThreadMutType<SkeletonMesh>> {
+    ) -> Vec<TypedContent<SkeletonMesh>> {
         let content_manager = self.content_manager.borrow();
         let files = content_manager.content_files();
-        let skeleton_meshes: Vec<SingleThreadMutType<SkeletonMesh>> = files
+        let skeleton_meshes: Vec<TypedContent<SkeletonMesh>> = files
             .iter()
             .filter_map(|x| {
-                if let rs_engine::content::content_file_type::EContentFileType::SkeletonMesh(
-                    skeleton_mesh,
-                ) = x
-                {
-                    if &skeleton_mesh.borrow().skeleton_url == skeleton_url {
-                        Some(skeleton_mesh.clone())
+                if let Ok(skeleton_mesh) = TypedContent::<SkeletonMesh>::new(x.clone()) {
+                    if skeleton_mesh.borrow().skeleton_url == *skeleton_url {
+                        Some(skeleton_mesh)
                     } else {
                         None
                     }
@@ -184,10 +187,11 @@ impl BlendAnimationUIWindow {
             let new = current_value.cloned();
             event_type = Some(EventType::PreviewSkeletonUrl(new));
         }
+        let all_animation_urls = self.collect_animation_urls();
 
         let is_add = ui.button(t!("Add Animation Slot")).clicked();
         if is_add {
-            if let Some(animation_url) = self.collect_animation_urls().first().cloned() {
+            if let Some(animation_url) = all_animation_urls.first().cloned() {
                 event_type = Some(EventType::Add(animation_url));
             }
         }
@@ -204,7 +208,7 @@ impl BlendAnimationUIWindow {
                     &format!("{} {}", t!("Animation"), index),
                     &format!("{} {}", t!("Animation"), index),
                     current_value,
-                    self.collect_animation_urls(),
+                    all_animation_urls.clone(),
                 );
                 if is_changed {
                     event_type = Some(EventType::UpdateAnimation(index, current_value.clone()));
@@ -255,7 +259,7 @@ impl BlendAnimationUIWindow {
                         glam::Mat4::IDENTITY,
                     );
                     let content_manager = self.content_manager.borrow();
-                    let files = content_manager.content_files();
+                    let files = &content_manager.content_map();
                     skeleton_mesh_component.initialize(engine, files, &mut self.player_view_port);
                     self.preview_skeleton_mesh_component = Some(skeleton_mesh_component);
                 } else {
@@ -296,7 +300,7 @@ impl BlendAnimationUIWindow {
         }
         if let Some(component) = self.preview_skeleton_mesh_component.as_mut() {
             let content_manager = self.content_manager.borrow();
-            let files = content_manager.content_files();
+            let files = &content_manager.content_map();
             component.on_post_update_animation(files);
         }
     }

@@ -7,6 +7,7 @@ use crate::{
 use downcast_rs::{Downcast, impl_downcast};
 use dyn_clone::clone_trait_object;
 use rapier3d::{dynamics::RigidBodyHandle, geometry::ColliderHandle};
+use std::collections::HashMap;
 
 #[typetag::serde]
 pub trait Component: erased_serde::Serialize + Downcast + dyn_clone::DynClone {
@@ -24,7 +25,7 @@ pub trait Component: erased_serde::Serialize + Downcast + dyn_clone::DynClone {
         &mut self,
         engine: &mut Engine,
         level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     );
 
     fn set_final_transformation(&mut self, final_transformation: glam::Mat4);
@@ -36,7 +37,7 @@ pub trait Component: erased_serde::Serialize + Downcast + dyn_clone::DynClone {
     fn initialize(
         &mut self,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     );
 
@@ -44,7 +45,7 @@ pub trait Component: erased_serde::Serialize + Downcast + dyn_clone::DynClone {
         &mut self,
         engine: &mut Engine,
         level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     );
 
     fn tick(&mut self, time: f32, engine: &mut Engine, level_physics: &mut LevelPhysics);

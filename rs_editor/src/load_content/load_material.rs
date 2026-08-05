@@ -5,7 +5,8 @@ use crate::impl_default_load_future_body;
 use crate::material_resolve::resolve_task;
 use crate::ui::material_view::MaterialNode;
 use rs_artifact::bincode_legacy;
-use rs_foundation::new::SingleThreadMutType;
+use rs_content::TypedContent;
+use rs_engine::content::material::Material;
 use rs_render_types::MaterialOptions;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -45,8 +46,8 @@ type ResultType =
 
 pub struct LoadMaterial<'a> {
     _loading_context: PreLoadingContext<'a>,
-    material_content: SingleThreadMutType<rs_engine::content::material::Material>,
-    material_editor: SingleThreadMutType<crate::material::Material>,
+    material_content: TypedContent<Material>,
+    material_editor: rs_foundation::new::SingleThreadMutType<crate::material::Material>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -97,7 +98,7 @@ impl<'a> PostLoading for LoadMaterial<'a> {
 impl<'a> LoadMaterial<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        material_content: SingleThreadMutType<rs_engine::content::material::Material>,
+        material_content: TypedContent<Material>,
     ) -> Option<LoadMaterial<'a>> {
         let url = material_content.borrow().asset_url.clone();
         let Some(material_editor) = loading_context
@@ -114,9 +115,10 @@ impl<'a> LoadMaterial<'a> {
             SnarlWrapper::copy_snarl_from(url.clone(), &material_editor.borrow().snarl);
         let paramenters = material_editor.borrow().paramenters.clone();
         let module_manager = loading_context.module_manager.clone();
-        // TODO:
+        let content_manager = loading_context.content_manager.clone();
         let mut task = resolve_task(
             module_manager,
+            content_manager,
             url,
             snarl_wrapper.get(),
             MaterialOptions::all(),

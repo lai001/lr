@@ -5,9 +5,13 @@ use rs_artifact::{
     material::{GroupBinding, MaterialInfo, MaterialParamentersCollectionBinding, TextureBinding},
     material_paramenters::{BaseDataValueType, StructField},
 };
+use rs_content_manager::content_manager::ContentManager;
 use rs_editor_core::types::CreationTask;
 use rs_engine::{
-    content::material_paramenters_collection::MaterialParamentersCollection,
+    content::{
+        content_file_type::collect_typed_contents,
+        material_paramenters_collection::MaterialParamentersCollection,
+    },
     url_extension::UrlExtension,
 };
 use rs_foundation::new::SingleThreadMutType;
@@ -16,7 +20,6 @@ use rs_render_types::MaterialOptions;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
-    rc::Rc,
 };
 
 struct ResolveResultInternal {
@@ -41,7 +44,7 @@ struct ResolveContext<'a> {
     nodes: HashMap<NodeId, NodeIOInfo>,
     current_group: usize,
     current_binding: usize,
-    used_material_paramenters_collections: Vec<SingleThreadMutType<MaterialParamentersCollection>>,
+    used_material_paramenters_collection_urls: Vec<url::Url>,
     material_paramenters: &'a rs_editor_core::material::Paramenters,
 }
 
@@ -80,7 +83,7 @@ impl<'a> ResolveContext<'a> {
             snarl,
             current_group: 0,
             current_binding: 0,
-            used_material_paramenters_collections: vec![],
+            used_material_paramenters_collection_urls: vec![],
             material_paramenters,
         }
     }
@@ -140,7 +143,11 @@ impl<'a> ResolveContext<'a> {
         }
     }
 
-    fn resolve(&mut self, options: &MaterialOptions) -> anyhow::Result<ResolveResult> {
+    fn resolve(
+        &mut self,
+        options: &MaterialOptions,
+        content_manager: &ContentManager,
+    ) -> anyhow::Result<ResolveResult> {
         let mut material_info = MaterialInfo {
             map_textures: HashSet::new(),
             virtual_textures: HashSet::new(),
@@ -226,14 +233,27 @@ impl<'a> ResolveContext<'a> {
         let shader_code = shader_code.replace("@USER_TEXTURES@", &texture_uniform_code);
 
         let mut material_paramenters_collection_uniform_code = "".to_string();
-        for material_paramenters_collection in self.used_material_paramenters_collections.iter() {
+        let all_content_files = content_manager.content_files();
+        let mut used_material_paramenters_collections =
+            collect_typed_contents::<MaterialParamentersCollection>(all_content_files);
+        used_material_paramenters_collections.retain(|x| {
+            self.used_material_paramenters_collection_urls
+                .contains(&x.borrow().url)
+        });
+        if used_material_paramenters_collections.len()
+            != self.used_material_paramenters_collection_urls.len()
+        {
+            return Err(anyhow!("The quantities don't match."));
+        }
+
+        for material_paramenters_collection in used_material_paramenters_collections.iter() {
             let uniform_struct_string = material_paramenters_collection_to_struct_string(
                 &material_paramenters_collection.borrow(),
             );
             material_paramenters_collection_uniform_code.push_str(&uniform_struct_string);
             material_paramenters_collection_uniform_code.push_str("\n");
         }
-        for material_paramenters_collection in self.used_material_paramenters_collections.iter() {
+        for material_paramenters_collection in used_material_paramenters_collections.iter() {
             let material_paramenters_collection = material_paramenters_collection.borrow();
             let url = material_paramenters_collection.url.clone();
             let type_text = material_paramenters_collection.url.get_name_in_editor();
@@ -551,18 +571,15 @@ impl<'a> ResolveContext<'a> {
                     (material_paramenters_collection.clone(), name)
                 {
                     let is_contain = self
-                        .used_material_paramenters_collections
+                        .used_material_paramenters_collection_urls
                         .iter()
-                        .find(|x| Rc::ptr_eq(&x, &material_paramenters_collection))
+                        .find(|x| **x == material_paramenters_collection)
                         .is_some();
                     if !is_contain {
-                        self.used_material_paramenters_collections
+                        self.used_material_paramenters_collection_urls
                             .push(material_paramenters_collection.clone());
                     }
-                    let type_text = material_paramenters_collection
-                        .borrow()
-                        .url
-                        .get_name_in_editor();
+                    let type_text = material_paramenters_collection.get_name_in_editor();
                     format!(
                         "var {} = material_paramenters_collection_uniform_{}.{};",
                         var_name, type_text, name
@@ -620,11 +637,13 @@ pub struct ResolveTask {
     options: Vec<MaterialOptions>,
     material_paramenters: rs_editor_core::material::Paramenters,
     tasks: HashMap<MaterialOptions, Box<dyn CreationTask>>,
+    content_manager: SingleThreadMutType<ContentManager>,
 }
 
 impl ResolveTask {
     fn new(
         module_manager: SingleThreadMutType<rs_module::types::ModuleManager>,
+        content_manager: SingleThreadMutType<ContentManager>,
         snarl: Snarl<MaterialNode>,
         material_url: url::Url,
         options: Vec<MaterialOptions>,
@@ -655,6 +674,7 @@ impl ResolveTask {
             options,
             material_paramenters,
             tasks,
+            content_manager,
         }
     }
 
@@ -674,10 +694,11 @@ impl ResolveTask {
             Ok(results)
         } else {
             let mut results: HashMap<MaterialOptions, ResolveResult> = HashMap::new();
+            let content_manager = self.content_manager.borrow();
             for option in &self.options {
                 let mut resolve_context =
                     ResolveContext::new(&self.snarl, &self.material_paramenters);
-                let result = resolve_context.resolve(&option)?;
+                let result = resolve_context.resolve(&option, &content_manager)?;
                 // let result = resolve_internal(snarl, &option)?;
                 results.insert(option.clone(), result);
             }
@@ -688,6 +709,7 @@ impl ResolveTask {
 
 pub fn resolve_task(
     module_manager: SingleThreadMutType<rs_module::types::ModuleManager>,
+    content_manager: SingleThreadMutType<ContentManager>,
     material_url: url::Url,
     snarl: Snarl<MaterialNode>,
     options: Vec<MaterialOptions>,
@@ -695,6 +717,7 @@ pub fn resolve_task(
 ) -> ResolveTask {
     ResolveTask::new(
         module_manager,
+        content_manager,
         snarl,
         material_url,
         options,
@@ -704,6 +727,7 @@ pub fn resolve_task(
 
 pub fn resolve(
     module_manager: SingleThreadMutType<rs_module::types::ModuleManager>,
+    content_manager: SingleThreadMutType<ContentManager>,
     material_url: Option<&url::Url>,
     snarl: &Snarl<MaterialNode>,
     options: Vec<MaterialOptions>,
@@ -721,9 +745,10 @@ pub fn resolve(
     }
 
     let mut results: HashMap<MaterialOptions, ResolveResult> = HashMap::new();
+    let content_manager = content_manager.borrow();
     for option in options {
         let mut resolve_context = ResolveContext::new(snarl, material_paramenters);
-        let result = resolve_context.resolve(&option)?;
+        let result = resolve_context.resolve(&option, &content_manager)?;
         // let result = resolve_internal(snarl, &option)?;
         results.insert(option, result);
     }

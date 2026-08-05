@@ -1,4 +1,5 @@
 use crate::component_factory::ComponentFactory;
+use crate::content_edit::{ContentEdit, UIContentPropertyEvent};
 use crate::data_source::{DataSource, MeshItem};
 use crate::editor_ui::load::ImageLoader;
 use crate::thumbnail_cache::ThumbnailCache;
@@ -13,9 +14,11 @@ use crate::ui::{
     project_settings, top_menu,
 };
 use egui::*;
+use rs_content::Content;
 use rs_content_manager::content_manager::ContentManager;
 use rs_engine::engine::Engine;
 use rs_engine::input_mode::EInputMode;
+use rs_foundation::new::SingleThreadMutType;
 use rs_localization::t;
 use rs_model_loader::model_loader::ModelLoader;
 use std::sync::Arc;
@@ -34,6 +37,11 @@ pub struct GizmoEvent {
     pub gizmo_result: Option<(GizmoResult, Vec<Transform>)>,
 }
 
+pub struct ContentPropertyViewEvent {
+    pub content: SingleThreadMutType<Box<dyn Content>>,
+    pub event: Box<dyn UIContentPropertyEvent>,
+}
+
 #[derive(Default)]
 pub struct ClickEvent {
     pub click_actor: Option<level_view::EClickEventType>,
@@ -44,6 +52,7 @@ pub struct ClickEvent {
     pub debug_textures_view_event: Option<debug_textures_view::EClickEventType>,
     pub project_settings_event: Option<project_settings::EEventType>,
     pub object_property_view_event: Option<object_property_view::EEventType>,
+    pub content_property_view_event: Option<ContentPropertyViewEvent>,
     pub gizmo_event: Option<GizmoEvent>,
 }
 
@@ -104,6 +113,7 @@ impl EditorUI {
         component_edit: &mut ComponentEdit,
         engine: &mut Engine,
         content_manager: &mut ContentManager,
+        content_edit: &mut ContentEdit,
     ) -> ClickEvent {
         let mut click = ClickEvent::default();
 
@@ -113,7 +123,7 @@ impl EditorUI {
                 window,
                 context,
                 &mut data_source.is_level_view_open,
-                &level.as_ref().borrow(),
+                &level.borrow(),
                 component_factory,
             );
         }
@@ -125,6 +135,7 @@ impl EditorUI {
             data_source.current_asset_folder.as_ref(),
             data_source.highlight_asset_file.as_ref(),
             &mut self.thumbnail_cache,
+            content_edit,
         );
 
         if let Some(selected_object) = self.object_property_view.selected_object.as_ref() {
@@ -205,7 +216,7 @@ impl EditorUI {
                 project_folder_path,
                 &mut data_source.content_data_source,
                 &mut self.thumbnail_cache,
-                // data_source.input_mode,
+                content_edit, // data_source.input_mode,
             );
         }
         if let Some(console_cmds) = &data_source.console_cmds {
@@ -230,7 +241,13 @@ impl EditorUI {
         .resizable(true)
         .default_size([250.0, 500.0])
         .show(context, |ui| {
-            self.content_item_property_view.draw(ui);
+            let event = self.content_item_property_view.draw(ui, content_edit);
+            if let Some(content) = self.content_item_property_view.content.clone() {
+                if let Some(event) = event {
+                    click.content_property_view_event =
+                        Some(ContentPropertyViewEvent { content, event });
+                }
+            }
         });
 
         Self::new_window(t!("Detail"), "Detail", data_source.input_mode)

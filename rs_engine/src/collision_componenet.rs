@@ -16,6 +16,7 @@ use rs_render::{
     vertex_data_type::mesh_vertex::MeshVertex3,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct Physics {
@@ -86,7 +87,7 @@ impl Component for CollisionComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let Some(level_physics) = level_physics else {
             return;
@@ -118,7 +119,7 @@ impl Component for CollisionComponent {
     fn initialize(
         &mut self,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         let _ = files;
@@ -180,7 +181,7 @@ impl Component for CollisionComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;
@@ -313,7 +314,7 @@ impl CollisionComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         self.initialize_physics(engine, level_physics, files);
     }

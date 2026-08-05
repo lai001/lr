@@ -77,11 +77,7 @@ impl ApplicationContext {
         let frame_sync = FrameSync::new(EOptions::FPS(60.0));
 
         let current_active_level = engine.new_main_level().unwrap();
-        let contents = engine
-            .content_files
-            .iter()
-            .map(|(_, x)| x.clone())
-            .collect();
+        let contents = engine.content_files.clone();
 
         #[cfg(feature = "plugin_shared_crate")]
         let plugins = rs_proc_macros::load_static_plugins!(rs_desktop_standalone);

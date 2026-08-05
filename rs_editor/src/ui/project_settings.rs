@@ -1,6 +1,9 @@
 use crate::ui::misc::ToUIString;
 use egui::{Context, Ui};
-use rs_core_minimal::settings::{Backends, EAntialiasType, PowerPreference, Settings};
+use rs_core_minimal::{
+    settings::{Backends, EAntialiasType, PowerPreference, Settings},
+    types::HasUrl,
+};
 use rs_engine::content::content_file_type::EContentFileType;
 use rs_foundation::new::SingleThreadMutType;
 use rs_localization::{self, t};
@@ -87,9 +90,15 @@ fn draw_content(
         let contents = contents.borrow();
         let urls: Vec<url::Url> = contents
             .iter()
-            .map(|x| match x {
-                EContentFileType::Level(level) => Some(level.borrow().url.clone()),
-                _ => None,
+            .map(|x| {
+                if let Some(level) = x
+                    .borrow()
+                    .downcast_ref::<rs_engine::content::level::Level>()
+                {
+                    Some(level.get_url())
+                } else {
+                    None
+                }
             })
             .flatten()
             .collect();

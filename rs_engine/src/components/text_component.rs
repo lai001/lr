@@ -1,6 +1,8 @@
 use crate::{
     build_built_in_resouce_url,
-    content::{content_file_type::EContentFileType, level::LevelPhysics},
+    content::{
+        content_file_type::EContentFileType, level::LevelPhysics, render_target_2d::RenderTarget2D,
+    },
     drawable::{Drawable, EDrawObjectType},
     engine::Engine,
     scene_node::SceneNode,
@@ -13,6 +15,7 @@ use rs_render::{
     egui_render::UICanvasType,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use winit::dpi::PhysicalSize;
 
 #[derive(Clone)]
@@ -64,28 +67,25 @@ impl TextComponent {
 
     fn custom_render_target(
         render_target: Option<url::Url>,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) -> Option<(PhysicalSize<u32>, crate::handle::TextureHandle)> {
         let rt = &render_target?;
-        for file in files {
-            match file {
-                EContentFileType::RenderTarget2D(render_target2d) => {
-                    let file_url = file.get_url();
-                    if file_url != *rt {
-                        continue;
-                    }
-                    let render_target2d = render_target2d.borrow();
-                    if render_target2d.format != Self::supported_foramt() {
-                        continue;
-                    }
-                    let texture_handle = render_target2d.texture_handle()?;
-                    return Some((
-                        PhysicalSize::new(render_target2d.width, render_target2d.height),
-                        texture_handle,
-                    ));
-                }
-                _ => {}
+        for (file_url, file) in files {
+            if file_url != rt {
+                continue;
             }
+            let file = file.borrow();
+            let Some(render_target2d) = file.downcast_ref::<RenderTarget2D>() else {
+                continue;
+            };
+            if render_target2d.format != Self::supported_foramt() {
+                continue;
+            }
+            let texture_handle = render_target2d.texture_handle()?;
+            return Some((
+                PhysicalSize::new(render_target2d.width, render_target2d.height),
+                texture_handle,
+            ));
         }
         return None;
     }
@@ -94,7 +94,7 @@ impl TextComponent {
         &mut self,
         render_target: Option<url::Url>,
         engine: &mut crate::engine::Engine,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         self.render_target = render_target;
         let Some(runtime) = &mut self.run_time else {
@@ -169,7 +169,7 @@ impl super::component::Component for TextComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;
@@ -200,7 +200,7 @@ impl super::component::Component for TextComponent {
     fn initialize(
         &mut self,
         engine: &mut crate::engine::Engine,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut crate::player_viewport::PlayerViewport,
     ) {
         let _ = player_viewport;
@@ -242,7 +242,7 @@ impl super::component::Component for TextComponent {
         &mut self,
         engine: &mut crate::engine::Engine,
         level_physics: &mut LevelPhysics,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;

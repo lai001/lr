@@ -2,9 +2,10 @@ use crate::content_folder::ContentFolder;
 use notify::ReadDirectoryChangesWatcher;
 use notify_debouncer_full::{DebouncedEvent, Debouncer, FileIdMap};
 use pathdiff::diff_paths;
+use rs_content::Content;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use rs_engine::{CONTENT_ROOT, CONTENT_SCHEME, content::content_file_type::EContentFileType};
-use rs_foundation::new::SingleThreadMut;
+use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -36,7 +37,7 @@ enum LoadResult {
 
 pub struct ContentManager {
     content_root_folder_path: PathBuf,
-    content_files: Vec<EContentFileType>,
+    content_files: Vec<SingleThreadMutType<Box<dyn rs_content::Content>>>,
     content_folders: HashMap<PathBuf, ContentFolder>,
     creators: HashMap<String, ContentCreator>,
     saver: HashMap<String, ContentSaver>,
@@ -57,32 +58,44 @@ impl ContentManager {
                 creators.insert(
                     stringify!($type_name).to_string(),
                     Box::new(|meta| {
-                        Ok(EContentFileType::$type_name(SingleThreadMut::new(
-                            serde_json::from_value(meta)?,
-                        )))
-                    }) as ContentCreator,
-                );
-
-                saver.insert(
-                    stringify!($type_name).to_string(),
-                    Box::new(|content| {
-                        if let EContentFileType::$type_name(inner) = content {
-                            Ok(serde_json::to_value(inner)?)
+                        let content: Box<dyn Content> = serde_json::from_value(meta)?;
+                        if content.is::<$type_name>() {
+                            Ok(SingleThreadMut::new(content))
                         } else {
                             Err(crate::error::Error::Other(
                                 "Content type mismatch".to_string(),
                             ))
                         }
-                    }) as ContentSaver,
+                    }) as ContentCreator,
+                );
+                saver.insert(
+                    stringify!($type_name).to_string(),
+                    Box::new(|content| Ok(serde_json::to_value(content)?)) as ContentSaver,
                 );
             }};
         }
+
+        type StaticMesh = rs_engine::content::static_mesh::StaticMesh;
+        type SkeletonMesh = rs_engine::content::skeleton_mesh::SkeletonMesh;
+        type SkeletonAnimation = rs_engine::content::skeleton_animation::SkeletonAnimation;
+        type Skeleton = rs_engine::content::skeleton::Skeleton;
+        type TextureFile = rs_engine::content::texture::TextureFile;
+        type Level = rs_engine::content::level::Level;
+        type Material = rs_engine::content::material::Material;
+        type IBL = rs_engine::content::ibl::IBL;
+        type ParticleSystem = rs_engine::content::particle_system::ParticleSystem;
+        type Sound = rs_engine::content::sound::Sound;
+        type Curve = rs_engine::content::curve::Curve;
+        type BlendAnimations = rs_engine::content::blend_animations::BlendAnimations;
+        type MaterialParamentersCollection =
+            rs_engine::content::material_paramenters_collection::MaterialParamentersCollection;
+        type RenderTarget2D = rs_engine::content::render_target_2d::RenderTarget2D;
 
         register_content_type!(StaticMesh);
         register_content_type!(SkeletonMesh);
         register_content_type!(SkeletonAnimation);
         register_content_type!(Skeleton);
-        register_content_type!(Texture);
+        register_content_type!(TextureFile);
         register_content_type!(Level);
         register_content_type!(Material);
         register_content_type!(IBL);
@@ -202,16 +215,16 @@ impl ContentManager {
     }
 
     pub fn save(&self, content: EContentFileType) -> crate::error::Result<()> {
-        let p = Self::try_create_path(&self.content_root_folder_path, &content.get_url())?;
+        let p = Self::try_create_path(&self.content_root_folder_path, &content.borrow().get_url())?;
 
-        let type_text = content.get_type_text();
+        let type_text = { content.borrow().get_type_text() };
         let save = self
             .saver
-            .get(&type_text)
+            .get(type_text)
             .ok_or(crate::error::Error::MissingValue(format!("{type_text}")))?;
         let content = save(content)?;
         let content = ContentMeta {
-            ty: type_text,
+            ty: type_text.to_string(),
             content,
         };
         let contents = serde_json::to_string_pretty(&content)?;
@@ -258,15 +271,11 @@ impl ContentManager {
             let creator = creators
                 .get(type_text)
                 .ok_or(crate::error::Error::MissingValue(format!(
-                    "No createor for {}",
-                    type_text
+                    "No createor for {}, fail to load {}",
+                    type_text,
+                    path.display()
                 )))?;
-            let content = object
-                .get("content")
-                .ok_or(crate::error::Error::MissingValue(
-                    "No content field".to_string(),
-                ))?;
-            let content = creator(content.clone())?;
+            let content = creator(object)?;
 
             let parent = path
                 .parent()
@@ -319,7 +328,7 @@ impl ContentManager {
             match self.save(content.clone()) {
                 Ok(_) => {}
                 Err(err) => {
-                    errors.insert(content.get_url(), err);
+                    errors.insert(content.borrow().get_url(), err);
                 }
             }
         }
@@ -337,16 +346,17 @@ impl ContentManager {
         self.file_debouncer = None;
     }
 
-    pub fn content_files_map(&self) -> HashMap<url::Url, EContentFileType> {
-        let mut map = HashMap::new();
-        for content in self.content_files.clone() {
-            map.insert(content.get_url(), content);
-        }
-        map
-    }
-
     pub fn content_files(&self) -> &[EContentFileType] {
         &self.content_files
+    }
+
+    pub fn content_map(&self) -> HashMap<url::Url, EContentFileType> {
+        let mut content_map = HashMap::new();
+        for content in &self.content_files {
+            let url = content.borrow().get_url();
+            content_map.insert(url, content.clone());
+        }
+        content_map
     }
 
     pub fn content_folders(&self) -> &HashMap<PathBuf, ContentFolder> {
@@ -364,11 +374,11 @@ impl ContentManager {
     ) -> HashMap<url::Url, crate::error::Error> {
         let mut errors = HashMap::new();
         for new_file in new_files {
-            let url = new_file.get_url();
+            let url = new_file.borrow().get_url();
             let urls = self
                 .content_files
                 .iter()
-                .map(|x| x.get_url())
+                .map(|x| x.borrow().get_url())
                 .collect::<Vec<url::Url>>();
             if !urls.contains(&url)
                 && let Some(path) = Self::get_path(&self.content_root_folder_path, &url)
@@ -391,7 +401,7 @@ impl ContentManager {
         let paths = contents
             .iter()
             .flat_map(|x| {
-                let path = Self::get_path(&content_root_folder_path, &x.get_url());
+                let path = Self::get_path(&content_root_folder_path, &x.borrow().get_url());
                 path
             })
             .collect::<Vec<PathBuf>>();
@@ -406,7 +416,8 @@ impl ContentManager {
     pub fn on_delete_by_paths(&mut self, paths: &[PathBuf]) {
         let content_root_folder_path = self.content_root_folder_path.clone();
         self.content_files.retain(|x| {
-            let Some(path) = Self::get_path(&content_root_folder_path, &x.get_url()) else {
+            let Some(path) = Self::get_path(&content_root_folder_path, &x.borrow().get_url())
+            else {
                 return true;
             };
             let is_remove = paths.contains(&path);

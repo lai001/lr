@@ -3,6 +3,7 @@ use crate::{
     engine::Engine,
     standalone::application::Application,
 };
+use std::collections::HashMap;
 
 pub trait Plugin {
     fn on_init(
@@ -10,7 +11,7 @@ pub trait Plugin {
         engine: &mut Engine,
         level: &mut Level,
         application: &mut Application,
-        contents: &[EContentFileType],
+        contents: &HashMap<url::Url, EContentFileType>,
     );
 
     fn on_open_level(
@@ -18,14 +19,14 @@ pub trait Plugin {
         engine: &mut Engine,
         level: &mut Level,
         application: &mut Application,
-        contents: &[EContentFileType],
+        contents: &HashMap<url::Url, EContentFileType>,
     );
 
     fn tick(
         &mut self,
         engine: &mut Engine,
         ctx: egui::Context,
-        contents: &[EContentFileType],
+        contents: &HashMap<url::Url, EContentFileType>,
         application: &mut Application,
         #[cfg(not(target_os = "android"))] window: &mut winit::window::Window,
     );

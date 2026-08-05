@@ -17,7 +17,7 @@ pub trait HasUrl {
 /// (`take()`, `replace()`, `swap()`, etc.) while any `TypedRcRefCellBox` exists.
 /// Replacing it invalidates cached pointers (use-after-free).
 #[derive(Clone)]
-pub struct TypedRcRefCellBox<E: Downcast + ?Sized, T: 'static> {
+pub struct UnstableTypedRcRefCellBox<E: Downcast + ?Sized, T: 'static> {
     #[allow(unused)]
     reference: Rc<RefCell<Box<E>>>,
     #[allow(unused)]
@@ -25,8 +25,8 @@ pub struct TypedRcRefCellBox<E: Downcast + ?Sized, T: 'static> {
     phantom: PhantomData<*const ()>,
 }
 
-impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBox<E, T> {
-    pub fn new(reference: Rc<RefCell<Box<E>>>) -> crate::error::Result<Self> {
+impl<E: Downcast + ?Sized, T: 'static> UnstableTypedRcRefCellBox<E, T> {
+    pub unsafe fn new(reference: Rc<RefCell<Box<E>>>) -> crate::error::Result<Self> {
         let ptr = {
             let content_ref = reference.borrow();
             let any_ref: &dyn Any = (**content_ref).as_any();
@@ -40,13 +40,13 @@ impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBox<E, T> {
         };
         Ok(Self {
             reference,
-            value: unsafe { NonNull::new_unchecked(ptr as *mut T) },
+            value: NonNull::new_unchecked(ptr as *mut T),
             phantom: PhantomData,
         })
     }
 
-    pub fn downgrade(&self) -> TypedRcRefCellBoxWeak<E, T> {
-        TypedRcRefCellBoxWeak {
+    pub fn downgrade(&self) -> UnstableTypedRcRefCellBoxWeak<E, T> {
+        UnstableTypedRcRefCellBoxWeak {
             reference: Rc::downgrade(&self.reference),
             _phantom: PhantomData,
         }
@@ -54,14 +54,14 @@ impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBox<E, T> {
 }
 
 #[cfg(not(debug_assertions))]
-impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBox<E, T> {
+impl<E: Downcast + ?Sized, T: 'static> UnstableTypedRcRefCellBox<E, T> {
     /// # Safety Contract
     ///
     /// Bypasses `RefCell`. The caller must ensure:
     /// - No `&mut T` exists through any `TypedRcRefCellBox` referencing the same data.
     /// - The inner `Box<E>` has not been replaced.
-    pub fn get(&self) -> &T {
-        unsafe { self.value.as_ref() }
+    pub unsafe fn get(&self) -> &T {
+        self.value.as_ref()
     }
 
     /// # Safety Contract
@@ -69,13 +69,13 @@ impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBox<E, T> {
     /// Bypasses `RefCell`. The caller must ensure:
     /// - No other `&T` or `&mut T` exists (including from cloned `TypedRcRefCellBox`s).
     /// - The inner `Box<E>` has not been replaced.
-    pub fn get_mut(&mut self) -> &mut T {
-        unsafe { self.value.as_mut() }
+    pub unsafe fn get_mut(&mut self) -> &mut T {
+        self.value.as_mut()
     }
 }
 
 #[cfg(debug_assertions)]
-impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBox<E, T> {
+impl<E: Downcast + ?Sized, T: 'static> UnstableTypedRcRefCellBox<E, T> {
     pub fn get(&self) -> std::cell::Ref<'_, T> {
         std::cell::Ref::map(self.reference.borrow(), |x| {
             (**x).as_any().downcast_ref::<T>().unwrap()
@@ -90,9 +90,99 @@ impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBox<E, T> {
 }
 
 #[derive(Clone)]
+pub struct UnstableTypedRcRefCellBoxWeak<E: Downcast + ?Sized, T: 'static> {
+    reference: Weak<RefCell<Box<E>>>,
+    _phantom: PhantomData<T>,
+}
+
+impl<E: Downcast + ?Sized, T: 'static> UnstableTypedRcRefCellBoxWeak<E, T> {
+    pub unsafe fn upgrade(&self) -> Option<UnstableTypedRcRefCellBox<E, T>> {
+        let reference = self.reference.upgrade()?;
+        UnstableTypedRcRefCellBox::new(reference).ok()
+    }
+}
+
+#[derive(Debug)]
+pub struct TypedRcRefCellBox<E: Downcast + ?Sized, T: 'static> {
+    #[allow(unused)]
+    reference: Rc<RefCell<Box<E>>>,
+    _phantom: PhantomData<T>,
+}
+
+impl<E: Downcast + ?Sized, T: 'static> Clone for TypedRcRefCellBox<E, T> {
+    fn clone(&self) -> Self {
+        Self {
+            reference: self.reference.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
+}
+
+impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBox<E, T> {
+    pub fn new(reference: Rc<RefCell<Box<E>>>) -> crate::error::Result<Self> {
+        {
+            let content_ref = reference.borrow();
+            let inner = content_ref.as_ref().as_any();
+            if !inner.is::<T>() {
+                return Err(crate::error::Error::TypeMismatch(format!(
+                    "expected {}, got different type",
+                    type_name::<T>(),
+                )));
+            }
+        }
+        Ok(Self {
+            reference,
+            _phantom: PhantomData,
+        })
+    }
+
+    pub fn downgrade(&self) -> TypedRcRefCellBoxWeak<E, T> {
+        TypedRcRefCellBoxWeak {
+            reference: Rc::downgrade(&self.reference),
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn borrow(&self) -> std::cell::Ref<'_, T> {
+        std::cell::Ref::filter_map(self.reference.borrow(), |content| {
+            content.as_ref().as_any().downcast_ref::<T>()
+        })
+        .ok()
+        .expect(&format!(
+            "expected {}, got different type",
+            type_name::<T>()
+        ))
+    }
+
+    pub fn borrow_mut(&self) -> std::cell::RefMut<'_, T> {
+        std::cell::RefMut::filter_map(self.reference.borrow_mut(), |content| {
+            content.as_mut().as_any_mut().downcast_mut::<T>()
+        })
+        .ok()
+        .expect(&format!(
+            "expected {}, got different type",
+            type_name::<T>()
+        ))
+    }
+
+    pub fn underlying(&self) -> Rc<RefCell<Box<E>>> {
+        self.reference.clone()
+    }
+}
+
+#[derive(Debug)]
 pub struct TypedRcRefCellBoxWeak<E: Downcast + ?Sized, T: 'static> {
     reference: Weak<RefCell<Box<E>>>,
     _phantom: PhantomData<T>,
+}
+
+impl<E: Downcast + ?Sized, T: 'static> Clone for TypedRcRefCellBoxWeak<E, T> {
+    fn clone(&self) -> Self {
+        Self {
+            reference: self.reference.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
 }
 
 impl<E: Downcast + ?Sized, T: 'static> TypedRcRefCellBoxWeak<E, T> {

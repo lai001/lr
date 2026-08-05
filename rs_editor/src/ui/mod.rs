@@ -23,3 +23,6 @@ pub mod project_settings;
 pub mod standalone_ui_window;
 pub mod top_menu;
 pub mod ui_window;
+
+pub trait UIEvent: downcast_rs::Downcast {}
+downcast_rs::impl_downcast!(UIEvent);

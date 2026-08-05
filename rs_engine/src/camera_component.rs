@@ -17,6 +17,7 @@ use rs_render::{
     vertex_data_type::mesh_vertex::MeshVertex3,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Clone)]
 struct DrawObjectBundle {
@@ -74,7 +75,7 @@ impl Component for CameraComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;
@@ -105,7 +106,7 @@ impl Component for CameraComponent {
     fn initialize(
         &mut self,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         level_player_viewport: &mut PlayerViewport,
     ) {
         let _ = files;
@@ -193,7 +194,7 @@ impl Component for CameraComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;

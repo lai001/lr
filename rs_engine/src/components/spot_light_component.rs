@@ -1,7 +1,11 @@
 use super::point_light_component::PointLight;
-use crate::{content::level::LevelPhysics, scene_node::SceneNode};
+use crate::{
+    content::{content_file_type::EContentFileType, level::LevelPhysics},
+    scene_node::SceneNode,
+};
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct SpotLight {
@@ -85,7 +89,7 @@ impl super::component::Component for SpotLightComponent {
         &mut self,
         engine: &mut crate::engine::Engine,
         level_physics: Option<&mut LevelPhysics>,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = engine;
         let _ = files;
@@ -116,7 +120,7 @@ impl super::component::Component for SpotLightComponent {
     fn initialize(
         &mut self,
         engine: &mut crate::engine::Engine,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut crate::player_viewport::PlayerViewport,
     ) {
         let _ = player_viewport;
@@ -132,7 +136,7 @@ impl super::component::Component for SpotLightComponent {
         &mut self,
         engine: &mut crate::engine::Engine,
         level_physics: &mut LevelPhysics,
-        files: &[crate::content::content_file_type::EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;

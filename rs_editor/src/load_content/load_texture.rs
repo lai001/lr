@@ -2,14 +2,15 @@ use super::types::{PostLoading, PostLoadingContext, PreLoadingContext};
 use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
 use anyhow::Context;
+use rs_content::TypedContent;
+use rs_engine::content::texture::TextureFile;
 use rs_engine::thread_pool::ThreadPool;
-use rs_foundation::new::SingleThreadMutType;
 
 type ResultType = Result<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, anyhow::Error>;
 
 pub struct LoadTexture<'a> {
     _loading_context: PreLoadingContext<'a>,
-    _content: SingleThreadMutType<rs_engine::content::texture::TextureFile>,
+    _content: TypedContent<TextureFile>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -37,10 +38,10 @@ impl<'a> PostLoading for LoadTexture<'a> {
 impl<'a> LoadTexture<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        content: SingleThreadMutType<rs_engine::content::texture::TextureFile>,
+        content: TypedContent<TextureFile>,
     ) -> Option<LoadTexture<'a>> {
         let maintain = content.clone();
-        let texture_file = content.borrow_mut();
+        let texture_file = content.borrow();
         let Some(image_reference) = &texture_file.get_image_reference_path() else {
             return None;
         };

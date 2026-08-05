@@ -8,6 +8,7 @@ use anyhow::anyhow;
 use egui::Sense;
 use egui_extras::{Column, TableBuilder};
 use egui_winit::State;
+use rs_content::TypedContent;
 use rs_core_minimal::name_generator::{self, make_unique_name};
 use rs_engine::{
     camera::Camera,
@@ -19,7 +20,6 @@ use rs_engine::{
     particle::emiter_render::EmiterRender,
     resource_manager::ResourceManager,
 };
-use rs_foundation::new::SingleThreadMutType;
 use rs_localization::t;
 use rs_render::{
     command::{
@@ -35,7 +35,7 @@ use winit::{
 };
 
 pub struct DataSource {
-    pub particle_system: SingleThreadMutType<rs_engine::content::particle_system::ParticleSystem>,
+    pub particle_system: TypedContent<rs_engine::content::particle_system::ParticleSystem>,
     pub particle_system_template: rs_engine::particle::system::ParticleSystem,
     pub current_monitor: Option<String>,
 }
@@ -315,7 +315,7 @@ impl ParticleSystemUIWindow {
         window_manager: &mut WindowsManager,
         event_loop_window_target: &winit::event_loop::ActiveEventLoop,
         engine: &mut Engine,
-        particle_system: SingleThreadMutType<rs_engine::content::particle_system::ParticleSystem>,
+        particle_system: TypedContent<rs_engine::content::particle_system::ParticleSystem>,
     ) -> anyhow::Result<ParticleSystemUIWindow> {
         let window_context = window_manager.spwan_new_window(
             EWindowType::Particle,

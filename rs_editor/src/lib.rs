@@ -1,5 +1,6 @@
 pub mod build_config;
 pub mod component_factory;
+pub mod content_edit;
 pub mod custom_event;
 pub mod data_source;
 pub mod editor;

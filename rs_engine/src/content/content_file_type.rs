@@ -1,80 +1,126 @@
-use super::{
-    blend_animations::BlendAnimations, curve::Curve, ibl::IBL, level::Level, material::Material,
-    material_paramenters_collection::MaterialParamentersCollection,
-    particle_system::ParticleSystem, skeleton::Skeleton, skeleton_animation::SkeletonAnimation,
-    skeleton_mesh::SkeletonMesh, sound::Sound, static_mesh::StaticMesh, texture::TextureFile,
-};
-use crate::{content::render_target_2d::RenderTarget2D, url_extension::UrlExtension};
-use rs_artifact::asset::Asset;
-use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, rc::Rc};
+use rs_content::TypedContent;
+use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Clone)]
-pub enum EContentFileType {
-    StaticMesh(Rc<RefCell<StaticMesh>>),
-    SkeletonMesh(Rc<RefCell<SkeletonMesh>>),
-    SkeletonAnimation(Rc<RefCell<SkeletonAnimation>>),
-    Skeleton(Rc<RefCell<Skeleton>>),
-    Texture(Rc<RefCell<TextureFile>>),
-    Level(Rc<RefCell<Level>>),
-    Material(Rc<RefCell<Material>>),
-    IBL(Rc<RefCell<IBL>>),
-    ParticleSystem(Rc<RefCell<ParticleSystem>>),
-    Sound(Rc<RefCell<Sound>>),
-    Curve(Rc<RefCell<Curve>>),
-    BlendAnimations(Rc<RefCell<BlendAnimations>>),
-    MaterialParamentersCollection(Rc<RefCell<MaterialParamentersCollection>>),
-    RenderTarget2D(Rc<RefCell<RenderTarget2D>>),
+pub type EContentFileType = rs_foundation::new::SingleThreadMutType<Box<dyn rs_content::Content>>;
+
+pub fn find_content_by_type_ref<'a, 'b, T: rs_content::Content>(
+    iter: impl IntoIterator<Item = &'a EContentFileType> + Clone,
+    url: &'b url::Url,
+) -> Option<std::cell::Ref<'a, T>> {
+    for file in iter.into_iter() {
+        let content = file.borrow();
+        if content.get_url() == *url && content.as_ref().as_any().is::<T>() {
+            let found = std::cell::Ref::filter_map(content, |content| {
+                content.as_ref().as_any().downcast_ref::<T>()
+            });
+            return found.ok();
+        }
+    }
+    return None;
 }
 
-macro_rules! common_fn {
-    ($($x:tt),*) => {
-        pub fn get_type_text(&self) -> String {
-            match self {
-                $(EContentFileType::$x(_) => stringify!($x).to_string(),)*
-            }
+pub fn find_content_by_type_mut<'a, 'b, T: rs_content::Content>(
+    iter: impl IntoIterator<Item = &'a mut EContentFileType> + Clone,
+    url: &'b url::Url,
+) -> Option<std::cell::RefMut<'a, T>> {
+    for file in iter.into_iter() {
+        let content = file.borrow_mut();
+        if content.get_url() == *url && content.as_ref().as_any().is::<T>() {
+            let found = std::cell::RefMut::filter_map(content, |content| {
+                content.as_mut().as_any_mut().downcast_mut::<T>()
+            });
+            return found.ok();
         }
-
-        pub fn get_name(&self) -> String {
-            match self {
-                $(EContentFileType::$x(content) => content.borrow().get_name(),)*
-            }
-        }
-
-        pub fn get_url(&self) -> url::Url {
-            match self {
-                $(EContentFileType::$x(content) => content.borrow().get_url(),)*
-            }
-        }
-
-        pub fn set_name(&mut self, new_name: String) {
-            match self {
-                $(
-                    EContentFileType::$x(content) => {
-                        let mut content = content.borrow_mut();
-                        content.url.set_name_in_editor(new_name);
-                    }
-                )*
-            }
-        }
-    };
+    }
+    return None;
 }
 
-impl EContentFileType {
-    common_fn!(
-        StaticMesh,
-        SkeletonMesh,
-        SkeletonAnimation,
-        Skeleton,
-        Texture,
-        Level,
-        Material,
-        IBL,
-        ParticleSystem,
-        Sound,
-        Curve,
-        BlendAnimations,
-        MaterialParamentersCollection,
-        RenderTarget2D
-    );
+pub fn find_content_by_type<'a, 'b, T: rs_content::Content>(
+    iter: impl IntoIterator<Item = &'a EContentFileType> + Clone,
+    url: &'b url::Url,
+) -> Option<EContentFileType> {
+    for file in iter.into_iter() {
+        let content = file.borrow();
+        if content.get_url() == *url && content.as_ref().as_any().is::<T>() {
+            return Some(file.clone());
+        }
+    }
+    return None;
+}
+
+pub fn collect_typed_contents<'a, T: rs_content::Content>(
+    contents: impl IntoIterator<Item = &'a EContentFileType> + Clone,
+) -> Vec<TypedContent<T>> {
+    let mut typed_contents = vec![];
+    for content in contents {
+        let typed_content = TypedContent::<T>::new(content.clone());
+        if let Ok(typed_content) = typed_content {
+            typed_contents.push(typed_content);
+        }
+    }
+    typed_contents
+}
+
+pub fn find_content_by_type_ref_map<'a, 'b, T: rs_content::Content>(
+    contents: &'a HashMap<url::Url, EContentFileType>,
+    url: &'b url::Url,
+) -> Option<std::cell::Ref<'a, T>> {
+    for (content_url, file) in contents {
+        if content_url == url {
+            let content = file.borrow();
+            if content.as_ref().as_any().is::<T>() {
+                let found = std::cell::Ref::filter_map(content, |content| {
+                    content.as_ref().as_any().downcast_ref::<T>()
+                });
+                return found.ok();
+            }
+        }
+    }
+    return None;
+}
+
+pub fn find_content_by_type_mut_map<'a, 'b, T: rs_content::Content>(
+    contents: &'a HashMap<url::Url, EContentFileType>,
+    url: &'b url::Url,
+) -> Option<std::cell::RefMut<'a, T>> {
+    for (content_url, file) in contents {
+        if content_url == url {
+            let content = file.borrow_mut();
+            if content.as_ref().as_any().is::<T>() {
+                let found = std::cell::RefMut::filter_map(content, |content| {
+                    content.as_mut().as_any_mut().downcast_mut::<T>()
+                });
+                return found.ok();
+            }
+        }
+    }
+    return None;
+}
+
+pub fn find_content_by_type_map<'a, 'b, T: rs_content::Content>(
+    contents: &'a HashMap<url::Url, EContentFileType>,
+    url: &'b url::Url,
+) -> Option<EContentFileType> {
+    for (content_url, file) in contents {
+        if content_url == url {
+            let content = file.borrow();
+            if content.as_ref().as_any().is::<T>() {
+                return Some(file.clone());
+            }
+        }
+    }
+    return None;
+}
+
+pub fn collect_typed_contents_map<'a, T: rs_content::Content>(
+    contents: &'a HashMap<url::Url, EContentFileType>,
+) -> Vec<TypedContent<T>> {
+    let mut typed_contents = vec![];
+    for (_, content) in contents {
+        let typed_content = TypedContent::<T>::new(content.clone());
+        if let Ok(typed_content) = typed_content {
+            typed_contents.push(typed_content);
+        }
+    }
+    typed_contents
 }

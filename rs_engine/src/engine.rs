@@ -2,6 +2,7 @@ use crate::build_built_in_resouce_url;
 use crate::camera::Camera;
 use crate::console_cmd::ConsoleCmd;
 use crate::content::content_file_type::EContentFileType;
+use crate::content::material_paramenters_collection::MaterialParamentersCollection;
 use crate::default_textures::DefaultTextures;
 use crate::drawable::{
     EDrawObjectType, MaterialDrawObject, PBRBindingResources, SkinMeshDrawObject,
@@ -17,6 +18,7 @@ use rs_artifact::content_type::EContentType;
 use rs_artifact::resource_info::ResourceInfo;
 use rs_artifact::resource_type::EResourceType;
 use rs_audio::audio_device::AudioDevice;
+use rs_content::TypedContent;
 use rs_core_minimal::settings::Settings;
 use rs_foundation::new::{
     MultipleThreadMut, MultipleThreadMutType, SingleThreadMut, SingleThreadMutType,
@@ -34,10 +36,8 @@ use rs_render::sdf2d_generator;
 use rs_render::view_mode::EViewModeType;
 use rs_render::virtual_texture_source::TVirtualTextureSource;
 use rs_render_types::MaterialOptions;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
-use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -224,15 +224,11 @@ impl Engine {
 
     pub fn initialize_content(&mut self) {
         for (_, content_file) in self.content_files.clone() {
-            match content_file {
-                EContentFileType::MaterialParamentersCollection(
-                    material_paramenters_collection,
-                ) => {
-                    let mut material_paramenters_collection =
-                        material_paramenters_collection.borrow_mut();
-                    material_paramenters_collection.initialize(self);
-                }
-                _ => {}
+            if let Some(material_paramenters_collection) = content_file
+                .borrow_mut()
+                .downcast_mut::<MaterialParamentersCollection>(
+            ) {
+                material_paramenters_collection.initialize(self);
             }
         }
     }
@@ -283,10 +279,7 @@ impl Engine {
                                 Some(EResourceType::Content(EContentType::StaticMesh)),
                             ) {
                             Ok(static_mesh) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::StaticMesh(SingleThreadMut::new(static_mesh)),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(static_mesh)));
                             }
                             Err(err) => {
                                 log::warn!("{err}");
@@ -301,12 +294,7 @@ impl Engine {
                             Some(EResourceType::Content(EContentType::Skeleton)),
                         ) {
                             Ok(content_skeleton) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::Skeleton(SingleThreadMut::new(
-                                        content_skeleton,
-                                    )),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(content_skeleton)));
                             }
                             Err(err) => {
                                 log::warn!("{err}");
@@ -319,10 +307,7 @@ impl Engine {
                             .get_resource::<crate::content::level::Level>(url, None)
                         {
                             Ok(f) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::Level(SingleThreadMut::new(f)),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(f)));
                             }
                             Err(err) => {
                                 log::warn!("{}", err);
@@ -334,10 +319,7 @@ impl Engine {
                             .get_resource::<crate::content::material::Material>(url, None)
                         {
                             Ok(f) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::Material(SingleThreadMut::new(f)),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(f)));
                             }
                             Err(err) => {
                                 log::warn!("{}", err);
@@ -350,10 +332,7 @@ impl Engine {
                             Some(EResourceType::Content(EContentType::IBL)),
                         ) {
                             Ok(ibl) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::IBL(SingleThreadMut::new(ibl)),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(ibl)));
                             }
                             Err(err) => {
                                 log::warn!("{err}");
@@ -368,12 +347,7 @@ impl Engine {
                                 Some(EResourceType::Content(EContentType::ParticleSystem)),
                             ) {
                             Ok(particle_system) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::ParticleSystem(SingleThreadMut::new(
-                                        particle_system,
-                                    )),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(particle_system)));
                             }
                             Err(err) => {
                                 log::warn!("{err}");
@@ -386,10 +360,7 @@ impl Engine {
                             Some(EResourceType::Content(EContentType::Sound)),
                         ) {
                             Ok(sound) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::Sound(SingleThreadMut::new(sound)),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(sound)));
                             }
                             Err(err) => {
                                 log::warn!("{err}");
@@ -402,10 +373,7 @@ impl Engine {
                             Some(EResourceType::Content(EContentType::Curve)),
                         ) {
                             Ok(curve) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::Curve(SingleThreadMut::new(curve)),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(curve)));
                             }
                             Err(err) => {
                                 log::warn!("{err}");
@@ -419,12 +387,7 @@ impl Engine {
                                 Some(EResourceType::Content(EContentType::BlendAnimations)),
                             ) {
                             Ok(blend_animations) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::BlendAnimations(SingleThreadMut::new(
-                                        blend_animations,
-                                    )),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(blend_animations)));
                             }
                             Err(err) => {
                                 log::warn!("{err}");
@@ -438,12 +401,7 @@ impl Engine {
                                 Some(EResourceType::Content(EContentType::MaterialParamentersCollection)),
                             ) {
                             Ok(material_paramenters_collection) => {
-                                files.insert(
-                                    url.clone(),
-                                    EContentFileType::MaterialParamentersCollection(SingleThreadMut::new(
-                                        material_paramenters_collection,
-                                    )),
-                                );
+                                files.insert(url.clone(), SingleThreadMut::new(Box::new(material_paramenters_collection)));
                             }
                             Err(err) => {
                                 log::warn!("{err}");
@@ -531,15 +489,24 @@ impl Engine {
                             Some(resource_info.resource_type),
                         )
                     {
-                        let material_content = self.content_files.values().find_map(|x| match x {
-                            EContentFileType::Material(material_content) => {
-                                if material_content.borrow().asset_url == material.url {
-                                    Some(material_content.clone())
+                        let material_content = self.content_files.values().find_map(|x| {
+                            if let Some(material_content) =
+                                x.borrow()
+                                    .downcast_ref::<crate::content::material::Material>()
+                            {
+                                if material_content.asset_url == material.url {
+                                    Some(
+                                        TypedContent::<crate::content::material::Material>::new(
+                                            x.clone(),
+                                        )
+                                        .expect("Matched type"),
+                                    )
                                 } else {
                                     None
                                 }
+                            } else {
+                                None
                             }
-                            _ => None,
                         });
 
                         if let Some(material_content) = material_content {
@@ -1054,7 +1021,7 @@ impl Engine {
         vertexes: &[rs_artifact::skin_mesh::SkinMeshVertex],
         indexes: &[u32],
         name: Option<String>,
-        material: Rc<RefCell<crate::content::material::Material>>,
+        material: TypedContent<crate::content::material::Material>,
         global_constants_handle: crate::handle::BufferHandle,
         point_lights_constants_resource: crate::handle::BufferHandle,
         spot_lights_constants_resource: crate::handle::BufferHandle,
@@ -1302,7 +1269,7 @@ impl Engine {
         vertexes: &[rs_artifact::mesh_vertex::MeshVertex],
         indexes: &[u32],
         name: Option<String>,
-        material: Rc<RefCell<crate::content::material::Material>>,
+        material: TypedContent<crate::content::material::Material>,
         global_constants_handle: crate::handle::BufferHandle,
         point_lights_constants_resource: crate::handle::BufferHandle,
         spot_lights_constants_resource: crate::handle::BufferHandle,

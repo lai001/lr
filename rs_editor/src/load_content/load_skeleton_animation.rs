@@ -3,8 +3,10 @@ use super::types::{PostLoading, PostLoadingContext, PreLoadingContext};
 use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
 use anyhow::Context;
+use rs_content::TypedContent;
+use rs_engine::content::skeleton_animation::SkeletonAnimation;
 use rs_engine::thread_pool::ThreadPool;
-use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
+use rs_foundation::new::MultipleThreadMutType;
 use rs_model_loader::model_loader::ModelLoader;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
@@ -13,7 +15,7 @@ type ResultType = Result<rs_artifact::skeleton_animation::SkeletonAnimation, any
 
 pub(crate) struct LoadSkeletonAnimation<'a> {
     _loading_context: PreLoadingContext<'a>,
-    _content: SingleThreadMutType<rs_engine::content::skeleton_animation::SkeletonAnimation>,
+    _content: TypedContent<SkeletonAnimation>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -39,7 +41,7 @@ impl<'a> PostLoading for LoadSkeletonAnimation<'a> {
 impl<'a> LoadSkeletonAnimation<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        content: SingleThreadMutType<rs_engine::content::skeleton_animation::SkeletonAnimation>,
+        content: TypedContent<SkeletonAnimation>,
         scenes: MultipleThreadMutType<HashMap<PathBuf, SceneWrapper>>,
     ) -> Option<LoadSkeletonAnimation<'a>> {
         let maintain = content.clone();

@@ -1,4 +1,5 @@
 use super::types::{PreLoadingContext, SceneWrapper};
+use crate::content_edit::ContentEdit;
 use crate::project_context::ProjectContext;
 use futures::stream::FuturesUnordered;
 use rs_engine::content::content_file_type::EContentFileType;
@@ -15,8 +16,10 @@ impl LoadContents {
         project_context: &ProjectContext,
         model_loader: &mut ModelLoader,
         files: Vec<EContentFileType>,
+        content_edit: &mut ContentEdit,
     ) -> anyhow::Result<()> {
         let module_manager = project_context.module_manager.clone();
+        let content_manager = project_context.content_manager.clone();
         let _span = tracy_client::span!();
         {
             let resource_manager = engine.get_resource_manager().clone();
@@ -26,93 +29,27 @@ impl LoadContents {
                 resource_manager: &resource_manager,
                 project_context,
                 module_manager,
+                content_manager,
             };
             let scenes: MultipleThreadMutType<HashMap<PathBuf, SceneWrapper>> =
                 MultipleThreadMut::new(HashMap::new());
 
             for file in files {
-                match file {
-                    EContentFileType::StaticMesh(ref_cell) => {
-                        if let Some(future) = super::load_static_mesh::LoadStaticMesh::new(
-                            cx.clone(),
-                            ref_cell,
-                            scenes.clone(),
-                        ) {
-                            futures.push(Box::new(future));
+                let content = file.clone();
+                let editable = {
+                    let content_ref = content.borrow();
+                    content_edit.editable(content_ref.as_ref())
+                };
+                if let Some(editable) = editable {
+                    let scenes_for_async = scenes.clone();
+                    let async_futures =
+                        editable.load_async(content.clone(), cx.clone(), scenes_for_async, engine);
+                    if async_futures.is_empty() {
+                        editable.load_sync(content.clone(), cx.clone(), scenes.clone(), engine);
+                    } else {
+                        for future in async_futures {
+                            futures.push(future);
                         }
-                    }
-                    EContentFileType::SkeletonMesh(ref_cell) => {
-                        if let Some(future) = super::load_skeleton_mesh::LoadSkeletonMesh::new(
-                            cx.clone(),
-                            ref_cell,
-                            scenes.clone(),
-                        ) {
-                            futures.push(Box::new(future));
-                        }
-                    }
-                    EContentFileType::SkeletonAnimation(ref_cell) => {
-                        if let Some(future) =
-                            super::load_skeleton_animation::LoadSkeletonAnimation::new(
-                                cx.clone(),
-                                ref_cell,
-                                scenes.clone(),
-                            )
-                        {
-                            futures.push(Box::new(future));
-                        }
-                    }
-                    EContentFileType::Skeleton(ref_cell) => {
-                        if let Some(future) = super::load_skeleton::LoadSkeleton::new(
-                            cx.clone(),
-                            ref_cell,
-                            scenes.clone(),
-                        ) {
-                            futures.push(Box::new(future));
-                        }
-                    }
-                    EContentFileType::Texture(ref_cell) => {
-                        if let Some(future) =
-                            super::load_texture::LoadTexture::new(cx.clone(), ref_cell.clone())
-                        {
-                            futures.push(Box::new(future));
-                        }
-                        if let Some(future) = super::load_virtual_texture::LoadVirtualTexture::new(
-                            cx.clone(),
-                            ref_cell,
-                        ) {
-                            futures.push(Box::new(future));
-                        }
-                    }
-                    EContentFileType::Level(_) => {}
-                    EContentFileType::Material(ref_cell) => {
-                        if let Some(future) =
-                            super::load_material::LoadMaterial::new(cx.clone(), ref_cell)
-                        {
-                            futures.push(Box::new(future));
-                        }
-                    }
-                    EContentFileType::IBL(ref_cell) => {
-                        if let Some(future) = super::load_ibl::LoadIBL::new(cx.clone(), ref_cell) {
-                            futures.push(Box::new(future));
-                        }
-                    }
-                    EContentFileType::ParticleSystem(_) => {}
-                    EContentFileType::Sound(ref_cell) => {
-                        if let Some(future) =
-                            super::load_sound::LoadSound::new(cx.clone(), ref_cell)
-                        {
-                            futures.push(Box::new(future));
-                        }
-                    }
-                    EContentFileType::Curve(_) => {}
-                    EContentFileType::BlendAnimations(_) => {}
-                    EContentFileType::MaterialParamentersCollection(ref_cell) => {
-                        let mut material_paramenters_collection = ref_cell.borrow_mut();
-                        material_paramenters_collection.initialize(engine);
-                    }
-                    EContentFileType::RenderTarget2D(render_target_2d) => {
-                        let mut render_target_2d = render_target_2d.borrow_mut();
-                        render_target_2d.init_resouce(engine);
                     }
                 }
             }

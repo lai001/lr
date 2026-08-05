@@ -1,6 +1,14 @@
 use crate::{
     components::component::Component,
-    content::{content_file_type::EContentFileType, level::LevelPhysics},
+    content::{
+        content_file_type::{
+            EContentFileType, find_content_by_type, find_content_by_type_map,
+            find_content_by_type_ref_map,
+        },
+        level::LevelPhysics,
+        material::Material,
+        skeleton_mesh::SkeletonMesh,
+    },
     drawable::{Drawable, EDrawObjectType},
     engine::Engine,
     player_viewport::PlayerViewport,
@@ -12,6 +20,7 @@ use crate::{
 };
 use rapier3d::prelude::*;
 use rs_artifact::{skeleton::Skeleton, skin_mesh::SkinMesh};
+use rs_content::TypedContent;
 use rs_render::global_shaders::skeleton_shading::NUM_MAX_BONE;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, iter::zip, sync::Arc};
@@ -69,7 +78,7 @@ impl Component for SkeletonMeshComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: Option<&mut LevelPhysics>,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;
@@ -100,35 +109,28 @@ impl Component for SkeletonMeshComponent {
     fn initialize(
         &mut self,
         engine: &mut Engine,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
     ) {
         let resource_manager = engine.get_resource_manager().clone();
         let mut skeleton: Option<Arc<Skeleton>> = None;
 
         if let Some(skeleton_url) = &self.skeleton_url {
-            for file in files.iter() {
-                if let EContentFileType::Skeleton(content_skeleton) = file {
-                    if &content_skeleton.borrow().url == skeleton_url {
-                        skeleton =
-                            resource_manager.get_skeleton(&content_skeleton.borrow().asset_url);
-                        break;
-                    }
-                }
+            if let Some(content_skeleton) = find_content_by_type_ref_map::<
+                crate::content::skeleton::Skeleton,
+            >(files, skeleton_url)
+            {
+                skeleton = resource_manager.get_skeleton(&content_skeleton.asset_url);
             }
         }
 
         let skeleton_animation_provider = self.find_animation_provider(files);
-
         let material = if let Some(material_url) = &self.material_url {
-            files.iter().find_map(|x| {
-                if let EContentFileType::Material(content_material) = x {
-                    if &content_material.borrow().url == material_url {
-                        return Some(content_material.clone());
-                    }
-                }
+            if let Some(content) = find_content_by_type_map::<Material>(files, material_url) {
+                TypedContent::<Material>::new(content).ok()
+            } else {
                 None
-            })
+            }
         } else {
             None
         };
@@ -146,14 +148,10 @@ impl Component for SkeletonMeshComponent {
 
         for skeleton_mesh in &self.skeleton_mesh_urls {
             let mut skin_mesh: Option<Arc<SkinMesh>> = None;
-            for file in files.iter() {
-                if let EContentFileType::SkeletonMesh(content_skin_mesh) = file {
-                    if &content_skin_mesh.borrow().url == skeleton_mesh {
-                        skin_mesh =
-                            resource_manager.get_skin_mesh(&content_skin_mesh.borrow().asset_url);
-                        break;
-                    }
-                }
+            if let Some(content_skin_mesh) =
+                find_content_by_type_ref_map::<SkeletonMesh>(files, skeleton_mesh)
+            {
+                skin_mesh = resource_manager.get_skin_mesh(&content_skin_mesh.asset_url);
             }
             let Some(skin_mesh) = skin_mesh else {
                 continue;
@@ -222,7 +220,7 @@ impl Component for SkeletonMeshComponent {
         &mut self,
         engine: &mut Engine,
         level_physics: &mut LevelPhysics,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = files;
         let _ = engine;
@@ -348,7 +346,7 @@ impl SkeletonMeshComponent {
 
     fn find_animation_provider(
         &self,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) -> Option<Box<dyn SkeletonAnimationProvider>> {
         let Some(skeleton_url) = &self.skeleton_url else {
             return None;
@@ -377,15 +375,13 @@ impl SkeletonMeshComponent {
         player_viewport: &mut PlayerViewport,
     ) {
         self.material_url = Some(material_url);
+
         let material = if let Some(material_url) = &self.material_url {
-            files.iter().find_map(|x| {
-                if let EContentFileType::Material(content_material) = x {
-                    if &content_material.borrow().url == material_url {
-                        return Some(content_material.clone());
-                    }
-                }
+            if let Some(content) = find_content_by_type::<Material>(files, material_url) {
+                TypedContent::<Material>::new(content).ok()
+            } else {
                 None
-            })
+            }
         } else {
             None
         };
@@ -499,7 +495,7 @@ impl SkeletonMeshComponent {
         &mut self,
         animation: Option<url::Url>,
         resource_manager: ResourceManager,
-        files: &[EContentFileType],
+        files: &HashMap<url::Url, EContentFileType>,
     ) {
         let _ = resource_manager;
         self.animation_url = animation;
@@ -510,7 +506,7 @@ impl SkeletonMeshComponent {
         run_time.skeleton_animation_provider = animation_provider;
     }
 
-    pub fn on_post_update_animation(&mut self, files: &[EContentFileType]) {
+    pub fn on_post_update_animation(&mut self, files: &HashMap<url::Url, EContentFileType>) {
         let skeleton_animation_provider = self.find_animation_provider(files);
         let Some(run_time) = self.run_time.as_mut() else {
             return;

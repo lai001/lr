@@ -1,13 +1,13 @@
 use crate::ui::material_view::MaterialNode;
 use egui_snarl::Snarl;
+use rs_content::TypedContent;
 use rs_editor_core::material::Paramenters;
 use rs_engine::url_extension::UrlExtension;
-use rs_foundation::new::SingleThreadMutType;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct MaterialRuntime {
-    material: SingleThreadMutType<rs_engine::content::material::Material>,
+    material: TypedContent<rs_engine::content::material::Material>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -32,7 +32,7 @@ impl Material {
 
     pub fn set_associated_material(
         &mut self,
-        material: SingleThreadMutType<rs_engine::content::material::Material>,
+        material: TypedContent<rs_engine::content::material::Material>,
     ) {
         if let Some(runtime) = self.run_time.as_mut() {
             runtime.material = material;
@@ -43,7 +43,7 @@ impl Material {
 
     pub fn get_associated_material(
         &self,
-    ) -> Option<SingleThreadMutType<rs_engine::content::material::Material>> {
+    ) -> Option<TypedContent<rs_engine::content::material::Material>> {
         if let Some(runtime) = self.run_time.as_ref() {
             Some(runtime.material.clone())
         } else {

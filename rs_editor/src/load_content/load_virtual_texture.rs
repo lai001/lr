@@ -2,16 +2,17 @@ use super::types::{PostLoading, PostLoadingContext, PreLoadingContext};
 use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
 use anyhow::Context;
+use rs_content::TypedContent;
+use rs_engine::content::texture::TextureFile;
 use rs_engine::{
     static_virtual_texture_source::StaticVirtualTextureSource, thread_pool::ThreadPool,
 };
-use rs_foundation::new::SingleThreadMutType;
 
 type ResultType = Result<StaticVirtualTextureSource, anyhow::Error>;
 
 pub struct LoadVirtualTexture<'a> {
     _loading_context: PreLoadingContext<'a>,
-    _content: SingleThreadMutType<rs_engine::content::texture::TextureFile>,
+    _content: TypedContent<TextureFile>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -37,10 +38,10 @@ impl<'a> PostLoading for LoadVirtualTexture<'a> {
 impl<'a> LoadVirtualTexture<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        content: SingleThreadMutType<rs_engine::content::texture::TextureFile>,
+        content: TypedContent<TextureFile>,
     ) -> Option<LoadVirtualTexture<'a>> {
         let maintain = content.clone();
-        let texture_file = content.borrow_mut();
+        let texture_file = content.borrow();
         let Some(virtual_image_reference) = &texture_file.virtual_image_reference else {
             return None;
         };

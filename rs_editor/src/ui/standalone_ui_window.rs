@@ -18,6 +18,7 @@ use rs_engine::{
 };
 use rs_localization::t;
 use rs_render::{command::RenderUIOptions, egui_render::UICanvasType};
+use std::collections::HashMap;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 pub struct StandaloneUiWindow {
@@ -175,7 +176,7 @@ impl StandaloneUiWindow {
         engine: &mut Engine,
         #[cfg(feature = "plugin_shared_crate")] plugins: Vec<Box<dyn Plugin>>,
         active_level: &Level,
-        contents: Vec<EContentFileType>,
+        contents: HashMap<url::Url, EContentFileType>,
         standalone_simulation_type: StandaloneSimulationType,
     ) -> anyhow::Result<StandaloneUiWindow> {
         let window_context = window_manager.spwan_new_window(

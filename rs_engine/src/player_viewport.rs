@@ -2,7 +2,7 @@ use crate::camera::Camera;
 use crate::components::component::Component;
 use crate::components::point_light_component::PointLightComponent;
 use crate::components::spot_light_component::SpotLightComponent;
-use crate::content::content_file_type::EContentFileType;
+use crate::content::material_paramenters_collection::MaterialParamentersCollection;
 use crate::directional_light::DirectionalLight;
 use crate::drawable::{EDrawObjectType, PBRBindingResources};
 use crate::engine::{Engine, VirtualPassHandle};
@@ -664,13 +664,13 @@ impl PlayerViewport {
                         .content_files
                         .get(material_paramenters_collection_url)
                         .unwrap();
-                    let buffer_handle = match content {
-                        EContentFileType::MaterialParamentersCollection(rc) => {
-                            rc.borrow().get_buffer_handle().unwrap()
-                        }
-                        _ => {
-                            panic!()
-                        }
+                    let buffer_handle = if let Some(material_paramenters_collection) = content
+                        .borrow()
+                        .downcast_ref::<MaterialParamentersCollection>()
+                    {
+                        material_paramenters_collection.get_buffer_handle().unwrap()
+                    } else {
+                        panic!()
                     };
                     material_parameters_collection_resources.insert(
                         GroupBinding {
@@ -802,13 +802,13 @@ impl PlayerViewport {
                         .content_files
                         .get(material_paramenters_collection_url)
                         .unwrap();
-                    let buffer_handle = match content {
-                        EContentFileType::MaterialParamentersCollection(rc) => {
-                            rc.borrow().get_buffer_handle().unwrap()
-                        }
-                        _ => {
-                            panic!()
-                        }
+                    let buffer_handle = if let Some(material_paramenters_collection) = content
+                        .borrow()
+                        .downcast_ref::<MaterialParamentersCollection>()
+                    {
+                        material_paramenters_collection.get_buffer_handle().unwrap()
+                    } else {
+                        panic!()
                     };
                     material_parameters_collection_resources.insert(
                         GroupBinding {

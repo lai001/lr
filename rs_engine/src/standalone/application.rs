@@ -1,3 +1,5 @@
+#[cfg(feature = "network")]
+use crate::content::content_file_type::find_content_by_type_map;
 #[cfg(feature = "plugin_shared_crate")]
 use crate::plugin::plugin_crate::Plugin;
 use crate::{
@@ -10,6 +12,7 @@ use crate::{
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 #[cfg(feature = "network")]
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[cfg(feature = "network")]
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, Debug)]
@@ -153,7 +156,7 @@ pub struct Application {
     _window_id: isize,
     player_view_port: PlayerViewport,
     current_active_level: SingleThreadMutType<Level>,
-    _contents: Vec<EContentFileType>,
+    _contents: HashMap<url::Url, EContentFileType>,
     #[cfg(feature = "plugin_shared_crate")]
     plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
     #[cfg(feature = "network")]
@@ -170,7 +173,7 @@ impl Application {
         height: u32,
         engine: &mut Engine,
         current_active_level: &Level,
-        contents: Vec<EContentFileType>,
+        contents: HashMap<url::Url, EContentFileType>,
         input_mode: EInputMode,
         #[cfg(feature = "plugin_shared_crate")] plugins: Vec<Box<dyn Plugin>>,
     ) -> Application {
@@ -425,7 +428,7 @@ impl Application {
         active_level: &mut Level,
         server: &mut rs_network::server::Server,
         engine: &mut Engine,
-        contents: &[EContentFileType],
+        contents: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
         #[cfg(feature = "plugin_shared_crate")] plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
     ) -> Vec<rs_network::server::Connection> {
@@ -602,7 +605,7 @@ impl Application {
     fn client_tick(
         engine: &mut Engine,
         current_active_level: &mut SingleThreadMutType<Level>,
-        contents: &[EContentFileType],
+        contents: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut PlayerViewport,
         client: &mut rs_network::client::Client,
         #[cfg(feature = "plugin_shared_crate")] plugins: SingleThreadMutType<Vec<Box<dyn Plugin>>>,
@@ -846,20 +849,17 @@ impl Application {
         engine: &mut Engine,
         url: url::Url,
     ) -> crate::error::Result<()> {
-        let mut find_level = self
-            ._contents
-            .iter()
-            .find(|x| match x {
-                EContentFileType::Level(level) => level.borrow().url == url,
-                _ => false,
-            })
-            .and_then(|x| match x {
-                EContentFileType::Level(level) => Some(level.borrow().make_copy_for_standalone(
-                    engine,
-                    &self._contents,
-                    &mut self.player_view_port,
-                )),
-                _ => None,
+        let mut find_level = find_content_by_type_map::<Level>(&self._contents, &url)
+            .and_then(|x| {
+                if let Some(level) = x.borrow().downcast_ref::<Level>() {
+                    Some(level.make_copy_for_standalone(
+                        engine,
+                        &self._contents,
+                        &mut self.player_view_port,
+                    ))
+                } else {
+                    unreachable!("Type missmatch")
+                }
             })
             .ok_or(crate::error::Error::Other(Some(format!(
                 "Can't find level: {}",

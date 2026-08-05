@@ -2,15 +2,16 @@ use super::types::{PostLoading, PostLoadingContext, PreLoadingContext};
 use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
 use rs_artifact::asset::Asset;
+use rs_content::TypedContent;
+use rs_engine::content::sound::Sound;
 use rs_engine::thread_pool::ThreadPool;
-use rs_foundation::new::SingleThreadMutType;
 use std::sync::Arc;
 
 type ResultType = Result<rs_artifact::sound::Sound, anyhow::Error>;
 
 pub struct LoadSound<'a> {
     _loading_context: PreLoadingContext<'a>,
-    _content: SingleThreadMutType<rs_engine::content::sound::Sound>,
+    _content: TypedContent<Sound>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -36,7 +37,7 @@ impl<'a> PostLoading for LoadSound<'a> {
 impl<'a> LoadSound<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        content: SingleThreadMutType<rs_engine::content::sound::Sound>,
+        content: TypedContent<Sound>,
     ) -> Option<LoadSound<'a>> {
         let maintain = content.clone();
         let sound = content.borrow_mut();

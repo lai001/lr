@@ -5,16 +5,17 @@ use crate::{
     file_header::{ASSET_FILE_MAGIC_NUMBERS, FileHeader, HEADER_LENGTH_SIZE},
     resource_type::EResourceType,
 };
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Seek};
+use std::io::{Cursor, Read, Seek};
 
-pub trait Asset: for<'a> Deserialize<'a> + Serialize + Sized {
+pub trait Asset: erased_serde::Serialize {
     fn get_url(&self) -> url::Url;
     fn get_resource_type(&self) -> EResourceType;
-    fn build_resource_encode_task<R>(&self, reader: R) -> ResourceEncodeTask<R>
-    where
-        R: Seek + Read,
-    {
+    fn build_resource_encode_task(
+        &self,
+        reader: Cursor<Vec<u8>>,
+    ) -> ResourceEncodeTask<Cursor<Vec<u8>>> {
         ResourceEncodeTask {
             url: self.get_url(),
             resource_type: self.get_resource_type(),
@@ -34,7 +35,7 @@ pub fn encode_asset<A>(
     asset: &A,
 ) -> Result<Vec<u8>>
 where
-    A: Asset,
+    A: Asset + Serialize,
 {
     let asset_header = AssetHeader { resource_type };
     let header_data =
@@ -53,7 +54,7 @@ pub fn decode_asset<T>(
     expected_resource_type: Option<EResourceType>,
 ) -> Result<T>
 where
-    T: Asset,
+    T: Asset + DeserializeOwned,
 {
     let mut reader = std::io::Cursor::new(data);
     let _ = FileHeader::check_identification(&mut reader, ASSET_FILE_MAGIC_NUMBERS)?;

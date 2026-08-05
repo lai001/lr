@@ -59,11 +59,21 @@ impl ContentFolder {
     }
 
     pub(crate) fn insert_file(&mut self, file: EContentFileType) {
+        self.check_file(&file);
+        self.files.push(file);
+    }
+
+    fn check_file(&self, file: &EContentFileType) {
+        let file_ref = file.borrow();
         let mut base_url = self.get_url();
-        base_url.set_path(&format!("{}/{}", self.get_url().path(), file.get_name()));
+        base_url.set_path(&format!(
+            "{}/{}",
+            self.get_url().path(),
+            file_ref.get_name()
+        ));
         assert_eq!(
             base_url,
-            file.get_url(),
+            file_ref.get_url(),
             "url path: {}, relative_path: {}",
             self.get_url().path(),
             self.relative_path.display()
@@ -71,10 +81,9 @@ impl ContentFolder {
         assert!(
             self.files
                 .iter()
-                .map(|x| x.get_name())
-                .all(|x| x != file.get_name()),
+                .map(|x| x.borrow().get_name())
+                .all(|x| x != file_ref.get_name()),
         );
-        self.files.push(file);
     }
 
     pub(crate) fn insert_sub_folder(&mut self, folder: PathBuf) {

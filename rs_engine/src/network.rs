@@ -1,4 +1,6 @@
+use crate::content::content_file_type::EContentFileType;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum ENetMode {
@@ -37,7 +39,7 @@ pub trait NetworkReplicated {
         replicated: &Vec<u8>,
         calls: &Vec<u8>,
         engine: &mut crate::engine::Engine,
-        contents: &[crate::content::content_file_type::EContentFileType],
+        contents: &HashMap<url::Url, EContentFileType>,
         player_viewport: &mut crate::player_viewport::PlayerViewport,
     ) {
         let _ = player_viewport;

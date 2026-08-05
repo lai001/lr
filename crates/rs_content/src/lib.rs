@@ -10,5 +10,5 @@ pub trait Content: HasUrl + erased_serde::Serialize + Downcast {
 
 impl_downcast!(Content);
 
-pub type ContentWrapper<T> = TypedRcRefCellBox<dyn Content, T>;
-pub type ContentWrapperWeak<T> = TypedRcRefCellBoxWeak<dyn Content, T>;
+pub type TypedContent<T> = TypedRcRefCellBox<dyn Content, T>;
+pub type TypedContentWeak<T> = TypedRcRefCellBoxWeak<dyn Content, T>;

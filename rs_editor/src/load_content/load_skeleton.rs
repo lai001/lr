@@ -2,8 +2,10 @@ use super::types::SceneWrapper;
 use super::types::{PostLoading, PostLoadingContext, PreLoadingContext};
 use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
+use rs_content::TypedContent;
+use rs_engine::content::skeleton::Skeleton;
 use rs_engine::thread_pool::ThreadPool;
-use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
+use rs_foundation::new::MultipleThreadMutType;
 use rs_model_loader::model_loader::ModelLoader;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
@@ -12,7 +14,7 @@ type ResultType = Result<rs_artifact::skeleton::Skeleton, anyhow::Error>;
 
 pub(crate) struct LoadSkeleton<'a> {
     _loading_context: PreLoadingContext<'a>,
-    _content: SingleThreadMutType<rs_engine::content::skeleton::Skeleton>,
+    _content: TypedContent<Skeleton>,
     receiver: std::sync::mpsc::Receiver<ResultType>,
     resource: Option<ResultType>,
 }
@@ -37,7 +39,7 @@ impl<'a> PostLoading for LoadSkeleton<'a> {
 impl<'a> LoadSkeleton<'a> {
     pub fn new(
         loading_context: PreLoadingContext<'a>,
-        content: SingleThreadMutType<rs_engine::content::skeleton::Skeleton>,
+        content: TypedContent<Skeleton>,
         scenes: MultipleThreadMutType<HashMap<PathBuf, SceneWrapper>>,
     ) -> Option<LoadSkeleton<'a>> {
         let maintain = content.clone();

@@ -13,8 +13,9 @@ use egui_snarl::{
 };
 use rs_artifact::material_paramenters::{BaseDataValueType, StructField};
 use rs_content_manager::content_manager::ContentManager;
+use rs_core_minimal::types::HasUrl;
 use rs_engine::content::{
-    content_file_type::EContentFileType,
+    content_file_type::collect_typed_contents,
     material_paramenters_collection::MaterialParamentersCollection,
 };
 use rs_foundation::new::SingleThreadMutType;
@@ -107,21 +108,6 @@ impl GraphViewer {
                 break;
             }
         }
-    }
-
-    fn collect_material_parameters_collections(
-        contents: Vec<EContentFileType>,
-    ) -> Vec<SingleThreadMutType<MaterialParamentersCollection>> {
-        let mut material_parameters_collections = vec![];
-        for content in contents {
-            match content {
-                EContentFileType::MaterialParamentersCollection(material_parameters_collection) => {
-                    material_parameters_collections.push(material_parameters_collection);
-                }
-                _ => {}
-            }
-        }
-        material_parameters_collections
     }
 }
 
@@ -332,7 +318,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                 match pin.id.input {
                     0 => {
                         let text = if let Some(current_value) = current_value.as_ref() {
-                            current_value.borrow().url.to_string()
+                            current_value.to_string()
                         } else {
                             t!("None").to_string()
                         };
@@ -353,9 +339,10 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
 
                                     let content_manager = self.content_manager.borrow();
                                     let contents = content_manager.content_files();
+
                                     let material_parameters_collections =
-                                        Self::collect_material_parameters_collections(
-                                            contents.to_vec(),
+                                        collect_typed_contents::<MaterialParamentersCollection>(
+                                            contents,
                                         );
 
                                     for material_parameters_collection in
@@ -364,9 +351,7 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                                         let (is_selected, text) = {
                                             let material_parameters_collection =
                                                 material_parameters_collection.borrow();
-                                            let current_url = current_value
-                                                .as_ref()
-                                                .map(|x| x.borrow().url.clone());
+                                            let current_url = current_value.as_ref().cloned();
                                             (
                                                 current_url
                                                     == Some(
@@ -379,7 +364,9 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                                             .add(egui::Button::selectable(is_selected, &text))
                                             .clicked()
                                         {
-                                            *current_value = Some(material_parameters_collection);
+                                            *current_value = Some(
+                                                material_parameters_collection.borrow().get_url(),
+                                            );
                                             self.is_updated = true;
                                         }
                                     }
@@ -398,17 +385,27 @@ impl SnarlViewer<MaterialNode> for GraphViewer {
                                 .show_ui(ui, |ui| {
                                     let mut names: Vec<Option<String>> =
                                         vec![Some(t!("None").to_string())];
-                                    let mut field_names = current_value
-                                        .as_ref()
-                                        .map(|x| {
-                                            x.borrow()
+
+                                    if let Some(current_value) = current_value.as_ref() {
+                                        let content_manager = self.content_manager.borrow();
+                                        let contents = content_manager.content_files();
+                                        let material_parameters_collections =
+                                            collect_typed_contents::<MaterialParamentersCollection>(
+                                                contents,
+                                            );
+                                        let current_collection = material_parameters_collections
+                                            .iter()
+                                            .find(|x| x.borrow().url == *current_value);
+                                        if let Some(current_collection) = current_collection {
+                                            let current_collection = current_collection.borrow();
+                                            let mut field_names = current_collection
                                                 .fields
                                                 .iter()
                                                 .map(|x| Some(x.name.clone()))
-                                                .collect::<Vec<_>>()
-                                        })
-                                        .unwrap_or(vec![]);
-                                    names.append(&mut field_names);
+                                                .collect::<Vec<Option<String>>>();
+                                            names.append(&mut field_names);
+                                        }
+                                    }
 
                                     for selected_value in names {
                                         let text = selected_value
@@ -667,7 +664,8 @@ pub enum EMaterialNodeType {
     Sin(EValueType),
     MaterialParamentersCollection(
         (
-            Option<SingleThreadMutType<MaterialParamentersCollection>>,
+            Option<url::Url>,
+            // Option<SingleThreadMutType<MaterialParamentersCollection>>,
             Option<String>,
         ),
     ),
@@ -729,6 +727,7 @@ pub struct MaterialView {
     pub validate: Option<HashMap<MaterialOptions, rs_render::error::Result<()>>>,
     material_url: url::Url,
     module_manager: SingleThreadMutType<ModuleManager>,
+    content_manager: SingleThreadMutType<ContentManager>,
 }
 
 impl MaterialView {
@@ -749,7 +748,7 @@ impl MaterialView {
             texture_urls: vec![],
             virtual_texture_urls: vec![],
             is_updated: false,
-            content_manager: content_manager,
+            content_manager: content_manager.clone(),
             paramenters: rs_editor_core::material::Paramenters::empty(),
         };
 
@@ -768,11 +767,13 @@ impl MaterialView {
             validate: None,
             material_url,
             module_manager,
+            content_manager,
         }
     }
 
     pub fn default_resolve(
         module_manager: SingleThreadMutType<ModuleManager>,
+        content_manager: SingleThreadMutType<ContentManager>,
     ) -> anyhow::Result<HashMap<MaterialOptions, ResolveResult>> {
         let mut snarl = Snarl::new();
         let node = MaterialNode {
@@ -781,6 +782,7 @@ impl MaterialView {
         let _ = snarl.insert_node(egui::pos2(0.0, 0.0), node);
         material_resolve::resolve(
             module_manager,
+            content_manager,
             None,
             &snarl,
             MaterialOptions::all(),
@@ -921,6 +923,7 @@ impl MaterialView {
             &mut material,
             &self.material_url,
             self.module_manager.clone(),
+            self.content_manager.clone(),
         );
         if let Some(result) = result {
             if let Ok(result) = result {
@@ -937,6 +940,7 @@ impl MaterialView {
         material: &mut crate::material::Material,
         material_url: &url::Url,
         module_manager: SingleThreadMutType<ModuleManager>,
+        content_manager: SingleThreadMutType<ContentManager>,
     ) -> Option<anyhow::Result<HashMap<MaterialOptions, ResolveResult>>> {
         {
             let snarl = &mut material.snarl;
@@ -953,6 +957,7 @@ impl MaterialView {
         let material_paramenters = &material.paramenters;
         Some(material_resolve::resolve(
             module_manager,
+            content_manager,
             Some(material_url),
             snarl,
             MaterialOptions::all(),
