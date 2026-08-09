@@ -42,3 +42,24 @@ task("fmt") do
         }
     }
 end
+
+task("rustfmt")
+    on_run(function()
+        import("core.base.option")
+        import("lib.detect.find_program")
+        local prefix = option.get("prefix")
+        if os.isdir(prefix) then
+            for _, file in ipairs(os.files(path.join(prefix, "**.rs"))) do
+                os.execv(find_program("rustfmt"), { "--edition=2024", file })
+            end
+        else
+            raise(format("%s is not a folder", prefix))
+        end
+    end)
+    set_menu {
+        usage = "xmake rustfmt",
+        description = "Format code",
+        options = {
+            { "p", "prefix", "kv", nil, "Set prefix" },
+        }
+    }

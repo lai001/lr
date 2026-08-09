@@ -1,0 +1,22 @@
+[package]
+name = "rs_code_gen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ra_ap_hir = "0.0.326"
+ra_ap_ide = "0.0.326"
+ra_ap_ide_assists = "0.0.326"
+ra_ap_ide_db = "0.0.326"
+ra_ap_load-cargo = "0.0.326"
+ra_ap_project_model = "0.0.326"
+ra_ap_rust-analyzer = "0.0.326"
+ra_ap_vfs = "0.0.326"
+ra_ap_parser = "0.0.326"
+ra_ap_syntax = "0.0.326"
+ra_ap_paths = "0.0.326"
+ra_ap_proc_macro_api = "0.0.326"
+ra_ap_salsa = "0.0.269"
+ra_ap_hir_ty = "0.0.326"
+ra_ap_stdx = "0.0.326"
+ra_ap_hir_def = "0.0.326"

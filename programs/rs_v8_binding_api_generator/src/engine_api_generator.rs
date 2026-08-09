@@ -18,6 +18,7 @@ use ra_ap_syntax::{
     ast::{self, HasModuleItem},
 };
 use ra_ap_vfs::AbsPathBuf;
+use rs_code_gen::is_generic_function;
 use rs_core_minimal::path_ext::CanonicalizeSlashExt;
 use std::{collections::HashMap, path::Path};
 use std::{io::Write, path::PathBuf, str::FromStr};
@@ -343,6 +344,9 @@ rs_core_minimal = { path = "@engine_dir@/rs_core_minimal" }
                     ra_ap_hir::AssocItem::Function(function) => {
                         let visibility = function.visibility(db);
                         if visibility != Visibility::Public {
+                            continue;
+                        }
+                        if is_generic_function(db, function) {
                             continue;
                         }
                         let function_name = function.name(db).as_str().to_string();
