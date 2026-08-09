@@ -1130,7 +1130,7 @@ impl Engine {
             index_count: Some(indexes.len() as u32),
             pbr_binding_resources,
             skin_constants_resource: EBindingResource::Constants(*skin_constants_buffer_handle),
-            user_textures_resources: vec![],
+            user_textures_resources: HashMap::new(),
             material,
             constants_buffer_handle,
             skin_constants_buffer_handle,
@@ -1140,7 +1140,7 @@ impl Engine {
             skin_constants: Default::default(),
             virtual_texture_constants: Default::default(),
             debug_group_label: Some(name),
-            user_paramenters: vec![],
+            user_paramenters: HashMap::new(),
         };
         EDrawObjectType::SkinMaterial(object)
     }
@@ -1369,7 +1369,7 @@ impl Engine {
             index_buffer: Some(index_buffer_handle),
             index_count: Some(indexes.len() as u32),
             pbr_binding_resources,
-            user_textures_resources: vec![],
+            user_textures_resources: HashMap::new(),
             material,
             constants_buffer_handle,
             virtual_texture_constants_buffer_handle,
@@ -1378,7 +1378,7 @@ impl Engine {
             constants: Default::default(),
             virtual_texture_constants: Default::default(),
             debug_group_label: Some(name),
-            user_paramenters: vec![],
+            user_paramenters: HashMap::new(),
         };
         EDrawObjectType::StaticMeshMaterial(object)
     }

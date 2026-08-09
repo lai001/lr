@@ -124,8 +124,8 @@ pub struct MaterialDrawObject {
 
     pub(crate) skin_constants_resource: EBindingResource,
 
-    pub(crate) user_textures_resources: Vec<EBindingResource>,
-    pub(crate) user_paramenters: Vec<EBindingResource>,
+    pub(crate) user_textures_resources: HashMap<GroupBinding, EBindingResource>,
+    pub(crate) user_paramenters: HashMap<GroupBinding, EBindingResource>,
 
     pub(crate) material: TypedContent<crate::content::material::Material>,
     pub(crate) constants_buffer_handle: BufferHandle,
@@ -148,8 +148,8 @@ pub struct StaticMeshMaterialDrawObject {
     pub(crate) index_count: Option<u32>,
     pub(crate) pbr_binding_resources: PBRBindingResources,
 
-    pub(crate) user_textures_resources: Vec<EBindingResource>,
-    pub(crate) user_paramenters: Vec<EBindingResource>,
+    pub(crate) user_textures_resources: HashMap<GroupBinding, EBindingResource>,
+    pub(crate) user_paramenters: HashMap<GroupBinding, EBindingResource>,
 
     pub(crate) material: TypedContent<crate::content::material::Material>,
     pub(crate) constants_buffer_handle: BufferHandle,

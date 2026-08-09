@@ -17,6 +17,7 @@ use crate::{
     resource_manager::ResourceManager,
 };
 use rapier3d::prelude::*;
+use rs_artifact::material::GroupBinding;
 use rs_artifact::material_paramenters::BaseDataValueType;
 use rs_artifact::static_mesh::StaticMesh;
 use rs_content::TypedContent;
@@ -59,7 +60,7 @@ impl Physics {
 #[derive(Clone)]
 pub struct StaticMeshComponentRuntime {
     draw_objects: Option<EDrawObjectType>,
-    parament_resource: Option<crate::content::material::ParamentResource>,
+    parament_resource: Option<(GroupBinding, ParamentResource)>,
     is_parament_resource_dirty: bool,
     _mesh: Option<Arc<StaticMesh>>,
     pub physics: Option<physics_ability::PhysicsAbility>,
@@ -326,8 +327,9 @@ impl Component for StaticMeshComponent {
                 }
                 EDrawObjectType::StaticMeshMaterial(draw_object) => {
                     draw_object.constants.model = self.transformation;
-                    if let Some(parament_resource) = &parament_resource {
-                        draw_object.user_paramenters.push(
+                    if let Some((binding, parament_resource)) = &parament_resource {
+                        draw_object.user_paramenters.insert(
+                            *binding,
                             rs_render::command::EBindingResource::Constants(
                                 *parament_resource.handle,
                             ),
@@ -392,7 +394,7 @@ impl Component for StaticMeshComponent {
 
         if run_time.is_parament_resource_dirty {
             run_time.is_parament_resource_dirty = false;
-            if let Some(parament_resource) = run_time.parament_resource.as_mut() {
+            if let Some((binding, parament_resource)) = run_time.parament_resource.as_mut() {
                 let buffer_handle = engine
                     .create_buffer(
                         parament_resource.uniform_map.get_data().to_vec(),
@@ -403,8 +405,10 @@ impl Component for StaticMeshComponent {
                 parament_resource.handle = buffer_handle.clone();
                 match &mut draw_objects {
                     EDrawObjectType::StaticMeshMaterial(draw_object) => {
-                        draw_object.user_paramenters =
-                            vec![EBindingResource::Constants(*buffer_handle)];
+                        draw_object.user_paramenters = HashMap::from([(
+                            *binding,
+                            EBindingResource::Constants(*buffer_handle),
+                        )]);
                     }
                     _ => {}
                 }
@@ -721,8 +725,8 @@ impl StaticMeshComponent {
     fn create_parament_resource(
         engine: &mut Engine,
         material: &Material,
-    ) -> Option<ParamentResource> {
-        let mut parament_resource: Option<ParamentResource> = None;
+    ) -> Option<(GroupBinding, ParamentResource)> {
+        let mut parament_resource: Option<(GroupBinding, ParamentResource)> = None;
         let material_info = material.get_material_info();
         let material_info = material_info
             .get(&MaterialOptions { is_skin: false })
@@ -737,10 +741,13 @@ impl StaticMeshComponent {
                     None,
                 );
                 if let Ok(buffer_handle) = buffer_handle {
-                    parament_resource = Some(ParamentResource {
-                        handle: buffer_handle,
-                        uniform_map: uniform_map,
-                    });
+                    parament_resource = Some((
+                        parament.binding,
+                        ParamentResource {
+                            handle: buffer_handle,
+                            uniform_map: uniform_map,
+                        },
+                    ));
                 }
             }
         }
@@ -751,7 +758,7 @@ impl StaticMeshComponent {
         let Some(run_time) = &mut self.run_time else {
             return false;
         };
-        let Some(parament_resource) = run_time.parament_resource.as_mut() else {
+        let Some((_, parament_resource)) = run_time.parament_resource.as_mut() else {
             return false;
         };
         let is_success = match value {
@@ -780,7 +787,7 @@ impl StaticMeshComponent {
         new_material_url: Option<url::Url>,
         files: &[EContentFileType],
 
-        player_viewport: &mut PlayerViewport,
+        player_viewport: &PlayerViewport,
     ) {
         self.material_url = new_material_url;
         let material = if let Some(material_url) = &self.material_url {
@@ -1024,5 +1031,18 @@ impl StaticMeshComponent {
             .replicated_datas
             .insert(ReplicatedFieldType::AgentTransformation, data);
         Ok(())
+    }
+
+    pub fn update_uniform_map(&mut self, mut closure: impl FnMut(&mut UniformMap) -> bool) -> bool {
+        let Some(run_time) = &mut self.run_time else {
+            return false;
+        };
+        let Some(parament_resource) = &mut run_time.parament_resource else {
+            return false;
+        };
+        if closure(&mut parament_resource.1.uniform_map) {
+            run_time.is_parament_resource_dirty = true;
+        }
+        return true;
     }
 }

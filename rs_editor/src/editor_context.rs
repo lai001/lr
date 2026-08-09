@@ -63,7 +63,6 @@ use rs_engine::{
     logger::SlotFlags,
     player_viewport::PlayerViewport,
     scene_node::SceneNode,
-    skeleton_mesh_component::SkeletonMeshComponent,
     static_mesh_component::StaticMeshComponent,
     url_extension::UrlExtension,
 };
@@ -161,6 +160,14 @@ struct V8Plugin {
     engine: Option<v8::Global<v8::Object>>,
     level: Option<v8::Global<v8::Object>>,
     player_viewport: Option<v8::Global<v8::Object>>,
+}
+
+pub struct EditObjectContext<'a> {
+    pub data_source: &'a mut DataSource,
+    pub player_viewport: &'a mut PlayerViewport,
+    pub engine: &'a mut rs_engine::engine::Engine,
+    pub model_loader: &'a mut ModelLoader,
+    pub project_context: &'a mut ProjectContext,
 }
 
 pub struct EditorContext {
@@ -1566,7 +1573,6 @@ impl EditorContext {
                 .borrow_mut()
                 .append(add_files);
         }
-        let mut active_level = active_level.borrow_mut();
         let new_actor = SingleThreadMut::new(rs_engine::actor::Actor::new_with_node(
             load_result.appropriate_name,
             load_result.scene_node,
@@ -1574,6 +1580,7 @@ impl EditorContext {
 
         let content_manager = project_context.content_manager.borrow();
         let all_content_files = &content_manager.content_map();
+        let mut active_level = active_level.borrow_mut();
         Self::add_new_actors(
             &mut active_level,
             &mut self.engine,
@@ -3021,58 +3028,7 @@ impl EditorContext {
         let Some(event) = event else {
             return;
         };
-        let Some(active_level) = self.data_source.level.as_mut() else {
-            return;
-        };
         match event {
-            object_property_view::EEventType::UpdateMaterial(update_material) => {
-                match update_material.selected_object {
-                    ESelectedObjectType::Actor(_) => unimplemented!(),
-                    ESelectedObjectType::DirectionalLight(_) => unimplemented!(),
-                    ESelectedObjectType::SceneNode(scene_node) => {
-                        let mut scene_node = scene_node.borrow_mut();
-                        {
-                            let static_mesh_opt =
-                                scene_node.typed_component_mut::<StaticMeshComponent>();
-                            if let Some(mut static_mesh_component) = static_mesh_opt {
-                                let Some(project_context) = self.project_context.as_ref() else {
-                                    return;
-                                };
-                                let content_manager = project_context.content_manager.clone();
-                                let content_manager = content_manager.borrow();
-                                let files = content_manager.content_files();
-                                static_mesh_component.set_material(
-                                    &mut self.engine,
-                                    update_material.new.clone(),
-                                    files,
-                                    &mut self.player_viewport,
-                                );
-                            }
-                        }
-                        {
-                            let skeleton_mesh_opt =
-                                scene_node.typed_component_mut::<SkeletonMeshComponent>();
-                            if let Some(mut skeleton_mesh_component) = skeleton_mesh_opt {
-                                let Some(project_context) = self.project_context.as_ref() else {
-                                    return;
-                                };
-                                let content_manager = project_context.content_manager.clone();
-                                let content_manager = content_manager.borrow();
-                                let files = content_manager.content_files();
-
-                                if let Some(url) = update_material.new {
-                                    skeleton_mesh_component.set_material(
-                                        &mut self.engine,
-                                        url,
-                                        &files,
-                                        &mut self.player_viewport,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
             object_property_view::EEventType::UpdateDirectionalLight(
                 directional_light,
                 left,
@@ -3088,30 +3044,6 @@ impl EditorContext {
                 directional_light.bottom = bottom;
                 directional_light.far = far;
                 directional_light.remake_preview(&mut self.engine, &mut self.player_viewport);
-            }
-            object_property_view::EEventType::UpdateAnimation(update_animation) => {
-                match update_animation.selected_object {
-                    ESelectedObjectType::Actor(_) => unimplemented!(),
-                    ESelectedObjectType::DirectionalLight(_) => unimplemented!(),
-                    ESelectedObjectType::SceneNode(scene_node) => {
-                        let mut scene_node = scene_node.borrow_mut();
-                        let skeleton_mesh_opt =
-                            scene_node.typed_component_mut::<SkeletonMeshComponent>();
-                        if let Some(mut skeleton_mesh_component) = skeleton_mesh_opt {
-                            let Some(project_context) = self.project_context.as_ref() else {
-                                return;
-                            };
-                            let content_manager = project_context.content_manager.clone();
-                            let content_manager = content_manager.borrow();
-                            let files = content_manager.content_map();
-                            skeleton_mesh_component.set_animation(
-                                update_animation.new,
-                                self.engine.get_resource_manager().clone(),
-                                &files,
-                            );
-                        }
-                    }
-                }
             }
             object_property_view::EEventType::ChangeName(selected_object_type, new_name) => {
                 // let opened_level = opened_level.borrow();
@@ -3130,88 +3062,21 @@ impl EditorContext {
                     }
                 }
             }
-            object_property_view::EEventType::UpdateStaticMesh(update_static_mesh) => {
-                match update_static_mesh.selected_object {
-                    ESelectedObjectType::SceneNode(scene_node) => {
-                        let mut scene_node = scene_node.borrow_mut();
-                        let static_mesh_opt =
-                            scene_node.typed_component_mut::<StaticMeshComponent>();
-                        if let Some(mut static_mesh_component) = static_mesh_opt {
-                            let Some(project_context) = self.project_context.as_ref() else {
-                                return;
-                            };
-                            let content_manager = project_context.content_manager.clone();
-                            let content_manager = content_manager.borrow();
-                            let files = content_manager.content_map();
-                            let static_mesh_url = update_static_mesh.new;
-                            static_mesh_component.set_static_mesh_url(
-                                static_mesh_url,
-                                self.engine.get_resource_manager().clone(),
-                                &mut self.engine,
-                                &files,
-                                &mut self.player_viewport,
-                            );
-                            let mut active_level = active_level.borrow_mut();
-                            let physics = active_level.get_physics_mut();
-                            if let Some(physics) = physics {
-                                static_mesh_component.initialize_physics(
-                                    &mut self.engine,
-                                    physics,
-                                    &files,
-                                );
-                            }
-                        }
-                    }
-                    _ => {
-                        unimplemented!()
-                    }
-                }
-            }
-            object_property_view::EEventType::UpdateIsEnableMultiresolution(
-                selected_object_type,
-                old,
-                new,
-            ) => {
-                let _ = old;
-                match selected_object_type {
-                    ESelectedObjectType::SceneNode(scene_node) => {
-                        let mut scene_node = scene_node.borrow_mut();
-                        let static_mesh_opt =
-                            scene_node.typed_component_mut::<StaticMeshComponent>();
-                        if let Some(mut static_mesh_component) = static_mesh_opt {
-                            static_mesh_component.is_enable_multiresolution = new;
-                        }
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-            object_property_view::EEventType::UpdatePhysicsShapeType(
-                object_property_view::UpdatePhysicsShapeType {
-                    selected_object, ..
+            object_property_view::EEventType::ComponentEvent(
+                object_property_view::ComponentEvent {
+                    component,
+                    component_event,
                 },
-            ) => match selected_object {
-                ESelectedObjectType::SceneNode(scene_node) => {
-                    let mut scene_node = scene_node.borrow_mut();
-                    let mut active_level = active_level.borrow_mut();
-                    let physics = active_level.get_physics_mut();
-                    if let Some(level_physics) = physics {
-                        let Some(project_context) = self.project_context.as_ref() else {
-                            return;
-                        };
-                        let content_manager = project_context.content_manager.clone();
-                        let content_manager = content_manager.borrow();
-                        let files = content_manager.content_map();
-                        scene_node.component_mut().initialize_physics(
-                            &mut self.engine,
-                            level_physics,
-                            &files,
-                        );
-                    }
+            ) => {
+                let component_edit = self.component_edit.clone();
+                let mut component_edit = component_edit.borrow_mut();
+                let mut component = component.borrow_mut();
+                let component = component.as_mut();
+                let editable = component_edit.editable(component);
+                if let Some(editable) = editable {
+                    editable.on_process_event(self, component, component_event);
                 }
-                _ => {
-                    unimplemented!()
-                }
-            },
+            }
         }
     }
 
@@ -3290,6 +3155,24 @@ impl EditorContext {
 
     pub fn content_edit(&self) -> SingleThreadMutType<ContentEdit> {
         self.content_edit.clone()
+    }
+
+    pub fn player_viewport(&self) -> &PlayerViewport {
+        &self.player_viewport
+    }
+
+    pub fn edit_object_context(&mut self) -> EditObjectContext<'_> {
+        let project_context = self
+            .project_context
+            .as_mut()
+            .expect("A valid project must be opened.");
+        EditObjectContext {
+            data_source: &mut self.data_source,
+            player_viewport: &mut self.player_viewport,
+            engine: &mut self.engine,
+            model_loader: &mut self.model_loader,
+            project_context: project_context,
+        }
     }
 }
 

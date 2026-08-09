@@ -602,15 +602,16 @@ impl PlayerViewport {
                     rs_foundation::cast_any_as_u8_slice(&object.virtual_texture_constants),
                 );
 
-                let mut binding_resources: Vec<EBindingResource> =
-                    Vec::with_capacity(map_textures.len());
+                let mut binding_resources: HashMap<GroupBinding, EBindingResource> =
+                    HashMap::with_capacity(map_textures.len());
                 for map_texture in map_textures {
                     let resource_manager = engine.get_resource_manager();
 
                     if let Some(handle) =
                         resource_manager.get_texture_by_url(&map_texture.texture_url)
                     {
-                        binding_resources.push(EBindingResource::Texture(*handle));
+                        let binding = GroupBinding::new(map_texture.group, map_texture.binding);
+                        binding_resources.insert(binding, EBindingResource::Texture(*handle));
                     } else {
                         log::trace!("Can not find {}", map_texture.texture_url.to_string());
                     }
@@ -736,14 +737,15 @@ impl PlayerViewport {
                     rs_foundation::cast_any_as_u8_slice(&object.virtual_texture_constants),
                 );
 
-                let mut binding_resources: Vec<EBindingResource> =
-                    Vec::with_capacity(map_textures.len());
+                let mut binding_resources: HashMap<GroupBinding, EBindingResource> =
+                    HashMap::with_capacity(map_textures.len());
                 for map_texture in map_textures {
                     let resource_manager = engine.get_resource_manager();
                     if let Some(handle) =
                         resource_manager.get_texture_by_url(&map_texture.texture_url)
                     {
-                        binding_resources.push(EBindingResource::Texture(*handle));
+                        let binding = GroupBinding::new(map_texture.group, map_texture.binding);
+                        binding_resources.insert(binding, EBindingResource::Texture(*handle));
                     } else {
                         log::trace!("Can not find {}", map_texture.texture_url.to_string());
                     }
@@ -998,20 +1000,21 @@ impl PlayerViewport {
                     "Fail to load group binding to resource".to_string(),
                 )))?;
 
-                Self::push_user_paramenter_binding_resources(
+                let _ = Self::push_user_paramenter_binding_resources(
                     skin_objcet.user_paramenters.clone(),
                     &material,
                     material_info,
                     &mut group_binding_to_resource,
-                );
+                )?;
 
                 if let Some(group_binding) = &material_info.skin_constants_binding {
                     group_binding_to_resource
                         .push((*group_binding, skin_objcet.skin_constants_resource.clone()));
                 }
-
-                let mut binding_resources = Self::make_binding_resources(group_binding_to_resource);
-                binding_resources[0].append(&mut skin_objcet.user_textures_resources.clone());
+                for (binding, user_textures_resource) in &skin_objcet.user_textures_resources {
+                    group_binding_to_resource.push((*binding, user_textures_resource.clone()));
+                }
+                let binding_resources = Self::make_binding_resources(group_binding_to_resource);
                 let PBRBindingResources {
                     global_constants_resource,
                     constants_resource,
@@ -1081,16 +1084,19 @@ impl PlayerViewport {
                     "Fail to load group binding to resource".to_string(),
                 )))?;
 
-                Self::push_user_paramenter_binding_resources(
+                let _ = Self::push_user_paramenter_binding_resources(
                     static_mesh_draw_objcet.user_paramenters.clone(),
                     &material,
                     material_info,
                     &mut group_binding_to_resource,
-                );
+                )?;
 
-                let mut binding_resources = Self::make_binding_resources(group_binding_to_resource);
-                binding_resources[0]
-                    .append(&mut static_mesh_draw_objcet.user_textures_resources.clone());
+                for (binding, user_textures_resource) in
+                    &static_mesh_draw_objcet.user_textures_resources
+                {
+                    group_binding_to_resource.push((*binding, user_textures_resource.clone()));
+                }
+                let binding_resources = Self::make_binding_resources(group_binding_to_resource);
 
                 let PBRBindingResources {
                     global_constants_resource,
@@ -1590,24 +1596,25 @@ impl PlayerViewport {
     }
 
     fn push_user_paramenter_binding_resources(
-        mut user_paramenters: Vec<EBindingResource>,
+        mut user_paramenters: HashMap<GroupBinding, EBindingResource>,
         material: &crate::content::material::Material,
         material_info: &rs_artifact::material::MaterialInfo,
         group_binding_to_resource: &mut Vec<(GroupBinding, EBindingResource)>,
-    ) {
-        let mut user_paramenter_binding_resources: Vec<EBindingResource> = vec![];
-        user_paramenter_binding_resources.append(&mut user_paramenters);
-        if let Some(default_handle) =
-            material.default_parament_handle(&MaterialOptions { is_skin: false })
-        {
-            user_paramenter_binding_resources.push(EBindingResource::Constants(*default_handle));
+    ) -> crate::error::Result<()> {
+        for paramenters in &material_info.paramenters {
+            let resource = user_paramenters
+                .remove(&paramenters.binding)
+                .or_else(|| {
+                    let default_handle =
+                        material.default_parament_handle(&MaterialOptions { is_skin: false })?;
+                    Some(EBindingResource::Constants(*default_handle))
+                })
+                .ok_or(crate::error::Error::Other(Some(format!(
+                    "Miss binding resource at {:?}",
+                    paramenters.binding
+                ))))?;
+            group_binding_to_resource.push((paramenters.binding, resource));
         }
-        assert!(user_paramenter_binding_resources.len() >= material_info.paramenters.len());
-        for (binding_resource, paramenter) in user_paramenter_binding_resources
-            .iter()
-            .zip(&material_info.paramenters)
-        {
-            group_binding_to_resource.push((paramenter.binding, binding_resource.clone()));
-        }
+        Ok(())
     }
 }

@@ -1,6 +1,7 @@
 use crate::{editor_context::EWindowType, windows_manager::WindowsManager};
 use egui_winit::State;
 use rapier3d::prelude::RigidBodyType;
+use rs_artifact::material_paramenters::BaseDataValueType;
 use rs_egui_ext::egui_render::EGUIRenderOutput;
 use rs_engine::{engine::Engine, frame_sync::FrameSync, input_mode::EInputMode};
 use rs_localization::t;
@@ -287,6 +288,73 @@ pub fn f32_widget_mut<Num: egui::emath::Numeric>(
         is_changed = ui.add(egui::DragValue::new(value).speed(0.1)).changed();
     });
     is_changed
+}
+
+pub fn render_data_field(ui: &mut egui::Ui, data_type: &mut BaseDataValueType) -> bool {
+    let mut is_need_update = false;
+
+    match data_type {
+        BaseDataValueType::F32(value) => {
+            if ui.add(egui::DragValue::new(value)).changed() {
+                is_need_update = true;
+            }
+        }
+        BaseDataValueType::Vec2(value) => {
+            if ui.add(egui::DragValue::new(&mut value.x)).changed() {
+                is_need_update = true;
+            }
+            if ui.add(egui::DragValue::new(&mut value.y)).changed() {
+                is_need_update = true;
+            }
+        }
+        BaseDataValueType::Vec3(value) => {
+            if ui.add(egui::DragValue::new(&mut value.x)).changed() {
+                is_need_update = true;
+            }
+            if ui.add(egui::DragValue::new(&mut value.y)).changed() {
+                is_need_update = true;
+            }
+            if ui.add(egui::DragValue::new(&mut value.z)).changed() {
+                is_need_update = true;
+            }
+            let mut rgba_unmul = [value.x, value.y, value.z, 1.0];
+            if ui
+                .color_edit_button_rgba_unmultiplied(&mut rgba_unmul)
+                .changed()
+            {
+                value.x = rgba_unmul[0];
+                value.y = rgba_unmul[1];
+                value.z = rgba_unmul[2];
+                is_need_update = true;
+            }
+        }
+        BaseDataValueType::Vec4(value) => {
+            if ui.add(egui::DragValue::new(&mut value.x)).changed() {
+                is_need_update = true;
+            }
+            if ui.add(egui::DragValue::new(&mut value.y)).changed() {
+                is_need_update = true;
+            }
+            if ui.add(egui::DragValue::new(&mut value.z)).changed() {
+                is_need_update = true;
+            }
+            if ui.add(egui::DragValue::new(&mut value.w)).changed() {
+                is_need_update = true;
+            }
+            let mut rgba_unmul = [value.x, value.y, value.z, value.w];
+            if ui
+                .color_edit_button_rgba_unmultiplied(&mut rgba_unmul)
+                .changed()
+            {
+                value.x = rgba_unmul[0];
+                value.y = rgba_unmul[1];
+                value.z = rgba_unmul[2];
+                value.w = rgba_unmul[3];
+                is_need_update = true;
+            }
+        }
+    }
+    is_need_update
 }
 
 pub trait ToUIString {

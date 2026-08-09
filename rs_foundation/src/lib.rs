@@ -1,5 +1,6 @@
 use std::{
-    env, io,
+    env,
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 
@@ -254,6 +255,44 @@ pub fn full_cmd_from_command(command: &std::process::Command) -> String {
     //     .collect::<Vec<_>>()
     //     .join(" ");
     // full_cmd
+}
+
+pub fn insert_content_to_file(
+    file_path: &Path,
+    line_num: usize,
+    content_to_insert: &str,
+) -> std::io::Result<()> {
+    let content = std::fs::read_to_string(file_path)?;
+    let lines: Vec<&str> = content.lines().collect();
+
+    if line_num > lines.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Line {} out of range", line_num),
+        )
+        .into());
+    }
+
+    let parent = file_path.parent().unwrap_or(Path::new("."));
+    let temp_path = parent.join(format!(
+        ".{}_tmp",
+        file_path
+            .file_name()
+            .ok_or(std::io::ErrorKind::InvalidFilename)?
+            .to_string_lossy()
+    ));
+
+    let mut temp_file = std::fs::File::create(&temp_path)?;
+    for (i, line) in lines.iter().enumerate() {
+        if i == line_num {
+            writeln!(temp_file, "{}", content_to_insert)?;
+        }
+        writeln!(temp_file, "{}", line)?;
+    }
+    temp_file.sync_all()?;
+
+    std::fs::rename(&temp_path, file_path)?;
+    Ok(())
 }
 
 #[cfg(test)]

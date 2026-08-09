@@ -77,7 +77,7 @@ task("build_android_target")
         os.cd(old)
         local function cp_print(src, target)
             print("Copying %s to %s", src, target)
-            os.cp(src, target)
+            os.cp(src, target, {copy_if_different = true})
         end
         if mode == "debug" then
             cp_print(format("build/target/%s/debug/lib%s.so", target, project_name),

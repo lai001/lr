@@ -194,6 +194,13 @@ impl UniformMap {
             }
         }
     }
+
+    pub fn update(&mut self, mut closure: impl FnMut(&str, &mut BaseDataValueType)) {
+        for (k, v) in &mut self.name_range {
+            closure(k, &mut v.field.data_type);
+        }
+        self.transmit();
+    }
 }
 
 #[cfg(test)]

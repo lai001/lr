@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use crate::{
     content_edit::ContentEdit,
     data_source::{AssetFile, AssetFolder},
@@ -7,6 +6,7 @@ use crate::{
 use egui::{Color32, Context, RichText, Ui};
 use rs_engine::file_type::EFileType;
 use rs_localization::t;
+use std::any::TypeId;
 
 #[derive(Debug)]
 pub enum EClickItemType {
