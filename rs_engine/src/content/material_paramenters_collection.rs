@@ -1,7 +1,7 @@
 use crate::{
     engine::Engine, handle::BufferHandle, uniform_map::UniformMap, url_extension::UrlExtension,
 };
-use rs_artifact::{asset::Asset, material_paramenters::StructField, resource_type::EResourceType};
+use rs_artifact::material_paramenters::StructField;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -144,17 +144,5 @@ impl MaterialParamentersCollection {
             Some(buffer_handle) => Some(buffer_handle.clone()),
             None => None,
         }
-    }
-}
-
-impl Asset for MaterialParamentersCollection {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(
-            rs_artifact::content_type::EContentType::MaterialParamentersCollection,
-        )
     }
 }

@@ -4,7 +4,7 @@ use crate::{
     project_context::ProjectContext,
     ui::content_item_property_view::ContentItemPropertyView,
 };
-use rs_artifact::asset::Asset;
+use rs_artifact_types::asset::Asset;
 use rs_content::TypedContent;
 use rs_engine::{content::static_mesh::StaticMesh, resource_manager::ResourceManager};
 use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
@@ -207,7 +207,7 @@ impl ContentEditable for StaticMeshContentEditable {
                 Box::new(loaded_static_mesh.deref().clone()),
             );
         }
-        artifact_asset_encoder.encode(&*static_mesh);
+        artifact_asset_encoder.encode_content(&*static_mesh);
         Ok(())
     }
 }

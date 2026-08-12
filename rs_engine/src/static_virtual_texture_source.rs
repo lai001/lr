@@ -24,7 +24,7 @@ impl StaticVirtualTextureSource {
             ));
         }
         let image = rs_artifact::virtual_texture::image::decode_from_path(path, endian_type)
-            .map_err(|err| crate::error::Error::Artifact(err, None))?;
+            .map_err(|err| crate::error::Error::Artifact(err))?;
         let source = ESourceType::File(image);
         Ok(Self { source })
     }

@@ -1,6 +1,4 @@
-use crate::asset::Asset;
 use crate::mesh_vertex::MeshVertex;
-use crate::resource_type::EResourceType;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -39,12 +37,4 @@ pub struct SkinMesh {
     pub bone_paths: Vec<String>,
 }
 
-impl Asset for SkinMesh {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::SkinMesh
-    }
-}
+crate::impl_asset!(SkinMesh);

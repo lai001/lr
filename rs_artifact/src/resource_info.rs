@@ -1,4 +1,4 @@
-use crate::resource_type::EResourceType;
+use rs_artifact_types::resource_type::EResourceType;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

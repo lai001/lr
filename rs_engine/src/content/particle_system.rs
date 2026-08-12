@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use crate::url_extension::UrlExtension;
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ParticleSpawnEmiterPros {
@@ -40,15 +38,5 @@ impl ParticleSystem {
 
     pub fn new_template_instance(&self, name: String) -> crate::particle::system::ParticleSystem {
         crate::particle::system::ParticleSystem::new(name)
-    }
-}
-
-impl Asset for ParticleSystem {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::ParticleSystem)
     }
 }

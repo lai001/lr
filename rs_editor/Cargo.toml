@@ -101,6 +101,7 @@ rs_render = { path = "../rs_render" }
 rs_render_types = { path = "../rs_render_types" }
 rs_foundation = { path = "../rs_foundation" }
 rs_artifact = { path = "../rs_artifact" }
+rs_artifact_types = { path = "../crates/rs_artifact_types" }
 rs_engine = { path = "../rs_engine" }
 rs_hotreload_plugin = { path = "../rs_hotreload_plugin" }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }

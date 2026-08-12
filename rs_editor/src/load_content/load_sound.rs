@@ -1,7 +1,7 @@
 use super::types::{PostLoading, PostLoadingContext, PreLoadingContext};
 use crate::impl_default_load_future;
 use crate::impl_default_load_future_body;
-use rs_artifact::asset::Asset;
+use rs_artifact_types::asset::Asset;
 use rs_content::TypedContent;
 use rs_engine::content::sound::Sound;
 use rs_engine::thread_pool::ThreadPool;

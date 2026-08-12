@@ -1,7 +1,5 @@
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
-use serde::{Deserialize, Serialize};
-
 use crate::{build_asset_url, url_extension::UrlExtension};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SkeletonAnimation {
@@ -38,15 +36,5 @@ impl SkeletonAnimation {
             relative_path, animation_name
         ))
         .unwrap()
-    }
-}
-
-impl Asset for SkeletonAnimation {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::SkeletonAnimation)
     }
 }

@@ -1,5 +1,4 @@
 use crate::url_extension::UrlExtension;
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use rs_render::bake_info::BakeInfo;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -13,16 +12,6 @@ pub struct IBL {
 }
 
 crate::impl_content!(IBL);
-
-impl Asset for IBL {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::IBL)
-    }
-}
 
 impl IBL {
     pub fn get_name(&self) -> String {

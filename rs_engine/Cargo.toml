@@ -30,6 +30,7 @@ android-native-activity = ["winit/android-native-activity"]
 network_debug_trace = []
 
 [dependencies]
+thiserror = "2.0.19"
 bitflags = "2.13.1"
 md-5 = { version = "0.11.0" }
 anyhow = { version = "1.0.104", optional = true }
@@ -70,6 +71,7 @@ slotmap = { version = "1.1.1", features = ["serde"] }
 rs_foundation = { path = "../rs_foundation" }
 rs_audio = { path = "../rs_audio" }
 rs_artifact = { path = "../rs_artifact" }
+rs_artifact_types = { path = "../crates/rs_artifact_types" }
 rs_render = { path = "../rs_render" }
 rs_core_minimal = { path = "../rs_core_minimal" }
 rs_shader_compiler_core = { path = "../rs_shader_compiler_core" }

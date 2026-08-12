@@ -1,5 +1,4 @@
 use crate::error::Result;
-use crate::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -121,15 +120,7 @@ pub struct Image {
     pub data: Vec<u8>,
 }
 
-impl Asset for Image {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Image
-    }
-}
+crate::impl_asset!(Image);
 
 impl Image {
     pub fn decode(&self) -> image::ImageResult<image::DynamicImage> {

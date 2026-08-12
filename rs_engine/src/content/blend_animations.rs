@@ -1,5 +1,4 @@
 use crate::{skeleton_animation_provider::SkeletonAnimationBlendType, url_extension::UrlExtension};
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -27,15 +26,5 @@ impl BlendAnimations {
 
     pub fn get_name(&self) -> String {
         self.url.get_name_in_editor()
-    }
-}
-
-impl Asset for BlendAnimations {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::BlendAnimations)
     }
 }

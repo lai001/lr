@@ -1,7 +1,6 @@
 pub mod artifact;
 pub mod asset;
 pub mod bincode_legacy;
-pub mod content_type;
 pub mod derive_data;
 pub mod endian;
 pub mod error;
@@ -17,7 +16,6 @@ pub mod mesh_vertex_visitor;
 pub mod node_anim;
 pub mod property_value_type;
 pub mod resource_info;
-pub mod resource_type;
 pub mod shader_source_code;
 pub mod skeleton;
 pub mod skeleton_animation;
@@ -32,4 +30,16 @@ pub use endian::EEndianType;
 pub fn default_url() -> &'static url::Url {
     static URL: std::sync::OnceLock<url::Url> = std::sync::OnceLock::new();
     URL.get_or_init(|| url::Url::parse("rs://").unwrap())
+}
+
+#[macro_export]
+macro_rules! impl_asset {
+    ($type_name:ty) => {
+        #[typetag::serde(name = ::core::concat!("Asset::", ::core::stringify!($type_name)))]
+        impl rs_artifact_types::asset::Asset for $type_name {
+            fn get_url(&self) -> url::Url {
+                self.url.clone()
+            }
+        }
+    };
 }

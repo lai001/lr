@@ -879,12 +879,8 @@ impl Application {
             client_net_datas: vec![],
             level_net_data: vec![],
         };
-        server_net_data
-            .serialize_level(&find_level)
-            .map_err(|err| crate::error::Error::Artifact(err, None))?;
-        let data = server_net_data
-            .serialize()
-            .map_err(|err| crate::error::Error::Artifact(err, None))?;
+        server_net_data.serialize_level(&find_level)?;
+        let data = server_net_data.serialize()?;
         server.broadcast(&data);
         self.current_active_level = SingleThreadMut::new(find_level);
         self.server_pending_open_level = Some(url);

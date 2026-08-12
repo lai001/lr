@@ -4,7 +4,7 @@ use serde::de::DeserializeOwned;
 
 pub fn serialize<T>(val: &T, endian_type: Option<EEndianType>) -> Result<Vec<u8>>
 where
-    T: serde::ser::Serialize,
+    T: serde::ser::Serialize + ?Sized,
 {
     let endian_type = endian_type.unwrap_or_default();
     match endian_type {
@@ -22,7 +22,10 @@ where
     })
 }
 
-pub fn deserialize<D: DeserializeOwned>(src: &[u8], endian_type: Option<EEndianType>) -> Result<D> {
+pub fn deserialize<D: DeserializeOwned + ?Sized>(
+    src: &[u8],
+    endian_type: Option<EEndianType>,
+) -> Result<D> {
     let endian_type = endian_type.unwrap_or_default();
     let result: std::result::Result<(D, usize), bincode::error::DecodeError> = match endian_type {
         EEndianType::Big => {

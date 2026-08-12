@@ -1,4 +1,4 @@
-use crate::{asset::Asset, material_paramenters::StructField, resource_type::EResourceType};
+use crate::material_paramenters::StructField;
 use rs_render_types::MaterialOptions;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -77,12 +77,4 @@ pub struct Material {
     pub material_info: HashMap<MaterialOptions, MaterialInfo>,
 }
 
-impl Asset for Material {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Material
-    }
-}
+crate::impl_asset!(Material);

@@ -1,4 +1,4 @@
-use crate::{asset::Asset, derive_data::DeriveData, resource_type::EResourceType};
+use crate::derive_data::DeriveData;
 use rs_core_minimal::file_type::TextureFileType;
 use serde::{Deserialize, Serialize};
 
@@ -10,15 +10,7 @@ pub struct CompressedTexture {
     pub ty: TextureFileType,
 }
 
-impl Asset for CompressedTexture {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::DeriveData
-    }
-}
+crate::impl_asset!(CompressedTexture);
 
 impl DeriveData for CompressedTexture {
     fn source_url<'a>(&'a self) -> &'a url::Url {

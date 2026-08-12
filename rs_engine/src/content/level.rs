@@ -14,7 +14,6 @@ use crate::player_viewport::PlayerViewport;
 use crate::scene_node::SceneNode;
 use crate::{build_content_file_url, url_extension::UrlExtension};
 use rapier3d::prelude::*;
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use rs_core_minimal::name_generator::make_unique_name;
 use rs_foundation::new::{SingleThreadMut, SingleThreadMutType};
 use serde::{Deserialize, Serialize};
@@ -421,16 +420,6 @@ impl crate::network::NetworkReplicated for Level {
 
     fn on_net_mode_changed(&mut self, net_mode: crate::network::ENetMode) {
         self.network_fields.net_mode = net_mode;
-    }
-}
-
-impl Asset for Level {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::Level)
     }
 }
 

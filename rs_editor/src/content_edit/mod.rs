@@ -21,7 +21,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use downcast_rs::impl_downcast;
-use rs_artifact::asset::Asset;
+use rs_artifact_types::asset::Asset;
 use rs_content::Content;
 use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
 use rs_model_loader::model_loader::ModelLoader;

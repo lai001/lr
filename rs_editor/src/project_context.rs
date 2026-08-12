@@ -358,7 +358,7 @@ impl ProjectContext {
             url::Url,
             rs_artifact::shader_source_code::ShaderSourceCode,
         > = HashMap::new();
-        let mut associated_assets: HashMap<url::Url, Box<dyn rs_artifact::asset::Asset>> =
+        let mut associated_assets: HashMap<url::Url, Box<dyn rs_artifact_types::asset::Asset>> =
             HashMap::new();
 
         for content in self.content_manager.borrow().content_files() {
@@ -387,7 +387,10 @@ impl ProjectContext {
 
         // FIXME: Out of memory
         for asset in shader_source_codes.values() {
-            artifact_asset_encoder.encode(asset);
+            artifact_asset_encoder.encode_asset(asset);
+        }
+        for (_, associated_asset) in associated_assets {
+            artifact_asset_encoder.encode_asset(associated_asset.as_ref());
         }
         let _ = artifact_asset_encoder.finish()?;
         Ok(output_folder_path.join(output_filename))

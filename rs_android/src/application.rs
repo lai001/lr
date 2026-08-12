@@ -56,7 +56,9 @@ impl ApplicationContext {
             gui.egui_context().clone(),
         )
         .map_err(|err| crate::error::Error::Engine(err))?;
-        engine.init_resources();
+        if let Err(err) = engine.init_resources() {
+            panic!("{}", err);
+        }
         let current_active_level = engine.new_main_level().unwrap();
         let contents = engine.content_files.clone();
         #[cfg(feature = "plugin_shared_crate")]

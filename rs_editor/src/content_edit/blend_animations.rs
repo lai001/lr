@@ -39,7 +39,7 @@ impl ContentEditable for BlendAnimationsContentEditable {
         &self,
         content: SingleThreadMutType<Box<dyn rs_content::Content>>,
         artifact_asset_encoder: &mut rs_artifact::artifact::ArtifactAssetEncoder,
-        associated_assets: &mut HashMap<url::Url, Box<dyn rs_artifact::asset::Asset>>,
+        associated_assets: &mut HashMap<url::Url, Box<dyn rs_artifact_types::asset::Asset>>,
         model_loader: &mut rs_model_loader::model_loader::ModelLoader,
         project_context: &crate::project_context::ProjectContext,
     ) -> anyhow::Result<()> {
@@ -48,7 +48,7 @@ impl ContentEditable for BlendAnimationsContentEditable {
         let _ = associated_assets;
         let blend_animations = TypedContent::<BlendAnimations>::new(content).expect("Matched type");
         let blend_animations = blend_animations.borrow();
-        artifact_asset_encoder.encode(&*blend_animations);
+        artifact_asset_encoder.encode_content(&*blend_animations);
         Ok(())
     }
 

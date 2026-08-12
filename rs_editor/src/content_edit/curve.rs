@@ -41,7 +41,7 @@ impl ContentEditable for CurveContentEditable {
         &self,
         content: SingleThreadMutType<Box<dyn rs_content::Content>>,
         artifact_asset_encoder: &mut rs_artifact::artifact::ArtifactAssetEncoder,
-        associated_assets: &mut HashMap<url::Url, Box<dyn rs_artifact::asset::Asset>>,
+        associated_assets: &mut HashMap<url::Url, Box<dyn rs_artifact_types::asset::Asset>>,
         model_loader: &mut rs_model_loader::model_loader::ModelLoader,
         project_context: &crate::project_context::ProjectContext,
     ) -> anyhow::Result<()> {
@@ -50,7 +50,7 @@ impl ContentEditable for CurveContentEditable {
         let _ = associated_assets;
         let curve = TypedContent::<Curve>::new(content).expect("Matched type");
         let curve = curve.borrow();
-        artifact_asset_encoder.encode(&*curve);
+        artifact_asset_encoder.encode_content(&*curve);
         Ok(())
     }
 

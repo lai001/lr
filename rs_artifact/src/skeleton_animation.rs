@@ -1,4 +1,4 @@
-use crate::{asset::Asset, node_anim::NodeAnim, resource_type::EResourceType};
+use crate::node_anim::NodeAnim;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -16,12 +16,4 @@ impl SkeletonAnimation {
     }
 }
 
-impl Asset for SkeletonAnimation {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::SkeletonAnimation
-    }
-}
+crate::impl_asset!(SkeletonAnimation);

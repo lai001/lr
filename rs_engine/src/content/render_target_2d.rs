@@ -1,5 +1,4 @@
 use crate::engine::Engine;
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use rs_render::command::TextureDescriptorCreateInfo;
 use serde::{Deserialize, Serialize};
 
@@ -80,15 +79,5 @@ impl RenderTarget2D {
 
     pub fn texture_handle(&self) -> Option<crate::handle::TextureHandle> {
         self.run_time.as_ref().map(|x| x.texture.clone()).flatten()
-    }
-}
-
-impl Asset for RenderTarget2D {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::RenderTarget2D)
     }
 }

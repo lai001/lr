@@ -1,17 +1,15 @@
 use crate::error::Result;
-use crate::skeleton::Skeleton;
 use crate::{
     EEndianType,
-    asset::{self, Asset},
+    asset::{self},
     file_header::{
         self, ARTIFACT_FILE_MAGIC_NUMBERS, FileHeader, HEADER_LENGTH_SIZE, IDENTIFICATION_SIZE,
     },
-    image::Image,
     resource_info::ResourceInfo,
-    resource_type::EResourceType,
-    shader_source_code::ShaderSourceCode,
-    static_mesh::StaticMesh,
 };
+use rs_artifact_types::asset::{ASSET_KIND, Asset, ResourceEncodeTask};
+use rs_artifact_types::resource_type::EResourceType;
+use rs_content::{CONTENT_ASSET_KIND, Content};
 use rs_core_minimal::settings::Settings;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -26,15 +24,6 @@ use std::{
 pub struct ArtifactFileHeader {
     pub settings: Settings,
     pub resource_map: std::collections::HashMap<url::Url, ResourceInfo>,
-}
-
-pub struct ResourceEncodeTask<R>
-where
-    R: Seek + Read,
-{
-    pub url: url::Url,
-    pub resource_type: EResourceType,
-    pub reader: R,
 }
 
 pub fn encode_artifact_tasks_disk<R>(
@@ -72,7 +61,7 @@ where
             .map_err(|err| crate::error::Error::IO(err, Some(format!("Seek fail"))))?;
         let info = ResourceInfo {
             url: task.url.clone(),
-            resource_type: task.resource_type,
+            resource_type: task.resource_type.clone(),
             offset,
             length,
         };
@@ -94,12 +83,13 @@ where
         crate::error::Error::IO(err, Some(format!("Failed to write header data.")))
     })?;
     for task in tasks.iter_mut() {
-        std::io::copy(&mut task.reader, &mut buf_writer)
+        let bytes = std::io::copy(&mut task.reader, &mut buf_writer)
             .map_err(|err| crate::error::Error::IO(err, Some(format!("Failed to copy data."))))?;
         log::trace!(
-            "Url: {}, Resource type: {:?}",
+            "Url: {}, {:?}, bytes: {}",
             task.url.to_string(),
-            task.resource_type
+            task.resource_type,
+            bytes
         );
     }
     Ok(())
@@ -116,8 +106,7 @@ where
 {
     let mut tasks: Vec<ResourceEncodeTask<Cursor<Vec<u8>>>> = Vec::new();
     for asset in assets {
-        let asset_encoded_data =
-            asset::encode_asset(asset.get_resource_type(), endian_type, asset)?;
+        let asset_encoded_data = asset::encode_asset(asset, endian_type)?;
         let reader = Cursor::new(asset_encoded_data);
         let task = asset.build_resource_encode_task(reader);
         tasks.push(task);
@@ -142,12 +131,49 @@ impl ArtifactAssetEncoder {
         }
     }
 
-    pub fn encode<T>(&mut self, asset: &T)
-    where
-        T: Asset + Serialize,
-    {
-        let asset_encoded_data =
-            asset::encode_asset(asset.get_resource_type(), self.endian_type, asset).unwrap();
+    /// Encode a pure asset type (not a content type) into this artifact as a task.
+    ///
+    /// The `asset` must be a `&dyn Asset` whose concrete type implements the
+    /// [`Asset`] trait only, and must be registered with `#[typetag::serde]` on
+    /// `Asset` (`tag = "type", content = "asset"`). The payload is serialized
+    /// via `erased_serde` + `typetag`, which writes the typetag tag/content
+    /// wrapping (`{"type": ..., "asset": ...}`).
+    ///
+    /// # Warning
+    ///
+    /// Do **NOT** pass a content type here. Because of the `erased_serde` +
+    /// `typetag` combination, a type that implements [`Content`] (which is a
+    /// subtrait of `Asset`) is registered under `Content`'s typetag config
+    /// (`content = "content"`), not `Asset`'s (`content = "asset"`). Feeding a
+    /// `&dyn Content` into this method serializes it with `Content`'s tag
+    /// name, which the artifact reader cannot match back to an `Asset` when
+    /// decoding. Use [`Self::encode_content`] for content types instead.
+    pub fn encode_asset(&mut self, asset: &dyn Asset) {
+        let asset_encoded_data = asset::encode_asset(asset, self.endian_type).unwrap();
+        let reader = Cursor::new(asset_encoded_data);
+        let task = asset.build_resource_encode_task(reader);
+        self.tasks.push(task);
+    }
+
+    /// Encode a content type into this artifact as a task.
+    ///
+    /// The `asset` must be a `&dyn Content` registered with `#[typetag::serde]`
+    /// on `Content` (`tag = "type", content = "content"`). The payload is
+    /// serialized via `erased_serde` + `typetag`, which writes the typetag
+    /// tag/content wrapping (`{"type": ..., "content": ...}`).
+    ///
+    /// # Why not `encode_asset`?
+    ///
+    /// [`Content`] is a subtrait of `Asset`, so a `&dyn Content` *could* be
+    /// passed to [`Self::encode_asset`]. However, because of the
+    /// `erased_serde` + `typetag` combination, the two traits register the
+    /// same concrete type under different tag names and content keys. Encoding
+    /// a content type via `encode_asset` produces a payload tagged with
+    /// `Content`'s registration, which is incompatible with the `Asset`-based
+    /// decoding path. Always use this method for anything that implements
+    /// `Content`, and reserve [`Self::encode_asset`] for pure `Asset` types.
+    pub fn encode_content(&mut self, asset: &dyn Content) {
+        let asset_encoded_data = asset::encode_asset(asset, self.endian_type).unwrap();
         let reader = Cursor::new(asset_encoded_data);
         let task = asset.build_resource_encode_task(reader);
         self.tasks.push(task);
@@ -248,19 +274,62 @@ impl ArtifactReader {
         &self.artifact_file_header
     }
 
-    pub fn get_resource<T>(
+    /// Decode a pure asset from this artifact into a boxed trait object.
+    ///
+    /// The payload must have been encoded with
+    /// [`ArtifactAssetEncoder::encode_asset`] (i.e. serialized under `Asset`'s
+    /// typetag config: `content = "asset"`).
+    ///
+    /// # Warning
+    ///
+    /// Do **NOT** use this to read a content type. Because of the
+    /// `erased_serde` + `typetag` combination, a payload encoded via
+    /// [`ArtifactAssetEncoder::encode_content`] is tagged with `Content`'s
+    /// registration (`content = "content"`), which this method's `Asset`-based
+    /// decoding cannot match. Use [`Self::content`] for content types instead.
+    pub fn asset(
         &mut self,
         url: &url::Url,
         expected_resource_type: Option<EResourceType>,
-    ) -> Result<T>
+    ) -> Result<Box<dyn Asset>> {
+        self.asset_internal(url, expected_resource_type)
+    }
+
+    /// Decode a content type from this artifact into a boxed trait object.
+    ///
+    /// The payload must have been encoded with
+    /// [`ArtifactAssetEncoder::encode_content`] (i.e. serialized under
+    /// `Content`'s typetag config: `content = "content"`).
+    ///
+    /// # Why not `asset`?
+    ///
+    /// `Content` is a subtrait of `Asset`, but because of the `erased_serde` +
+    /// `typetag` combination, `Content`-encoded payloads carry `Content`'s tag
+    /// registration, which [`Self::asset`] (an `Asset`-based decoder) cannot
+    /// match back. Always pair `encode_content` with this method, and pair
+    /// `encode_asset` with `Self::asset`.
+    pub fn content(
+        &mut self,
+        url: &url::Url,
+        expected_resource_type: Option<EResourceType>,
+    ) -> Result<Box<dyn Content>> {
+        self.asset_internal(url, expected_resource_type)
+    }
+
+    fn asset_internal<T>(
+        &mut self,
+        url: &url::Url,
+        expected_resource_type: Option<EResourceType>,
+    ) -> Result<Box<T>>
     where
-        T: Asset + DeserializeOwned,
+        T: Asset + Serialize + ?Sized,
+        Box<T>: Asset + DeserializeOwned,
     {
         let resource_info = self.artifact_file_header.resource_map.get(url).ok_or(
-            crate::error::Error::NotFound(Some(format!("Resource does not contain {}.", url))),
+            crate::error::Error::NotFound(Some(format!("Resource does not contain {}", url))),
         )?;
-        if expected_resource_type.is_some() {
-            if Some(resource_info.resource_type) != expected_resource_type {
+        if let Some(expected_resource_type) = expected_resource_type {
+            if resource_info.resource_type != expected_resource_type {
                 return Err(crate::error::Error::ResourceTypeNotMatch(Some(format!(
                     "{:?} != expected resource type: {:?}",
                     resource_info.resource_type, expected_resource_type
@@ -280,11 +349,16 @@ impl ArtifactReader {
             let msg = format!("Failed to read the exact number of bytes.");
             crate::error::Error::IO(err, Some(msg))
         })?;
-        asset::decode_asset::<T>(&buf, self.endian_type, Some(resource_info.resource_type))
+        asset::decode_asset::<Box<T>>(
+            &buf,
+            self.endian_type,
+            Some(resource_info.resource_type.clone()),
+        )
     }
 
     pub fn check_assets(&mut self) -> Result<()> {
-        for (_, resource_info) in &self.artifact_file_header.resource_map {
+        for (url, resource_info) in self.artifact_file_header.resource_map.clone() {
+            log::trace!("url: {}, type: {:?}", url, resource_info.resource_type);
             let offset = resource_info.offset;
             let length = resource_info.length;
             let _ = self
@@ -301,45 +375,33 @@ impl ArtifactReader {
                 let msg = format!("Failed to read the exact number of bytes.");
                 crate::error::Error::IO(err, Some(msg))
             })?;
-            log::trace!(
-                "url: {}, type: {:?}",
-                resource_info.url,
-                resource_info.resource_type
-            );
-            match resource_info.resource_type {
-                EResourceType::Image => {
-                    asset::decode_asset::<Image>(
-                        &buf,
-                        self.endian_type,
-                        Some(resource_info.resource_type),
-                    )?;
-                    log::trace!("{}", "Check image asset");
-                }
-                EResourceType::StaticMesh => {
-                    asset::decode_asset::<StaticMesh>(
-                        &buf,
-                        self.endian_type,
-                        Some(resource_info.resource_type),
-                    )?;
-                    log::trace!("{}", "Check static_mesh asset");
-                }
-                EResourceType::ShaderSourceCode => {
-                    asset::decode_asset::<ShaderSourceCode>(
-                        &buf,
-                        self.endian_type,
-                        Some(resource_info.resource_type),
-                    )?;
-                    log::trace!("{}", "Check shader_source_code asset");
-                }
-                EResourceType::Skeleton => {
-                    asset::decode_asset::<Skeleton>(
-                        &buf,
-                        self.endian_type,
-                        Some(resource_info.resource_type),
-                    )?;
-                    log::trace!("{}", "Check skeleton asset");
-                }
-                _ => {}
+
+            if resource_info.resource_type.kind() == ASSET_KIND {
+                let asset = self.asset(&url, None)?;
+                let message = format!(
+                    "{:?}, {:?}",
+                    asset.as_ref().resource_type(),
+                    resource_info.resource_type
+                );
+                assert!(
+                    asset.as_ref().resource_type() == resource_info.resource_type,
+                    "{}",
+                    message
+                );
+            } else if resource_info.resource_type.kind() == CONTENT_ASSET_KIND {
+                let content = self.content(&url, None)?;
+                let message = format!(
+                    "{:?}, {:?}",
+                    content.as_ref().resource_type(),
+                    resource_info.resource_type
+                );
+                assert!(
+                    content.as_ref().resource_type() == resource_info.resource_type,
+                    "{}",
+                    message
+                );
+            } else {
+                unimplemented!();
             }
         }
         Ok(())

@@ -68,7 +68,9 @@ impl ApplicationContext {
         )
         .unwrap();
 
-        engine.init_resources();
+        if let Err(err) = engine.init_resources() {
+            panic!("{}", err);
+        }
 
         window
             .set_cursor_grab(winit::window::CursorGrabMode::Confined)

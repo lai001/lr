@@ -165,11 +165,21 @@ impl FileHeader {
 #[cfg(test)]
 mod test {
     use super::{ARTIFACT_FILE_MAGIC_NUMBERS, FileHeader};
-    use crate::{
-        artifact::ArtifactFileHeader, resource_info::ResourceInfo, resource_type::EResourceType,
-    };
+    use crate::{artifact::ArtifactFileHeader, resource_info::ResourceInfo};
+    use rs_artifact_types::asset::Asset;
     use rs_core_minimal::settings::Settings;
+    use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
+
+    #[derive(Deserialize, Serialize)]
+    struct Binary {}
+
+    #[typetag::serde]
+    impl Asset for Binary {
+        fn get_url(&self) -> url::Url {
+            unreachable!()
+        }
+    }
 
     #[test]
     fn test_case() {
@@ -184,7 +194,7 @@ mod test {
             url: url::Url::parse("https://github.com/lai001").unwrap(),
             offset: 0,
             length: 1024,
-            resource_type: EResourceType::Binary,
+            resource_type: Binary::associated_resource_type(),
         };
         let fileheader = ArtifactFileHeader {
             resource_map: HashMap::from([(resource.url.clone(), resource)]),

@@ -1,5 +1,3 @@
-use crate::asset::Asset;
-use crate::resource_type::EResourceType;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -36,12 +34,4 @@ pub struct Skeleton {
     pub skeleton_mesh_hierarchy: HashMap<String, SkeletonMeshHierarchyNode>,
 }
 
-impl Asset for Skeleton {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Skeleton
-    }
-}
+crate::impl_asset!(Skeleton);

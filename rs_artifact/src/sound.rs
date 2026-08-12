@@ -1,4 +1,3 @@
-use crate::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Copy, PartialEq, Eq, Debug, Clone, Hash, Serialize, Deserialize)]
@@ -17,12 +16,4 @@ pub struct Sound {
     pub data: Vec<u8>,
 }
 
-impl Asset for Sound {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Sound
-    }
-}
+crate::impl_asset!(Sound);

@@ -38,5 +38,23 @@ macro_rules! impl_content {
                 ::core::stringify!($type_name)
             }
         }
+
+        #[typetag::serde(name = ::core::stringify!($type_name))]
+        impl rs_artifact_types::asset::Asset for $type_name {
+            fn get_url(&self) -> url::Url {
+                self.url.clone()
+            }
+
+            fn asset_kind(&self) -> std::borrow::Cow<'static, str> {
+                std::borrow::Cow::Borrowed(rs_content::CONTENT_ASSET_KIND)
+            }
+
+            fn associated_asset_kind() -> std::borrow::Cow<'static, str>
+            where
+                Self: Sized,
+            {
+                std::borrow::Cow::Borrowed(rs_content::CONTENT_ASSET_KIND)
+            }
+        }
     };
 }

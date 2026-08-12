@@ -4,16 +4,14 @@ use crate::handle::SamplerHandle;
 use crate::thread_pool::ThreadPool;
 use crate::{error::Result, handle::HandleManager};
 use lazy_static::lazy_static;
-use rs_artifact::asset::Asset;
 use rs_artifact::resource_info::ResourceInfo;
 use rs_artifact::sound::Sound;
 use rs_artifact::static_mesh::StaticMesh;
-use rs_artifact::{
-    artifact::ArtifactReader, resource_type::EResourceType, shader_source_code::ShaderSourceCode,
-};
+use rs_artifact::{artifact::ArtifactReader, shader_source_code::ShaderSourceCode};
+use rs_artifact_types::asset::Asset;
+use rs_artifact_types::resource_type::EResourceType;
 use rs_core_minimal::name_generator;
 use rs_render::command::IBLTexturesKey;
-use serde::de::DeserializeOwned;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::{collections::HashMap, sync::Mutex};
@@ -175,47 +173,43 @@ impl STResourceManager {
         };
 
         for (url, resource_info) in reader.get_artifact_file_header().resource_map.clone() {
-            if resource_info.resource_type != EResourceType::StaticMesh {
+            if resource_info.resource_type != StaticMesh::associated_resource_type() {
                 continue;
             }
             let static_mesh = reader
-                .get_resource::<rs_artifact::static_mesh::StaticMesh>(
-                    &url,
-                    Some(EResourceType::StaticMesh),
-                )
+                .asset(&url, Some(StaticMesh::associated_resource_type()))
                 .expect("Never");
-            self.static_meshs
-                .insert(static_mesh.url.clone(), Arc::new(static_mesh));
+            let static_mesh = static_mesh.downcast::<StaticMesh>();
+            match static_mesh {
+                Ok(static_mesh) => {
+                    self.static_meshs
+                        .insert(static_mesh.url.clone(), Arc::from(static_mesh));
+                }
+                Err(_) => {
+                    panic!("Never");
+                }
+            }
         }
     }
 
-    fn get_shader_source_code(&mut self, url: &url::Url) -> Result<ShaderSourceCode> {
+    fn get_shader_source_code(&mut self, url: &url::Url) -> Result<Box<ShaderSourceCode>> {
         let reader = self
             .artifact_reader
             .as_mut()
             .ok_or(crate::error::Error::ArtifactReaderNotSet)?;
-        let shader = reader
-            .get_resource::<rs_artifact::shader_source_code::ShaderSourceCode>(
-                url,
-                Some(EResourceType::ShaderSourceCode),
-            )
-            .map_err(|err| crate::error::Error::Artifact(err, None))?;
+        let shader = reader.asset(url, Some(ShaderSourceCode::associated_resource_type()))?;
+
+        let shader = shader.downcast::<ShaderSourceCode>()?;
         Ok(shader)
     }
 
-    fn get_level(&mut self, url: &url::Url) -> Result<Level> {
+    fn get_level(&mut self, url: &url::Url) -> Result<Box<Level>> {
         let reader = self
             .artifact_reader
             .as_mut()
             .ok_or(crate::error::Error::ArtifactReaderNotSet)?;
-        let level = reader
-            .get_resource::<Level>(
-                url,
-                Some(EResourceType::Content(
-                    rs_artifact::content_type::EContentType::Level,
-                )),
-            )
-            .map_err(|err| crate::error::Error::Artifact(err, None))?;
+        let level = reader.asset(url, Some(Level::associated_resource_type()))?;
+        let level = level.downcast::<Level>()?;
         Ok(level)
     }
 
@@ -247,13 +241,9 @@ impl STResourceManager {
             .artifact_reader
             .as_mut()
             .ok_or(crate::error::Error::ArtifactReaderNotSet)?;
-        let static_mesh = reader
-            .get_resource::<rs_artifact::static_mesh::StaticMesh>(
-                url,
-                Some(EResourceType::StaticMesh),
-            )
-            .map_err(|err| crate::error::Error::Artifact(err, None))?;
-        let static_mesh = Arc::new(static_mesh);
+        let static_mesh = reader.asset(url, Some(StaticMesh::associated_resource_type()))?;
+        let static_mesh = static_mesh.downcast::<StaticMesh>()?;
+        let static_mesh: Arc<StaticMesh> = Arc::from(static_mesh);
         self.static_meshs.insert(url.clone(), static_mesh.clone());
         Ok(static_mesh)
     }
@@ -266,37 +256,52 @@ impl STResourceManager {
         Ok(reader.get_artifact_file_header().resource_map.clone())
     }
 
-    fn get_resource<T: Asset + DeserializeOwned>(
+    fn get_content(
         &mut self,
         url: &url::Url,
         expected_resource_type: Option<EResourceType>,
-    ) -> Result<T> {
+    ) -> Result<Box<dyn rs_content::Content>> {
         let reader = self
             .artifact_reader
             .as_mut()
             .ok_or(crate::error::Error::ArtifactReaderNotSet)?;
-        let level = reader
-            .get_resource::<T>(url, expected_resource_type)
-            .map_err(|err| crate::error::Error::Artifact(err, None))?;
-        Ok(level)
+        let content = reader.content(url, expected_resource_type)?;
+        Ok(content)
     }
 
-    fn get_all_shader_source_codes(&mut self) -> Vec<ShaderSourceCode> {
-        let mut codes: Vec<ShaderSourceCode> = vec![];
+    fn get_asset(
+        &mut self,
+        url: &url::Url,
+        expected_resource_type: Option<EResourceType>,
+    ) -> Result<Box<dyn Asset>> {
+        let reader = self
+            .artifact_reader
+            .as_mut()
+            .ok_or(crate::error::Error::ArtifactReaderNotSet)?;
+        let asset = reader.asset(url, expected_resource_type)?;
+        Ok(asset)
+    }
+
+    fn get_all_shader_source_codes(&mut self) -> Vec<Box<ShaderSourceCode>> {
+        let mut codes: Vec<Box<ShaderSourceCode>> = vec![];
         let Some(reader) = self.artifact_reader.as_mut() else {
             return codes;
         };
         for (url, resource_info) in reader.get_artifact_file_header().resource_map.clone() {
-            if resource_info.resource_type != EResourceType::ShaderSourceCode {
+            if resource_info.resource_type != ShaderSourceCode::associated_resource_type() {
                 continue;
             }
             let shader = reader
-                .get_resource::<rs_artifact::shader_source_code::ShaderSourceCode>(
-                    &url,
-                    Some(EResourceType::ShaderSourceCode),
-                )
+                .asset(&url, Some(ShaderSourceCode::associated_resource_type()))
                 .expect("Never");
-            codes.push(shader);
+            match shader.downcast::<ShaderSourceCode>() {
+                Ok(shader) => {
+                    codes.push(shader);
+                }
+                Err(_) => {
+                    panic!("Never");
+                }
+            }
         }
         codes
     }

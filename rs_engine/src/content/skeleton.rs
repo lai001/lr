@@ -1,5 +1,4 @@
 use crate::{build_asset_url, url_extension::UrlExtension};
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -35,16 +34,6 @@ impl Skeleton {
 
     pub fn make_asset_url(relative_path: &str, root_bone: &str) -> url::Url {
         build_asset_url(format!("{}?root_bone={}", relative_path, root_bone)).unwrap()
-    }
-}
-
-impl Asset for Skeleton {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::Skeleton)
     }
 }
 

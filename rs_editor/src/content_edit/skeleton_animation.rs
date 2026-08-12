@@ -54,7 +54,7 @@ impl ContentEditable for SkeletonAnimationContentEditable {
         &self,
         content: SingleThreadMutType<Box<dyn rs_content::Content>>,
         artifact_asset_encoder: &mut rs_artifact::artifact::ArtifactAssetEncoder,
-        associated_assets: &mut HashMap<url::Url, Box<dyn rs_artifact::asset::Asset>>,
+        associated_assets: &mut HashMap<url::Url, Box<dyn rs_artifact_types::asset::Asset>>,
         model_loader: &mut rs_model_loader::model_loader::ModelLoader,
         project_context: &crate::project_context::ProjectContext,
     ) -> anyhow::Result<()> {
@@ -76,7 +76,7 @@ impl ContentEditable for SkeletonAnimationContentEditable {
             Box::new(loaded_skeleton_animation.deref().clone()),
         );
 
-        artifact_asset_encoder.encode(&*skeleton_animation);
+        artifact_asset_encoder.encode_content(&*skeleton_animation);
 
         Ok(())
     }

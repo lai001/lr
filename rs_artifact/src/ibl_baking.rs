@@ -1,4 +1,3 @@
-use crate::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -10,12 +9,4 @@ pub struct IBLBaking {
     pub irradiance_data: Vec<u8>,
 }
 
-impl Asset for IBLBaking {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::IBLBaking
-    }
-}
+crate::impl_asset!(IBLBaking);

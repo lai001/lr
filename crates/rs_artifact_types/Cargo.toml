@@ -1,0 +1,11 @@
+[package]
+name = "rs_artifact_types"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+downcast-rs = "2.0.2"
+url = { version = "2.5.8", features = ["serde"] }
+typetag = "0.2.23"
+erased-serde = "0.4.10"
+serde = { version = "1.0.229", features = ["derive"] }

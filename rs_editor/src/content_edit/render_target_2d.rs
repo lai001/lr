@@ -102,7 +102,7 @@ impl ContentEditable for RenderTarget2DContentEditable {
         &self,
         content: SingleThreadMutType<Box<dyn rs_content::Content>>,
         artifact_asset_encoder: &mut rs_artifact::artifact::ArtifactAssetEncoder,
-        associated_assets: &mut HashMap<url::Url, Box<dyn rs_artifact::asset::Asset>>,
+        associated_assets: &mut HashMap<url::Url, Box<dyn rs_artifact_types::asset::Asset>>,
         model_loader: &mut rs_model_loader::model_loader::ModelLoader,
         project_context: &crate::project_context::ProjectContext,
     ) -> anyhow::Result<()> {
@@ -111,7 +111,7 @@ impl ContentEditable for RenderTarget2DContentEditable {
         let _ = associated_assets;
         let render_target_2d = TypedContent::<RenderTarget2D>::new(content).expect("Matched type");
         let render_target_2d = render_target_2d.borrow();
-        artifact_asset_encoder.encode(&*render_target_2d);
+        artifact_asset_encoder.encode_content(&*render_target_2d);
         Ok(())
     }
 

@@ -1,7 +1,6 @@
 use crate::{ASSET_SCHEME, build_asset_url, url_extension::UrlExtension};
 #[cfg(feature = "editor")]
 use anyhow::{Context, Result, anyhow};
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
@@ -20,16 +19,6 @@ pub struct TextureFile {
     pub compressed_texture_url: Option<url::Url>,
 }
 crate::impl_content!(TextureFile);
-
-impl Asset for TextureFile {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::Texture)
-    }
-}
 
 impl TextureFile {
     pub fn new(url: url::Url) -> Self {

@@ -1,5 +1,4 @@
 use crate::url_extension::UrlExtension;
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use serde::{Deserialize, Serialize};
 use uniform_cubic_splines::{basis::CatmullRom, spline, spline_inverse};
 
@@ -85,15 +84,5 @@ impl Curve {
         } else {
             None
         }
-    }
-}
-
-impl Asset for Curve {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::Curve)
     }
 }

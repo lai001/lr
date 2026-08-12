@@ -3,7 +3,6 @@ use crate::handle::BufferHandle;
 use crate::uniform_map::UniformMap;
 use crate::{handle::MaterialRenderPipelineHandle, url_extension::UrlExtension};
 use rs_artifact::material::MaterialInfo;
-use rs_artifact::{asset::Asset, resource_type::EResourceType};
 use rs_render_types::{EBlendModeType, MaterialOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -32,16 +31,6 @@ pub struct Material {
 }
 
 crate::impl_content!(Material);
-
-impl Asset for Material {
-    fn get_url(&self) -> url::Url {
-        self.url.clone()
-    }
-
-    fn get_resource_type(&self) -> EResourceType {
-        EResourceType::Content(rs_artifact::content_type::EContentType::Material)
-    }
-}
 
 impl Material {
     pub fn get_name(&self) -> String {

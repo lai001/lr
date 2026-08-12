@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{content_edit::ContentEditable, project_context::ProjectContext};
-use rs_artifact::asset::Asset;
+use rs_artifact_types::asset::Asset;
 use rs_content::TypedContent;
 use rs_engine::content::level::Level;
 use rs_foundation::new::SingleThreadMutType;
@@ -56,7 +56,7 @@ impl ContentEditable for LevelContentEditable {
         let _ = model_loader;
         let level = TypedContent::<Level>::new(content).expect("Matched type");
         let level = level.borrow();
-        artifact_asset_encoder.encode(&*level);
+        artifact_asset_encoder.encode_content(&*level);
         Ok(())
     }
 

@@ -2,7 +2,6 @@ use crate::{get_engine_root_dir_at_compile_time, string_extension::StringExtensi
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use syn::*;
-
 struct MultipleThreadFunctionsGeneratorFileParams {
     file: std::path::PathBuf,
     target_struct_name: String,
@@ -85,7 +84,7 @@ pub fn multiple_thread_functions_generator_macro_derive_impl(input: TokenStream)
     let content = std::fs::read_to_string(&file_parameters.file).unwrap();
     let read_ast = syn::parse_file(&content).unwrap();
 
-    let mut func_stream = proc_macro2::TokenStream::default();
+    let mut funcs_stream = proc_macro2::TokenStream::default();
 
     for item in read_ast.items.iter() {
         let Item::Impl(target_impl) = item else {
@@ -105,7 +104,7 @@ pub fn multiple_thread_functions_generator_macro_derive_impl(input: TokenStream)
                 continue;
             };
             let func_name = method.sig.ident.to_string();
-            let generics = method.sig.generics.to_token_stream();
+            let generics = &method.sig.generics;
 
             let input_args = &method.sig.inputs;
             let input_args = input_args
@@ -147,17 +146,24 @@ pub fn multiple_thread_functions_generator_macro_derive_impl(input: TokenStream)
                 });
             }
 
-            func_stream.extend::<proc_macro2::TokenStream>(quote! {
+            let mut caller_generics: proc_macro2::TokenStream = proc_macro2::TokenStream::new();
+            assert!(generics.type_params().count() <= 1);
+            for type_param in generics.type_params() {
+                let _caller_generics = type_param.ident.to_token_stream();
+                caller_generics = _caller_generics;
+            }
+            let func_stream = quote! {
                 pub fn #func_name #generics(&self, #input_args_token) #output_name {
-                    self.inner.lock().unwrap().#func_name(#call_input_args_token)
+                    self.inner.lock().unwrap().#func_name ::<#caller_generics>(#call_input_args_token)
                 }
-            });
+            };
+            funcs_stream.extend::<proc_macro2::TokenStream>(func_stream);
         }
     }
 
     let output_stream = quote! {
         impl #self_struct_name {
-           #func_stream
+           #funcs_stream
         }
     };
     // println!(
