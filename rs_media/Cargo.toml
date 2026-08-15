@@ -6,14 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ffmpeg-next = "8.1.0"
-cpal = "0.17.3"
+ffmpeg-next = "9.0.0"
+cpal = "0.18.1"
 image = "0.25.10"
 bitflags = "2.13.1"
 num-complex = "0.4.6"
 log = "0.4.33"
 rustfft = "6.4.1"
-glam = { version = "0.30.10", features = ["mint"] }
+glam = { version = "0.33.3", features = ["mint"] }
 mp4 = { version = "0.14.0" }
 rs_foundation = { path = "../rs_foundation" }
 rs_core_audio = { path = "../rs_core_audio" }

@@ -12,7 +12,6 @@ use anyhow::anyhow;
 use convert_case::Casing;
 use proc_macro2::TokenStream;
 use ra_ap_hir::{HasVisibility, Semantics, Visibility};
-use ra_ap_ide_db::base_db::RootQueryDb;
 use ra_ap_syntax::{
     SourceFile,
     ast::{self, HasModuleItem},
@@ -44,7 +43,7 @@ impl EngineApiGenerator {
             std::fs::create_dir_all(&output_root_dir)?;
         }
 
-        let crates = analyzer.root_database.all_crates().clone();
+        let crates = ra_ap_ide_db::base_db::all_crates(&analyzer.root_database);
         log::trace!("Num of crates: {}", crates.len());
         for db_krate in crates.iter() {
             let db = &analyzer.root_database;

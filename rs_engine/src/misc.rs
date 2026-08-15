@@ -1,6 +1,8 @@
+use glam::camera::rh::proj::directx::orthographic as orthographic_rh;
 use rs_core_minimal::{
     misc::distance_from_point_to_segment, parallel::ComputeDispatcher, sphere_3d::Sphere3D,
 };
+
 pub const FORWARD_VECTOR: glam::Vec3 = glam::Vec3::Z;
 pub const UP_VECTOR: glam::Vec3 = glam::Vec3::Y;
 pub const RIGHT_VECTOR: glam::Vec3 = glam::Vec3::X;
@@ -82,7 +84,7 @@ pub fn compute_appropriate_offset_look_and_projection_matrix(
         let sphere = aabb_as_sphere(&aabb);
         let size = sphere.radius;
         let directional_light_projection =
-            glam::Mat4::orthographic_rh(-size, size, -size, size, 0.01, 0.01 + size * 2.0);
+            orthographic_rh(-size, size, -size, size, 0.01, 0.01 + size * 2.0);
         Some((size, sphere.center, directional_light_projection))
     } else {
         None

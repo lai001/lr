@@ -9,7 +9,7 @@ editor = ["rs_core_minimal/editor", "rs_engine/editor"]
 standalone = ["rs_core_minimal/standalone", "rs_engine/standalone"]
 
 [dependencies]
-thiserror = "2.0.19"
+thiserror = "2.0.20"
 log = "0.4.33"
 url = { version = "2.5.8", features = ["serde"] }
 notify = "8.2.0"

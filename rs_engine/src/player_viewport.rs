@@ -13,6 +13,7 @@ use crate::physics_debug_render::{PhysicsDebugRender, RenderRigidBodiesBundle};
 use crate::resource_manager::ResourceManager;
 use crate::{BUILT_IN_RESOURCE, build_built_in_resouce_url};
 use glam::Vec4Swizzles;
+use glam::camera::rh::view::look_to_mat4 as look_to_rh;
 use rapier3d::prelude::*;
 use rs_artifact::material::GroupBinding;
 use rs_foundation::new::{MultipleThreadMutType, SingleThreadMutType};
@@ -1459,7 +1460,7 @@ impl PlayerViewport {
                 .get_transformation()
                 .transform_vector3(FORWARD_VECTOR);
             let eye = center - look_to * offset;
-            let view_matrix = glam::Mat4::look_to_rh(
+            let view_matrix = look_to_rh(
                 eye,
                 directional_light
                     .get_transformation()

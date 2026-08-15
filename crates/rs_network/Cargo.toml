@@ -8,7 +8,7 @@ network_debug_trace = []
 
 [dependencies]
 log = "0.4.33"
-uuid = { version = "1.24.0", features = [
+uuid = { version = "1.24.1", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",

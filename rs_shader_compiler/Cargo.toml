@@ -16,10 +16,10 @@ anyhow = { version = "1.0.104" }
 bincode = { version = "=2.0.1", features = ["serde"] }
 log = "0.4.33"
 env_logger = "0.11.11"
-clap = { version = "4.6.4", features = ["derive"] }
+clap = { version = "4.6.6", features = ["derive"] }
 wgpu = "29.0.4"
 naga = { version = "29.0.4", features = ["serialize", "deserialize"] }
-pollster = "0.4.0"
+pollster = "1.0.1"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 walkdir = "2.5.0"

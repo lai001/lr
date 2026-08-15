@@ -1,4 +1,7 @@
 use crate::{misc::FORWARD_VECTOR, rotator::Rotator};
+use glam::camera::rh::proj::directx::orthographic as orthographic_rh;
+use glam::camera::rh::proj::directx::perspective as perspective_rh;
+use glam::camera::rh::view::look_to_mat4 as look_to_rh;
 use rs_core_minimal::frustum::Frustum;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -59,13 +62,13 @@ impl Camera {
         camera_type: ECameraType,
     ) -> Camera {
         let projection_matrix = match camera_type {
-            ECameraType::Perspective(perspective_properties) => glam::Mat4::perspective_rh(
+            ECameraType::Perspective(perspective_properties) => perspective_rh(
                 perspective_properties.fov_y_radians,
                 perspective_properties.aspect_ratio,
                 z_near,
                 z_far,
             ),
-            ECameraType::Orthographic(orthographic_properties) => glam::Mat4::orthographic_rh(
+            ECameraType::Orthographic(orthographic_properties) => orthographic_rh(
                 orthographic_properties.left,
                 orthographic_properties.right,
                 orthographic_properties.bottom,
@@ -75,7 +78,7 @@ impl Camera {
             ),
         };
 
-        let view_matrix = glam::Mat4::look_to_rh(world_location, forward_vector, up_vector);
+        let view_matrix = look_to_rh(world_location, forward_vector, up_vector);
         Camera {
             world_location,
             up_vector,
@@ -173,7 +176,7 @@ impl Camera {
     fn update_projection_matrix(&mut self) {
         match self.camera_type {
             ECameraType::Perspective(perspective_properties) => {
-                self.projection_matrix = glam::Mat4::perspective_rh(
+                self.projection_matrix = perspective_rh(
                     perspective_properties.fov_y_radians,
                     perspective_properties.aspect_ratio,
                     self.z_near,
@@ -181,7 +184,7 @@ impl Camera {
                 );
             }
             ECameraType::Orthographic(orthographic_properties) => {
-                self.projection_matrix = glam::Mat4::orthographic_rh(
+                self.projection_matrix = orthographic_rh(
                     orthographic_properties.left,
                     orthographic_properties.right,
                     orthographic_properties.bottom,
@@ -194,8 +197,7 @@ impl Camera {
     }
 
     fn update_view_matrix(&mut self) {
-        self.view_matrix =
-            glam::Mat4::look_to_rh(self.world_location, self.forward_vector, self.up_vector);
+        self.view_matrix = look_to_rh(self.world_location, self.forward_vector, self.up_vector);
     }
 
     pub fn get_view_matrix(&self) -> glam::Mat4 {

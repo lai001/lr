@@ -194,7 +194,10 @@ impl V8Runtime {
         }
     }
 
-    pub fn execute_script_code(&mut self, source: String) -> crate::error::Result<()> {
+    pub fn execute_script_code(
+        &mut self,
+        source: String,
+    ) -> crate::error::Result<v8::Global<v8::Value>> {
         v8::scope!(let handle_scope, &mut self.isolate);
         let global_context = v8::Local::new(handle_scope, self.global_context.clone());
         let scope = &mut v8::ContextScope::new(handle_scope, global_context);
@@ -207,23 +210,27 @@ impl V8Runtime {
     fn execute_script(
         context_scope: &mut v8::ContextScope<v8::HandleScope>,
         script: v8::Local<v8::String>,
-    ) -> crate::error::Result<()> {
+    ) -> crate::error::Result<v8::Global<v8::Value>> {
         v8::tc_scope!(let try_catch, context_scope);
 
         let script = v8::Script::compile(try_catch, script, None).ok_or(
             crate::error::Error::Other(format!("Failed to compile script")),
         )?;
 
-        if script.run(try_catch).is_none() {
-            let exception_string = try_catch
-                .stack_trace()
-                .or_else(|| try_catch.exception())
-                .map(|value| value.to_rust_string_lossy(try_catch))
-                .unwrap_or_else(|| "No stack trace".into());
-            return Err(crate::error::Error::Execute(exception_string));
+        let run_result = script.run(try_catch);
+        match run_result {
+            Some(run_result) => {
+                return Ok(v8::Global::new(try_catch, run_result));
+            }
+            None => {
+                let exception_string = try_catch
+                    .stack_trace()
+                    .or_else(|| try_catch.exception())
+                    .map(|value| value.to_rust_string_lossy(try_catch))
+                    .unwrap_or_else(|| "No stack trace".into());
+                return Err(crate::error::Error::Execute(exception_string));
+            }
         }
-
-        Ok(())
     }
 
     pub fn reload_script(&mut self) -> crate::error::Result<()> {
@@ -371,5 +378,186 @@ impl V8Runtime {
 impl Drop for V8Runtime {
     fn drop(&mut self) {
         // unsafe { ManuallyDrop::drop(&mut self.isolate) };
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use crate::{
+        error::Error,
+        util::return_exception,
+        v8_runtime::{CPPGC_TAG, Constructible, Constructor, Newable, V8Runtime},
+    };
+
+    pub struct Object {}
+
+    impl Drop for Object {
+        fn drop(&mut self) {}
+    }
+
+    impl Object {
+        pub fn ehco(&mut self, arg: i32) -> i32 {
+            arg
+        }
+    }
+
+    pub struct NativeObjectBindingApi {
+        _function_template: v8::Global<v8::FunctionTemplate>,
+    }
+
+    impl Constructible for NativeObjectBindingApi {
+        type AssociatedType = NativeObject;
+        fn construct(v8_runtime: &mut crate::v8_runtime::V8Runtime) -> Result<Constructor, Error> {
+            let main_context = v8_runtime.global_context.clone();
+            let isolate = &mut v8_runtime.isolate;
+            v8::scope_with_context!(context_scope, isolate, &main_context);
+            let scope = context_scope;
+            let native_class_function_template =
+                v8::FunctionTemplate::new(scope, NativeObject::constructor_function);
+            const JS_CLASS_NAME: &str = "NativeObject";
+            native_class_function_template.set_class_name(
+                v8::String::new(scope, JS_CLASS_NAME)
+                    .ok_or(Error::Other("Failed to create string".to_string()))?,
+            );
+            let prototype_template = native_class_function_template.prototype_template(scope);
+            {
+                let name = v8::String::new(scope, "ehco")
+                    .ok_or(Error::Other("Failed to create string".to_string()))?;
+                let function = v8::FunctionTemplate::new(scope, NativeObject::ehco);
+                prototype_template.set(name.into(), function.into());
+            }
+            let function = native_class_function_template
+                .get_function(scope)
+                .ok_or(Error::Other("Function is null".to_string()))?;
+            let context = v8::Local::new(scope, main_context.clone());
+            let global_this = context.global(scope);
+            let name = v8::String::new(scope, JS_CLASS_NAME)
+                .ok_or(Error::Other("Failed to create string".to_string()))?;
+            global_this.set(scope, name.into(), function.into());
+            let function_template = v8::Global::new(scope, native_class_function_template);
+            Ok(Constructor {
+                name: JS_CLASS_NAME.to_string(),
+                function_template,
+            })
+        }
+    }
+
+    pub struct NativeObject {
+        pub value: std::ptr::NonNull<Object>,
+    }
+
+    impl Drop for NativeObject {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = Box::from_raw(self.value.as_ptr());
+            }
+        }
+    }
+
+    unsafe impl v8::cppgc::GarbageCollected for NativeObject {
+        fn trace(&self, _visitor: &mut v8::cppgc::Visitor) {}
+        fn get_name(&self) -> &'static std::ffi::CStr {
+            c"NativeObject"
+        }
+    }
+
+    impl Newable for NativeObject {
+        type AssociatedType = std::ptr::NonNull<Object>;
+        fn new(value: Self::AssociatedType) -> Self {
+            NativeObject { value }
+        }
+    }
+
+    impl NativeObject {
+        pub fn constructor_function(
+            scope: &mut v8::PinScope,
+            args: v8::FunctionCallbackArguments,
+            ret_val: v8::ReturnValue,
+        ) {
+            let _ = ret_val;
+            let value = Box::new(Object {});
+            let value = Box::leak(value);
+            let value = std::ptr::NonNull::new(value).expect("Not null");
+            let value = NativeObject::new(value);
+            let runtime = scope.get_data(super::V8_RUNTIME_DATA_OFFSET) as *mut V8Runtime;
+            let _ = unsafe { runtime.as_mut().expect("Not null") };
+            let obj = args.this();
+            unsafe {
+                let value: v8::cppgc::UnsafePtr<NativeObject> =
+                    v8::cppgc::make_garbage_collected::<NativeObject>(
+                        scope.get_cpp_heap().expect("Not null"),
+                        value,
+                    );
+                v8::Object::wrap::<{ CPPGC_TAG }, NativeObject>(scope, obj, &value)
+            }
+        }
+
+        pub fn ehco(
+            scope: &mut v8::PinScope,
+            args: v8::FunctionCallbackArguments,
+            mut ret_val: v8::ReturnValue,
+        ) {
+            if let Err(err) = Self::do_ehco(scope, args, &mut ret_val) {
+                return_exception(scope, &mut ret_val, &format!("{}", err));
+            }
+        }
+
+        fn do_ehco(
+            scope: &mut v8::PinScope,
+            args: v8::FunctionCallbackArguments,
+            ret_val: &mut v8::ReturnValue,
+        ) -> crate::error::Result<()> {
+            if args.length() < 1i32 {
+                return Err(crate::error::Error::Other(format!("Too few parameters")));
+            }
+            let arg_0 = args.get(0);
+            let Some(arg_0) = arg_0.to_int32(scope).map(|x| x.value()) else {
+                return Err(crate::error::Error::Other(format!(
+                    "args[{}] is not a 32-bit signed integer",
+                    0usize
+                )));
+            };
+            let unwrapped_value = unsafe {
+                let unwrapped_value =
+                    v8::Object::unwrap::<CPPGC_TAG, NativeObject>(scope, args.this())
+                        .ok_or(crate::error::Error::Other(format!("Null object")))?;
+                unwrapped_value
+                    .as_ref()
+                    .value
+                    .as_ptr()
+                    .as_mut()
+                    .expect("Not null")
+            };
+            let return_value = unwrapped_value.ehco(arg_0);
+            ret_val.set_int32(return_value);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_v8_runtime() {
+        let mut runtime = V8Runtime::new();
+        runtime.associate_embedder_specific_data();
+        runtime.register_func_global().unwrap();
+        runtime.register_constructor::<NativeObjectBindingApi>();
+
+        let expected_value = 100;
+        let result =
+            runtime.execute_script_code(format!("new NativeObject().ehco({expected_value})"));
+        match result {
+            Ok(result) => {
+                v8::scope_with_context!(
+                    context_scope,
+                    &mut runtime.isolate,
+                    &runtime.global_context.clone()
+                );
+                let result = v8::Local::new(context_scope, &result);
+                let value = result.to_int32(context_scope).unwrap().value();
+                assert_eq!(expected_value, value);
+            }
+            Err(err) => {
+                panic!("{err:?}");
+            }
+        }
     }
 }

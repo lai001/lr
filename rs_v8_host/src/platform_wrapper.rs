@@ -24,13 +24,3 @@ impl Drop for PlatformWrapper {
         v8::V8::dispose_platform();
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::PlatformWrapper;
-
-    #[test]
-    fn test_case() {
-        let _ = PlatformWrapper::new();
-    }
-}

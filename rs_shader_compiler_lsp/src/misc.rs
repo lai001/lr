@@ -82,10 +82,12 @@ pub fn send_notification(
 pub fn send_response(
     connection: &lsp_server::Connection,
     id: lsp_server::RequestId,
-    result: Option<serde_json::Value>,
-    error: Option<lsp_server::ResponseError>,
+    response_result: Result<serde_json::Value, lsp_server::ResponseError>,
 ) -> std::result::Result<(), crossbeam_channel::SendError<lsp_server::Message>> {
-    let request = lsp_server::Response { id, result, error };
+    let request = lsp_server::Response {
+        id,
+        response_result,
+    };
     let msg = lsp_server::Message::Response(request);
     connection.sender.send(msg)
 }

@@ -14,6 +14,7 @@ pub mod test {
     use rand::{Rng, RngExt};
     use std::collections::HashMap;
     use std::num::NonZeroUsize;
+    use std::path::PathBuf;
     use std::sync::Arc;
     use std::{borrow::Cow, collections::HashSet};
     use vello::kurbo::Vec2;
@@ -30,6 +31,12 @@ pub mod test {
         rs_core_minimal::file_manager::get_engine_resource(
             "Remote/Font/SourceHanSansHWSC/OTF/SimplifiedChineseHW/SourceHanSansHWSC-Regular.otf",
         )
+    }
+
+    fn tmp_folder_path() -> PathBuf {
+        let path = rs_core_minimal::file_manager::get_engine_build_tmp_dir().join("text");
+        std::fs::create_dir_all(&path).unwrap();
+        path
     }
 
     #[test]
@@ -56,11 +63,8 @@ pub mod test {
         let gray_image =
             image::GrayImage::from_vec(metrics.width as u32, metrics.height as u32, bitmap)
                 .unwrap();
-        let output = std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fontdue_test.png");
+
+        let output = tmp_folder_path().join("fontdue_test.png");
         println!("Save to {:?}", &output);
         gray_image.save(output).unwrap();
     }
@@ -86,11 +90,7 @@ pub mod test {
             let pixel_mut = gray_image.get_pixel_mut(x, y);
             pixel_mut.0[0] = (c * 255.0f32) as u8;
         });
-        let output = std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("ab_glyph_test.png");
+        let output = tmp_folder_path().join("ab_glyph_test.png");
         println!("Save to {:?}", &output);
         gray_image.save(output).unwrap();
     }
@@ -145,11 +145,7 @@ members of the human family is the foundation of freedom, justice and peace in t
             }
         }
 
-        let output = std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("atlas_test.png");
+        let output = tmp_folder_path().join("atlas_test.png");
         println!("Save to {:?}", &output);
         gray_image.save(output).unwrap();
     }
@@ -195,7 +191,7 @@ members of the human family is the foundation of freedom, justice and peace in t
             let mut layout: Layout<()> = builder.build(text);
 
             layout.break_all_lines(max_width);
-            layout.align(max_width, Alignment::Start, AlignmentOptions::default());
+            layout.align(Alignment::Start, AlignmentOptions::default());
 
             // let width = layout.width();
             // let height = layout.height();
@@ -270,11 +266,7 @@ members of the human family is the foundation of freedom, justice and peace in t
                 let _ = canvas.copy_from(&other, 0, 0);
             }
         }
-        let output = std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("text_layout_test.png");
+        let output = tmp_folder_path().join("text_layout_test.png");
         println!("Save to {:?}", &output);
         gray_image.save(output).unwrap();
     }
@@ -458,11 +450,7 @@ members of the human family is the foundation of freedom, justice and peace in t
                 )
                 .expect("Failed to render to a texture");
 
-            let folder = std::env::current_exe()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("render_test");
+            let folder = tmp_folder_path().join("render_test");
             if !folder.exists() {
                 let _ = std::fs::create_dir_all(&folder);
             }

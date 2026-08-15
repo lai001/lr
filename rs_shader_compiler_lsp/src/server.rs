@@ -82,11 +82,15 @@ impl Server {
                     let _ = connection.handle_shutdown(&request);
                     if request.method == lsp_types::request::Completion::METHOD {
                         let result = lsp_types::CompletionResponse::Array(vec![]);
-                        let result = serde_json::to_value(&result).ok();
+                        let result = serde_json::to_value(&result);
+                        let response_result = result.map_err(|err| lsp_server::ResponseError {
+                            code: lsp_server::ErrorCode::ParseError as i32,
+                            message: err.to_string(),
+                            data: None,
+                        });
                         let response = Response {
                             id: request.id,
-                            result,
-                            error: None,
+                            response_result,
                         };
                         let msg = lsp_server::Message::Response(response);
                         let _ = connection.sender.send(msg);
@@ -128,8 +132,13 @@ impl Server {
                                 }
                             }
                         }
-                        let result = Some(serde_json::to_value(&result).unwrap());
-                        let _ = misc::send_response(&connection, request.id, result, None);
+                        let result = serde_json::to_value(&result);
+                        let response_result = result.map_err(|err| lsp_server::ResponseError {
+                            code: lsp_server::ErrorCode::ParseError as i32,
+                            message: err.to_string(),
+                            data: None,
+                        });
+                        let _ = misc::send_response(&connection, request.id, response_result);
                     }
                 }
                 lsp_server::Message::Response(response) => {
@@ -138,7 +147,7 @@ impl Server {
                             .to_string()
                             .into()
                     {
-                        let Some(workspace_configuration) = response.result else {
+                        let Ok(workspace_configuration) = response.response_result else {
                             return;
                         };
                         if workspace_configuration.is_array() == false {

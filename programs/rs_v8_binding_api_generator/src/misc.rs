@@ -601,14 +601,11 @@ pub fn make_return_value_expr(
 
 pub fn is_impl_clone(ty: &ra_ap_hir::Type, db: &dyn ra_ap_hir::db::HirDatabase) -> bool {
     let krate = ty.krate(db);
-    let interner = ra_ap_hir::next_solver::DbInterner::new_with(db, krate.into());
-    let clone_trait = interner.lang_items().Clone.expect("A valid TraitId");
-    // let lang_item = db.lang_item(krate.into(), ra_ap_hir::LangItem::Clone);
-    // let clone_trait = match lang_item {
-    //     Some(ra_ap_hir_def::lang_item::LangItemTarget::Trait(it)) => it,
-    //     _ => return false,
-    // };
-    return ty.impls_trait(db, clone_trait.into(), &[]);
+    let clone_trait = match ra_ap_hir::Trait::lang(db, krate, ra_ap_hir::LangItem::Clone) {
+        Some(it) => it,
+        None => return false,
+    };
+    return ty.impls_trait(db, clone_trait, &[]);
 }
 
 pub fn readable_type_description(

@@ -14,7 +14,7 @@ detect_encoding = ["dep:encoding_rs", "dep:chardetng"]
 [dependencies]
 wgpu = "29.0.4"
 naga = "29.0.4"
-pollster = "0.4.0"
+pollster = "1.0.1"
 dunce = "1.0.5"
 path-slash = "0.2.1"
 walkdir = "2.5.0"

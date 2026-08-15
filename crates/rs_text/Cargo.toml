@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-fontdue = { version = "0.9.3", features = ["parallel"] }
+fontdue = { version = "0.9.4", features = ["parallel"] }
 ab_glyph = "0.2.32"
 ab_glyph_rasterizer = "0.1.10"
 max_rects = "1.0.2"
-moka = { version = "0.12.15", default-features = false, features = ["sync"] }
+moka = { version = "0.12.16", default-features = false, features = ["sync"] }
 image = "0.25.10"
-parley = "0.8.0"
-harfrust = "0.6.2"
+parley = "0.11.0"
+harfrust = "0.13.0"
 linebender_resource_handle = { version = "0.1.1", default-features = false }
 log = "0.4.33"
 rs_foundation = { path = "../../rs_foundation" }
@@ -20,8 +20,8 @@ rs_pack = { path = "../rs_pack" }
 
 [dev-dependencies]
 lyon = "1.0.19"
-vello = "0.8.0"
+vello = "0.10.0"
 rand = "0.10.2"
 rs_render_core = { path = "../rs_render_core", default-features = false, features = [
-    "wgpu28",
+    "wgpu_latest",
 ] }

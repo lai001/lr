@@ -18,7 +18,7 @@ android-native-activity = [
 ]
 
 [dependencies]
-glam = { version = "0.30.10", features = ["mint", "serde"] }
+glam = { version = "0.33.3", features = ["mint", "serde"] }
 log = "0.4.33"
 env_logger = "0.11.11"
 egui = "0.34.3"

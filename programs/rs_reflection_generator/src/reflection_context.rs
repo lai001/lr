@@ -9,7 +9,7 @@ use ra_ap_hir::GenericDef;
 use ra_ap_hir::HasVisibility;
 use ra_ap_hir::HirDisplay;
 use ra_ap_ide::*;
-use ra_ap_ide_db::base_db::RootQueryDb;
+use ra_ap_ide_db::base_db::all_crates;
 use ra_ap_ide_db::*;
 use ra_ap_load_cargo::*;
 use ra_ap_proc_macro_api::ProcMacroClient;
@@ -221,7 +221,7 @@ impl ReflectionContext {
         let mut parse_results: Vec<ParseResult> = vec![];
         let db = self.db.as_ref();
 
-        let crates = db.all_crates().clone();
+        let crates = all_crates(db);
         log::trace!("Num of crates: {}", crates.len());
         for db_krate in crates.iter() {
             let sema: Semantics<'_, ra_ap_ide::RootDatabase> = Semantics::new(db);

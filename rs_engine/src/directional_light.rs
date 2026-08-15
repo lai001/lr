@@ -2,6 +2,8 @@ use crate::drawable::{CustomDrawObject, EDrawObjectType};
 use crate::engine::Engine;
 use crate::misc::FORWARD_VECTOR;
 use crate::player_viewport::PlayerViewport;
+use glam::camera::rh::proj::directx::orthographic as orthographic_rh;
+use glam::camera::rh::view::look_to_mat4 as look_to_rh;
 use rs_core_minimal::frustum::Frustum;
 use rs_core_minimal::misc::get_orthographic_frustum;
 use rs_render::command::{DrawObject, EBindingResource};
@@ -57,11 +59,11 @@ impl DirectionalLight {
         near: f32,
         far: f32,
     ) -> DirectionalLight {
-        let light_projection = glam::Mat4::orthographic_rh(left, right, bottom, top, near, far);
+        let light_projection = orthographic_rh(left, right, bottom, top, near, far);
         let up = glam::Vec3::Y;
         let dir = Self::default_dir();
         let eye = glam::Vec3::ZERO;
-        let light_view = glam::Mat4::look_to_rh(eye, dir, up);
+        let light_view = look_to_rh(eye, dir, up);
         let transformation = glam::Mat4::IDENTITY;
         DirectionalLight {
             light_projection,
@@ -223,7 +225,7 @@ impl DirectionalLight {
     }
 
     pub fn update(&mut self, engine: &mut Engine) {
-        self.light_projection = glam::Mat4::orthographic_rh(
+        self.light_projection = orthographic_rh(
             self.left,
             self.right,
             self.bottom,
@@ -253,8 +255,7 @@ impl DirectionalLight {
         let up = glam::Vec3::Y;
         let dir = Self::default_dir();
         let eye = self.transformation.to_scale_rotation_translation().2;
-        self.light_view =
-            glam::Mat4::look_to_rh(eye, self.transformation.transform_vector3(dir), up);
+        self.light_view = look_to_rh(eye, self.transformation.transform_vector3(dir), up);
         self.light_projection * self.light_view
     }
 }

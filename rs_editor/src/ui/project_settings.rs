@@ -73,7 +73,7 @@ fn draw_content(
                     event = Some(EEventType::SetLocale(locale.clone()));
                 }
                 for available_locale in locales {
-                    let name = locale_name(available_locale);
+                    let name = locale_name(&available_locale);
                     if ui
                         .selectable_value(&mut locale, available_locale.to_string(), name)
                         .clicked()

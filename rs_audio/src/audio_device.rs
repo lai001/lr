@@ -28,7 +28,7 @@ impl AudioDevice {
             host.default_output_device()
         } else {
             host.output_devices()
-                .map_err(|err| crate::error::Error::DevicesError(err))?
+                .map_err(|err| crate::error::Error::Cpal(err))?
                 .find(|x| {
                     x.description()
                         .map(|y| y.name() == opt.device)
@@ -40,17 +40,17 @@ impl AudioDevice {
             "Output device: {}",
             device
                 .description()
-                .map_err(|err| crate::error::Error::DeviceNameError(err))?
+                .map_err(|err| crate::error::Error::Cpal(err))?
         );
         let supported_output_configs = device
             .supported_output_configs()
-            .map_err(|err| crate::error::Error::SupportedStreamConfigsError(err))?;
+            .map_err(|err| crate::error::Error::Cpal(err))?;
         for supported_output_config in supported_output_configs {
             log::trace!("Supported output config: {:?}", supported_output_config);
         }
         let config = device
             .default_output_config()
-            .map_err(|err| crate::error::Error::DefaultStreamConfigError(err))?;
+            .map_err(|err| crate::error::Error::Cpal(err))?;
         let sample_format = config.sample_format();
 
         log::trace!("Default output config: {:?}", config);
@@ -89,7 +89,7 @@ impl AudioDevice {
             cpal::SampleFormat::U64 => unimplemented!(),
             cpal::SampleFormat::F32 => device
                 .build_output_stream(
-                    &config.config(),
+                    config.config(),
                     {
                         let output_node = get_global_output_node().clone();
                         let stream_config = config.config().clone();
@@ -116,7 +116,7 @@ impl AudioDevice {
                     err_fn,
                     None,
                 )
-                .map_err(|err| crate::error::Error::BuildStreamError(err))?,
+                .map_err(|err| crate::error::Error::Cpal(err))?,
             cpal::SampleFormat::F64 => todo!(),
             _ => unimplemented!(),
         };
@@ -133,7 +133,7 @@ impl AudioDevice {
         let result = self
             .stream
             .play()
-            .map_err(|err| crate::error::Error::PlayStreamError(err));
+            .map_err(|err| crate::error::Error::Cpal(err));
         result
     }
 

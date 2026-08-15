@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-thiserror = "2.0.19"
+thiserror = "2.0.20"
 semver = "1.0"
 serde_json = "1.0.151"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -15,5 +15,5 @@ rs_core_minimal = { path = "../../rs_core_minimal" }
 eolify = "0.4.2"
 wgpu = "29.0.4"
 naga = "29.0.4"
-pollster = "0.4.0"
+pollster = "1.0.1"
 rs_render_core = { path = "../rs_render_core" }

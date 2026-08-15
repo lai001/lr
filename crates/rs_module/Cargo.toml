@@ -10,7 +10,7 @@ standalone = []
 
 [dependencies]
 downcast-rs = "2.0.2"
-uuid = { version = "1.24.0", features = [
+uuid = { version = "1.24.1", features = [
     "v4",
     "fast-rng",
     "macro-diagnostics",

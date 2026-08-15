@@ -13,7 +13,7 @@ editor = []
 dunce = "1.0.5"
 path-slash = "0.2.1"
 serde = { version = "1.0.229", features = ["derive", "rc"] }
-glam = { version = "0.30.10", features = ["mint", "serde"] }
+glam = { version = "0.33.3", features = ["mint", "serde"] }
 md-5 = { version = "0.11.0" }
 sha2 = { version = "0.11" }
 rayon = "1.12.0"

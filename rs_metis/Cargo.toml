@@ -9,9 +9,9 @@ profiler = ["tracy-client/enable", "rapier3d/profiler"]
 required_detail_edges = []
 
 [dependencies]
-glam = { version = "0.30.10", features = ["mint"] }
+glam = { version = "0.33.3", features = ["mint"] }
 serde = { version = "1.0.229", features = ["derive", "rc"] }
-rapier3d = { version = "0.32.0", features = ["simd-stable", "serde-serialize"] }
+rapier3d = { version = "0.35.1", features = ["simd8", "serde-serialize"] }
 meshopt = "0.6.2"
 tracy-client = { version = "0.18.4", default-features = false }
 log = "0.4.33"

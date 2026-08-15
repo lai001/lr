@@ -1,11 +1,6 @@
 #[derive(Debug)]
 pub enum Error {
-    PlayStreamError(cpal::PlayStreamError),
-    DevicesError(cpal::DevicesError),
-    DeviceNameError(cpal::DeviceNameError),
-    DefaultStreamConfigError(cpal::DefaultStreamConfigError),
-    SupportedStreamConfigsError(cpal::SupportedStreamConfigsError),
-    BuildStreamError(cpal::BuildStreamError),
+    Cpal(cpal::Error),
     Other(String),
 }
 
